@@ -1,0 +1,134 @@
+@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@400..700&family=Permanent+Marker&family=Inter:wght@400..700&display=swap');
+@import "tailwindcss";
+@import "tw-animate-css";
+@plugin "@tailwindcss/typography";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-card-border: hsl(var(--card-border));
+
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-popover-border: hsl(var(--popover-border));
+
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+
+  --font-sans: "Inter", sans-serif;
+  --font-display: "Permanent Marker", "Caveat", cursive;
+  
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+}
+
+:root {
+  --background: 0 0% 100%;
+  --foreground: 0 0% 7%;
+  
+  --border: 0 0% 7%;
+  --input: 0 0% 7%;
+  --ring: 72 100% 50%;
+  
+  --card: 0 0% 100%;
+  --card-foreground: 0 0% 7%;
+  --card-border: 0 0% 7%;
+  
+  --popover: 0 0% 100%;
+  --popover-foreground: 0 0% 7%;
+  --popover-border: 0 0% 7%;
+  
+  --primary: 72 100% 50%;
+  --primary-foreground: 0 0% 7%;
+  
+  --secondary: 0 0% 90%;
+  --secondary-foreground: 0 0% 7%;
+  
+  --muted: 0 0% 95%;
+  --muted-foreground: 0 0% 40%;
+  
+  --accent: 72 100% 50%;
+  --accent-foreground: 0 0% 7%;
+  
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
+
+  --radius: 0.5rem;
+}
+
+.dark {
+  --background: 0 0% 100%;
+  --foreground: 0 0% 7%;
+  
+  --border: 0 0% 7%;
+  --input: 0 0% 7%;
+  --ring: 72 100% 50%;
+  
+  --card: 0 0% 100%;
+  --card-foreground: 0 0% 7%;
+  --card-border: 0 0% 7%;
+  
+  --popover: 0 0% 100%;
+  --popover-foreground: 0 0% 7%;
+  --popover-border: 0 0% 7%;
+  
+  --primary: 72 100% 50%;
+  --primary-foreground: 0 0% 7%;
+  
+  --secondary: 0 0% 90%;
+  --secondary-foreground: 0 0% 7%;
+  
+  --muted: 0 0% 95%;
+  --muted-foreground: 0 0% 40%;
+  
+  --accent: 72 100% 50%;
+  --accent-foreground: 0 0% 7%;
+  
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply font-sans antialiased bg-background text-foreground;
+  }
+
+  h1, h2, h3, h4, h5, h6, .font-display {
+    font-family: var(--font-display);
+  }
+}
+
+.wobbly-border {
+  border: 2px solid hsl(var(--border));
+  border-radius: 8px 12px 6px 10px / 10px 6px 12px 8px;
+}
+
+.wobbly-svg {
+  filter: url(#wobbly-filter);
+}
