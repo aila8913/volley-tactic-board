@@ -82,7 +82,7 @@ export default function RightPanel() {
         
         <section>
           <div className="flex justify-between items-center mb-3">
-            <h2 className="font-display text-2xl border-b-2 border-[#111] inline-block">畫筆工具</h2>
+            <h2 className="font-display border-b-2 border-[#111] inline-block text-[15px]">畫筆工具</h2>
             <div className="flex gap-1">
               <button onClick={undo} disabled={historyIndex <= 0} className="px-2 py-1 wobbly-border bg-white text-xs disabled:opacity-50 hover:bg-[#CCFF00]" title="Undo (Ctrl+Z)">↩</button>
               <button onClick={redo} disabled={historyIndex >= history.length - 1} className="px-2 py-1 wobbly-border bg-white text-xs disabled:opacity-50 hover:bg-[#CCFF00]" title="Redo (Ctrl+Y)">↪</button>
@@ -107,7 +107,7 @@ export default function RightPanel() {
         </section>
 
         <section>
-          <h2 className="font-display text-2xl mb-3 border-b-2 border-[#111] inline-block">防守範圍</h2>
+          <h2 className="font-display mb-3 border-b-2 border-[#111] inline-block text-[15px]">防守範圍</h2>
           <div className="grid grid-cols-3 gap-2 mb-3">
             <button onClick={() => handleTool('circle')} className={toolBtnClass('circle')}>圓形</button>
             <button onClick={() => handleTool('ellipse')} className={toolBtnClass('ellipse')}>橢圓</button>
@@ -171,7 +171,7 @@ export default function RightPanel() {
         </section>
 
         <section>
-          <h2 className="font-display text-2xl mb-3 border-b-2 border-[#111] inline-block">專案管理</h2>
+          <h2 className="font-display mb-3 border-b-2 border-[#111] inline-block text-[15px]">戰術管理</h2>
           <div className="space-y-2 mb-4">
             <input 
               className="w-full wobbly-border px-3 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-[#CCFF00]" 
@@ -207,7 +207,6 @@ export default function RightPanel() {
         </section>
 
       </div>
-
       <div className="p-4 border-t-2 border-[#111] bg-white wobbly-svg">
         <h2 className="font-display text-2xl mb-3 border-b-2 border-[#111] inline-block">分享匯出</h2>
         <div className="grid grid-cols-2 gap-2">

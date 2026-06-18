@@ -101,7 +101,7 @@ export default function LeftPanel() {
         </section>
 
         <section>
-          <h2 className="font-display text-xl mb-4 border-b-2 border-[#111] inline-block">顯示標籤</h2>
+          <h2 className="font-display mb-4 border-b-2 border-[#111] inline-block text-[15px]">顯示標籤</h2>
           <div className="flex gap-4">
             {(['name', 'role', 'zone'] as const).map(key => (
               <label key={key} className="flex items-center gap-2 cursor-pointer text-sm font-bold">
