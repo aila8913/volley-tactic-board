@@ -2,6 +2,14 @@ import React from 'react';
 import { useTactics } from '../hooks/useTactics';
 import RotationThumbnails from './RotationThumbnails';
 
+const roleName = (role: string): string => {
+  const map: Record<string, string> = {
+    S: 'S 舉球', OH1: '主攻1', OH2: '主攻2',
+    MB1: '副攻1', MB2: '副攻2', OPP: '大砲', L: '自由'
+  };
+  return map[role] ?? role;
+};
+
 export default function LeftPanel() {
   const { 
     players, updatePlayer, generateRotations, 
@@ -40,7 +48,7 @@ export default function LeftPanel() {
           <div className="space-y-2 mb-3">
             {players.map((p) => (
               <div key={p.id} className="flex items-center gap-2">
-                <span className="w-10 text-right text-xs font-bold">{p.role}</span>
+                <span className="w-12 text-right text-xs font-bold shrink-0">{roleName(p.role)}</span>
                 <input 
                   className="flex-1 wobbly-border px-2 py-1 text-sm bg-white outline-none focus:ring-2 focus:ring-[#CCFF00] transition-shadow" 
                   placeholder={p.role === 'L' ? "自由球員姓名" : "球員姓名"}

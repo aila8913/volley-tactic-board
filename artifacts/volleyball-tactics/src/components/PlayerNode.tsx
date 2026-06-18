@@ -12,6 +12,14 @@ interface PlayerNodeProps {
   courtRef: React.RefObject<SVGSVGElement | null>;
 }
 
+const roleLabel = (role: string): string => {
+  const map: Record<string, string> = {
+    S: 'S', OH1: '攻1', OH2: '攻2',
+    MB1: '中1', MB2: '中2', OPP: '大砲', L: 'L'
+  };
+  return map[role] ?? role;
+};
+
 export default function PlayerNode({ player, position, isFrontRow, isLibero, showName, showRole, courtRef }: PlayerNodeProps) {
   const { updatePlayerPosition, selectedObjectId, setSelectedObjectId, activeTool } = useTactics();
   const [isDragging, setIsDragging] = useState(false);
@@ -84,7 +92,7 @@ export default function PlayerNode({ player, position, isFrontRow, isLibero, sho
           textAnchor="middle" 
           className="font-sans pointer-events-none"
         >
-          {player.role}
+          {roleLabel(player.role)}
         </text>
       )}
       
