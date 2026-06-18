@@ -86,7 +86,7 @@ export const useTactics = create<TacticsStore>()(
       scenario: 'base',
       currentRotation: 0,
       rotations: emptyRotations,
-      labelToggles: { name: true, role: true, zone: true },
+      labelToggles: { name: true, role: true, zone: false },
       
       activeTool: 'select',
       selectedObjectId: null,
