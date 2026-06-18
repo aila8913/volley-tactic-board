@@ -88,7 +88,7 @@ export default function Markers({ marker }: { marker: MarkerType }) {
             onChange={handleTextChange}
             onBlur={handleTextBlur}
             onKeyDown={(e) => e.key === 'Enter' && handleTextBlur()}
-            className="w-full h-full text-[5px] bg-transparent outline-none border-b border-[#111] text-center font-display text-[#111]"
+            className="w-full h-full text-[5px] bg-transparent outline-none border-b border-[#111] text-center font-sans text-[#111]"
             style={{ fontSize: '5px' }}
           />
         </foreignObject>
@@ -102,7 +102,7 @@ export default function Markers({ marker }: { marker: MarkerType }) {
         fontSize="5" 
         fontWeight="bold"
         textAnchor="middle"
-        className="font-display cursor-pointer select-none"
+        className="font-sans cursor-pointer select-none"
         onPointerDown={handleClick}
         onDoubleClick={handleDoubleClick}
       >

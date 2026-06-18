@@ -157,7 +157,7 @@ export default function Court() {
 
           {/* Zone Labels */}
           {labelToggles.zone && (
-            <g className="opacity-10 font-display text-4xl" fill="#111">
+            <g className="opacity-10 font-sans text-4xl" fill="#111">
               {/* Bottom half (Our team) */}
               <text x="80" y="180" textAnchor="middle">1</text>
               <text x="80" y="120" textAnchor="middle">2</text>
@@ -176,8 +176,8 @@ export default function Court() {
             </g>
           )}
 
-          <text x="50" y="15" fontSize="6" fill="#111" textAnchor="middle" className="font-display">對手</text>
-          <text x="50" y="192" fontSize="6" fill="#111" textAnchor="middle" className="font-display">我方</text>
+          <text x="50" y="15" fontSize="6" fill="#111" textAnchor="middle" className="font-sans">對手</text>
+          <text x="50" y="192" fontSize="6" fill="#111" textAnchor="middle" className="font-sans">我方</text>
 
           {/* Render Defense Ranges */}
           {rotation.defenseRanges.map(dr => (

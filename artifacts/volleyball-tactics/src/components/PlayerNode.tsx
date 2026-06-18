@@ -82,7 +82,7 @@ export default function PlayerNode({ player, position, isFrontRow, isLibero, sho
           fontWeight="bold" 
           fill="#111" 
           textAnchor="middle" 
-          className="font-display pointer-events-none"
+          className="font-sans pointer-events-none"
         >
           {player.role}
         </text>
