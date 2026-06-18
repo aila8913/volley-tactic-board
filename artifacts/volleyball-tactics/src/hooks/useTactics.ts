@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { v4 as uuidv4 } from 'uuid';
-import { TacticsState, Player, RotationState, DefenseRange, Marker, PlayerPosition } from '../types/tactics';
+import { TacticsState, Player, RotationState, DefenseRange, Marker, PlayerPosition, ScenarioType } from '../types/tactics';
 import { getDefaultPositions } from '../lib/rotationLogic';
 
 export type ToolType = 'select' | 'arrow' | 'dashed' | 'attack' | 'text' | 'volleyball' | 'circle' | 'ellipse' | 'fan';
@@ -19,22 +19,19 @@ interface TacticsStore extends TacticsState {
   selectedObjectId: string | null;
   projects: ProjectInfo[];
   
-  // History for current rotation
   history: RotationState[];
   historyIndex: number;
 
-  // Actions
   setActiveTool: (tool: ToolType) => void;
   setSelectedObjectId: (id: string | null) => void;
   setProjectName: (name: string) => void;
   setTeamName: (name: string) => void;
   updatePlayer: (id: string, name: string, role?: Player['role']) => void;
   setLiberoSubstitution: (sub: 'MB1' | 'MB2' | null) => void;
-  setScenario: (scenario: TacticsState['scenario']) => void;
+  setScenario: (scenario: ScenarioType) => void;
   setCurrentRotation: (index: number) => void;
   generateRotations: () => void;
   
-  // Rotation actions (affect current rotation)
   pushHistory: () => void;
   undo: () => void;
   redo: () => void;
@@ -50,10 +47,8 @@ interface TacticsStore extends TacticsState {
   resetCurrentRotation: () => void;
   copyRotation: () => void;
   
-  // Label toggles
   toggleLabel: (key: keyof TacticsState['labelToggles']) => void;
 
-  // Global load/save
   saveProject: () => void;
   loadProject: (id: string) => void;
   deleteProject: (id: string) => void;
@@ -70,11 +65,27 @@ const defaultPlayers: Player[] = [
   { id: 'p7', name: '', role: 'L' }
 ];
 
+const SCENARIOS: ScenarioType[] = ['base', 'serve-receive', 'defense', 'attack', 'cover'];
+
+const makeEmptyScenarioPositions = (): Record<ScenarioType, PlayerPosition[]> => ({
+  base: [],
+  'serve-receive': [],
+  defense: [],
+  attack: [],
+  cover: []
+});
+
 const emptyRotations: RotationState[] = Array(6).fill(null).map(() => ({
-  positions: [],
+  scenarioPositions: makeEmptyScenarioPositions(),
   defenseRanges: [],
   markers: []
 }));
+
+export const getActivePositions = (rotation: RotationState, scenario: ScenarioType): PlayerPosition[] => {
+  const pos = rotation.scenarioPositions?.[scenario];
+  if (pos && pos.length > 0) return pos;
+  return rotation.scenarioPositions?.base || [];
+};
 
 export const useTactics = create<TacticsStore>()(
   persist(
@@ -104,7 +115,15 @@ export const useTactics = create<TacticsStore>()(
         players: state.players.map(p => p.id === id ? { ...p, name, ...(role ? {role} : {}) } : p)
       })),
       setLiberoSubstitution: (sub) => set({ liberoSubstitution: sub }),
-      setScenario: (scenario) => set({ scenario }),
+      setScenario: (scenario) => set((state) => {
+        const r = state.currentRotation;
+        return { 
+          scenario,
+          history: [state.rotations[r]],
+          historyIndex: 0,
+          selectedObjectId: null
+        };
+      }),
       
       setCurrentRotation: (index) => set((state) => ({ 
         currentRotation: index,
@@ -114,11 +133,18 @@ export const useTactics = create<TacticsStore>()(
       })),
       
       generateRotations: () => set((state) => {
-        const newRotations = state.rotations.map((_, i) => ({
-          positions: getDefaultPositions(state.players, i),
-          defenseRanges: [],
-          markers: []
-        }));
+        const newRotations = Array(6).fill(null).map((_, i) => {
+          const defaultPos = getDefaultPositions(state.players, i);
+          const scenarioPositions = SCENARIOS.reduce((acc, sc) => {
+            acc[sc] = defaultPos.map(p => ({ ...p }));
+            return acc;
+          }, {} as Record<ScenarioType, PlayerPosition[]>);
+          return {
+            scenarioPositions,
+            defenseRanges: [],
+            markers: []
+          };
+        });
         return { 
           rotations: newRotations, 
           currentRotation: 0,
@@ -162,11 +188,19 @@ export const useTactics = create<TacticsStore>()(
         get().pushHistory();
         set((state) => {
           const r = state.currentRotation;
-          const newPositions = state.rotations[r].positions.map(p => 
+          const sc = state.scenario;
+          const currentPositions = getActivePositions(state.rotations[r], sc);
+          const newPositions = currentPositions.map(p =>
             p.playerId === playerId ? { ...p, x, y } : p
           );
           const newRotations = [...state.rotations];
-          newRotations[r] = { ...newRotations[r], positions: newPositions };
+          newRotations[r] = {
+            ...newRotations[r],
+            scenarioPositions: {
+              ...newRotations[r].scenarioPositions,
+              [sc]: newPositions
+            }
+          };
           return { rotations: newRotations };
         });
       },
@@ -267,10 +301,15 @@ export const useTactics = create<TacticsStore>()(
         get().pushHistory();
         set((state) => {
           const r = state.currentRotation;
+          const sc = state.scenario;
+          const defaultPos = getDefaultPositions(state.players, r);
           const newRotations = [...state.rotations];
           newRotations[r] = {
             ...newRotations[r],
-            positions: getDefaultPositions(state.players, r),
+            scenarioPositions: {
+              ...newRotations[r].scenarioPositions,
+              [sc]: defaultPos.map(p => ({ ...p }))
+            },
             markers: [],
             defenseRanges: []
           };
@@ -280,9 +319,7 @@ export const useTactics = create<TacticsStore>()(
 
       copyRotation: () => {
         get().pushHistory();
-        set((state) => {
-          return state; // Custom logic if we want to copy to next, but for now it's basically a snapshot
-        });
+        set((state) => state);
       },
 
       toggleLabel: (key) => set((state) => ({

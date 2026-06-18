@@ -1,3 +1,5 @@
+export type ScenarioType = 'base' | 'serve-receive' | 'defense' | 'attack' | 'cover';
+
 export interface Player {
   id: string;
   name: string;
@@ -21,6 +23,7 @@ export interface DefenseRange {
   ry?: number;
   startAngle?: number;
   endAngle?: number;
+  rotation?: number;
   color: string;
   opacity: number;
   visible: boolean;
@@ -36,7 +39,7 @@ export interface Marker {
 }
 
 export interface RotationState {
-  positions: PlayerPosition[];
+  scenarioPositions: Record<ScenarioType, PlayerPosition[]>;
   defenseRanges: DefenseRange[];
   markers: Marker[];
 }
@@ -46,7 +49,7 @@ export interface TacticsState {
   teamName: string;
   players: Player[];
   liberoSubstitution: 'MB1' | 'MB2' | null;
-  scenario: 'base' | 'serve-receive' | 'defense' | 'attack' | 'cover';
+  scenario: ScenarioType;
   currentRotation: number;
   rotations: RotationState[];
   labelToggles: { name: boolean; role: boolean; zone: boolean };

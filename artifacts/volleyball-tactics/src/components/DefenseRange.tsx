@@ -83,22 +83,38 @@ export default function DefenseRange({ range }: { range: DefenseRangeType }) {
   }
 
   if (range.type === 'ellipse') {
-    return <ellipse cx={range.x} cy={range.y} rx={range.rx || 15} ry={range.ry || 10} {...getCommonProps()} />;
+    const rot = range.rotation || 0;
+    return (
+      <ellipse
+        cx={range.x} cy={range.y}
+        rx={range.rx || 15} ry={range.ry || 10}
+        transform={`rotate(${rot}, ${range.x}, ${range.y})`}
+        {...getCommonProps()}
+      />
+    );
   }
 
   if (range.type === 'fan') {
     const r = range.radius || 15;
-    const start = (range.startAngle || -45) * Math.PI / 180;
-    const end = (range.endAngle || 45) * Math.PI / 180;
-    
+    const baseRotation = range.rotation || 0;
+    const halfAngle = ((range.endAngle || 45) - (range.startAngle || -45)) / 2;
+    const start = (-halfAngle) * Math.PI / 180;
+    const end = (halfAngle) * Math.PI / 180;
+
     const x1 = range.x + r * Math.sin(start);
     const y1 = range.y - r * Math.cos(start);
     const x2 = range.x + r * Math.sin(end);
     const y2 = range.y - r * Math.cos(end);
-    const largeArc = (range.endAngle || 45) - (range.startAngle || -45) > 180 ? 1 : 0;
+    const largeArc = halfAngle * 2 > 180 ? 1 : 0;
 
     const d = `M ${range.x} ${range.y} L ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2} Z`;
-    return <path d={d} {...getCommonProps()} />;
+    return (
+      <path
+        d={d}
+        transform={`rotate(${baseRotation}, ${range.x}, ${range.y})`}
+        {...getCommonProps()}
+      />
+    );
   }
 
   return null;

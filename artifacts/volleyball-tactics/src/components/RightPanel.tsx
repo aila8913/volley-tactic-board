@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useRef } from 'react';
 import { useTactics, ToolType } from '../hooks/useTactics';
 import { exportCourtAsPng, exportStateAsJson, importStateFromJson } from '../lib/exportUtils';
 import { Toaster } from "@/components/ui/toaster";
@@ -21,7 +21,7 @@ export default function RightPanel() {
   const handleTool = (tool: ToolType) => setActiveTool(tool);
 
   const toolBtnClass = (tool: ToolType) => 
-    `wobbly-border py-2 text-sm font-bold transition-colors ${activeTool === tool ? 'bg-[#CCFF00] shadow-[2px_2px_0_0_#111]' : 'bg-white hover:bg-gray-100'}`;
+    `wobbly-border py-1.5 text-xs font-bold transition-colors ${activeTool === tool ? 'bg-[#CCFF00] shadow-[2px_2px_0_0_#111]' : 'bg-white hover:bg-gray-100'}`;
 
   const handleDelete = () => {
     if (selectedObjectId) {
@@ -40,7 +40,6 @@ export default function RightPanel() {
     const originalRotation = currentRotation;
     for (let i = 0; i < 6; i++) {
       setCurrentRotation(i);
-      // Brief delay to allow React to render the new rotation
       await new Promise(resolve => setTimeout(resolve, 300));
       exportCourtAsPng('court-wrapper', `${projectName || 'tactics'}_輪次${i + 1}`);
     }
@@ -78,47 +77,48 @@ export default function RightPanel() {
 
   return (
     <div className="flex flex-col h-full bg-[#f8f8f8]">
-      <div className="p-4 flex flex-col gap-6 overflow-y-auto flex-1 wobbly-svg">
+      <div className="p-3 flex flex-col gap-4 overflow-y-auto flex-1">
         
         <section>
-          <div className="flex justify-between items-center mb-3">
-            <h2 className="font-display border-b-2 border-[#111] inline-block text-[15px]">畫筆工具</h2>
+          <div className="flex justify-between items-center mb-2">
+            <h2 className="font-display text-[15px] font-bold">畫筆工具</h2>
             <div className="flex gap-1">
               <button onClick={undo} disabled={historyIndex <= 0} className="px-2 py-1 wobbly-border bg-white text-xs disabled:opacity-50 hover:bg-[#CCFF00]" title="Undo (Ctrl+Z)">↩</button>
               <button onClick={redo} disabled={historyIndex >= history.length - 1} className="px-2 py-1 wobbly-border bg-white text-xs disabled:opacity-50 hover:bg-[#CCFF00]" title="Redo (Ctrl+Y)">↪</button>
             </div>
           </div>
           
-          <div className="grid grid-cols-2 gap-2 mb-2">
-            <button onClick={() => handleTool('select')} className={toolBtnClass('select')}>選取移動</button>
-            <button onClick={() => handleTool('arrow')} className={toolBtnClass('arrow')}>實線箭頭</button>
-            <button onClick={() => handleTool('dashed')} className={toolBtnClass('dashed')}>虛線路徑</button>
-            <button onClick={() => handleTool('attack')} className={toolBtnClass('attack')}>攻擊線</button>
-            <button onClick={() => handleTool('text')} className={toolBtnClass('text')}>文字</button>
-            <button onClick={() => handleTool('volleyball')} className={toolBtnClass('volleyball')}>排球</button>
+          <div className="grid grid-cols-2 gap-1.5 mb-2">
+            <button onClick={() => handleTool('select')} className={toolBtnClass('select')} data-testid="tool-select">選取移動</button>
+            <button onClick={() => handleTool('arrow')} className={toolBtnClass('arrow')} data-testid="tool-arrow">實線箭頭</button>
+            <button onClick={() => handleTool('dashed')} className={toolBtnClass('dashed')} data-testid="tool-dashed">虛線路徑</button>
+            <button onClick={() => handleTool('attack')} className={toolBtnClass('attack')} data-testid="tool-attack">攻擊線</button>
+            <button onClick={() => handleTool('text')} className={toolBtnClass('text')} data-testid="tool-text">文字</button>
+            <button onClick={() => handleTool('volleyball')} className={toolBtnClass('volleyball')} data-testid="tool-volleyball">排球</button>
           </div>
           <button 
             onClick={handleDelete}
             disabled={!selectedObjectId}
-            className="w-full wobbly-border py-2 text-sm bg-white hover:bg-red-100 disabled:opacity-50 text-red-600 font-bold transition-colors"
+            className="w-full wobbly-border py-1.5 text-xs bg-white hover:bg-red-100 disabled:opacity-50 text-red-600 font-bold transition-colors"
+            data-testid="button-delete-marker"
           >
             刪除選取標記 (Del)
           </button>
         </section>
 
         <section>
-          <h2 className="font-display mb-3 border-b-2 border-[#111] inline-block text-[15px]">防守範圍</h2>
-          <div className="grid grid-cols-3 gap-2 mb-3">
-            <button onClick={() => handleTool('circle')} className={toolBtnClass('circle')}>圓形</button>
-            <button onClick={() => handleTool('ellipse')} className={toolBtnClass('ellipse')}>橢圓</button>
-            <button onClick={() => handleTool('fan')} className={toolBtnClass('fan')}>扇形</button>
+          <h2 className="font-display mb-2 text-[15px] font-bold">防守範圍</h2>
+          <div className="grid grid-cols-3 gap-1.5 mb-2">
+            <button onClick={() => handleTool('circle')} className={toolBtnClass('circle')} data-testid="tool-circle">圓形</button>
+            <button onClick={() => handleTool('ellipse')} className={toolBtnClass('ellipse')} data-testid="tool-ellipse">橢圓</button>
+            <button onClick={() => handleTool('fan')} className={toolBtnClass('fan')} data-testid="tool-fan">扇形</button>
           </div>
 
           {selectedRange && (
-            <div className="p-3 bg-white wobbly-border text-sm space-y-3">
-              <div className="font-bold">範圍屬性</div>
+            <div className="p-2 bg-white wobbly-border text-xs space-y-2">
+              <div className="font-bold text-xs">範圍屬性</div>
               <div>
-                <label className="text-xs mb-1 block">透明度: {Math.round(selectedRange.opacity * 100)}%</label>
+                <label className="text-[10px] mb-1 block">透明度: {Math.round(selectedRange.opacity * 100)}%</label>
                 <input 
                   type="range" min="0.1" max="1" step="0.1" 
                   value={selectedRange.opacity} 
@@ -127,12 +127,12 @@ export default function RightPanel() {
                 />
               </div>
               <div>
-                <label className="text-xs mb-1 block">顏色</label>
+                <label className="text-[10px] mb-1 block">顏色</label>
                 <div className="flex gap-1 flex-wrap">
                   {COLORS.map(c => (
                     <button 
                       key={c}
-                      className={`w-6 h-6 border-2 border-[#111] ${selectedRange.color === c ? 'ring-2 ring-offset-1 ring-[#111]' : ''}`}
+                      className={`w-5 h-5 border-2 border-[#111] ${selectedRange.color === c ? 'ring-2 ring-offset-1 ring-[#111]' : ''}`}
                       style={{ backgroundColor: c }}
                       onClick={() => updateDefenseRange(selectedRange.id, { color: c })}
                     />
@@ -142,27 +142,65 @@ export default function RightPanel() {
               
               {selectedRange.type === 'circle' && (
                 <div>
-                  <label className="text-xs mb-1 block">半徑</label>
-                  <input type="range" min="5" max="50" value={selectedRange.radius || 15} onChange={(e) => updateDefenseRange(selectedRange.id, { radius: parseInt(e.target.value) })} className="w-full accent-[#CCFF00]"/>
+                  <label className="text-[10px] mb-1 block">半徑: {selectedRange.radius || 15}</label>
+                  <input type="range" min="5" max="60" value={selectedRange.radius || 15}
+                    onChange={(e) => updateDefenseRange(selectedRange.id, { radius: parseInt(e.target.value) })}
+                    className="w-full accent-[#CCFF00]"
+                  />
                 </div>
               )}
+
               {selectedRange.type === 'ellipse' && (
                 <>
                   <div>
-                    <label className="text-xs mb-1 block">長軸</label>
-                    <input type="range" min="5" max="50" value={selectedRange.rx || 15} onChange={(e) => updateDefenseRange(selectedRange.id, { rx: parseInt(e.target.value) })} className="w-full accent-[#CCFF00]"/>
+                    <label className="text-[10px] mb-1 block">長軸: {selectedRange.rx || 15}</label>
+                    <input type="range" min="5" max="60" value={selectedRange.rx || 15}
+                      onChange={(e) => updateDefenseRange(selectedRange.id, { rx: parseInt(e.target.value) })}
+                      className="w-full accent-[#CCFF00]"
+                    />
                   </div>
                   <div>
-                    <label className="text-xs mb-1 block">短軸</label>
-                    <input type="range" min="5" max="50" value={selectedRange.ry || 10} onChange={(e) => updateDefenseRange(selectedRange.id, { ry: parseInt(e.target.value) })} className="w-full accent-[#CCFF00]"/>
+                    <label className="text-[10px] mb-1 block">短軸: {selectedRange.ry || 10}</label>
+                    <input type="range" min="5" max="60" value={selectedRange.ry || 10}
+                      onChange={(e) => updateDefenseRange(selectedRange.id, { ry: parseInt(e.target.value) })}
+                      className="w-full accent-[#CCFF00]"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] mb-1 block">旋轉: {selectedRange.rotation || 0}°</label>
+                    <input type="range" min="0" max="359" value={selectedRange.rotation || 0}
+                      onChange={(e) => updateDefenseRange(selectedRange.id, { rotation: parseInt(e.target.value) })}
+                      className="w-full accent-[#CCFF00]"
+                    />
                   </div>
                 </>
               )}
+
               {selectedRange.type === 'fan' && (
                 <>
                   <div>
-                    <label className="text-xs mb-1 block">半徑</label>
-                    <input type="range" min="10" max="80" value={selectedRange.radius || 15} onChange={(e) => updateDefenseRange(selectedRange.id, { radius: parseInt(e.target.value) })} className="w-full accent-[#CCFF00]"/>
+                    <label className="text-[10px] mb-1 block">半徑: {selectedRange.radius || 15}</label>
+                    <input type="range" min="10" max="80" value={selectedRange.radius || 15}
+                      onChange={(e) => updateDefenseRange(selectedRange.id, { radius: parseInt(e.target.value) })}
+                      className="w-full accent-[#CCFF00]"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] mb-1 block">扇形角度: {Math.abs((selectedRange.endAngle || 45) - (selectedRange.startAngle || -45))}°</label>
+                    <input type="range" min="10" max="340" value={Math.abs((selectedRange.endAngle || 45) - (selectedRange.startAngle || -45))}
+                      onChange={(e) => {
+                        const half = parseInt(e.target.value) / 2;
+                        updateDefenseRange(selectedRange.id, { startAngle: -half, endAngle: half });
+                      }}
+                      className="w-full accent-[#CCFF00]"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] mb-1 block">旋轉方向: {selectedRange.rotation || 0}°</label>
+                    <input type="range" min="0" max="359" value={selectedRange.rotation || 0}
+                      onChange={(e) => updateDefenseRange(selectedRange.id, { rotation: parseInt(e.target.value) })}
+                      className="w-full accent-[#CCFF00]"
+                    />
                   </div>
                 </>
               )}
@@ -171,33 +209,44 @@ export default function RightPanel() {
         </section>
 
         <section>
-          <h2 className="font-display mb-3 border-b-2 border-[#111] inline-block text-[15px]">戰術管理</h2>
-          <div className="space-y-2 mb-4">
+          <h2 className="font-display mb-2 text-[15px] font-bold">戰術管理</h2>
+          <div className="space-y-2">
             <input 
-              className="w-full wobbly-border px-3 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-[#CCFF00]" 
+              className="w-full wobbly-border px-2 py-1.5 text-xs bg-white outline-none focus:ring-2 focus:ring-[#CCFF00]" 
               placeholder="專案名稱" 
               value={projectName}
               onChange={(e) => setProjectName(e.target.value)}
+              data-testid="input-project-name"
             />
             <input 
-              className="w-full wobbly-border px-3 py-2 text-sm bg-white outline-none focus:ring-2 focus:ring-[#CCFF00]" 
+              className="w-full wobbly-border px-2 py-1.5 text-xs bg-white outline-none focus:ring-2 focus:ring-[#CCFF00]" 
               placeholder="隊伍名稱" 
               value={teamName}
               onChange={(e) => setTeamName(e.target.value)}
+              data-testid="input-team-name"
             />
-            <div className="flex gap-2 pt-2">
-              <button onClick={() => { saveProject(); toast({ title: "專案已儲存" })}} className="flex-1 wobbly-border py-2 bg-[#CCFF00] hover:bg-[#111] hover:text-[#CCFF00] transition-colors font-bold text-sm shadow-[2px_2px_0_0_#111]">儲存</button>
-              <button onClick={handleNewProject} className="flex-1 wobbly-border py-2 bg-white hover:bg-gray-100 font-bold text-sm">新建</button>
+            <div className="flex gap-2">
+              <button onClick={() => { saveProject(); toast({ title: "專案已儲存" })}}
+                className="flex-1 wobbly-border py-1.5 bg-[#CCFF00] hover:bg-[#111] hover:text-[#CCFF00] transition-colors font-bold text-xs shadow-[2px_2px_0_0_#111]"
+                data-testid="button-save-project"
+              >儲存</button>
+              <button onClick={handleNewProject}
+                className="flex-1 wobbly-border py-1.5 bg-white hover:bg-gray-100 font-bold text-xs"
+                data-testid="button-new-project"
+              >新建</button>
             </div>
             
             {projects.length > 0 && (
-              <div className="mt-4 border-2 border-[#111] bg-white p-2">
-                <div className="text-xs font-bold mb-2">已儲存專案 (點擊載入)</div>
-                <div className="space-y-1 max-h-[100px] overflow-y-auto">
+              <div className="border-2 border-[#111] bg-white p-2">
+                <div className="text-[10px] font-bold mb-1">已儲存 (點擊載入)</div>
+                <div className="space-y-1 max-h-[80px] overflow-y-auto">
                   {projects.map(p => (
-                    <div key={p.id} className="flex justify-between items-center text-xs p-1 hover:bg-gray-100 cursor-pointer" onClick={() => { loadProject(p.id); toast({ title: "專案已載入" }); }}>
-                      <span>{p.name || '未命名'}</span>
-                      <span className="text-gray-500">{new Date(p.date).toLocaleDateString()}</span>
+                    <div key={p.id}
+                      className="flex justify-between items-center text-[10px] p-1 hover:bg-gray-100 cursor-pointer"
+                      onClick={() => { loadProject(p.id); toast({ title: "專案已載入" }); }}
+                    >
+                      <span className="truncate flex-1">{p.name || '未命名'}</span>
+                      <span className="text-gray-400 ml-1 shrink-0">{new Date(p.date).toLocaleDateString()}</span>
                     </div>
                   ))}
                 </div>
@@ -207,16 +256,18 @@ export default function RightPanel() {
         </section>
 
       </div>
-      <div className="p-4 border-t-2 border-[#111] bg-white wobbly-svg">
-        <h2 className="font-display text-2xl mb-3 border-b-2 border-[#111] inline-block">分享匯出</h2>
-        <div className="grid grid-cols-2 gap-2">
-          <button onClick={handleExportPNG} className="wobbly-border py-2 bg-white text-xs hover:bg-[#CCFF00] font-bold">匯出 PNG</button>
-          <button onClick={handleExportAllPNG} className="wobbly-border py-2 bg-white text-xs hover:bg-[#CCFF00] font-bold">匯出6輪PNG</button>
-          <button onClick={handleExportJSON} className="wobbly-border py-2 bg-white text-xs hover:bg-[#CCFF00] font-bold">匯出 JSON</button>
-          <button onClick={() => fileInputRef.current?.click()} className="wobbly-border py-2 bg-white text-xs hover:bg-[#CCFF00] font-bold">匯入 JSON</button>
+
+      <div className="p-3 border-t-2 border-[#111] bg-white">
+        <h2 className="font-display text-[15px] font-bold mb-2">分享匯出</h2>
+        <div className="grid grid-cols-2 gap-1.5">
+          <button onClick={handleExportPNG} className="wobbly-border py-1.5 bg-white text-xs hover:bg-[#CCFF00] font-bold" data-testid="button-export-png">匯出 PNG</button>
+          <button onClick={handleExportAllPNG} className="wobbly-border py-1.5 bg-white text-xs hover:bg-[#CCFF00] font-bold" data-testid="button-export-all-png">匯出6輪PNG</button>
+          <button onClick={handleExportJSON} className="wobbly-border py-1.5 bg-white text-xs hover:bg-[#CCFF00] font-bold" data-testid="button-export-json">匯出 JSON</button>
+          <button onClick={() => fileInputRef.current?.click()} className="wobbly-border py-1.5 bg-white text-xs hover:bg-[#CCFF00] font-bold" data-testid="button-import-json">匯入 JSON</button>
           <input type="file" accept=".json" className="hidden" ref={fileInputRef} onChange={handleImportJSON} />
         </div>
       </div>
+      <Toaster />
     </div>
   );
 }

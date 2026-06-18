@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { useTactics, ToolType } from '../hooks/useTactics';
+import { useTactics, ToolType, getActivePositions } from '../hooks/useTactics';
 import PlayerNode from './PlayerNode';
 import Markers from './Markers';
 import DefenseRange from './DefenseRange';
@@ -9,7 +9,7 @@ export default function Court() {
     rotations, currentRotation, players, labelToggles, activeTool, setActiveTool,
     addMarker, updateMarker, selectedObjectId, setSelectedObjectId,
     addDefenseRange, updateDefenseRange, liberoSubstitution,
-    undo, redo
+    scenario, undo, redo
   } = useTactics();
   
   const courtRef = useRef<SVGSVGElement>(null);
@@ -190,7 +190,7 @@ export default function Court() {
           ))}
 
           {/* Render Players */}
-          {rotation.positions.map(pos => {
+          {getActivePositions(rotation, scenario).map(pos => {
             const player = players.find(p => p.id === pos.playerId);
             if (!player) return null;
             
