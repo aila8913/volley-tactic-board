@@ -10,20 +10,17 @@ export default function TacticsBoard() {
       <div className="w-[260px] border-r-2 border-[#111111] flex-shrink-0 flex flex-col">
         <LeftPanel />
       </div>
-      
       <div className="flex-1 flex flex-col relative overflow-hidden bg-white">
-        <div className="flex-1 p-4 flex items-center justify-center relative min-h-0">
+        <div className="flex-1 p-4 flex items-center justify-center relative min-h-0 text-[15px]">
           <Court />
         </div>
         <div className="h-[100px] border-t-2 border-[#111111] bg-white flex-shrink-0">
           <RotationThumbnails />
         </div>
       </div>
-      
       <div className="w-[240px] border-l-2 border-[#111111] flex-shrink-0 flex flex-col">
         <RightPanel />
       </div>
-      
       <svg className="hidden">
         <filter id="wobbly-filter">
           <feTurbulence type="fractalNoise" baseFrequency="0.05" numOctaves="2" result="noise" />

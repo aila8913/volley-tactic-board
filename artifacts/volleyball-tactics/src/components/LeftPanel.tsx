@@ -28,7 +28,7 @@ export default function LeftPanel() {
         </div>
 
         <section>
-          <h2 className="font-display text-xl mb-4 border-b-2 border-[#111] inline-block">球員設定</h2>
+          <h2 className="font-display mb-4 border-b-2 border-[#111] inline-block text-[15px]">球員設定</h2>
           <div className="space-y-3 mb-4">
             {players.map((p, i) => (
               <div key={p.id} className="flex items-center gap-2">
@@ -51,7 +51,7 @@ export default function LeftPanel() {
         </section>
 
         <section>
-          <h2 className="font-display text-xl mb-4 border-b-2 border-[#111] inline-block">情境模式</h2>
+          <h2 className="font-display mb-4 border-b-2 border-[#111] inline-block text-[15px]">情境模式</h2>
           <div className="flex flex-wrap gap-2">
             {[
               { id: 'base', label: '基礎輪轉' },
@@ -81,7 +81,7 @@ export default function LeftPanel() {
         </section>
         
         <section>
-          <h2 className="font-display text-xl mb-4 border-b-2 border-[#111] inline-block">自由球員替換</h2>
+          <h2 className="font-display mb-4 border-b-2 border-[#111] inline-block text-[15px]">自由球員替換</h2>
           <div className="flex gap-2">
             <button 
               onClick={() => handleSub('MB1')}
@@ -121,7 +121,6 @@ export default function LeftPanel() {
         </section>
 
       </div>
-      
       {/* Tips Section */}
       <div className="p-4 border-t-2 border-[#111] bg-white">
         <details className="group">
