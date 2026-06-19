@@ -4,12 +4,12 @@ import RotationThumbnails from "./RotationThumbnails";
 
 const roleName = (role: string): string => {
   const map: Record<string, string> = {
-    S: "舉球",
+    S1: "舉球",
     OH1: "主攻1",
     OH2: "主攻2",
     MB1: "中間1",
     MB2: "中間2",
-    S: "舉球",
+    S2: "舉球",
     L: "自由",
   };
   return map[role] ?? role;
@@ -56,7 +56,7 @@ export default function LeftPanel() {
         </div>
 
         <section>
-          <h2 className="font-display mb-3 text-[15px] font-bold">球員</h2>
+          <h2 className="font-display mb-3 text-[15px] font-bold">球員設定</h2>
           <div className="space-y-2 mb-3">
             {players.map((p) => (
               <div key={p.id} className="flex items-center gap-2">
@@ -114,7 +114,7 @@ export default function LeftPanel() {
               { id: "serve-receive", label: "接發球" },
               { id: "defense", label: "防守" },
               { id: "attack", label: "進攻" },
-              { id: "cover", label: "Cover保護" },
+              { id: "cover", label: "Cover" },
             ].map((sc) => (
               <label
                 key={sc.id}

@@ -1,9 +1,14 @@
-export type ScenarioType = 'base' | 'serve-receive' | 'defense' | 'attack' | 'cover';
+export type ScenarioType =
+  | "base"
+  | "serve-receive"
+  | "defense"
+  | "attack"
+  | "cover";
 
 export interface Player {
   id: string;
   name: string;
-  role: 'S' | 'OH1' | 'OH2' | 'MB1' | 'MB2' | 'OPP' | 'L';
+  role: "S1" | "OH1" | "OH2" | "MB1" | "MB2" | "S2" | "L";
 }
 
 export interface PlayerPosition {
@@ -15,7 +20,7 @@ export interface PlayerPosition {
 export interface DefenseRange {
   id: string;
   playerId: string;
-  type: 'circle' | 'ellipse' | 'fan';
+  type: "circle" | "ellipse" | "fan";
   x: number;
   y: number;
   radius?: number;
@@ -31,8 +36,8 @@ export interface DefenseRange {
 
 export interface Marker {
   id: string;
-  type: 'arrow' | 'dashed' | 'attack' | 'text' | 'volleyball';
-  points?: {x: number; y: number}[];
+  type: "arrow" | "dashed" | "attack" | "text" | "volleyball";
+  points?: { x: number; y: number }[];
   x?: number;
   y?: number;
   text?: string;
@@ -48,7 +53,7 @@ export interface TacticsState {
   projectName: string;
   teamName: string;
   players: Player[];
-  liberoSubstitution: 'MB1' | 'MB2' | null;
+  liberoSubstitution: "MB1" | "MB2" | null;
   scenario: ScenarioType;
   currentRotation: number;
   rotations: RotationState[];

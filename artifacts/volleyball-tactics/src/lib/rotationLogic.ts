@@ -11,12 +11,12 @@ import { PlayerPosition, Player } from '../types/tactics';
 //   Net: top of front row
 
 export function getDefaultPositions(players: Player[], rotation: number): PlayerPosition[] {
-  const s   = players.find(p => p.role === 'S');
+  const s   = players.find(p => p.role === 'S1');
   const oh1 = players.find(p => p.role === 'OH1');
   const oh2 = players.find(p => p.role === 'OH2');
   const mb1 = players.find(p => p.role === 'MB1');
   const mb2 = players.find(p => p.role === 'MB2');
-  const opp = players.find(p => p.role === 'OPP');
+  const opp = players.find(p => p.role === 'S2');
 
   // Rotation 1 starting zones — every pair is exactly 3 zones apart (true diagonal)
   const initialZones = new Map<string, number>();
