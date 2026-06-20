@@ -56,12 +56,12 @@ interface TacticsStore extends TacticsState {
 }
 
 const defaultPlayers: Player[] = [
-  { id: 'p1', name: '', role: 'S1' },
+  { id: 'p1', name: '', role: 'S' },
   { id: 'p2', name: '', role: 'OH1' },
   { id: 'p3', name: '', role: 'OH2' },
   { id: 'p4', name: '', role: 'MB1' },
   { id: 'p5', name: '', role: 'MB2' },
-  { id: 'p6', name: '', role: 'S2' },
+  { id: 'p6', name: '', role: 'OPP' },
   { id: 'p7', name: '', role: 'L' }
 ];
 
