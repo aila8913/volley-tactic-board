@@ -14,12 +14,12 @@ interface PlayerNodeProps {
 
 const roleLabel = (role: string): string => {
   const map: Record<string, string> = {
-    S1: "S",
-    OH1: "攻1",
-    OH2: "攻2",
-    MB1: "中1",
-    MB2: "中2",
-    S2: "大砲",
+    S1: "舉球1",
+    OH1: "大砲1",
+    OH2: "大砲2",
+    MB1: "中間1",
+    MB2: "中間2",
+    S2: "舉球2",
     L: "L",
   };
   return map[role] ?? role;

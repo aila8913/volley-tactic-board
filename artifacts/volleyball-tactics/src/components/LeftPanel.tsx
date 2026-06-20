@@ -4,12 +4,12 @@ import RotationThumbnails from "./RotationThumbnails";
 
 const roleName = (role: string): string => {
   const map: Record<string, string> = {
-    S1: "舉球",
-    OH1: "主攻1",
-    OH2: "主攻2",
+    S1: "舉球1",
+    OH1: "大砲1",
+    OH2: "大砲2",
     MB1: "中間1",
     MB2: "中間2",
-    S2: "舉球",
+    S2: "舉球2",
     L: "自由",
   };
   return map[role] ?? role;
