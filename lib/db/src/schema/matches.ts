@@ -2,9 +2,11 @@ import { pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
-// 一場比賽。videoUrl 留空代表目前還沒有可以做「賽後補填」的影片連結。
+// 一場比賽，name 是這場比賽自己取的名字（跟對手 opponent 是兩個獨立欄位）。
+// videoUrl 留空代表目前還沒有可以做「賽後補填」的影片連結。
 export const matchesTable = pgTable("matches", {
   id: serial("id").primaryKey(),
+  name: text("name").notNull(),
   date: timestamp("date", { withTimezone: true }).notNull(),
   opponent: text("opponent").notNull(),
   location: text("location"),
