@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: matches
+    description: Matches, and the players/sets/rallies/events nested under a match
 paths:
   /healthz:
     get:
@@ -24,7 +26,262 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /matches:
+    get:
+      operationId: listMatches
+      tags: [matches]
+      summary: List matches
+      responses:
+        "200":
+          description: List of matches
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Match"
+    post:
+      operationId: createMatch
+      tags: [matches]
+      summary: Create a match
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewMatch"
+      responses:
+        "201":
+          description: Created match
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Match"
+
+  /matches/{matchId}:
+    parameters:
+      - $ref: "#/components/parameters/MatchId"
+    get:
+      operationId: getMatch
+      tags: [matches]
+      summary: Get a match by id
+      responses:
+        "200":
+          description: The match
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Match"
+    patch:
+      operationId: updateMatch
+      tags: [matches]
+      summary: Update a match (e.g. attach a video_url for post-game review)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMatch"
+      responses:
+        "200":
+          description: Updated match
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Match"
+
+  /matches/{matchId}/players:
+    parameters:
+      - $ref: "#/components/parameters/MatchId"
+    get:
+      operationId: listPlayers
+      tags: [matches]
+      summary: List players for a match
+      responses:
+        "200":
+          description: List of players
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Player"
+    post:
+      operationId: createPlayer
+      tags: [matches]
+      summary: Add a player to a match's roster
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewPlayer"
+      responses:
+        "201":
+          description: Created player
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Player"
+
+  /matches/{matchId}/sets:
+    parameters:
+      - $ref: "#/components/parameters/MatchId"
+    get:
+      operationId: listSets
+      tags: [matches]
+      summary: List sets for a match
+      responses:
+        "200":
+          description: List of sets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MatchSet"
+    post:
+      operationId: createSet
+      tags: [matches]
+      summary: Start a new set
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewSet"
+      responses:
+        "201":
+          description: Created set
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MatchSet"
+
+  /sets/{setId}/rallies:
+    parameters:
+      - $ref: "#/components/parameters/SetId"
+    get:
+      operationId: listRallies
+      tags: [matches]
+      summary: List rallies for a set
+      responses:
+        "200":
+          description: List of rallies
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Rally"
+    post:
+      operationId: createRally
+      tags: [matches]
+      summary: Record a new rally (one point)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewRally"
+      responses:
+        "201":
+          description: Created rally
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Rally"
+
+  /rallies/{rallyId}/events:
+    parameters:
+      - $ref: "#/components/parameters/RallyId"
+    get:
+      operationId: listEvents
+      tags: [matches]
+      summary: List events (individual ball touches) for a rally
+      responses:
+        "200":
+          description: List of events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MatchEvent"
+    post:
+      operationId: createEvent
+      tags: [matches]
+      summary: Record one ball touch, live during the match or backfilled from video review
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewEvent"
+      responses:
+        "201":
+          description: Created event
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MatchEvent"
+
+  /events/{eventId}:
+    parameters:
+      - $ref: "#/components/parameters/EventId"
+    patch:
+      operationId: updateEvent
+      tags: [matches]
+      summary: Correct or fill in details on an existing event (e.g. during video review)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateEvent"
+      responses:
+        "200":
+          description: Updated event
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MatchEvent"
+    delete:
+      operationId: deleteEvent
+      tags: [matches]
+      summary: Delete an event (e.g. recorded by mistake)
+      responses:
+        "204":
+          description: Deleted
+
 components:
+  parameters:
+    MatchId:
+      name: matchId
+      in: path
+      required: true
+      schema:
+        type: integer
+    SetId:
+      name: setId
+      in: path
+      required: true
+      schema:
+        type: integer
+    RallyId:
+      name: rallyId
+      in: path
+      required: true
+      schema:
+        type: integer
+    EventId:
+      name: eventId
+      in: path
+      required: true
+      schema:
+        type: integer
+
   schemas:
     HealthStatus:
       type: object
@@ -34,3 +291,255 @@ components:
       required:
         - status
 
+    # 跟前端戰術板的角色定義一致 (artifacts/volleyball-tactics/src/types/tactics.ts 的 Player.role)
+    # 以及後端 DB schema 的 playerRoleEnum (lib/db/src/schema/players.ts)。
+    PlayerRole:
+      type: string
+      enum: [S, OH1, OH2, MB1, MB2, OPP, L]
+
+    Player:
+      type: object
+      properties:
+        id:
+          type: integer
+        matchId:
+          type: integer
+        name:
+          type: string
+        role:
+          $ref: "#/components/schemas/PlayerRole"
+      required: [id, matchId, name, role]
+
+    NewPlayer:
+      type: object
+      properties:
+        name:
+          type: string
+        role:
+          $ref: "#/components/schemas/PlayerRole"
+      required: [name, role]
+
+    Match:
+      type: object
+      properties:
+        id:
+          type: integer
+        date:
+          type: string
+          format: date-time
+        opponent:
+          type: string
+        location:
+          type: string
+          nullable: true
+        # YouTube 連結；有值時前端會顯示影片播放器並啟用「賽後補填」模式。
+        videoUrl:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, date, opponent, createdAt]
+
+    NewMatch:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date-time
+        opponent:
+          type: string
+        location:
+          type: string
+          nullable: true
+        videoUrl:
+          type: string
+          nullable: true
+      required: [date, opponent]
+
+    UpdateMatch:
+      type: object
+      properties:
+        opponent:
+          type: string
+        location:
+          type: string
+          nullable: true
+        videoUrl:
+          type: string
+          nullable: true
+
+    MatchSet:
+      type: object
+      properties:
+        id:
+          type: integer
+        matchId:
+          type: integer
+        setNumber:
+          type: integer
+      required: [id, matchId, setNumber]
+
+    NewSet:
+      type: object
+      properties:
+        setNumber:
+          type: integer
+      required: [setNumber]
+
+    RallyWinner:
+      type: string
+      enum: [home, away]
+
+    Rally:
+      type: object
+      properties:
+        id:
+          type: integer
+        setId:
+          type: integer
+        rallyNumber:
+          type: integer
+        # 這分開始前的比分，不是結束後的——見 docs/db-schema-spec.md 的設計理由。
+        homeScore:
+          type: integer
+        awayScore:
+          type: integer
+        winner:
+          $ref: "#/components/schemas/RallyWinner"
+      required: [id, setId, rallyNumber, homeScore, awayScore, winner]
+
+    NewRally:
+      type: object
+      properties:
+        rallyNumber:
+          type: integer
+        homeScore:
+          type: integer
+        awayScore:
+          type: integer
+        winner:
+          $ref: "#/components/schemas/RallyWinner"
+      required: [rallyNumber, homeScore, awayScore, winner]
+
+    EventAction:
+      type: string
+      enum: [serve, receive, set, attack, block, dig]
+
+    # 只在 receive/dig 動作才有意義，用來把一傳/防守細分成接發/接扣(S)/嗆司/接吊(T)四類做統計。
+    BallType:
+      type: string
+      enum: [serve, spike, tip, chance]
+
+    EventSource:
+      type: string
+      enum: [live, review]
+
+    MatchEvent:
+      type: object
+      properties:
+        id:
+          type: integer
+        rallyId:
+          type: integer
+        sequence:
+          type: integer
+        playerId:
+          type: integer
+        action:
+          $ref: "#/components/schemas/EventAction"
+        ballType:
+          $ref: "#/components/schemas/BallType"
+        # 0~3 品質評分，0 = 直接失誤，3 = 完美到位。用來算「到位率」。
+        quality:
+          type: integer
+          nullable: true
+        # 跟前端球場 SVG 同一個座標系：viewBox 0~100 (寬) x 0~200 (長)。
+        fromX:
+          type: number
+        fromY:
+          type: number
+        toX:
+          type: number
+        toY:
+          type: number
+        tags:
+          type: array
+          items:
+            type: string
+        note:
+          type: string
+          nullable: true
+        # 對應 YouTube 播放秒數，只有 source = 'review' 時才會有值。
+        videoTimestamp:
+          type: integer
+          nullable: true
+        source:
+          $ref: "#/components/schemas/EventSource"
+      required:
+        [id, rallyId, sequence, playerId, action, fromX, fromY, toX, toY, tags, source]
+
+    NewEvent:
+      type: object
+      properties:
+        sequence:
+          type: integer
+        playerId:
+          type: integer
+        action:
+          $ref: "#/components/schemas/EventAction"
+        ballType:
+          $ref: "#/components/schemas/BallType"
+        quality:
+          type: integer
+          nullable: true
+        fromX:
+          type: number
+        fromY:
+          type: number
+        toX:
+          type: number
+        toY:
+          type: number
+        tags:
+          type: array
+          items:
+            type: string
+        note:
+          type: string
+          nullable: true
+        videoTimestamp:
+          type: integer
+          nullable: true
+        source:
+          $ref: "#/components/schemas/EventSource"
+      required: [sequence, playerId, action, fromX, fromY, toX, toY, source]
+
+    UpdateEvent:
+      type: object
+      properties:
+        action:
+          $ref: "#/components/schemas/EventAction"
+        ballType:
+          $ref: "#/components/schemas/BallType"
+        quality:
+          type: integer
+          nullable: true
+        fromX:
+          type: number
+        fromY:
+          type: number
+        toX:
+          type: number
+        toY:
+          type: number
+        tags:
+          type: array
+          items:
+            type: string
+        note:
+          type: string
+          nullable: true
+        videoTimestamp:
+          type: integer
+          nullable: true

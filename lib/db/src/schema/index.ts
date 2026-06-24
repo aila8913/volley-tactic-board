@@ -1,20 +1,8 @@
-// Export your models here. Add one export per file
-// export * from "./posts";
-//
-// Each model/table should ideally be split into different files.
-// Each model/table should define a Drizzle table, insert schema, and types:
-//
-//   import { pgTable, text, serial } from "drizzle-orm/pg-core";
-//   import { createInsertSchema } from "drizzle-zod";
-//   import { z } from "zod/v4";
-//
-//   export const postsTable = pgTable("posts", {
-//     id: serial("id").primaryKey(),
-//     title: text("title").notNull(),
-//   });
-//
-//   export const insertPostSchema = createInsertSchema(postsTable).omit({ id: true });
-//   export type InsertPost = z.infer<typeof insertPostSchema>;
-//   export type Post = typeof postsTable.$inferSelect;
-
-export {}
+// 一場比賽的資料模型，由上到下是巢狀關係：
+// Match (比賽) -> Player (球員) / Set (局) -> Rally (一分) -> Event (一球)
+// 詳細規格見 docs/db-schema-spec.md。
+export * from "./matches";
+export * from "./players";
+export * from "./sets";
+export * from "./rallies";
+export * from "./events";
