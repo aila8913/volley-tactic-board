@@ -17,6 +17,7 @@ export const playersTable = pgTable("players", {
     .notNull()
     .references(() => matchesTable.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
+  number: integer("number").notNull(),
   role: playerRoleEnum("role").notNull(),
 });
 
