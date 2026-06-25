@@ -14,10 +14,8 @@ export type PlayerRole = typeof PlayerRole[keyof typeof PlayerRole];
 
 export const PlayerRole = {
   S: 'S',
-  OH1: 'OH1',
-  OH2: 'OH2',
-  MB1: 'MB1',
-  MB2: 'MB2',
+  OH: 'OH',
+  MB: 'MB',
   OPP: 'OPP',
   L: 'L',
 } as const;
