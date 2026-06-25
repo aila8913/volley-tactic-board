@@ -18,6 +18,14 @@
   不再有「戰術板內部 7 個固定站位」這層中間對應，所以「比賽紀錄」（`MatchRecording.tsx`/
   `RecordingCourt.tsx`）也一起改了：紀錄模式不會自動生成站位，沒有人先拖過站位時會請教練先去
   戰術板排好。
+- **畫筆工具改成要進「戰術布置」模式才能用**：新增 `useTactics.ts` 的 `isLayoutMode`
+  狀態（故意不存進 localStorage，重新整理一律回到唯讀檢視）跟 `setLayoutMode` action。
+  平常 `RightPanel.tsx` 只顯示「進入戰術布置」按鈕；點下去之後才會出現畫筆工具（箭頭/虛線/
+  攻擊線/文字/排球）跟防守範圍工具（圓形/橢圓/扇形），畫完點「完成並儲存」會呼叫既有的
+  `saveProject()` 存檔並退出。`Markers.tsx`/`DefenseRange.tsx` 的選取、拖曳、雙擊編輯文字
+  都加上 `isLayoutMode` 檢查，沒進入模式時球場上已經畫好的標記只能看不能動；`Court.tsx`
+  建立新標記的三個分支也同樣多一層 `isLayoutMode` 防呆。球員拖曳上場（吸附 6 格）不受這次
+  改動影響，跟模式無關，隨時可用。
 
 ## 還沒做的事
 
@@ -25,10 +33,6 @@
    `LeftPanel.tsx` 的「情境模式」區塊、`TacticsState.scenario` /
    `RotationState.scenarioPositions`。要融進「戰術專案」（`saveProject`/`loadProject`）
    的概念裡，不要再用獨立的情境切換——細節待設計（一個戰術專案要存幾種情境？怎麼存？）。
-2. **畫筆工具要在「戰術布置」模式才能用**：箭頭、虛線、攻擊線、文字、排球標記，目前
-   `RightPanel.tsx` 隨時都能用。改成要先進入一個「戰術布置」編輯模式才能畫，畫完要能
-   「儲存戰術」存回戰術專案。需要設計這個模式怎麼進入/退出、跟現有的
-   `activeTool`/`selectedObjectId` 狀態怎麼接。
 
 ## 不在這次範圍內、但相關的既有限制
 

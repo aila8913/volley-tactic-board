@@ -24,6 +24,7 @@ export default function Court() {
     scenario,
     undo,
     redo,
+    isLayoutMode,
   } = useTactics();
 
   const courtRef = useRef<SVGSVGElement>(null);
@@ -49,7 +50,9 @@ export default function Court() {
       setSelectedObjectId(null);
       const pt = getSvgPoint(e);
 
-      if (["arrow", "dashed", "attack"].includes(activeTool)) {
+      // 畫筆/防守範圍工具只能在「戰術布置」模式裡新增——理論上不在這個模式時 RightPanel
+      // 不會顯示這些工具按鈕，activeTool 也就不會被設成它們，這裡是再多一層防呆。
+      if (isLayoutMode && ["arrow", "dashed", "attack"].includes(activeTool)) {
         // Zustand doesn't return the ID, so we need to rely on the fact that it pushes to the end.
         // But since we can't synchronously get the ID easily without modifying addMarker,
         // we'll just set a drawing mode and update the *last* marker.
@@ -63,7 +66,7 @@ export default function Court() {
         });
         // We will set a flag so pointerMove knows we are drawing
         setDrawingMarkerId("drawing");
-      } else if (activeTool === "text" || activeTool === "volleyball") {
+      } else if (isLayoutMode && (activeTool === "text" || activeTool === "volleyball")) {
         addMarker({
           type: activeTool as any,
           x: pt.x,
@@ -71,7 +74,7 @@ export default function Court() {
           text: activeTool === "text" ? "請輸入文字" : undefined,
         });
         setActiveTool("select");
-      } else if (["circle", "ellipse", "fan"].includes(activeTool)) {
+      } else if (isLayoutMode && ["circle", "ellipse", "fan"].includes(activeTool)) {
         addDefenseRange({
           playerId: "",
           type: activeTool as any,
