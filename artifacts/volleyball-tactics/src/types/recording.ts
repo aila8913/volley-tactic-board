@@ -6,12 +6,25 @@
 // 對手沒有名單資料，只追蹤號位輪轉（見 lib/rotationLogic.ts 的 getZoneLayout）。
 export type Side = "us" | "opponent";
 
+// 快速操作手勢（畫線連到球員→選動作→選得失分）裡，「選動作」那一步的四個選項。
+export const PLAY_ACTIONS = ["serve", "defense", "attack", "block"] as const;
+export type PlayAction = (typeof PLAY_ACTIONS)[number];
+
 // 紀錄每一分發生時的狀況，用來支援「復原上一球」：
 // wasSideOut 代表這一分是不是從對方手上把發球權贏回來（side-out），
 // 只有 side-out 才會讓贏球的那一方輪轉一個位置。
+// action/touchedBy 是從快速操作手勢來的額外資訊（這一球是哪一方哪個球員做了什麼動作），
+// 純粹補充紀錄用，沒有也不影響比分/輪轉怎麼算——所以是 optional。
 export interface PointRecord {
   side: Side;
   wasSideOut: boolean;
+  action?: PlayAction;
+  touchedBy?: {
+    side: Side;
+    // 我方球員才有 playerId（對手只有號位沒有名單，見 RecordingCourt.tsx）。
+    playerId?: string;
+    zone?: number;
+  };
 }
 
 export interface SetRecordingState {

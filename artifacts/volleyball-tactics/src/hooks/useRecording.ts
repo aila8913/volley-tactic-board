@@ -1,13 +1,19 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { MatchRecordingState, Side, SetRecordingState } from "../types/recording";
+import { MatchRecordingState, PointRecord, Side, SetRecordingState } from "../types/recording";
 
 interface RecordingStore {
   // 用 matchId 當 key，這樣每場比賽的比分/輪轉是分開存的，跟 useMatches 用陣列存比賽列表不同，
   // 這裡用物件存是因為查特定一場的記錄比「列出所有場」更常用，物件用 id 查比陣列 find 快也好寫。
   recordingsByMatch: Record<string, MatchRecordingState>;
   startSet: (matchId: string, servingFirst: Side) => void;
-  scorePoint: (matchId: string, side: Side) => void;
+  // meta 是快速操作手勢（畫線連到球員→選動作→選得失分）帶來的附加資訊，純記錄用，
+  // 不影響比分/輪轉怎麼算——所以舊的「按按鈕得分」呼叫方式（不傳 meta）一樣能用。
+  scorePoint: (
+    matchId: string,
+    side: Side,
+    meta?: Pick<PointRecord, "action" | "touchedBy">,
+  ) => void;
   undoLastPoint: (matchId: string) => void;
   nextSet: (matchId: string) => void;
 }
@@ -43,7 +49,7 @@ export const useRecording = create<RecordingStore>()(
           };
         }),
 
-      scorePoint: (matchId, side) =>
+      scorePoint: (matchId, side, meta) =>
         set((state) => {
           const record = getOrInitRecord(state.recordingsByMatch, matchId);
           const current = record.currentSet;
@@ -73,7 +79,7 @@ export const useRecording = create<RecordingStore>()(
                   serving: side,
                   ourRotation,
                   opponentRotation,
-                  history: [...current.history, { side, wasSideOut }],
+                  history: [...current.history, { side, wasSideOut, ...meta }],
                 },
               },
             },
