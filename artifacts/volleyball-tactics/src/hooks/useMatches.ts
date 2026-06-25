@@ -8,8 +8,9 @@ interface MatchesStore {
   addMatch: (values: MatchFormValues, tournamentId: string | null) => string;
   updateMatch: (id: string, values: MatchFormValues) => void;
   // 只更新球員名單，不動對手/時間——戰術板的「編輯球員名單」彈窗用這個，
-  // 不用像 updateMatch 一樣帶著整張表單的其他欄位。
-  updateMatchPlayers: (id: string, players: MatchFormValues["players"]) => void;
+  // 不用像 updateMatch 一樣帶著整張表單的其他欄位。傳進來的 players 已經是補好 id 的
+  // MatchPlayer[]（戰術板那邊跟自己的 roster 用同一份補過 id 的資料，兩邊 id 才會一致）。
+  updateMatchPlayers: (id: string, players: MatchPlayer[]) => void;
   deleteMatch: (id: string) => void;
 }
 
@@ -58,9 +59,7 @@ export const useMatches = create<MatchesStore>()(
 
       updateMatchPlayers: (id, players) =>
         set((state) => ({
-          matches: state.matches.map((m) =>
-            m.id === id ? { ...m, players: toMatchPlayers(players) } : m,
-          ),
+          matches: state.matches.map((m) => (m.id === id ? { ...m, players } : m)),
         })),
 
       deleteMatch: (id) =>

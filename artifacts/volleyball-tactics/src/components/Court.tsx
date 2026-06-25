@@ -1,5 +1,6 @@
 import React, { useRef, useState, useEffect } from "react";
 import { useTactics, ToolType, getActivePositions } from "../hooks/useTactics";
+import { findNearestZone } from "../lib/rotationLogic";
 import PlayerNode from "./PlayerNode";
 import Markers from "./Markers";
 import DefenseRange from "./DefenseRange";
@@ -8,7 +9,7 @@ export default function Court() {
   const {
     rotations,
     currentRotation,
-    players,
+    roster,
     labelToggles,
     activeTool,
     setActiveTool,
@@ -19,6 +20,7 @@ export default function Court() {
     addDefenseRange,
     updateDefenseRange,
     liberoSubstitution,
+    placePlayerOnCourt,
     scenario,
     undo,
     redo,
@@ -113,6 +115,25 @@ export default function Court() {
     }
   };
 
+  // 從左側「球員設定」名單把球員拖到球場上，用的是瀏覽器原生的 drag-and-drop
+  // （跟 PlayerNode 場上重新拖曳用的 pointer events 是兩套不同機制——名單在 SVG
+  // 外面，要跨元件拖曳，原生 drag-and-drop 比自己用 pointer 算「拖到哪個 DOM 元素上」簡單）。
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const playerId = e.dataTransfer.getData("text/plain");
+    if (!playerId || !courtRef.current) return;
+    const CTM = courtRef.current.getScreenCTM();
+    if (!CTM) return;
+    const rawX = (e.clientX - CTM.e) / CTM.a;
+    const rawY = (e.clientY - CTM.f) / CTM.d;
+    const zone = findNearestZone(rawX / 100, rawY / 200);
+    placePlayerOnCourt(playerId, zone);
+  };
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "z") {
@@ -146,6 +167,8 @@ export default function Court() {
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
           onPointerLeave={handlePointerUp}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
           className="touch-none select-none"
         >
           <defs>
@@ -274,14 +297,14 @@ export default function Court() {
 
           {/* Render Players */}
           {getActivePositions(rotation, scenario).map((pos) => {
-            const player = players.find((p) => p.id === pos.playerId);
+            const player = roster.find((p) => p.id === pos.playerId);
             if (!player) return null;
 
             let isLibero = false;
             let displayPlayer = player;
 
-            if (liberoSubstitution && player.role === liberoSubstitution) {
-              const libero = players.find((p) => p.role === "L");
+            if (liberoSubstitution === player.id) {
+              const libero = roster.find((p) => p.role === "L");
               if (libero) {
                 isLibero = true;
                 displayPlayer = libero;

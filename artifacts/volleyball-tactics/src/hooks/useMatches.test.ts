@@ -1,11 +1,11 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { useMatches } from './useMatches';
-import { MatchFormValues } from '../types/match';
+import { describe, it, expect, beforeEach } from "vitest";
+import { useMatches } from "./useMatches";
+import { MatchFormValues } from "../types/match";
 
 const formValues: MatchFormValues = {
-  opponent: '台大',
-  dateTime: '2026-06-25T19:00',
-  players: [{ name: '小明', number: 7, role: 'S' }],
+  opponent: "台大",
+  dateTime: "2026-06-25T19:00",
+  players: [{ name: "小明", number: 7, role: "S" }],
 };
 
 // zustand store 是 module 層級的單例，測試之間如果不重置，前一個測試加的資料會留到下一個測試裡，
@@ -18,30 +18,30 @@ beforeEach(() => {
   localStorage.clear();
 });
 
-describe('useMatches', () => {
-  it('addMatch 在 tournamentId 是 null 時，建立一場最上層的比賽', () => {
+describe("useMatches", () => {
+  it("addMatch 在 tournamentId 是 null 時，建立一場最上層的比賽", () => {
     const id = useMatches.getState().addMatch(formValues, null);
     const match = useMatches.getState().matches.find((m) => m.id === id);
     expect(match).toBeDefined();
     expect(match?.tournamentId).toBeNull();
-    expect(match?.opponent).toBe('台大');
+    expect(match?.opponent).toBe("台大");
   });
 
-  it('addMatch 有傳 tournamentId 時，比賽會記住自己屬於哪個資料夾', () => {
-    const id = useMatches.getState().addMatch(formValues, 'tournament-1');
+  it("addMatch 有傳 tournamentId 時，比賽會記住自己屬於哪個資料夾", () => {
+    const id = useMatches.getState().addMatch(formValues, "tournament-1");
     const match = useMatches.getState().matches.find((m) => m.id === id);
-    expect(match?.tournamentId).toBe('tournament-1');
+    expect(match?.tournamentId).toBe("tournament-1");
   });
 
-  it('updateMatch 保留既有球員的 id，新球員列才補新的 id', () => {
+  it("updateMatch 保留既有球員的 id，新球員列才補新的 id", () => {
     const id = useMatches.getState().addMatch(formValues, null);
     const existingPlayerId = useMatches.getState().matches[0].players[0].id;
 
     useMatches.getState().updateMatch(id, {
       ...formValues,
       players: [
-        { id: existingPlayerId, name: '小明', number: 7, role: 'S' },
-        { name: '小華', number: 8, role: 'OH1' },
+        { id: existingPlayerId, name: "小明", number: 7, role: "S" },
+        { name: "小華", number: 8, role: "OH" },
       ],
     });
 
@@ -51,7 +51,7 @@ describe('useMatches', () => {
     expect(updated?.players[1].id).not.toBe(existingPlayerId);
   });
 
-  it('deleteMatch 只刪掉指定的那一場比賽', () => {
+  it("deleteMatch 只刪掉指定的那一場比賽", () => {
     const idToDelete = useMatches.getState().addMatch(formValues, null);
     const idToKeep = useMatches.getState().addMatch(formValues, null);
 
