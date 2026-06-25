@@ -54,11 +54,17 @@ interface TacticsStore extends TacticsState {
   selectedObjectId: string | null;
   projects: ProjectInfo[];
 
+  // 是否處於「戰術布置」編輯模式——畫筆/防守範圍工具跟既有標記的選取/拖曳/刪除都鎖在這個
+  // 模式裡才能用，平常球場只是唯讀的站位圖。故意不存進 localStorage（看 partialize），
+  // 重新整理頁面一律回到唯讀檢視。
+  isLayoutMode: boolean;
+
   history: RotationState[];
   historyIndex: number;
 
   setActiveTool: (tool: ToolType) => void;
   setSelectedObjectId: (id: string | null) => void;
+  setLayoutMode: (value: boolean) => void;
   setProjectName: (name: string) => void;
   setTeamName: (name: string) => void;
   // 設定完整名單（新增/刪除/編輯球員都透過這個，一次整批換掉）。
@@ -136,12 +142,15 @@ export const useTactics = create<TacticsStore>()(
       activeTool: "select",
       selectedObjectId: null,
       projects: [],
+      isLayoutMode: false,
 
       history: [],
       historyIndex: -1,
 
       setActiveTool: (tool) => set({ activeTool: tool, selectedObjectId: null }),
       setSelectedObjectId: (id) => set({ selectedObjectId: id }),
+      setLayoutMode: (value) =>
+        set({ isLayoutMode: value, activeTool: "select", selectedObjectId: null }),
 
       setProjectName: (name) => set({ projectName: name }),
       setTeamName: (name) => set({ teamName: name }),
