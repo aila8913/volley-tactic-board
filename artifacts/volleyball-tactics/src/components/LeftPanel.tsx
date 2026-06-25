@@ -1,7 +1,11 @@
-import React from "react";
-import { useTactics } from "../hooks/useTactics";
-import { CIRCLE_LABEL_TYPES, CircleLabelType, displayRole } from "../types/tactics";
+import React, { useState } from "react";
+import { useParams } from "wouter";
+import { useTactics, getActivePositions } from "../hooks/useTactics";
+import { useMatches } from "../hooks/useMatches";
+import { CIRCLE_LABEL_TYPES, CircleLabelType } from "../types/tactics";
+import { MatchPlayer } from "../types/match";
 import RotationThumbnails from "./RotationThumbnails";
+import RosterEditDialog from "./RosterEditDialog";
 
 const CIRCLE_LABEL_TEXT: Record<CircleLabelType, string> = {
   name: "姓名",
@@ -11,9 +15,8 @@ const CIRCLE_LABEL_TEXT: Record<CircleLabelType, string> = {
 
 export default function LeftPanel() {
   const {
-    players,
-    updatePlayer,
-    generateRotations,
+    roster,
+    setRoster,
     scenario,
     setScenario,
     liberoSubstitution,
@@ -23,21 +26,36 @@ export default function LeftPanel() {
     circleLabel,
     setCircleLabel,
     rotations,
+    currentRotation,
     resetCurrentRotation,
     clearMarkers,
   } = useTactics();
+  const { id: matchId } = useParams<{ id: string }>();
+  const updateMatchPlayers = useMatches((state) => state.updateMatchPlayers);
+  const [isRosterDialogOpen, setIsRosterDialogOpen] = useState(false);
+
+  // 球員名單同時要存進戰術板自己的 roster，也要回寫到比賽列表那邊的 match.players，
+  // 兩邊存的是同一份資料（包含 id），這樣下次重新進這個戰術板時兩邊才不會兜不起來。
+  const handleRosterSave = (players: MatchPlayer[]) => {
+    setRoster(players);
+    if (matchId) {
+      updateMatchPlayers(matchId, players);
+    }
+  };
 
   const hasRotations = rotations.some((r) => {
     const base = r.scenarioPositions?.base;
     return base && base.length > 0;
   });
 
-  const handleSub = (role: "MB1" | "MB2") => {
-    if (liberoSubstitution === role) {
-      setLiberoSubstitution(null);
-    } else {
-      setLiberoSubstitution(role);
-    }
+  // 哪些人已經在場上了，名單上標示一下，拖曳時比較清楚目前狀態。
+  const onCourtIds = new Set(
+    getActivePositions(rotations[currentRotation], scenario).map((p) => p.playerId),
+  );
+
+  const mbPlayers = roster.filter((p) => p.role === "MB");
+  const handleSub = (playerId: string) => {
+    setLiberoSubstitution(liberoSubstitution === playerId ? null : playerId);
   };
 
   return (
@@ -52,30 +70,36 @@ export default function LeftPanel() {
         </div>
 
         <section>
-          <h2 className="font-display mb-3 text-[15px] font-bold">球員設定</h2>
-          <div className="space-y-2 mb-3">
-            {players.map((p) => (
-              <div key={p.id} className="flex items-center gap-2">
-                {/* 兩個主攻(OH1/OH2)、兩個攔中(MB1/MB2)其實是同一種位置，畫面上不用分1、2 */}
-                <span className="w-10 text-right text-xs font-bold">{displayRole(p.role)}</span>
-                {/* 背號用 number input，畫面上限制 0~99，跟比賽名單表單（types/match.ts 的 zod 規則）一致 */}
-                <input
-                  type="number"
-                  min={0}
-                  max={99}
-                  className="w-12 wobbly-border px-1 py-1 text-sm bg-white outline-none focus:ring-2 focus:ring-[#CCFF00] transition-shadow"
-                  placeholder="背號"
-                  value={p.number || ""}
-                  onChange={(e) => updatePlayer(p.id, { number: Number(e.target.value) || 0 })}
-                  data-testid={`input-player-number-${p.id}`}
-                />
-                <input
-                  className="flex-1 wobbly-border px-2 py-1 text-sm bg-white outline-none focus:ring-2 focus:ring-[#CCFF00] transition-shadow"
-                  placeholder={p.role === "L" ? "自由球員姓名" : "球員姓名"}
-                  value={p.name}
-                  onChange={(e) => updatePlayer(p.id, { name: e.target.value })}
-                  data-testid={`input-player-${p.id}`}
-                />
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="font-display text-[15px] font-bold">球員設定</h2>
+            <button
+              onClick={() => setIsRosterDialogOpen(true)}
+              className="wobbly-border bg-white px-2 py-0.5 text-xs font-bold hover:bg-gray-100"
+              data-testid="button-edit-roster"
+            >
+              編輯
+            </button>
+          </div>
+          {/* 名單只顯示「目前有的」球員，不像場上站位一定要湊滿固定欄位；
+              新增/刪除/編輯都在「編輯」彈窗裡做，這裡是可以拖到球場上的唯讀清單。 */}
+          <div className="space-y-1 mb-3">
+            {roster.length === 0 && (
+              <p className="text-xs text-gray-500">尚未設定球員，點右上角「編輯」新增</p>
+            )}
+            {roster.map((p) => (
+              <div
+                key={p.id}
+                draggable
+                onDragStart={(e) => e.dataTransfer.setData("text/plain", p.id)}
+                className={`flex items-center gap-2 text-sm cursor-grab active:cursor-grabbing wobbly-border px-1.5 py-1 ${
+                  onCourtIds.has(p.id) ? "bg-[#CCFF00]/30" : "bg-white"
+                }`}
+                data-testid={`roster-row-${p.id}`}
+              >
+                <span className="w-8 text-right text-xs font-bold text-gray-600">{p.role}</span>
+                <span className="w-8 text-gray-500">{p.number}</span>
+                <span className="flex-1">{p.name}</span>
+                {onCourtIds.has(p.id) && <span className="text-[10px] text-gray-500">已上場</span>}
               </div>
             ))}
           </div>
@@ -105,14 +129,6 @@ export default function LeftPanel() {
               ))}
             </div>
           </div>
-
-          <button
-            onClick={generateRotations}
-            className="w-full wobbly-border bg-[#CCFF00] font-bold py-2 text-sm hover:bg-[#111] hover:text-[#CCFF00] transition-colors shadow-[2px_2px_0_0_#111111] active:shadow-none active:translate-y-[2px] active:translate-x-[2px]"
-            data-testid="button-generate-rotations"
-          >
-            生成初始輪次
-          </button>
         </section>
 
         {/* Rotation Thumbnails */}
@@ -173,27 +189,24 @@ export default function LeftPanel() {
           )}
         </section>
 
-        <section>
-          <h2 className="font-display mb-2 text-[15px] font-bold">自由球員替換</h2>
-          <div className="flex gap-2">
-            <button
-              onClick={() => handleSub("MB1")}
-              className={`flex-1 wobbly-border py-1.5 text-xs font-bold transition-colors
-                ${liberoSubstitution === "MB1" ? "bg-[#FF6B00] text-white" : "bg-white hover:bg-gray-100"}`}
-              data-testid="button-libero-mb1"
-            >
-              替換 MB1
-            </button>
-            <button
-              onClick={() => handleSub("MB2")}
-              className={`flex-1 wobbly-border py-1.5 text-xs font-bold transition-colors
-                ${liberoSubstitution === "MB2" ? "bg-[#FF6B00] text-white" : "bg-white hover:bg-gray-100"}`}
-              data-testid="button-libero-mb2"
-            >
-              替換 MB2
-            </button>
-          </div>
-        </section>
+        {mbPlayers.length > 0 && (
+          <section>
+            <h2 className="font-display mb-2 text-[15px] font-bold">自由球員替換</h2>
+            <div className="flex flex-wrap gap-2">
+              {mbPlayers.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => handleSub(p.id)}
+                  className={`flex-1 wobbly-border py-1.5 text-xs font-bold transition-colors
+                    ${liberoSubstitution === p.id ? "bg-[#FF6B00] text-white" : "bg-white hover:bg-gray-100"}`}
+                  data-testid={`button-libero-${p.id}`}
+                >
+                  替換 {p.name || "MB"}
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
 
         <section>
           <h2 className="font-display mb-2 text-[15px] font-bold">球場標示</h2>
@@ -223,13 +236,20 @@ export default function LeftPanel() {
             <span className="hidden group-open:inline">👇 隱藏提示</span>
           </summary>
           <ul className="mt-2 text-xs space-y-1 list-disc pl-4 text-gray-700">
-            <li>設定球員後點擊「生成初始輪次」</li>
-            <li>點擊輪次縮圖切換輪次，每個情境的站位獨立保存</li>
+            <li>把球員從名單拖到球場上，會自動吸附到最近的位置</li>
+            <li>拖到已經有人的位置會跟原本那位對換</li>
+            <li>排好一個輪次後，其他 5 個輪次會自動依輪轉順序排好</li>
             <li>在右側面板選工具後點擊球場畫圖</li>
-            <li>點擊球員可拖曳調整位置</li>
           </ul>
         </details>
       </div>
+
+      <RosterEditDialog
+        open={isRosterDialogOpen}
+        onOpenChange={setIsRosterDialogOpen}
+        roster={roster}
+        onSave={handleRosterSave}
+      />
     </div>
   );
 }

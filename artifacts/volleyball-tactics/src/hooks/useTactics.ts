@@ -3,7 +3,6 @@ import { persist } from "zustand/middleware";
 import { v4 as uuidv4 } from "uuid";
 import {
   TacticsState,
-  Player,
   RotationState,
   DefenseRange,
   Marker,
@@ -11,37 +10,24 @@ import {
   ScenarioType,
   CircleLabelType,
 } from "../types/tactics";
-import { getDefaultPositions } from "../lib/rotationLogic";
+import { findNearestZone, getZoneCoords, rotateZone } from "../lib/rotationLogic";
 import type { MatchPlayer } from "../types/match";
 
-// 比賽名單（roster）裡同一類位置可能有任意人數（例如 3 個 OH、0 個 MB），但場上固定只有
-// 7 個站位需要明確角色才能算輪轉（S/OH1/OH2/MB1/MB2/OPP + 自由球員 L）。這個函式依照在
-// roster 裡出現的順序，取每一類的「第 1、第 2 個」對應到場上站位；多出來的人（例如第 3 個
-// OH）目前不會被排上場，board id（p1~p7）固定不變，這樣輪轉站位資料才不會跟著斷掉。
-function deriveCourtPlayers(roster: MatchPlayer[]): Player[] {
-  const byRole = (role: MatchPlayer["role"]) => roster.filter((p) => p.role === role);
-  const oh = byRole("OH");
-  const mb = byRole("MB");
-  const s = byRole("S")[0];
-  const opp = byRole("OPP")[0];
-  const l = byRole("L")[0];
+// 把目前場上的站位轉成「哪個格子站了誰」，方便用格子（1~6 號位）做吸附/換位/
+// 推算其他輪次的邏輯，而不用每次都跟 x/y 浮點數打交道。
+function positionsToZoneMap(positions: PlayerPosition[]): Map<number, string> {
+  const map = new Map<number, string>();
+  for (const pos of positions) {
+    map.set(findNearestZone(pos.x, pos.y), pos.playerId);
+  }
+  return map;
+}
 
-  const slot = (id: string, role: Player["role"], match: MatchPlayer | undefined): Player => ({
-    id,
-    name: match?.name ?? "",
-    number: match?.number ?? 0,
-    role,
+function zoneMapToPositions(zoneMap: Map<number, string>): PlayerPosition[] {
+  return Array.from(zoneMap.entries()).map(([zone, playerId]) => {
+    const coords = getZoneCoords(zone);
+    return { playerId, x: coords.x, y: coords.y };
   });
-
-  return [
-    slot("p1", "S", s),
-    slot("p2", "OH1", oh[0]),
-    slot("p3", "OH2", oh[1]),
-    slot("p4", "MB1", mb[0]),
-    slot("p5", "MB2", mb[1]),
-    slot("p6", "OPP", opp),
-    slot("p7", "L", l),
-  ];
 }
 
 export type ToolType =
@@ -75,20 +61,22 @@ interface TacticsStore extends TacticsState {
   setSelectedObjectId: (id: string | null) => void;
   setProjectName: (name: string) => void;
   setTeamName: (name: string) => void;
-  // 設定完整名單（新增/刪除/編輯球員都透過這個，一次整批換掉），同時會重新推算場上 7 個站位。
+  // 設定完整名單（新增/刪除/編輯球員都透過這個，一次整批換掉）。
   // 進入戰術板時用比賽名單帶入，編輯名單彈窗按「儲存」時也是呼叫這個。
   setRoster: (roster: MatchPlayer[]) => void;
   setCircleLabel: (label: CircleLabelType) => void;
-  setLiberoSubstitution: (sub: "MB1" | "MB2" | null) => void;
+  setLiberoSubstitution: (playerId: string | null) => void;
   setScenario: (scenario: ScenarioType) => void;
   setCurrentRotation: (index: number) => void;
-  generateRotations: () => void;
 
   pushHistory: () => void;
   undo: () => void;
   redo: () => void;
 
-  updatePlayerPosition: (playerId: string, x: number, y: number) => void;
+  // 把球員放到場上某個格子（1~6 號位）——不管是從球員設定名單拖上場的新人，還是把
+  // 已經在場上的人拖到別的格子，都是呼叫這個。放開時格子已經有人會直接互換位置；
+  // 這個格子排定之後，其他 5 個輪次會依照「輪轉了幾格」自動推算，不用每輪都重新拖。
+  placePlayerOnCourt: (playerId: string, zone: number) => void;
   addDefenseRange: (range: Omit<DefenseRange, "id">) => void;
   updateDefenseRange: (id: string, updates: Partial<DefenseRange>) => void;
   removeDefenseRange: (id: string) => void;
@@ -106,10 +94,6 @@ interface TacticsStore extends TacticsState {
   deleteProject: (id: string) => void;
   importState: (data: TacticsState) => void;
 }
-
-const emptyCourtPlayers: Player[] = deriveCourtPlayers([]);
-
-const SCENARIOS: ScenarioType[] = ["base", "serve-receive", "defense", "attack", "cover"];
 
 const makeEmptyScenarioPositions = (): Record<ScenarioType, PlayerPosition[]> => ({
   base: [],
@@ -142,7 +126,6 @@ export const useTactics = create<TacticsStore>()(
       projectName: "新戰術專案",
       teamName: "",
       roster: [],
-      players: emptyCourtPlayers,
       liberoSubstitution: null,
       scenario: "base",
       currentRotation: 0,
@@ -162,7 +145,7 @@ export const useTactics = create<TacticsStore>()(
 
       setProjectName: (name) => set({ projectName: name }),
       setTeamName: (name) => set({ teamName: name }),
-      setRoster: (roster) => set({ roster, players: deriveCourtPlayers(roster) }),
+      setRoster: (roster) => set({ roster }),
       setCircleLabel: (label) => set({ circleLabel: label }),
       setLiberoSubstitution: (sub) => set({ liberoSubstitution: sub }),
       setScenario: (scenario) =>
@@ -183,33 +166,6 @@ export const useTactics = create<TacticsStore>()(
           historyIndex: 0,
           selectedObjectId: null,
         })),
-
-      generateRotations: () =>
-        set((state) => {
-          const newRotations = Array(6)
-            .fill(null)
-            .map((_, i) => {
-              const defaultPos = getDefaultPositions(state.players, i);
-              const scenarioPositions = SCENARIOS.reduce(
-                (acc, sc) => {
-                  acc[sc] = defaultPos.map((p) => ({ ...p }));
-                  return acc;
-                },
-                {} as Record<ScenarioType, PlayerPosition[]>,
-              );
-              return {
-                scenarioPositions,
-                defenseRanges: [],
-                markers: [],
-              };
-            });
-          return {
-            rotations: newRotations,
-            currentRotation: 0,
-            history: [newRotations[0]],
-            historyIndex: 0,
-          };
-        }),
 
       pushHistory: () =>
         set((state) => {
@@ -245,23 +201,52 @@ export const useTactics = create<TacticsStore>()(
           return state;
         }),
 
-      updatePlayerPosition: (playerId, x, y) => {
+      placePlayerOnCourt: (playerId, zone) => {
         get().pushHistory();
         set((state) => {
           const r = state.currentRotation;
           const sc = state.scenario;
           const currentPositions = getActivePositions(state.rotations[r], sc);
-          const newPositions = currentPositions.map((p) =>
-            p.playerId === playerId ? { ...p, x, y } : p,
-          );
-          const newRotations = [...state.rotations];
-          newRotations[r] = {
-            ...newRotations[r],
-            scenarioPositions: {
-              ...newRotations[r].scenarioPositions,
-              [sc]: newPositions,
-            },
-          };
+          const zoneMap = positionsToZoneMap(currentPositions);
+
+          // 這個人現在在不在場上：場上重新拖曳 vs 從名單把新人拖上場，要分開處理。
+          let sourceZone: number | null = null;
+          let occupantZone: number | null = null;
+          let occupantId: string | undefined;
+          for (const [z, id] of zoneMap.entries()) {
+            if (id === playerId) sourceZone = z;
+            if (z === zone) {
+              occupantZone = z;
+              occupantId = id;
+            }
+          }
+          if (sourceZone === zone) return state; // 拖到自己原本站的格子，沒變化
+
+          if (sourceZone !== null) zoneMap.delete(sourceZone);
+          if (occupantZone !== null) zoneMap.delete(occupantZone);
+          // 目標格子原本有人：如果這個人是從場上別的格子拖過來的，互換位置；
+          // 如果是從名單拖上場的新人，原本佔格的人就被換下場（回到名單，不留在場上）。
+          if (occupantId && sourceZone !== null) {
+            zoneMap.set(sourceZone, occupantId);
+          }
+          zoneMap.set(zone, playerId);
+
+          // 這個輪次排好之後，其他 5 個輪次依「輪轉了幾格」的公式自動推算
+          // （跟以前 getDefaultPositions 用的是同一套順時鐘輪轉公式）。
+          const newRotations = state.rotations.map((rotation, i) => {
+            const shiftedMap = new Map<number, string>();
+            for (const [z, id] of zoneMap.entries()) {
+              shiftedMap.set(rotateZone(z, i - r), id);
+            }
+            return {
+              ...rotation,
+              scenarioPositions: {
+                ...rotation.scenarioPositions,
+                [sc]: zoneMapToPositions(shiftedMap),
+              },
+            };
+          });
+
           return { rotations: newRotations };
         });
       },
@@ -360,18 +345,19 @@ export const useTactics = create<TacticsStore>()(
         });
       },
 
+      // 把這個輪次的球場清空（球員退回名單、畫筆/防守範圍都清掉），不會動到其他輪次——
+      // 拖曳上場是手動的，沒有「預設站位」可以還原，所以「重置」就是清空讓你重新拖。
       resetCurrentRotation: () => {
         get().pushHistory();
         set((state) => {
           const r = state.currentRotation;
           const sc = state.scenario;
-          const defaultPos = getDefaultPositions(state.players, r);
           const newRotations = [...state.rotations];
           newRotations[r] = {
             ...newRotations[r],
             scenarioPositions: {
               ...newRotations[r].scenarioPositions,
-              [sc]: defaultPos.map((p) => ({ ...p })),
+              [sc]: [],
             },
             markers: [],
             defenseRanges: [],
@@ -402,7 +388,6 @@ export const useTactics = create<TacticsStore>()(
               projectName: state.projectName,
               teamName: state.teamName,
               roster: state.roster,
-              players: state.players,
               liberoSubstitution: state.liberoSubstitution,
               scenario: state.scenario,
               currentRotation: state.currentRotation,
@@ -446,7 +431,6 @@ export const useTactics = create<TacticsStore>()(
         projectName: state.projectName,
         teamName: state.teamName,
         roster: state.roster,
-        players: state.players,
         liberoSubstitution: state.liberoSubstitution,
         scenario: state.scenario,
         currentRotation: state.currentRotation,
