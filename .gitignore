@@ -47,3 +47,11 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# env files (contain secrets like DB passwords — never commit these)
+.env
+.env.*
+!.env.example
+
+# Claude Code worktrees (local working copies, not repo content)
+.claude/worktrees/
