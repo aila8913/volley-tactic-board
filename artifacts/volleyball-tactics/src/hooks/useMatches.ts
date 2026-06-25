@@ -5,7 +5,7 @@ import { Match, MatchFormValues, MatchPlayer } from '../types/match';
 
 interface MatchesStore {
   matches: Match[];
-  addMatch: (values: MatchFormValues) => string;
+  addMatch: (values: MatchFormValues, tournamentId: string | null) => string;
   updateMatch: (id: string, values: MatchFormValues) => void;
   deleteMatch: (id: string) => void;
 }
@@ -20,15 +20,15 @@ export const useMatches = create<MatchesStore>()(
     (set) => ({
       matches: [],
 
-      addMatch: (values) => {
+      addMatch: (values, tournamentId) => {
         const id = uuidv4();
         const newMatch: Match = {
           id,
-          name: values.name,
           opponent: values.opponent,
           dateTime: values.dateTime,
           players: toMatchPlayers(values.players),
           createdAt: new Date().toISOString(),
+          tournamentId,
         };
         set((state) => ({ matches: [...state.matches, newMatch] }));
         return id;
@@ -38,7 +38,6 @@ export const useMatches = create<MatchesStore>()(
         matches: state.matches.map((m) => m.id === id
           ? {
               ...m,
-              name: values.name,
               opponent: values.opponent,
               dateTime: values.dateTime,
               players: toMatchPlayers(values.players),

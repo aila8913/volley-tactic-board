@@ -31,7 +31,6 @@ import { useMatches } from '@/hooks/useMatches';
 import { Match, matchFormSchema, MatchFormValues, matchToFormValues, PLAYER_ROLES } from '@/types/match';
 
 const emptyDefaults: MatchFormValues = {
-  name: '',
   opponent: '',
   dateTime: '',
   players: [{ name: '', number: 0, role: 'S' }],
@@ -42,9 +41,12 @@ interface MatchFormDialogProps {
   onOpenChange: (open: boolean) => void;
   // 有傳 match 就是編輯模式，沒傳就是新增模式。
   match?: Match | null;
+  // 新增時這場比賽要歸到哪個資料夾——null 代表直接放在最上層。編輯時不會用到這個 prop
+  // (歸屬的資料夾在這一輪不能改)。
+  tournamentId?: string | null;
 }
 
-export default function MatchFormDialog({ open, onOpenChange, match }: MatchFormDialogProps) {
+export default function MatchFormDialog({ open, onOpenChange, match, tournamentId = null }: MatchFormDialogProps) {
   const addMatch = useMatches((state) => state.addMatch);
   const updateMatch = useMatches((state) => state.updateMatch);
   const isEditing = !!match;
@@ -71,7 +73,7 @@ export default function MatchFormDialog({ open, onOpenChange, match }: MatchForm
     if (match) {
       updateMatch(match.id, values);
     } else {
-      addMatch(values);
+      addMatch(values, tournamentId);
     }
     onOpenChange(false);
   };
@@ -85,20 +87,6 @@ export default function MatchFormDialog({ open, onOpenChange, match }: MatchForm
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <FormField
-              control={form.control}
-              name="name"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>比賽名稱</FormLabel>
-                  <FormControl>
-                    <Input placeholder="例如：2026 春季聯賽 vs 台大" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
             <FormField
               control={form.control}
               name="opponent"
