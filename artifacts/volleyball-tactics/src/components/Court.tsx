@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from "react";
-import { useTactics, ToolType, getActivePositions } from "../hooks/useTactics";
+import { useTactics, ToolType } from "../hooks/useTactics";
 import { findNearestZone } from "../lib/rotationLogic";
 import PlayerNode from "./PlayerNode";
 import Markers from "./Markers";
@@ -21,7 +21,6 @@ export default function Court() {
     updateDefenseRange,
     liberoSubstitution,
     placePlayerOnCourt,
-    scenario,
     undo,
     redo,
     isLayoutMode,
@@ -299,7 +298,7 @@ export default function Court() {
           ))}
 
           {/* Render Players */}
-          {getActivePositions(rotation, scenario).map((pos) => {
+          {rotation.positions.map((pos) => {
             const player = roster.find((p) => p.id === pos.playerId);
             if (!player) return null;
 

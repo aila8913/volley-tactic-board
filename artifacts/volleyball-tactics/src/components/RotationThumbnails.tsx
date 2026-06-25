@@ -1,20 +1,20 @@
-import React from 'react';
-import { useTactics } from '../hooks/useTactics';
+import React from "react";
+import { useTactics } from "../hooks/useTactics";
 
 export default function RotationThumbnails() {
-  const { rotations, currentRotation, scenario, setCurrentRotation } = useTactics();
+  const { rotations, currentRotation, setCurrentRotation } = useTactics();
 
   return (
     <div className="flex gap-2 px-1 pt-2 pb-1">
       {rotations.map((r, i) => {
-        const positions = r.scenarioPositions?.[scenario] || r.scenarioPositions?.base || [];
+        const positions = r.positions;
         return (
           <div
             key={i}
             onClick={() => setCurrentRotation(i)}
             data-testid={`thumbnail-rotation-${i}`}
             className={`flex-1 h-[52px] wobbly-border cursor-pointer flex flex-col items-center justify-between p-1 transition-transform
-              ${currentRotation === i ? 'bg-[#CCFF00] scale-105 shadow-[2px_2px_0_0_#111]' : 'bg-white hover:bg-gray-100'}
+              ${currentRotation === i ? "bg-[#CCFF00] scale-105 shadow-[2px_2px_0_0_#111]" : "bg-white hover:bg-gray-100"}
             `}
           >
             <div className="w-full flex-1 border border-[#111] rounded-sm relative opacity-60">
@@ -22,7 +22,11 @@ export default function RotationThumbnails() {
                 <div
                   key={pos.playerId}
                   className="absolute w-1 h-1 bg-[#111] rounded-full"
-                  style={{ left: `${pos.x * 100}%`, top: `${pos.y * 100}%`, transform: 'translate(-50%, -50%)' }}
+                  style={{
+                    left: `${pos.x * 100}%`,
+                    top: `${pos.y * 100}%`,
+                    transform: "translate(-50%, -50%)",
+                  }}
                 />
               ))}
             </div>

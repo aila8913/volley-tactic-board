@@ -70,7 +70,7 @@ export default function MatchRecording() {
 
   // 先發站位是教練在戰術板手動拖上場的（見 TacticsBoard.tsx），紀錄模式自己不會生成
   // 預設站位——沒有任何輪次排過站位時，先請教練去戰術板排好再回來記錄。
-  const hasLineup = rotations.some((r) => (r.scenarioPositions?.base?.length ?? 0) > 0);
+  const hasLineup = rotations.some((r) => r.positions.length > 0);
   if (!hasLineup) {
     return (
       <div className="flex min-h-screen w-full flex-col items-center justify-center gap-4 bg-white px-4 text-center">

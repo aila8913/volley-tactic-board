@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useParams } from "wouter";
-import { useTactics, getActivePositions } from "../hooks/useTactics";
+import { useTactics } from "../hooks/useTactics";
 import { useMatches } from "../hooks/useMatches";
 import { CIRCLE_LABEL_TYPES, CircleLabelType } from "../types/tactics";
 import { MatchPlayer } from "../types/match";
@@ -17,8 +17,6 @@ export default function LeftPanel() {
   const {
     roster,
     setRoster,
-    scenario,
-    setScenario,
     liberoSubstitution,
     setLiberoSubstitution,
     labelToggles,
@@ -43,15 +41,10 @@ export default function LeftPanel() {
     }
   };
 
-  const hasRotations = rotations.some((r) => {
-    const base = r.scenarioPositions?.base;
-    return base && base.length > 0;
-  });
+  const hasRotations = rotations.some((r) => r.positions.length > 0);
 
   // 哪些人已經在場上了，名單上標示一下，拖曳時比較清楚目前狀態。
-  const onCourtIds = new Set(
-    getActivePositions(rotations[currentRotation], scenario).map((p) => p.playerId),
-  );
+  const onCourtIds = new Set(rotations[currentRotation].positions.map((p) => p.playerId));
 
   const mbPlayers = roster.filter((p) => p.role === "MB");
   const handleSub = (playerId: string) => {
@@ -152,42 +145,6 @@ export default function LeftPanel() {
             </div>
           </section>
         )}
-
-        <section>
-          <h2 className="font-display mb-2 text-[15px] font-bold">情境模式</h2>
-          <div className="flex flex-wrap gap-2">
-            {[
-              { id: "base", label: "基礎輪轉" },
-              { id: "serve-receive", label: "接發球" },
-              { id: "defense", label: "防守" },
-              { id: "attack", label: "進攻" },
-              { id: "cover", label: "Cover保護" },
-            ].map((sc) => (
-              <label
-                key={sc.id}
-                className={`cursor-pointer px-3 py-1 wobbly-border text-xs font-bold transition-colors select-none
-                  ${scenario === sc.id ? "bg-[#CCFF00] shadow-[2px_2px_0_0_#111]" : "bg-white hover:bg-gray-100"}
-                `}
-                data-testid={`scenario-${sc.id}`}
-              >
-                <input
-                  type="radio"
-                  name="scenario"
-                  value={sc.id}
-                  checked={scenario === sc.id}
-                  onChange={() => setScenario(sc.id as any)}
-                  className="hidden"
-                />
-                {sc.label}
-              </label>
-            ))}
-          </div>
-          {scenario !== "base" && (
-            <p className="text-[10px] text-gray-500 mt-1">
-              此情境的站位獨立保存，切換情境不影響其他情境
-            </p>
-          )}
-        </section>
 
         {mbPlayers.length > 0 && (
           <section>

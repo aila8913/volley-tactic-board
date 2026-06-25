@@ -1,5 +1,5 @@
 import React, { useRef, useState } from "react";
-import { useTactics, getActivePositions } from "../hooks/useTactics";
+import { useTactics } from "../hooks/useTactics";
 import { getZoneLayout } from "../lib/rotationLogic";
 import { Side } from "../types/recording";
 
@@ -53,7 +53,7 @@ export default function RecordingCourt({
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
   const [dragCurrent, setDragCurrent] = useState<{ x: number; y: number } | null>(null);
 
-  const ourPositions = getActivePositions(rotations[ourRotation] ?? rotations[0], "base");
+  const ourPositions = (rotations[ourRotation] ?? rotations[0]).positions;
   // 對手沒有球員名單，只畫號位（見 lib/rotationLogic.ts 的 getZoneLayout），mirrored=true
   // 把座標翻到球場另一邊，跟 Court.tsx 畫「對手號位」標籤時的鏡射方式一致。
   const opponentZones = getZoneLayout(opponentRotation, true);

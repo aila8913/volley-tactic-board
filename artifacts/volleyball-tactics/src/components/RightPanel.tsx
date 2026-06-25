@@ -1,8 +1,22 @@
 import React, { useRef } from "react";
 import { useTactics, ToolType } from "../hooks/useTactics";
 import { exportCourtAsPng, exportStateAsJson, importStateFromJson } from "../lib/exportUtils";
+import { SituationTag } from "../types/tactics";
 import { Toaster } from "@/components/ui/toaster";
 import { useToast } from "@/hooks/use-toast";
+
+// 情境標籤只在存檔時當分類用，跟球場上即時編輯無關，所以放在「戰術管理」區塊裡選。
+const SITUATION_OPTIONS: { id: SituationTag; label: string }[] = [
+  { id: "base", label: "基礎輪轉" },
+  { id: "serve-receive", label: "接發球" },
+  { id: "defense", label: "防守" },
+  { id: "attack", label: "進攻" },
+  { id: "cover", label: "Cover保護" },
+];
+const SITUATION_TEXT: Record<SituationTag, string> = SITUATION_OPTIONS.reduce(
+  (acc, { id, label }) => ({ ...acc, [id]: label }),
+  {} as Record<SituationTag, string>,
+);
 
 const COLORS = [
   "#CCFF00",
@@ -23,6 +37,8 @@ export default function RightPanel() {
     teamName,
     setProjectName,
     setTeamName,
+    projectSituation,
+    setProjectSituation,
     saveProject,
     projects,
     loadProject,
@@ -431,6 +447,18 @@ export default function RightPanel() {
               onChange={(e) => setTeamName(e.target.value)}
               data-testid="input-team-name"
             />
+            <select
+              className="w-full wobbly-border px-2 py-1.5 text-xs bg-white outline-none focus:ring-2 focus:ring-[#CCFF00]"
+              value={projectSituation}
+              onChange={(e) => setProjectSituation(e.target.value as SituationTag)}
+              data-testid="select-project-situation"
+            >
+              {SITUATION_OPTIONS.map((sc) => (
+                <option key={sc.id} value={sc.id}>
+                  {sc.label}
+                </option>
+              ))}
+            </select>
             <div className="flex gap-2">
               <button
                 onClick={() => {
@@ -465,6 +493,9 @@ export default function RightPanel() {
                       }}
                     >
                       <span className="truncate flex-1">{p.name || "未命名"}</span>
+                      <span className="text-gray-400 ml-1 shrink-0">
+                        {SITUATION_TEXT[p.situation]}
+                      </span>
                       <span className="text-gray-400 ml-1 shrink-0">
                         {new Date(p.date).toLocaleDateString()}
                       </span>

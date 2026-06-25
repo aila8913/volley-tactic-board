@@ -1,6 +1,8 @@
 import type { MatchPlayer } from "./match";
 
-export type ScenarioType = "base" | "serve-receive" | "defense" | "attack" | "cover";
+// 情境標籤：現在只在「存檔」時當標籤用（戰術管理區塊選一個、存進 ProjectInfo.situation），
+// 球場上不會即時切換、也不會讓同一個輪次同時存好幾份站位。
+export type SituationTag = "base" | "serve-receive" | "defense" | "attack" | "cover";
 
 // 圈圈裡面要顯示哪種資訊，三選一（不是像 labelToggles 那樣可以同時勾多個）。
 export const CIRCLE_LABEL_TYPES = ["name", "number", "role"] as const;
@@ -39,7 +41,7 @@ export interface Marker {
 }
 
 export interface RotationState {
-  scenarioPositions: Record<ScenarioType, PlayerPosition[]>;
+  positions: PlayerPosition[];
   defenseRanges: DefenseRange[];
   markers: Marker[];
 }
@@ -53,7 +55,6 @@ export interface TacticsState {
   roster: MatchPlayer[];
   // 自由球員替補：存被替換下場的那位球員的 id（必須是 roster 裡 role === 'MB' 的人）。
   liberoSubstitution: string | null;
-  scenario: ScenarioType;
   currentRotation: number;
   rotations: RotationState[];
   // 圈圈裡顯示姓名/背號/位置，三選一。

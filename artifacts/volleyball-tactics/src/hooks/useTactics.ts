@@ -7,7 +7,7 @@ import {
   DefenseRange,
   Marker,
   PlayerPosition,
-  ScenarioType,
+  SituationTag,
   CircleLabelType,
 } from "../types/tactics";
 import { findNearestZone, getZoneCoords, rotateZone } from "../lib/rotationLogic";
@@ -46,6 +46,8 @@ export interface ProjectInfo {
   name: string;
   team: string;
   date: string;
+  // 存檔當下選的情境標籤，純粹給「戰術專案」列表分類用，跟球場即時編輯無關。
+  situation: SituationTag;
   data: TacticsState;
 }
 
@@ -53,6 +55,10 @@ interface TacticsStore extends TacticsState {
   activeTool: ToolType;
   selectedObjectId: string | null;
   projects: ProjectInfo[];
+
+  // 目前「戰術管理」面板裡選的情境標籤，存檔時打包進 ProjectInfo.situation，
+  // 跟 projectName/teamName 是同一種東西——存檔用的中繼資料，不是球場上的即時狀態。
+  projectSituation: SituationTag;
 
   // 是否處於「戰術布置」編輯模式——畫筆/防守範圍工具跟既有標記的選取/拖曳/刪除都鎖在這個
   // 模式裡才能用，平常球場只是唯讀的站位圖。故意不存進 localStorage（看 partialize），
@@ -72,7 +78,7 @@ interface TacticsStore extends TacticsState {
   setRoster: (roster: MatchPlayer[]) => void;
   setCircleLabel: (label: CircleLabelType) => void;
   setLiberoSubstitution: (playerId: string | null) => void;
-  setScenario: (scenario: ScenarioType) => void;
+  setProjectSituation: (situation: SituationTag) => void;
   setCurrentRotation: (index: number) => void;
 
   pushHistory: () => void;
@@ -101,30 +107,13 @@ interface TacticsStore extends TacticsState {
   importState: (data: TacticsState) => void;
 }
 
-const makeEmptyScenarioPositions = (): Record<ScenarioType, PlayerPosition[]> => ({
-  base: [],
-  "serve-receive": [],
-  defense: [],
-  attack: [],
-  cover: [],
-});
-
 const emptyRotations: RotationState[] = Array(6)
   .fill(null)
   .map(() => ({
-    scenarioPositions: makeEmptyScenarioPositions(),
+    positions: [],
     defenseRanges: [],
     markers: [],
   }));
-
-export const getActivePositions = (
-  rotation: RotationState,
-  scenario: ScenarioType,
-): PlayerPosition[] => {
-  const pos = rotation.scenarioPositions?.[scenario];
-  if (pos && pos.length > 0) return pos;
-  return rotation.scenarioPositions?.base || [];
-};
 
 export const useTactics = create<TacticsStore>()(
   persist(
@@ -133,7 +122,6 @@ export const useTactics = create<TacticsStore>()(
       teamName: "",
       roster: [],
       liberoSubstitution: null,
-      scenario: "base",
       currentRotation: 0,
       rotations: emptyRotations,
       circleLabel: "name",
@@ -142,6 +130,7 @@ export const useTactics = create<TacticsStore>()(
       activeTool: "select",
       selectedObjectId: null,
       projects: [],
+      projectSituation: "base",
       isLayoutMode: false,
 
       history: [],
@@ -157,16 +146,7 @@ export const useTactics = create<TacticsStore>()(
       setRoster: (roster) => set({ roster }),
       setCircleLabel: (label) => set({ circleLabel: label }),
       setLiberoSubstitution: (sub) => set({ liberoSubstitution: sub }),
-      setScenario: (scenario) =>
-        set((state) => {
-          const r = state.currentRotation;
-          return {
-            scenario,
-            history: [state.rotations[r]],
-            historyIndex: 0,
-            selectedObjectId: null,
-          };
-        }),
+      setProjectSituation: (situation) => set({ projectSituation: situation }),
 
       setCurrentRotation: (index) =>
         set((state) => ({
@@ -214,8 +194,7 @@ export const useTactics = create<TacticsStore>()(
         get().pushHistory();
         set((state) => {
           const r = state.currentRotation;
-          const sc = state.scenario;
-          const currentPositions = getActivePositions(state.rotations[r], sc);
+          const currentPositions = state.rotations[r].positions;
           const zoneMap = positionsToZoneMap(currentPositions);
 
           // 這個人現在在不在場上：場上重新拖曳 vs 從名單把新人拖上場，要分開處理。
@@ -249,10 +228,7 @@ export const useTactics = create<TacticsStore>()(
             }
             return {
               ...rotation,
-              scenarioPositions: {
-                ...rotation.scenarioPositions,
-                [sc]: zoneMapToPositions(shiftedMap),
-              },
+              positions: zoneMapToPositions(shiftedMap),
             };
           });
 
@@ -360,14 +336,10 @@ export const useTactics = create<TacticsStore>()(
         get().pushHistory();
         set((state) => {
           const r = state.currentRotation;
-          const sc = state.scenario;
           const newRotations = [...state.rotations];
           newRotations[r] = {
             ...newRotations[r],
-            scenarioPositions: {
-              ...newRotations[r].scenarioPositions,
-              [sc]: [],
-            },
+            positions: [],
             markers: [],
             defenseRanges: [],
           };
@@ -393,12 +365,12 @@ export const useTactics = create<TacticsStore>()(
             name: state.projectName || "未命名",
             team: state.teamName || "無",
             date: new Date().toISOString(),
+            situation: state.projectSituation,
             data: {
               projectName: state.projectName,
               teamName: state.teamName,
               roster: state.roster,
               liberoSubstitution: state.liberoSubstitution,
-              scenario: state.scenario,
               currentRotation: state.currentRotation,
               rotations: state.rotations,
               circleLabel: state.circleLabel,
@@ -414,6 +386,7 @@ export const useTactics = create<TacticsStore>()(
           if (proj && proj.data) {
             return {
               ...proj.data,
+              projectSituation: proj.situation,
               history: [proj.data.rotations[proj.data.currentRotation]],
               historyIndex: 0,
             };
@@ -441,12 +414,12 @@ export const useTactics = create<TacticsStore>()(
         teamName: state.teamName,
         roster: state.roster,
         liberoSubstitution: state.liberoSubstitution,
-        scenario: state.scenario,
         currentRotation: state.currentRotation,
         rotations: state.rotations,
         circleLabel: state.circleLabel,
         labelToggles: state.labelToggles,
         projects: state.projects,
+        projectSituation: state.projectSituation,
       }),
     },
   ),
