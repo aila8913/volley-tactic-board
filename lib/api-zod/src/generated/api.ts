@@ -93,7 +93,7 @@ export const ListPlayersResponseItem = zod.object({
   "id": zod.number(),
   "matchId": zod.number(),
   "name": zod.string(),
-  "role": zod.enum(['S', 'OH1', 'OH2', 'MB1', 'MB2', 'OPP', 'L'])
+  "role": zod.enum(['S', 'OH', 'MB', 'OPP', 'L'])
 })
 export const ListPlayersResponse = zod.array(ListPlayersResponseItem)
 
@@ -107,7 +107,7 @@ export const CreatePlayerParams = zod.object({
 
 export const CreatePlayerBody = zod.object({
   "name": zod.string(),
-  "role": zod.enum(['S', 'OH1', 'OH2', 'MB1', 'MB2', 'OPP', 'L'])
+  "role": zod.enum(['S', 'OH', 'MB', 'OPP', 'L'])
 })
 
 

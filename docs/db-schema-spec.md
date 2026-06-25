@@ -14,13 +14,13 @@ Match (一場比賽)
         └── Event[]    一球
 ```
 
-| 資料表    | 檔案                                | 對應到 |
-| --------- | ----------------------------------- | ------ |
-| `matches` | `lib/db/src/schema/matches.ts`      | 一場比賽，含 `video_url`（YouTube 連結，可空） |
-| `players` | `lib/db/src/schema/players.ts`      | 球員名單，角色跟前端戰術板的 `Player.role` 一致 |
-| `sets`    | `lib/db/src/schema/sets.ts`         | 局（最多 5 局） |
-| `rallies` | `lib/db/src/schema/rallies.ts`      | 一分；記錄的是該分**開始前**的比分 |
-| `events`  | `lib/db/src/schema/events.ts`       | 一球；座標跟前端球場 SVG 的 viewBox (0~100 x 0~200) 一致 |
+| 資料表    | 檔案                           | 對應到                                                                                    |
+| --------- | ------------------------------ | ----------------------------------------------------------------------------------------- |
+| `matches` | `lib/db/src/schema/matches.ts` | 一場比賽，含 `video_url`（YouTube 連結，可空）                                            |
+| `players` | `lib/db/src/schema/players.ts` | 球員名單，角色跟前端比賽名單的 `PLAYER_ROLES`（S/OH/MB/OPP/L 五大類，同類可任意人數）一致 |
+| `sets`    | `lib/db/src/schema/sets.ts`    | 局（最多 5 局）                                                                           |
+| `rallies` | `lib/db/src/schema/rallies.ts` | 一分；記錄的是該分**開始前**的比分                                                        |
+| `events`  | `lib/db/src/schema/events.ts`  | 一球；座標跟前端球場 SVG 的 viewBox (0~100 x 0~200) 一致                                  |
 
 ## 為什麼這樣設計（非顯而易見的決定）
 

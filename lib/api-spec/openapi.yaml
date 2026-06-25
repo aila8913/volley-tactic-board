@@ -291,11 +291,11 @@ components:
       required:
         - status
 
-    # 跟前端戰術板的角色定義一致 (artifacts/volleyball-tactics/src/types/tactics.ts 的 Player.role)
+    # 跟前端比賽名單的角色定義一致 (artifacts/volleyball-tactics/src/types/match.ts 的 PLAYER_ROLES)
     # 以及後端 DB schema 的 playerRoleEnum (lib/db/src/schema/players.ts)。
     PlayerRole:
       type: string
-      enum: [S, OH1, OH2, MB1, MB2, OPP, L]
+      enum: [S, OH, MB, OPP, L]
 
     Player:
       type: object
@@ -476,8 +476,7 @@ components:
           nullable: true
         source:
           $ref: "#/components/schemas/EventSource"
-      required:
-        [id, rallyId, sequence, playerId, action, fromX, fromY, toX, toY, tags, source]
+      required: [id, rallyId, sequence, playerId, action, fromX, fromY, toX, toY, tags, source]
 
     NewEvent:
       type: object
