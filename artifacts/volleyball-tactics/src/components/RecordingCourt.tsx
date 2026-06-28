@@ -136,8 +136,9 @@ export default function RecordingCourt({
 
   return (
     <div className="h-full w-full max-w-[420px] mx-auto flex flex-col justify-center items-center">
+      {/* 同 Court.tsx：以高度為主，寬度由 aspect-ratio 1/2 推算，避免球場長出視窗 */}
       <div
-        className="w-full relative bg-white border-4 border-[#111111] rounded-lg shadow-sm"
+        className="h-full w-auto max-w-full relative bg-white border-4 border-[#111111] rounded-lg shadow-sm"
         style={{ aspectRatio: "1/2" }}
       >
         <svg
@@ -151,22 +152,22 @@ export default function RecordingCourt({
           onPointerLeave={handlePointerLeave}
         >
           <rect x="0" y="0" width="100" height="200" fill="#fff" />
-          <rect x="5" y="5" width="90" height="190" fill="none" stroke="#111" strokeWidth="1.5" />
-          <line x1="5" y1="100" x2="95" y2="100" stroke="#111" strokeWidth="2.5" />
+          {/* 外框由 div 的 border-4 負責，SVG 只畫球場內部線條 */}
+          <line x1="0" y1="100" x2="100" y2="100" stroke="#111" strokeWidth="2.5" />
           <line
-            x1="5"
-            y1="68.3"
-            x2="95"
-            y2="68.3"
+            x1="0"
+            y1="66.7"
+            x2="100"
+            y2="66.7"
             stroke="#111"
             strokeWidth="1"
             strokeDasharray="3 3"
           />
           <line
-            x1="5"
-            y1="131.7"
-            x2="95"
-            y2="131.7"
+            x1="0"
+            y1="133.3"
+            x2="100"
+            y2="133.3"
             stroke="#111"
             strokeWidth="1"
             strokeDasharray="3 3"

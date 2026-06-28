@@ -153,9 +153,12 @@ export default function Court() {
 
   return (
     <div className="h-full w-full max-w-[500px] mx-auto flex flex-col justify-center items-center relative py-4">
+      {/* 以高度為主、寬度自動縮：h-full 讓球場撐滿可用垂直空間，
+          aspect-ratio 1/2 表示 width:height = 1:2，所以 width = height / 2。
+          如果改成 w-full + aspectRatio，則 height = 2 * width，在寬螢幕上會讓球場長出視窗。 */}
       <div
         id="court-wrapper"
-        className="w-full relative bg-white border-4 border-[#111111] rounded-lg shadow-sm"
+        className="h-full w-auto max-w-full relative bg-white border-4 border-[#111111] rounded-lg shadow-sm"
         style={{ aspectRatio: "1/2" }}
       >
         <svg
@@ -208,27 +211,26 @@ export default function Court() {
           <rect id="court-bg" x="0" y="0" width="100" height="200" fill="#fff" />
 
           <g className="wobbly-svg">
-            {/* Outer Boundary */}
-            <rect x="5" y="5" width="90" height="190" fill="none" stroke="#111" strokeWidth="1.5" />
+            {/* Center Line (Net) — x 從 0 到 100 貼齊 div 邊框 */}
+            <line x1="0" y1="100" x2="100" y2="100" stroke="#111" strokeWidth="2.5" />
 
-            {/* Center Line (Net) */}
-            <line x1="5" y1="100" x2="95" y2="100" stroke="#111" strokeWidth="2.5" />
-
-            {/* Attack Lines (3m) */}
+            {/* Attack Lines (3m)
+                viewBox 高 200，每半場 100 個單位代表 9m，3m = 100/3 ≈ 33.3
+                → 三米線：y=100-33.3=66.7 / y=100+33.3=133.3 */}
             <line
-              x1="5"
-              y1="68.3"
-              x2="95"
-              y2="68.3"
+              x1="0"
+              y1="66.7"
+              x2="100"
+              y2="66.7"
               stroke="#111"
               strokeWidth="1"
               strokeDasharray="3 3"
             />
             <line
-              x1="5"
-              y1="131.7"
-              x2="95"
-              y2="131.7"
+              x1="0"
+              y1="133.3"
+              x2="100"
+              y2="133.3"
               stroke="#111"
               strokeWidth="1"
               strokeDasharray="3 3"

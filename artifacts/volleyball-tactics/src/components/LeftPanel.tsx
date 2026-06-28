@@ -85,11 +85,20 @@ export default function LeftPanel() {
                 draggable
                 onDragStart={(e) => e.dataTransfer.setData("text/plain", p.id)}
                 className={`flex items-center gap-2 text-sm cursor-grab active:cursor-grabbing wobbly-border px-1.5 py-1 ${
-                  onCourtIds.has(p.id) ? "bg-[#CCFF00]/30" : "bg-white"
+                  p.role === "L"
+                    ? "bg-red-100"
+                    : onCourtIds.has(p.id)
+                      ? "bg-[#CCFF00]/30"
+                      : "bg-white"
                 }`}
                 data-testid={`roster-row-${p.id}`}
               >
-                <span className="w-8 text-right text-xs font-bold text-gray-600">{p.role}</span>
+                {/* 自由球員（L）用紅色標示位置，跟其他位置明顯區分 */}
+                <span
+                  className={`w-8 text-right text-xs font-bold ${p.role === "L" ? "text-red-600" : "text-gray-600"}`}
+                >
+                  {p.role}
+                </span>
                 <span className="w-8 text-gray-500">{p.number}</span>
                 <span className="flex-1">{p.name}</span>
                 {onCourtIds.has(p.id) && <span className="text-[10px] text-gray-500">已上場</span>}

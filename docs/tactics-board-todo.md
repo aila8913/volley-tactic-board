@@ -86,15 +86,12 @@
    待在前排）。需要重新設計 `liberoSubstitution` 的資料結構（從單一 id 改成「最多兩個候選
    id」＋「目前場上是哪一位」的狀態機）。
 
-4. **球員設定 list 裡的自由球員那一列要標紅色**：目前 `LeftPanel.tsx` 球員名單列本身沒有
-   針對自由球員角色上色，只有上面提到的換人按鈕是橘色。要在 roster 列表那一列（不只是按鈕）
-   依角色加紅色標示，方便一眼看出誰是自由球員。
+4. ✅ **球員設定 list 裡的自由球員那一列要標紅色**：`LeftPanel.tsx` 的 roster 列表已對
+   `role === "L"` 的球員加上 `bg-red-100` 底色，位置文字也改成 `text-red-600`。
 
-5. **球場尺寸：寬高比 1:2 沒問題，但實際呈現太長，要查外層容器高度限制**：
-   `Court.tsx:155-165` 已經是 `h-full w-full` + `aspectRatio: "1/2"`（對應真實球場
-   9m×18m），但使用者覺得目前畫面看起來太長，懷疑是外層容器（`MatchRecording.tsx` 或頁面
-   layout）沒有給夠明確的高度限制，讓 aspect-ratio 用寬度反推出超出視窗的高度。要改成球場
-   高度跟著頁面高度走，寬度依 1:2 比例自動縮，而不是反過來。
+5. ✅ **球場尺寸：以高度為主，寬度由 1:2 比例推算**：`Court.tsx` 和 `RecordingCourt.tsx`
+   的球場 wrapper 從 `w-full + aspectRatio: "1/2"`（寬→高，可能超出視窗）改成
+   `h-full w-auto max-w-full + aspectRatio: "1/2"`（高→寬，高度跟著頁面走）。
 
 6. **比賽紀錄要有對應的「結果呈現」畫面**：目前 `MatchRecording.tsx`/`RecordingCourt.tsx`
    只負責寫入紀錄事件，還沒有看紀錄結果的地方。使用者想要能查看紀錄完的結果，可能會做成類似
