@@ -179,82 +179,7 @@ export default function RightPanel() {
           </>
         ) : (
           <>
-            {/* 布置模式：戰術管理移到最頂部 */}
-            <section>
-              <div className="flex items-center justify-between mb-2">
-                <h2 className="font-display text-[15px] font-bold">戰術管理</h2>
-                <span
-                  className={`text-[10px] font-bold px-1.5 py-0.5 wobbly-border ${activeProjectId ? "bg-[#CCFF00]" : "bg-gray-200 text-gray-500"}`}
-                >
-                  {activeProjectId ? "正在編輯" : "草稿"}
-                </span>
-              </div>
-              <div className="space-y-2">
-                <input
-                  className="w-full wobbly-border px-2 py-1.5 text-xs bg-white outline-none focus:ring-2 focus:ring-[#CCFF00]"
-                  placeholder="情境名稱（如：接發11號強發）"
-                  value={projectSituation}
-                  onChange={(e) => setProjectSituation(e.target.value)}
-                  data-testid="input-project-situation"
-                />
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => {
-                      saveProject();
-                      toast({ title: "戰術已儲存" });
-                    }}
-                    className="flex-1 wobbly-border py-1.5 bg-[#CCFF00] hover:bg-[#111] hover:text-[#CCFF00] transition-colors font-bold text-xs shadow-[2px_2px_0_0_#111]"
-                    data-testid="button-save-project"
-                  >
-                    儲存
-                  </button>
-                  <button
-                    onClick={handleNewProject}
-                    className="flex-1 wobbly-border py-1.5 bg-white hover:bg-gray-100 font-bold text-xs"
-                    data-testid="button-new-project"
-                  >
-                    新建
-                  </button>
-                </div>
-                {projects.length > 0 && (
-                  <div className="border-2 border-[#111] bg-white p-2">
-                    <div className="text-[10px] font-bold mb-1">已儲存 (點擊載入)</div>
-                    <div className="space-y-1 max-h-[80px] overflow-y-auto">
-                      {projects.map((p) => (
-                        <div
-                          key={p.id}
-                          className={`flex items-center text-[10px] p-1 gap-1 ${p.id === activeProjectId ? "bg-[#CCFF00]/30" : "hover:bg-gray-100"}`}
-                        >
-                          <span
-                            className="truncate flex-1 cursor-pointer hover:underline"
-                            onClick={() => {
-                              loadProject(p.id);
-                              toast({ title: "專案已載入" });
-                            }}
-                          >
-                            {displaySituation(p.situation)}
-                          </span>
-                          <span className="text-gray-400 shrink-0">
-                            {new Date(p.date).toLocaleDateString()}
-                          </span>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              deleteProject(p.id);
-                            }}
-                            className="shrink-0 text-gray-400 hover:text-red-600 font-bold leading-none px-0.5"
-                            title="刪除"
-                            data-testid={`button-delete-project-${p.id}`}
-                          >
-                            ×
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </section>
+            {/* 布置模式頂端：取消/儲存/另存新檔 */}
             <section>
               <div className="grid grid-cols-3 gap-1.5">
                 <button
@@ -557,6 +482,63 @@ export default function RightPanel() {
                   )}
                 </div>
               )}
+            </section>
+            {/* 布置模式底部：命名 + 已儲存列表（存檔按鈕已在頂端，不重複） */}
+            <section>
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="font-display text-[15px] font-bold">戰術管理</h2>
+                <span
+                  className={`text-[10px] font-bold px-1.5 py-0.5 wobbly-border ${activeProjectId ? "bg-[#CCFF00]" : "bg-gray-200 text-gray-500"}`}
+                >
+                  {activeProjectId ? "正在編輯" : "草稿"}
+                </span>
+              </div>
+              <div className="space-y-2">
+                <input
+                  className="w-full wobbly-border px-2 py-1.5 text-xs bg-white outline-none focus:ring-2 focus:ring-[#CCFF00]"
+                  placeholder="情境名稱（如：接發11號強發）"
+                  value={projectSituation}
+                  onChange={(e) => setProjectSituation(e.target.value)}
+                  data-testid="input-project-situation"
+                />
+                {projects.length > 0 && (
+                  <div className="border-2 border-[#111] bg-white p-2">
+                    <div className="text-[10px] font-bold mb-1">已儲存 (點擊載入)</div>
+                    <div className="space-y-1 max-h-[80px] overflow-y-auto">
+                      {projects.map((p) => (
+                        <div
+                          key={p.id}
+                          className={`flex items-center text-[10px] p-1 gap-1 ${p.id === activeProjectId ? "bg-[#CCFF00]/30" : "hover:bg-gray-100"}`}
+                        >
+                          <span
+                            className="truncate flex-1 cursor-pointer hover:underline"
+                            onClick={() => {
+                              loadProject(p.id);
+                              toast({ title: "專案已載入" });
+                            }}
+                          >
+                            {displaySituation(p.situation)}
+                          </span>
+                          <span className="text-gray-400 shrink-0">
+                            {new Date(p.date).toLocaleDateString()}
+                          </span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteProject(p.id);
+                            }}
+                            className="shrink-0 text-gray-400 hover:text-red-600 font-bold leading-none px-0.5"
+                            title="刪除"
+                            data-testid={`button-delete-project-${p.id}`}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             </section>
           </>
         )}
