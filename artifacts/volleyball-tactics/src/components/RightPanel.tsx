@@ -1,22 +1,21 @@
 import React, { useRef } from "react";
 import { useTactics, ToolType } from "../hooks/useTactics";
 import { exportCourtAsPng, exportStateAsJson, importStateFromJson } from "../lib/exportUtils";
-import { SituationTag } from "../types/tactics";
 import { Toaster } from "@/components/ui/toaster";
 import { useToast } from "@/hooks/use-toast";
 
-// 情境標籤只在存檔時當分類用，跟球場上即時編輯無關，所以放在「戰術管理」區塊裡選。
-const SITUATION_OPTIONS: { id: SituationTag; label: string }[] = [
-  { id: "base", label: "基礎輪轉" },
-  { id: "serve-receive", label: "接發球" },
-  { id: "defense", label: "防守" },
-  { id: "attack", label: "進攻" },
-  { id: "cover", label: "Cover保護" },
-];
-const SITUATION_TEXT: Record<SituationTag, string> = SITUATION_OPTIONS.reduce(
-  (acc, { id, label }) => ({ ...acc, [id]: label }),
-  {} as Record<SituationTag, string>,
-);
+// 常用情境選項，顯示在 datalist 下拉建議中；也可以直接輸入自訂文字（如「接發11號強發」）。
+const SITUATION_PRESETS = ["基礎輪轉", "接發球", "防守", "進攻", "Cover保護"];
+
+// 舊版資料相容：存的是英文 key，轉成中文顯示
+const LEGACY_SITUATION_TEXT: Record<string, string> = {
+  base: "基礎輪轉",
+  "serve-receive": "接發球",
+  defense: "防守",
+  attack: "進攻",
+  cover: "Cover保護",
+};
+const displaySituation = (s: string) => LEGACY_SITUATION_TEXT[s] ?? s;
 
 const COLORS = [
   "#CCFF00",
@@ -36,7 +35,6 @@ export default function RightPanel() {
     projectSituation,
     setProjectSituation,
     saveProject,
-    saveProjectAs,
     newProject,
     activeProjectId,
     projects,
@@ -73,7 +71,7 @@ export default function RightPanel() {
     }
   };
 
-  const situationLabel = SITUATION_TEXT[projectSituation] || "tactics";
+  const situationLabel = displaySituation(projectSituation) || "tactics";
 
   const handleExportPNG = () => {
     exportCourtAsPng("court-wrapper", `${situationLabel}_輪次${currentRotation + 1}`);
@@ -144,16 +142,22 @@ export default function RightPanel() {
         ) : (
           <>
             <section>
-              <button
-                onClick={handleFinishLayout}
-                className="w-full wobbly-border py-1.5 bg-[#CCFF00] hover:bg-[#111] hover:text-[#CCFF00] transition-colors font-bold text-xs shadow-[2px_2px_0_0_#111]"
-                data-testid="button-finish-layout"
-              >
-                完成並儲存
-              </button>
-              <p className="text-[10px] text-gray-500 mt-1 text-center">
-                {activeProjectId ? `將更新「${situationLabel}」` : "將建立新戰術"}
-              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleFinishLayout}
+                  className="flex-1 wobbly-border py-1.5 bg-[#CCFF00] hover:bg-[#111] hover:text-[#CCFF00] transition-colors font-bold text-xs shadow-[2px_2px_0_0_#111]"
+                  data-testid="button-finish-layout"
+                >
+                  儲存
+                </button>
+                <button
+                  onClick={() => setLayoutMode(false)}
+                  className="flex-1 wobbly-border py-1.5 bg-white hover:bg-gray-100 font-bold text-xs"
+                  data-testid="button-cancel-layout"
+                >
+                  取消
+                </button>
+              </div>
             </section>
             <section>
               <div className="flex justify-between items-center mb-2">
@@ -443,44 +447,34 @@ export default function RightPanel() {
             </span>
           </div>
           <div className="space-y-2">
-            {/* 情境即是這個戰術的名稱，選好情境再儲存就好，不需要另外填名稱 */}
-            <select
+            {/* 情境即是戰術名稱：可從常用選項選，也可以直接輸入自訂描述 */}
+            <input
+              list="situation-presets"
               className="w-full wobbly-border px-2 py-1.5 text-xs bg-white outline-none focus:ring-2 focus:ring-[#CCFF00]"
+              placeholder="情境名稱（可自訂）"
               value={projectSituation}
-              onChange={(e) => setProjectSituation(e.target.value as SituationTag)}
-              data-testid="select-project-situation"
-            >
-              {SITUATION_OPTIONS.map((sc) => (
-                <option key={sc.id} value={sc.id}>
-                  {sc.label}
-                </option>
+              onChange={(e) => setProjectSituation(e.target.value)}
+              data-testid="input-project-situation"
+            />
+            <datalist id="situation-presets">
+              {SITUATION_PRESETS.map((label) => (
+                <option key={label} value={label} />
               ))}
-            </select>
-            {/* 3 個按鈕：儲存（update-or-create）、另存新檔（永遠新增）、新建（清空編輯器） */}
-            <div className="grid grid-cols-3 gap-1.5">
+            </datalist>
+            <div className="flex gap-2">
               <button
                 onClick={() => {
                   saveProject();
-                  toast({ title: activeProjectId ? "專案已更新" : "專案已儲存" });
+                  toast({ title: "戰術已儲存" });
                 }}
-                className="wobbly-border py-1.5 bg-[#CCFF00] hover:bg-[#111] hover:text-[#CCFF00] transition-colors font-bold text-xs shadow-[2px_2px_0_0_#111]"
+                className="flex-1 wobbly-border py-1.5 bg-[#CCFF00] hover:bg-[#111] hover:text-[#CCFF00] transition-colors font-bold text-xs shadow-[2px_2px_0_0_#111]"
                 data-testid="button-save-project"
               >
                 儲存
               </button>
               <button
-                onClick={() => {
-                  saveProjectAs();
-                  toast({ title: "已另存新檔" });
-                }}
-                className="wobbly-border py-1.5 bg-white hover:bg-gray-100 font-bold text-xs"
-                data-testid="button-save-project-as"
-              >
-                另存新檔
-              </button>
-              <button
                 onClick={handleNewProject}
-                className="wobbly-border py-1.5 bg-white hover:bg-gray-100 font-bold text-xs"
+                className="flex-1 wobbly-border py-1.5 bg-white hover:bg-gray-100 font-bold text-xs"
                 data-testid="button-new-project"
               >
                 新建
@@ -503,7 +497,7 @@ export default function RightPanel() {
                           toast({ title: "專案已載入" });
                         }}
                       >
-                        {SITUATION_TEXT[p.situation]}
+                        {displaySituation(p.situation)}
                       </span>
                       <span className="text-gray-400 shrink-0">
                         {new Date(p.date).toLocaleDateString()}

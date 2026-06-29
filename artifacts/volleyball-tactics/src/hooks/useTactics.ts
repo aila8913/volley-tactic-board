@@ -116,10 +116,8 @@ interface TacticsStore extends TacticsState {
 
   toggleLabel: (key: keyof TacticsState["labelToggles"]) => void;
 
-  // activeProjectId 有值 → update in-place；null → 新增並設定 activeProjectId
+  // 永遠新增一筆——儲存就是建立新快照，不覆蓋既有的
   saveProject: () => void;
-  // 永遠新增一筆（另存新檔），不管 activeProjectId 是否有值
-  saveProjectAs: () => void;
   // 重置編輯器回初始值，activeProjectId = null，不動 projects[]
   newProject: () => void;
   loadProject: (id: string) => void;
@@ -148,7 +146,7 @@ export const useTactics = create<TacticsStore>()(
       activeTool: "select",
       selectedObjectId: null,
       projects: [],
-      projectSituation: "base",
+      projectSituation: "基礎輪轉",
       activeProjectId: null,
       isLayoutMode: false,
 
@@ -388,35 +386,6 @@ export const useTactics = create<TacticsStore>()(
 
       saveProject: () =>
         set((state) => {
-          const data = buildProjectData(state);
-          // activeProjectId が設定されている場合は既存戦術を更新（update in-place）、
-          // null の場合は新規追加して activeProjectId をセット
-          if (state.activeProjectId) {
-            return {
-              projects: state.projects.map((p) =>
-                p.id === state.activeProjectId
-                  ? {
-                      ...p,
-                      date: new Date().toISOString(),
-                      situation: state.projectSituation,
-                      data,
-                    }
-                  : p,
-              ),
-            };
-          }
-          const id = uuidv4();
-          return {
-            projects: [
-              ...state.projects,
-              { id, date: new Date().toISOString(), situation: state.projectSituation, data },
-            ],
-            activeProjectId: id,
-          };
-        }),
-
-      saveProjectAs: () =>
-        set((state) => {
           const id = uuidv4();
           const data = buildProjectData(state);
           return {
@@ -436,7 +405,7 @@ export const useTactics = create<TacticsStore>()(
           rotations: emptyRotations,
           circleLabel: "name",
           labelToggles: { zone: false },
-          projectSituation: "base",
+          projectSituation: "基礎輪轉",
           activeProjectId: null,
           history: [],
           historyIndex: -1,

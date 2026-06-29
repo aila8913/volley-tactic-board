@@ -1,8 +1,7 @@
 import type { MatchPlayer } from "./match";
 
-// 情境標籤：現在只在「存檔」時當標籤用（戰術管理區塊選一個、存進 ProjectInfo.situation），
-// 球場上不會即時切換、也不會讓同一個輪次同時存好幾份站位。
-export type SituationTag = "base" | "serve-receive" | "defense" | "attack" | "cover";
+// 情境即是戰術的名稱，可以是預設選項（如「接發球」），也可以自由輸入（如「接發11號強發」）。
+export type SituationTag = string;
 
 // 圈圈裡面要顯示哪種資訊，三選一（不是像 labelToggles 那樣可以同時勾多個）。
 export const CIRCLE_LABEL_TYPES = ["name", "number", "role"] as const;
