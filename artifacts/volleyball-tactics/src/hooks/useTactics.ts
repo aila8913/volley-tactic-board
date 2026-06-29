@@ -387,8 +387,23 @@ export const useTactics = create<TacticsStore>()(
 
       saveProject: () =>
         set((state) => {
-          const id = uuidv4();
           const data = buildProjectData(state);
+          // 有 activeProjectId → 覆蓋更新同一筆；沒有（草稿）→ 新建一筆
+          if (state.activeProjectId) {
+            return {
+              projects: state.projects.map((p) =>
+                p.id === state.activeProjectId
+                  ? {
+                      ...p,
+                      date: new Date().toISOString(),
+                      situation: state.projectSituation,
+                      data,
+                    }
+                  : p,
+              ),
+            };
+          }
+          const id = uuidv4();
           return {
             projects: [
               ...state.projects,
