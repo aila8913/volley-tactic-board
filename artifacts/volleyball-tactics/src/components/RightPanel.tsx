@@ -180,6 +180,23 @@ export default function RightPanel() {
         ) : (
           <>
             <section>
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="font-display text-[15px] font-bold">戰術管理</h2>
+                <span
+                  className={`text-[10px] font-bold px-1.5 py-0.5 wobbly-border ${activeProjectId ? "bg-[#CCFF00]" : "bg-gray-200 text-gray-500"}`}
+                >
+                  {activeProjectId ? "正在編輯" : "草稿"}
+                </span>
+              </div>
+              <input
+                  className="w-full wobbly-border px-2 py-1.5 text-xs bg-white outline-none focus:ring-2 focus:ring-[#CCFF00]"
+                  placeholder="情境名稱（如：接發11號強發）"
+                  value={projectSituation}
+                  onChange={(e) => setProjectSituation(e.target.value)}
+                  data-testid="input-project-situation"
+                />
+            </section>
+            <section>
               <div className="flex justify-between items-center mb-2">
                 <h2 className="font-display text-[15px] font-bold">畫筆工具</h2>
                 <div className="flex gap-1">
@@ -455,22 +472,8 @@ export default function RightPanel() {
             </section>
             {/* 布置模式底部：命名 + 已儲存列表（存檔按鈕已在頂端，不重複） */}
             <section>
-              <div className="flex items-center justify-between mb-2">
-                <h2 className="font-display text-[15px] font-bold">戰術管理</h2>
-                <span
-                  className={`text-[10px] font-bold px-1.5 py-0.5 wobbly-border ${activeProjectId ? "bg-[#CCFF00]" : "bg-gray-200 text-gray-500"}`}
-                >
-                  {activeProjectId ? "正在編輯" : "草稿"}
-                </span>
-              </div>
+        
               <div className="space-y-2">
-                <input
-                  className="w-full wobbly-border px-2 py-1.5 text-xs bg-white outline-none focus:ring-2 focus:ring-[#CCFF00]"
-                  placeholder="情境名稱（如：接發11號強發）"
-                  value={projectSituation}
-                  onChange={(e) => setProjectSituation(e.target.value)}
-                  data-testid="input-project-situation"
-                />
                 {projects.length > 0 && (
                   <div className="border-2 border-[#111] bg-white p-2">
                     <div className="text-[10px] font-bold mb-1">已儲存 (點擊載入)</div>
