@@ -42,6 +42,9 @@ export interface CompletedSet {
   setNumber: number;
   ourScore: number;
   opponentScore: number;
+  // 保留這局的球序歷史，讓結果頁可以做跨局統計。
+  // 舊的 persist 資料沒有這個欄位，所以讀取時要用 ?? [] 補空陣列。
+  history: PointRecord[];
 }
 
 export interface MatchRecordingState {

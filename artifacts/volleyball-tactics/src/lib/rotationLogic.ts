@@ -39,7 +39,10 @@ export function findNearestZone(x: number, y: number): number {
 }
 
 export interface ZoneSlot {
+  // 這個 slot 的原始號位標籤（顯示在圓圈裡）
   zone: number;
+  // 輪轉後這個 slot 實際佔據的號位——用來判斷誰現在在 1 號位（發球方）
+  currentZone: number;
   x: number;
   y: number;
 }
@@ -53,6 +56,7 @@ export function getZoneLayout(rotation: number, mirrored: boolean): ZoneSlot[] {
     const coords = zoneCoords[newZone as keyof typeof zoneCoords];
     return {
       zone,
+      currentZone: newZone,
       x: mirrored ? 1 - coords.x : coords.x,
       y: mirrored ? 1 - coords.y : coords.y,
     };
