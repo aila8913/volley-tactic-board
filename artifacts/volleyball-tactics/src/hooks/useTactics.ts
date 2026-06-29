@@ -118,6 +118,7 @@ interface TacticsStore extends TacticsState {
 
   // 永遠新增一筆——儲存就是建立新快照，不覆蓋既有的
   saveProject: () => void;
+  saveProjectAs: () => void;
   // 重置編輯器回初始值，activeProjectId = null，不動 projects[]
   newProject: () => void;
   loadProject: (id: string) => void;
@@ -385,6 +386,19 @@ export const useTactics = create<TacticsStore>()(
         })),
 
       saveProject: () =>
+        set((state) => {
+          const id = uuidv4();
+          const data = buildProjectData(state);
+          return {
+            projects: [
+              ...state.projects,
+              { id, date: new Date().toISOString(), situation: state.projectSituation, data },
+            ],
+            activeProjectId: id,
+          };
+        }),
+
+      saveProjectAs: () =>
         set((state) => {
           const id = uuidv4();
           const data = buildProjectData(state);

@@ -4,9 +4,6 @@ import { exportCourtAsPng, exportStateAsJson, importStateFromJson } from "../lib
 import { Toaster } from "@/components/ui/toaster";
 import { useToast } from "@/hooks/use-toast";
 
-// 常用情境選項，顯示在 datalist 下拉建議中；也可以直接輸入自訂文字（如「接發11號強發」）。
-const SITUATION_PRESETS = ["基礎輪轉", "接發球", "防守", "進攻", "Cover保護"];
-
 // 舊版資料相容：存的是英文 key，轉成中文顯示
 const LEGACY_SITUATION_TEXT: Record<string, string> = {
   base: "基礎輪轉",
@@ -35,6 +32,7 @@ export default function RightPanel() {
     projectSituation,
     setProjectSituation,
     saveProject,
+    saveProjectAs,
     newProject,
     activeProjectId,
     projects,
@@ -142,20 +140,31 @@ export default function RightPanel() {
         ) : (
           <>
             <section>
-              <div className="flex gap-2">
+              <div className="grid grid-cols-3 gap-1.5">
+                <button
+                  onClick={() => setLayoutMode(false)}
+                  className="wobbly-border py-1.5 bg-white hover:bg-gray-100 font-bold text-xs"
+                  data-testid="button-cancel-layout"
+                >
+                  取消
+                </button>
                 <button
                   onClick={handleFinishLayout}
-                  className="flex-1 wobbly-border py-1.5 bg-[#CCFF00] hover:bg-[#111] hover:text-[#CCFF00] transition-colors font-bold text-xs shadow-[2px_2px_0_0_#111]"
+                  className="wobbly-border py-1.5 bg-[#CCFF00] hover:bg-[#111] hover:text-[#CCFF00] transition-colors font-bold text-xs shadow-[2px_2px_0_0_#111]"
                   data-testid="button-finish-layout"
                 >
                   儲存
                 </button>
                 <button
-                  onClick={() => setLayoutMode(false)}
-                  className="flex-1 wobbly-border py-1.5 bg-white hover:bg-gray-100 font-bold text-xs"
-                  data-testid="button-cancel-layout"
+                  onClick={() => {
+                    saveProjectAs();
+                    setLayoutMode(false);
+                    toast({ title: "已另存新檔" });
+                  }}
+                  className="wobbly-border py-1.5 bg-white hover:bg-gray-100 font-bold text-xs"
+                  data-testid="button-save-as-layout"
                 >
-                  取消
+                  另存新檔
                 </button>
               </div>
             </section>
@@ -447,20 +456,13 @@ export default function RightPanel() {
             </span>
           </div>
           <div className="space-y-2">
-            {/* 情境即是戰術名稱：可從常用選項選，也可以直接輸入自訂描述 */}
             <input
-              list="situation-presets"
               className="w-full wobbly-border px-2 py-1.5 text-xs bg-white outline-none focus:ring-2 focus:ring-[#CCFF00]"
-              placeholder="情境名稱（可自訂）"
+              placeholder="情境名稱（如：接發11號強發）"
               value={projectSituation}
               onChange={(e) => setProjectSituation(e.target.value)}
               data-testid="input-project-situation"
             />
-            <datalist id="situation-presets">
-              {SITUATION_PRESETS.map((label) => (
-                <option key={label} value={label} />
-              ))}
-            </datalist>
             <div className="flex gap-2">
               <button
                 onClick={() => {
