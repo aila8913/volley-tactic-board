@@ -1,22 +1,18 @@
 import React, { useRef } from "react";
 import { useTactics, ToolType } from "../hooks/useTactics";
 import { exportCourtAsPng, exportStateAsJson, importStateFromJson } from "../lib/exportUtils";
-import { SituationTag } from "../types/tactics";
 import { Toaster } from "@/components/ui/toaster";
 import { useToast } from "@/hooks/use-toast";
 
-// 情境標籤只在存檔時當分類用，跟球場上即時編輯無關，所以放在「戰術管理」區塊裡選。
-const SITUATION_OPTIONS: { id: SituationTag; label: string }[] = [
-  { id: "base", label: "基礎輪轉" },
-  { id: "serve-receive", label: "接發球" },
-  { id: "defense", label: "防守" },
-  { id: "attack", label: "進攻" },
-  { id: "cover", label: "Cover保護" },
-];
-const SITUATION_TEXT: Record<SituationTag, string> = SITUATION_OPTIONS.reduce(
-  (acc, { id, label }) => ({ ...acc, [id]: label }),
-  {} as Record<SituationTag, string>,
-);
+// 舊版資料相容：存的是英文 key，轉成中文顯示
+const LEGACY_SITUATION_TEXT: Record<string, string> = {
+  base: "基礎輪轉",
+  "serve-receive": "接發球",
+  defense: "防守",
+  attack: "進攻",
+  cover: "Cover保護",
+};
+const displaySituation = (s: string) => LEGACY_SITUATION_TEXT[s] ?? s;
 
 const COLORS = [
   "#CCFF00",
@@ -33,15 +29,15 @@ export default function RightPanel() {
   const {
     activeTool,
     setActiveTool,
-    projectName,
-    teamName,
-    setProjectName,
-    setTeamName,
     projectSituation,
     setProjectSituation,
     saveProject,
+    saveProjectAs,
+    newProject,
+    activeProjectId,
     projects,
     loadProject,
+    deleteProject,
     importState,
     rotations,
     currentRotation,
@@ -73,8 +69,10 @@ export default function RightPanel() {
     }
   };
 
+  const situationLabel = displaySituation(projectSituation) || "tactics";
+
   const handleExportPNG = () => {
-    exportCourtAsPng("court-wrapper", `${projectName || "tactics"}_輪次${currentRotation + 1}`);
+    exportCourtAsPng("court-wrapper", `${situationLabel}_輪次${currentRotation + 1}`);
     toast({ title: "匯出成功", description: "PNG 下載中..." });
   };
 
@@ -84,7 +82,7 @@ export default function RightPanel() {
     for (let i = 0; i < 6; i++) {
       setCurrentRotation(i);
       await new Promise((resolve) => setTimeout(resolve, 300));
-      exportCourtAsPng("court-wrapper", `${projectName || "tactics"}_輪次${i + 1}`);
+      exportCourtAsPng("court-wrapper", `${situationLabel}_輪次${i + 1}`);
     }
     setCurrentRotation(originalRotation);
   };
@@ -92,7 +90,7 @@ export default function RightPanel() {
   const handleExportJSON = () => {
     const stateStr = localStorage.getItem("volleyboard_current");
     if (stateStr) {
-      exportStateAsJson(JSON.parse(stateStr).state, `${projectName || "tactics"}`);
+      exportStateAsJson(JSON.parse(stateStr).state, situationLabel);
       toast({ title: "匯出成功", description: "JSON 下載中..." });
     }
   };
@@ -110,10 +108,7 @@ export default function RightPanel() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const handleNewProject = () => {
-    localStorage.removeItem("volleyboard_current");
-    window.location.reload();
-  };
+  const handleNewProject = () => newProject();
 
   const handleFinishLayout = () => {
     saveProject();
@@ -128,31 +123,62 @@ export default function RightPanel() {
     <div className="flex flex-col h-full bg-[#f8f8f8]">
       <div className="p-3 flex flex-col gap-4 overflow-y-auto flex-1">
         {!isLayoutMode ? (
-          <section>
-            <h2 className="font-display mb-2 text-[15px] font-bold">戰術布置</h2>
-            <p className="text-[10px] text-gray-500 mb-2">
-              進入後才能使用箭頭、文字、防守範圍等工具標註戰術；平常球場只顯示已經畫好的內容，
-              不能選取或修改。
-            </p>
-            <button
-              onClick={() => setLayoutMode(true)}
-              className="w-full wobbly-border py-1.5 bg-[#CCFF00] hover:bg-[#111] hover:text-[#CCFF00] transition-colors font-bold text-xs shadow-[2px_2px_0_0_#111]"
-              data-testid="button-enter-layout-mode"
-            >
-              進入戰術布置
-            </button>
-          </section>
-        ) : (
           <>
             <section>
+              <h2 className="font-display mb-2 text-[15px] font-bold">戰術布置</h2>
+              <p className="text-[10px] text-gray-500 mb-2">
+                進入後才能使用箭頭、文字、防守範圍等工具標註戰術；平常球場只顯示已經畫好的內容，
+                不能選取或修改。
+              </p>
               <button
-                onClick={handleFinishLayout}
+                onClick={() => setLayoutMode(true)}
                 className="w-full wobbly-border py-1.5 bg-[#CCFF00] hover:bg-[#111] hover:text-[#CCFF00] transition-colors font-bold text-xs shadow-[2px_2px_0_0_#111]"
-                data-testid="button-finish-layout"
+                data-testid="button-enter-layout-mode"
               >
-                完成並儲存
+                進入戰術布置
               </button>
             </section>
+            {/* 非布置模式只顯示已儲存列表，不顯示命名和按鈕 */}
+            {projects.length > 0 && (
+              <div className="border-2 border-[#111] bg-white p-2">
+                <div className="text-[10px] font-bold mb-1">已儲存 (點擊載入)</div>
+                <div className="space-y-1 max-h-[160px] overflow-y-auto">
+                  {projects.map((p) => (
+                    <div
+                      key={p.id}
+                      className={`flex items-center text-[10px] p-1 gap-1 ${p.id === activeProjectId ? "bg-[#CCFF00]/30" : "hover:bg-gray-100"}`}
+                    >
+                      <span
+                        className="truncate flex-1 cursor-pointer hover:underline"
+                        onClick={() => {
+                          loadProject(p.id);
+                          toast({ title: "專案已載入" });
+                        }}
+                      >
+                        {displaySituation(p.situation)}
+                      </span>
+                      <span className="text-gray-400 shrink-0">
+                        {new Date(p.date).toLocaleDateString()}
+                      </span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteProject(p.id);
+                        }}
+                        className="shrink-0 text-gray-400 hover:text-red-600 font-bold leading-none px-0.5"
+                        title="刪除"
+                        data-testid={`button-delete-project-${p.id}`}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <>
             <section>
               <div className="flex justify-between items-center mb-2">
                 <h2 className="font-display text-[15px] font-bold">畫筆工具</h2>
@@ -427,85 +453,95 @@ export default function RightPanel() {
                 </div>
               )}
             </section>
+            {/* 布置模式底部：命名 + 已儲存列表（存檔按鈕已在頂端，不重複） */}
+            <section>
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="font-display text-[15px] font-bold">戰術管理</h2>
+                <span
+                  className={`text-[10px] font-bold px-1.5 py-0.5 wobbly-border ${activeProjectId ? "bg-[#CCFF00]" : "bg-gray-200 text-gray-500"}`}
+                >
+                  {activeProjectId ? "正在編輯" : "草稿"}
+                </span>
+              </div>
+              <div className="space-y-2">
+                <input
+                  className="w-full wobbly-border px-2 py-1.5 text-xs bg-white outline-none focus:ring-2 focus:ring-[#CCFF00]"
+                  placeholder="情境名稱（如：接發11號強發）"
+                  value={projectSituation}
+                  onChange={(e) => setProjectSituation(e.target.value)}
+                  data-testid="input-project-situation"
+                />
+                {projects.length > 0 && (
+                  <div className="border-2 border-[#111] bg-white p-2">
+                    <div className="text-[10px] font-bold mb-1">已儲存 (點擊載入)</div>
+                    <div className="space-y-1 max-h-[80px] overflow-y-auto">
+                      {projects.map((p) => (
+                        <div
+                          key={p.id}
+                          className={`flex items-center text-[10px] p-1 gap-1 ${p.id === activeProjectId ? "bg-[#CCFF00]/30" : "hover:bg-gray-100"}`}
+                        >
+                          <span
+                            className="truncate flex-1 cursor-pointer hover:underline"
+                            onClick={() => {
+                              loadProject(p.id);
+                              toast({ title: "專案已載入" });
+                            }}
+                          >
+                            {displaySituation(p.situation)}
+                          </span>
+                          <span className="text-gray-400 shrink-0">
+                            {new Date(p.date).toLocaleDateString()}
+                          </span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteProject(p.id);
+                            }}
+                            className="shrink-0 text-gray-400 hover:text-red-600 font-bold leading-none px-0.5"
+                            title="刪除"
+                            data-testid={`button-delete-project-${p.id}`}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </section>
+            {/* 布置模式底端：取消/儲存/另存新檔 */}
+            <section>
+              <div className="grid grid-cols-3 gap-1.5">
+                <button
+                  onClick={() => setLayoutMode(false)}
+                  className="wobbly-border py-1.5 bg-white hover:bg-gray-100 font-bold text-xs"
+                  data-testid="button-cancel-layout"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleFinishLayout}
+                  className="wobbly-border py-1.5 bg-[#CCFF00] hover:bg-[#111] hover:text-[#CCFF00] transition-colors font-bold text-xs shadow-[2px_2px_0_0_#111]"
+                  data-testid="button-finish-layout"
+                >
+                  儲存
+                </button>
+                <button
+                  onClick={() => {
+                    saveProjectAs();
+                    setLayoutMode(false);
+                    toast({ title: "已另存新檔" });
+                  }}
+                  className="wobbly-border py-1.5 bg-white hover:bg-gray-100 font-bold text-xs"
+                  data-testid="button-save-as-layout"
+                >
+                  另存新檔
+                </button>
+              </div>
+            </section>
           </>
         )}
-
-        <section>
-          <h2 className="font-display mb-2 text-[15px] font-bold">戰術管理</h2>
-          <div className="space-y-2">
-            <input
-              className="w-full wobbly-border px-2 py-1.5 text-xs bg-white outline-none focus:ring-2 focus:ring-[#CCFF00]"
-              placeholder="專案名稱"
-              value={projectName}
-              onChange={(e) => setProjectName(e.target.value)}
-              data-testid="input-project-name"
-            />
-            <input
-              className="w-full wobbly-border px-2 py-1.5 text-xs bg-white outline-none focus:ring-2 focus:ring-[#CCFF00]"
-              placeholder="隊伍名稱"
-              value={teamName}
-              onChange={(e) => setTeamName(e.target.value)}
-              data-testid="input-team-name"
-            />
-            <select
-              className="w-full wobbly-border px-2 py-1.5 text-xs bg-white outline-none focus:ring-2 focus:ring-[#CCFF00]"
-              value={projectSituation}
-              onChange={(e) => setProjectSituation(e.target.value as SituationTag)}
-              data-testid="select-project-situation"
-            >
-              {SITUATION_OPTIONS.map((sc) => (
-                <option key={sc.id} value={sc.id}>
-                  {sc.label}
-                </option>
-              ))}
-            </select>
-            <div className="flex gap-2">
-              <button
-                onClick={() => {
-                  saveProject();
-                  toast({ title: "專案已儲存" });
-                }}
-                className="flex-1 wobbly-border py-1.5 bg-[#CCFF00] hover:bg-[#111] hover:text-[#CCFF00] transition-colors font-bold text-xs shadow-[2px_2px_0_0_#111]"
-                data-testid="button-save-project"
-              >
-                儲存
-              </button>
-              <button
-                onClick={handleNewProject}
-                className="flex-1 wobbly-border py-1.5 bg-white hover:bg-gray-100 font-bold text-xs"
-                data-testid="button-new-project"
-              >
-                新建
-              </button>
-            </div>
-
-            {projects.length > 0 && (
-              <div className="border-2 border-[#111] bg-white p-2">
-                <div className="text-[10px] font-bold mb-1">已儲存 (點擊載入)</div>
-                <div className="space-y-1 max-h-[80px] overflow-y-auto">
-                  {projects.map((p) => (
-                    <div
-                      key={p.id}
-                      className="flex justify-between items-center text-[10px] p-1 hover:bg-gray-100 cursor-pointer"
-                      onClick={() => {
-                        loadProject(p.id);
-                        toast({ title: "專案已載入" });
-                      }}
-                    >
-                      <span className="truncate flex-1">{p.name || "未命名"}</span>
-                      <span className="text-gray-400 ml-1 shrink-0">
-                        {SITUATION_TEXT[p.situation]}
-                      </span>
-                      <span className="text-gray-400 ml-1 shrink-0">
-                        {new Date(p.date).toLocaleDateString()}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </section>
       </div>
 
       <div className="p-3 border-t-2 border-[#111] bg-white">

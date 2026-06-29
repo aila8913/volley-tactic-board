@@ -13,6 +13,19 @@ import {
 import { findNearestZone, getZoneCoords, rotateZone } from "../lib/rotationLogic";
 import type { MatchPlayer } from "../types/match";
 
+// 把目前編輯器狀態打包成可存檔的 TacticsState snapshot，
+// saveProject / saveProjectAs 共用同一份邏輯，避免兩處分別維護欄位清單。
+function buildProjectData(state: TacticsStore): TacticsState {
+  return {
+    roster: state.roster,
+    liberoSubstitution: state.liberoSubstitution,
+    currentRotation: state.currentRotation,
+    rotations: state.rotations,
+    circleLabel: state.circleLabel,
+    labelToggles: state.labelToggles,
+  };
+}
+
 // 把目前場上的站位轉成「哪個格子站了誰」，方便用格子（1~6 號位）做吸附/換位/
 // 推算其他輪次的邏輯，而不用每次都跟 x/y 浮點數打交道。
 function positionsToZoneMap(positions: PlayerPosition[]): Map<number, string> {
@@ -43,10 +56,8 @@ export type ToolType =
 
 export interface ProjectInfo {
   id: string;
-  name: string;
-  team: string;
   date: string;
-  // 存檔當下選的情境標籤，純粹給「戰術專案」列表分類用，跟球場即時編輯無關。
+  // situation 就是這個戰術的名稱（基本輪轉、接發球…），不另外存 name/team 欄位。
   situation: SituationTag;
   data: TacticsState;
 }
@@ -60,6 +71,10 @@ interface TacticsStore extends TacticsState {
   // 跟 projectName/teamName 是同一種東西——存檔用的中繼資料，不是球場上的即時狀態。
   projectSituation: SituationTag;
 
+  // 目前正在編輯哪個已存戰術的 id。null 代表是還沒存過的新草稿。
+  // 存進 localStorage（看 partialize），重整頁面後知道上次在編輯哪個。
+  activeProjectId: string | null;
+
   // 是否處於「戰術布置」編輯模式——畫筆/防守範圍工具跟既有標記的選取/拖曳/刪除都鎖在這個
   // 模式裡才能用，平常球場只是唯讀的站位圖。故意不存進 localStorage（看 partialize），
   // 重新整理頁面一律回到唯讀檢視。
@@ -71,8 +86,6 @@ interface TacticsStore extends TacticsState {
   setActiveTool: (tool: ToolType) => void;
   setSelectedObjectId: (id: string | null) => void;
   setLayoutMode: (value: boolean) => void;
-  setProjectName: (name: string) => void;
-  setTeamName: (name: string) => void;
   // 設定完整名單（新增/刪除/編輯球員都透過這個，一次整批換掉）。
   // 進入戰術板時用比賽名單帶入，編輯名單彈窗按「儲存」時也是呼叫這個。
   setRoster: (roster: MatchPlayer[]) => void;
@@ -89,6 +102,8 @@ interface TacticsStore extends TacticsState {
   // 已經在場上的人拖到別的格子，都是呼叫這個。放開時格子已經有人會直接互換位置；
   // 這個格子排定之後，其他 5 個輪次會依照「輪轉了幾格」自動推算，不用每輪都重新拖。
   placePlayerOnCourt: (playerId: string, zone: number) => void;
+  // 戰術布置模式下的自由放置：直接用正規化座標（0~1 範圍），只影響目前輪次，不做格子吸附也不做輪轉傳播。
+  placePlayerFree: (playerId: string, x: number, y: number) => void;
   addDefenseRange: (range: Omit<DefenseRange, "id">) => void;
   updateDefenseRange: (id: string, updates: Partial<DefenseRange>) => void;
   removeDefenseRange: (id: string) => void;
@@ -101,7 +116,11 @@ interface TacticsStore extends TacticsState {
 
   toggleLabel: (key: keyof TacticsState["labelToggles"]) => void;
 
+  // 永遠新增一筆——儲存就是建立新快照，不覆蓋既有的
   saveProject: () => void;
+  saveProjectAs: () => void;
+  // 重置編輯器回初始值，activeProjectId = null，不動 projects[]
+  newProject: () => void;
   loadProject: (id: string) => void;
   deleteProject: (id: string) => void;
   importState: (data: TacticsState) => void;
@@ -118,8 +137,6 @@ const emptyRotations: RotationState[] = Array(6)
 export const useTactics = create<TacticsStore>()(
   persist(
     (set, get) => ({
-      projectName: "新戰術專案",
-      teamName: "",
       roster: [],
       liberoSubstitution: null,
       currentRotation: 0,
@@ -130,7 +147,8 @@ export const useTactics = create<TacticsStore>()(
       activeTool: "select",
       selectedObjectId: null,
       projects: [],
-      projectSituation: "base",
+      projectSituation: "基礎輪轉",
+      activeProjectId: null,
       isLayoutMode: false,
 
       history: [],
@@ -141,8 +159,6 @@ export const useTactics = create<TacticsStore>()(
       setLayoutMode: (value) =>
         set({ isLayoutMode: value, activeTool: "select", selectedObjectId: null }),
 
-      setProjectName: (name) => set({ projectName: name }),
-      setTeamName: (name) => set({ teamName: name }),
       setRoster: (roster) => set({ roster }),
       setCircleLabel: (label) => set({ circleLabel: label }),
       setLiberoSubstitution: (sub) => set({ liberoSubstitution: sub }),
@@ -232,6 +248,18 @@ export const useTactics = create<TacticsStore>()(
             };
           });
 
+          return { rotations: newRotations };
+        });
+      },
+
+      placePlayerFree: (playerId, x, y) => {
+        get().pushHistory();
+        set((state) => {
+          const r = state.currentRotation;
+          const newRotations = [...state.rotations];
+          // 移除這位球員目前在這個輪次的舊位置，再以自由座標放回
+          const filtered = newRotations[r].positions.filter((p) => p.playerId !== playerId);
+          newRotations[r] = { ...newRotations[r], positions: [...filtered, { playerId, x, y }] };
           return { rotations: newRotations };
         });
       },
@@ -359,25 +387,59 @@ export const useTactics = create<TacticsStore>()(
 
       saveProject: () =>
         set((state) => {
+          const data = buildProjectData(state);
+          // 有 activeProjectId → 覆蓋更新同一筆；沒有（草稿）→ 新建一筆
+          if (state.activeProjectId) {
+            return {
+              projects: state.projects.map((p) =>
+                p.id === state.activeProjectId
+                  ? {
+                      ...p,
+                      date: new Date().toISOString(),
+                      situation: state.projectSituation,
+                      data,
+                    }
+                  : p,
+              ),
+            };
+          }
           const id = uuidv4();
-          const newProject: ProjectInfo = {
-            id,
-            name: state.projectName || "未命名",
-            team: state.teamName || "無",
-            date: new Date().toISOString(),
-            situation: state.projectSituation,
-            data: {
-              projectName: state.projectName,
-              teamName: state.teamName,
-              roster: state.roster,
-              liberoSubstitution: state.liberoSubstitution,
-              currentRotation: state.currentRotation,
-              rotations: state.rotations,
-              circleLabel: state.circleLabel,
-              labelToggles: state.labelToggles,
-            },
+          return {
+            projects: [
+              ...state.projects,
+              { id, date: new Date().toISOString(), situation: state.projectSituation, data },
+            ],
+            activeProjectId: id,
           };
-          return { projects: [...state.projects, newProject] };
+        }),
+
+      saveProjectAs: () =>
+        set((state) => {
+          const id = uuidv4();
+          const data = buildProjectData(state);
+          return {
+            projects: [
+              ...state.projects,
+              { id, date: new Date().toISOString(), situation: state.projectSituation, data },
+            ],
+            activeProjectId: id,
+          };
+        }),
+
+      newProject: () =>
+        set({
+          roster: [],
+          liberoSubstitution: null,
+          currentRotation: 0,
+          rotations: emptyRotations,
+          circleLabel: "name",
+          labelToggles: { zone: false },
+          projectSituation: "基礎輪轉",
+          activeProjectId: null,
+          history: [],
+          historyIndex: -1,
+          selectedObjectId: null,
+          activeTool: "select",
         }),
 
       loadProject: (id) =>
@@ -387,6 +449,7 @@ export const useTactics = create<TacticsStore>()(
             return {
               ...proj.data,
               projectSituation: proj.situation,
+              activeProjectId: id,
               history: [proj.data.rotations[proj.data.currentRotation]],
               historyIndex: 0,
             };
@@ -397,6 +460,8 @@ export const useTactics = create<TacticsStore>()(
       deleteProject: (id) =>
         set((state) => ({
           projects: state.projects.filter((p) => p.id !== id),
+          // 削除したのが今編集中の戦術なら草稿状態に戻す
+          activeProjectId: state.activeProjectId === id ? null : state.activeProjectId,
         })),
 
       importState: (data) =>
@@ -410,8 +475,6 @@ export const useTactics = create<TacticsStore>()(
     {
       name: "volleyboard_current",
       partialize: (state) => ({
-        projectName: state.projectName,
-        teamName: state.teamName,
         roster: state.roster,
         liberoSubstitution: state.liberoSubstitution,
         currentRotation: state.currentRotation,
@@ -420,6 +483,7 @@ export const useTactics = create<TacticsStore>()(
         labelToggles: state.labelToggles,
         projects: state.projects,
         projectSituation: state.projectSituation,
+        activeProjectId: state.activeProjectId,
       }),
     },
   ),

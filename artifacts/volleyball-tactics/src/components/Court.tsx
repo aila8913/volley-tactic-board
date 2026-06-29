@@ -21,6 +21,7 @@ export default function Court() {
     updateDefenseRange,
     liberoSubstitution,
     placePlayerOnCourt,
+    placePlayerFree,
     undo,
     redo,
     isLayoutMode,
@@ -132,8 +133,13 @@ export default function Court() {
     if (!CTM) return;
     const rawX = (e.clientX - CTM.e) / CTM.a;
     const rawY = (e.clientY - CTM.f) / CTM.d;
-    const zone = findNearestZone(rawX / 100, rawY / 200);
-    placePlayerOnCourt(playerId, zone);
+    // layout mode：自由座標放置，只影響目前輪次
+    // 一般模式：吸附到最近格子並自動傳播到其他輪次
+    if (isLayoutMode) {
+      placePlayerFree(playerId, rawX / 100, rawY / 200);
+    } else {
+      placePlayerOnCourt(playerId, findNearestZone(rawX / 100, rawY / 200));
+    }
   };
 
   useEffect(() => {
