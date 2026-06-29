@@ -19,29 +19,48 @@ export default function PlayerNode({
   isLibero,
   courtRef,
 }: PlayerNodeProps) {
-  const { placePlayerOnCourt, selectedObjectId, setSelectedObjectId, activeTool, circleLabel } =
-    useTactics();
+  const {
+    placePlayerOnCourt,
+    placePlayerFree,
+    selectedObjectId,
+    setSelectedObjectId,
+    activeTool,
+    circleLabel,
+    isLayoutMode,
+  } = useTactics();
   const [isDragging, setIsDragging] = useState(false);
-  // 拖曳中暫時吸附到的格子（1~6 號位）；放開滑鼠時才真正寫進 store，拖曳過程只是預覽，
-  // 這樣球員在場上只會在 6 個固定格子之間跳，不會出現格子以外的中間位置。
-  const [dragZone, setDragZone] = useState<number | null>(null);
-  const nodeRef = useRef<SVGGElement>(null);
 
+  // 格子吸附模式（非 layout mode）：拖曳中暫時吸附到的格子
+  const [dragZone, setDragZone] = useState<number | null>(null);
+  // 自由移動模式（layout mode）：拖曳中的 SVG 座標（0~100 / 0~200 範圍）
+  const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
+
+  const nodeRef = useRef<SVGGElement>(null);
   const isSelected = selectedObjectId === position.playerId;
   const bgColor = isLibero ? "#FF6B00" : isFrontRow ? "#CCFF00" : "#FFFFFF";
   const radius = 6;
 
-  // 拖曳中顯示吸附預覽的格子，沒在拖曳就顯示目前實際站的格子（用最近格反推，
-  // 避免 x/y 浮點數誤差讓圈圈看起來沒有完全對齊格子中心）。
-  const renderZone = dragZone ?? findNearestZone(position.x, position.y);
-  const coords = getZoneCoords(renderZone);
-  const x = coords.x * 100;
-  const y = coords.y * 200;
+  // 顯示位置計算：
+  // - layout mode 拖曳中 → 直接用游標座標
+  // - layout mode 靜止 → 用 position.x/y 直接換算（自由座標，不反推格子）
+  // - 非 layout mode → 從格子編號換算（確保完全對齊格子中心）
+  let x: number, y: number;
+  if (isLayoutMode && dragPos) {
+    x = dragPos.x;
+    y = dragPos.y;
+  } else if (isLayoutMode) {
+    x = position.x * 100;
+    y = position.y * 200;
+  } else {
+    const renderZone = dragZone ?? findNearestZone(position.x, position.y);
+    const coords = getZoneCoords(renderZone);
+    x = coords.x * 100;
+    y = coords.y * 200;
+  }
 
   const handlePointerDown = (e: React.PointerEvent) => {
     e.stopPropagation();
     if (activeTool !== "select") return;
-
     setSelectedObjectId(position.playerId);
     setIsDragging(true);
     (e.target as Element).setPointerCapture(e.pointerId);
@@ -49,25 +68,32 @@ export default function PlayerNode({
 
   const handlePointerMove = (e: React.PointerEvent) => {
     if (!isDragging || !courtRef.current) return;
-
     const CTM = courtRef.current.getScreenCTM();
     if (!CTM) return;
-
     let rawX = (e.clientX - CTM.e) / CTM.a;
     let rawY = (e.clientY - CTM.f) / CTM.d;
     rawX = Math.max(radius, Math.min(100 - radius, rawX));
     rawY = Math.max(radius, Math.min(200 - radius, rawY));
 
-    setDragZone(findNearestZone(rawX / 100, rawY / 200));
+    if (isLayoutMode) {
+      setDragPos({ x: rawX, y: rawY });
+    } else {
+      setDragZone(findNearestZone(rawX / 100, rawY / 200));
+    }
   };
 
   const handlePointerUp = (e: React.PointerEvent) => {
     setIsDragging(false);
     (e.target as Element).releasePointerCapture(e.pointerId);
-    if (dragZone !== null) {
+
+    if (isLayoutMode && dragPos) {
+      // 正規化到 0~1 範圍再存進 store
+      placePlayerFree(position.playerId, dragPos.x / 100, dragPos.y / 200);
+      setDragPos(null);
+    } else if (dragZone !== null) {
       placePlayerOnCourt(position.playerId, dragZone);
+      setDragZone(null);
     }
-    setDragZone(null);
   };
 
   return (
@@ -84,10 +110,9 @@ export default function PlayerNode({
       <circle
         r={isSelected ? radius + 1.5 : radius}
         fill={bgColor}
-        stroke={isSelected ? "#111111" : "#111111"}
+        stroke="#111111"
         strokeWidth={isSelected ? "1.5" : "1"}
       />
-
       {/* circleLabel 三選一，所以圈圈裡固定只畫一行文字；名字比較長，字級調小一點才塞得進去。 */}
       <text
         y="2"

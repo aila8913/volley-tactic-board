@@ -47,8 +47,6 @@ export interface RotationState {
 }
 
 export interface TacticsState {
-  projectName: string;
-  teamName: string;
   // 完整球員名單（人數不固定），跟比賽列表那邊的 match.players 是同一份資料、同一個型別，
   // 編輯這裡會回寫到 match list。球場上 PlayerPosition.playerId 直接存這份名單裡的球員 id，
   // 哪個球員站場上哪個位置，完全由教練拖曳決定（見 hooks/useTactics.ts 的 placePlayerOnCourt）。

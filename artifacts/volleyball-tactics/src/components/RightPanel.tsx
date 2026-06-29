@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useRef } from "react";
 import { useTactics, ToolType } from "../hooks/useTactics";
 import { exportCourtAsPng, exportStateAsJson, importStateFromJson } from "../lib/exportUtils";
 import { SituationTag } from "../types/tactics";
@@ -33,15 +33,10 @@ export default function RightPanel() {
   const {
     activeTool,
     setActiveTool,
-    projectName,
-    teamName,
-    setProjectName,
-    setTeamName,
     projectSituation,
     setProjectSituation,
     saveProject,
     saveProjectAs,
-    renameProject,
     newProject,
     activeProjectId,
     projects,
@@ -63,10 +58,6 @@ export default function RightPanel() {
     setLayoutMode,
   } = useTactics();
 
-  // inline rename state: 哪一筆正在編輯名稱
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editingName, setEditingName] = useState("");
-
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -82,8 +73,10 @@ export default function RightPanel() {
     }
   };
 
+  const situationLabel = SITUATION_TEXT[projectSituation] || "tactics";
+
   const handleExportPNG = () => {
-    exportCourtAsPng("court-wrapper", `${projectName || "tactics"}_輪次${currentRotation + 1}`);
+    exportCourtAsPng("court-wrapper", `${situationLabel}_輪次${currentRotation + 1}`);
     toast({ title: "匯出成功", description: "PNG 下載中..." });
   };
 
@@ -93,7 +86,7 @@ export default function RightPanel() {
     for (let i = 0; i < 6; i++) {
       setCurrentRotation(i);
       await new Promise((resolve) => setTimeout(resolve, 300));
-      exportCourtAsPng("court-wrapper", `${projectName || "tactics"}_輪次${i + 1}`);
+      exportCourtAsPng("court-wrapper", `${situationLabel}_輪次${i + 1}`);
     }
     setCurrentRotation(originalRotation);
   };
@@ -101,7 +94,7 @@ export default function RightPanel() {
   const handleExportJSON = () => {
     const stateStr = localStorage.getItem("volleyboard_current");
     if (stateStr) {
-      exportStateAsJson(JSON.parse(stateStr).state, `${projectName || "tactics"}`);
+      exportStateAsJson(JSON.parse(stateStr).state, situationLabel);
       toast({ title: "匯出成功", description: "JSON 下載中..." });
     }
   };
@@ -159,7 +152,7 @@ export default function RightPanel() {
                 完成並儲存
               </button>
               <p className="text-[10px] text-gray-500 mt-1 text-center">
-                {activeProjectId ? `將更新「${projectName || "未命名"}」` : "將建立新戰術"}
+                {activeProjectId ? `將更新「${situationLabel}」` : "將建立新戰術"}
               </p>
             </section>
             <section>
@@ -450,20 +443,7 @@ export default function RightPanel() {
             </span>
           </div>
           <div className="space-y-2">
-            <input
-              className="w-full wobbly-border px-2 py-1.5 text-xs bg-white outline-none focus:ring-2 focus:ring-[#CCFF00]"
-              placeholder="專案名稱"
-              value={projectName}
-              onChange={(e) => setProjectName(e.target.value)}
-              data-testid="input-project-name"
-            />
-            <input
-              className="w-full wobbly-border px-2 py-1.5 text-xs bg-white outline-none focus:ring-2 focus:ring-[#CCFF00]"
-              placeholder="隊伍名稱"
-              value={teamName}
-              onChange={(e) => setTeamName(e.target.value)}
-              data-testid="input-team-name"
-            />
+            {/* 情境即是這個戰術的名稱，選好情境再儲存就好，不需要另外填名稱 */}
             <select
               className="w-full wobbly-border px-2 py-1.5 text-xs bg-white outline-none focus:ring-2 focus:ring-[#CCFF00]"
               value={projectSituation}
@@ -516,44 +496,18 @@ export default function RightPanel() {
                       key={p.id}
                       className={`flex items-center text-[10px] p-1 gap-1 ${p.id === activeProjectId ? "bg-[#CCFF00]/30" : "hover:bg-gray-100"}`}
                     >
-                      {/* 點名稱文字進入 inline 改名模式 */}
-                      {editingId === p.id ? (
-                        <input
-                          autoFocus
-                          className="flex-1 min-w-0 border border-[#111] px-1 text-[10px] outline-none"
-                          value={editingName}
-                          onChange={(e) => setEditingName(e.target.value)}
-                          onBlur={() => {
-                            if (editingName.trim()) renameProject(p.id, editingName.trim());
-                            setEditingId(null);
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              if (editingName.trim()) renameProject(p.id, editingName.trim());
-                              setEditingId(null);
-                            } else if (e.key === "Escape") {
-                              setEditingId(null);
-                            }
-                          }}
-                        />
-                      ) : (
-                        <span
-                          className="truncate flex-1 cursor-pointer hover:underline"
-                          title="點擊載入，雙擊改名"
-                          onClick={() => {
-                            loadProject(p.id);
-                            toast({ title: "專案已載入" });
-                          }}
-                          onDoubleClick={() => {
-                            setEditingId(p.id);
-                            setEditingName(p.name || "");
-                          }}
-                        >
-                          {p.name || "未命名"}
-                        </span>
-                      )}
-                      <span className="text-gray-400 shrink-0">{SITUATION_TEXT[p.situation]}</span>
-                      {/* × 按鈕刪除這筆戰術 */}
+                      <span
+                        className="truncate flex-1 cursor-pointer hover:underline"
+                        onClick={() => {
+                          loadProject(p.id);
+                          toast({ title: "專案已載入" });
+                        }}
+                      >
+                        {SITUATION_TEXT[p.situation]}
+                      </span>
+                      <span className="text-gray-400 shrink-0">
+                        {new Date(p.date).toLocaleDateString()}
+                      </span>
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
