@@ -143,6 +143,7 @@ export const useRecording = create<RecordingStore>()(
                     setNumber: finished.setNumber,
                     ourScore: finished.ourScore,
                     opponentScore: finished.opponentScore,
+                    history: finished.history,
                   },
                 ],
                 currentSet: makeEmptySet(finished.setNumber + 1),

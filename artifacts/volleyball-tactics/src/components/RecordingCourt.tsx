@@ -1,48 +1,51 @@
-import React, { useRef, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { useTactics } from "../hooks/useTactics";
-import { getZoneLayout } from "../lib/rotationLogic";
+import { findNearestZone, getZoneLayout } from "../lib/rotationLogic";
 import { Side } from "../types/recording";
 
 export interface TouchedTarget {
   side: Side;
-  // 我方球員才有 playerId；對手沒有名單，只有號位（見下面 opponentZones 的渲染）。
   playerId?: string;
   zone?: number;
-  // 命中目標在螢幕上的座標（clientX/clientY），給 RadialMenu 用來定位彈出選單，
-  // 跟球場 SVG 座標系統無關。
   screenX: number;
   screenY: number;
+}
+
+export interface RegularSub {
+  outPlayerId: string;
+  inPlayerId: string;
 }
 
 interface RecordingCourtProps {
   ourRotation: number;
   opponentRotation: number;
-  // 哪一邊正在發球，畫面上用排球符號標在發球員（1 號位）旁邊。
   serving: "us" | "opponent" | null;
-  // 快速操作手勢進行中（選單還沒選完）時關掉，避免使用者在選單跳出來之前又畫了一條新的線。
+  // interactive=false 時手勢與換人拖曳都關閉（RadialMenu 選到一半時用）
   interactive: boolean;
   onPlayerTouch: (target: TouchedTarget) => void;
+  onLiberoSubstitute?: (targetPlayerId: string) => void;
+  regularSubs?: RegularSub[];
+  // 目前場邊被選中、準備換上場的球員 id；設定後球場進入「換人模式」
+  selectedBenchPlayer?: string | null;
+  onBenchPlayerSelect?: (playerId: string | null) => void;
 }
 
-// 球場座標系統固定是 viewBox 0~100 (x) / 0~200 (y)，跟戰術板 Court.tsx 共用同一套，
-// 球員圈圈半徑是 6（發球員放大成 7.5）——命中判定的容許範圍要比圈圈本身再大一點，
-// 不然手指/滑鼠要點得很精準才會命中，比賽現場快速操作時不現實。
 const HIT_RADIUS = 11;
 
-function distance(ax: number, ay: number, bx: number, by: number) {
+function dist(ax: number, ay: number, bx: number, by: number) {
   return Math.hypot(ax - bx, ay - by);
 }
 
-// 紀錄模式專用的球場畫面：跟戰術板的 Court.tsx 共用同一套球場座標系統，但這裡是唯讀的——
-// 比賽進行中球員站位不能隨意拖曳調整，只能靠比分變化自動算輪轉。額外多了「畫線連到球員」
-// 的手勢偵測：從球場任何一點按下、拖到某個球員/號位上放開，就算是連到那個目標
-// （直接點在球員身上也算，因為起點跟終點是同一個點）。
 export default function RecordingCourt({
   ourRotation,
   opponentRotation,
   serving,
   interactive,
   onPlayerTouch,
+  onLiberoSubstitute,
+  regularSubs = [],
+  selectedBenchPlayer = null,
+  onBenchPlayerSelect,
 }: RecordingCourtProps) {
   const roster = useTactics((state) => state.roster);
   const rotations = useTactics((state) => state.rotations);
@@ -52,107 +55,239 @@ export default function RecordingCourt({
   const svgRef = useRef<SVGSVGElement>(null);
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
   const [dragCurrent, setDragCurrent] = useState<{ x: number; y: number } | null>(null);
+  const [draggingLibero, setDraggingLibero] = useState(false);
+  const [liberoGhostScreen, setLiberoGhostScreen] = useState<{ x: number; y: number } | null>(null);
 
   const ourPositions = (rotations[ourRotation] ?? rotations[0]).positions;
-  // 對手沒有球員名單，只畫號位（見 lib/rotationLogic.ts 的 getZoneLayout），mirrored=true
-  // 把座標翻到球場另一邊，跟 Court.tsx 畫「對手號位」標籤時的鏡射方式一致。
   const opponentZones = getZoneLayout(opponentRotation, true);
+  const liberoPlayer = roster.find((p) => p.role === "L");
 
-  // 場上目前所有「可以被連到」的目標，命中判定時統一從這份清單找最近的一個。
-  const hitTargets: { side: Side; playerId?: string; zone?: number; x: number; y: number }[] = [
-    ...opponentZones.map((slot) => ({
-      side: "opponent" as const,
-      zone: slot.zone,
-      x: slot.x * 100,
-      y: slot.y * 200,
-    })),
-    ...ourPositions.map((pos) => ({
-      side: "us" as const,
-      playerId: pos.playerId,
-      x: pos.x * 100,
-      y: pos.y * 200,
-    })),
-  ];
+  // ── effectiveLiberoSub ──
+  // liberoSubstitution 的狀態可能在 useEffect 清除前就已輪轉到前排，
+  // 這裡直接用目前場上位置即時判斷「自由球員是否真的還在後排場上」，
+  // 讓顯示不依賴 Zustand 更新時序，不會有殘影或消失的問題。
+  const effectiveLiberoSub = useMemo(() => {
+    if (!liberoSubstitution) return null;
+    const pos = ourPositions.find((p) => p.playerId === liberoSubstitution);
+    if (!pos) return null;
+    // 後排：y > 0.75。目標在後排才視為「自由球員正在替換中」。
+    return pos.y > 0.75 ? liberoSubstitution : null;
+  }, [liberoSubstitution, ourPositions]);
 
-  const getSvgPoint = (e: React.PointerEvent) => {
+  // regularSubs 的 outPlayer → inPlayer 對應表
+  const regularSubMap = useMemo(
+    () => new Map(regularSubs.map((s) => [s.outPlayerId, s.inPlayerId])),
+    [regularSubs],
+  );
+
+  // ── effectivelyOnCourt ──
+  // 「誰目前在場上」的計算。自由球員的邏輯和一般換人分開：
+  //
+  // 一般換人：outPlayer 的格子歸屬改為 inPlayer，outPlayer 去場邊。
+  //
+  // 自由球員：L「蓋住」某個後排球員，但那個格子的「主人」不變——主人依然算在場上，
+  // L 也算在場上（蓋住中）。兩個人都不在場邊。L 離開（effectiveLiberoSub = null）
+  // 時，主人繼續在場上，L 回場邊。
+  //
+  // 記錄模式裡 L 的輪轉格子永遠跳過（和戰術板的佔位切開）。
+  const effectivelyOnCourt = useMemo(() => {
+    const set = new Set<string>();
+    for (const pos of ourPositions) {
+      // 跳過自由球員自己的輪轉位置（記錄模式裡 L 永遠從場邊出發）
+      if (liberoPlayer && pos.playerId === liberoPlayer.id) continue;
+      // 一般換人後，格主是替補進來的球員
+      const effectiveId = regularSubMap.get(pos.playerId) ?? pos.playerId;
+      // 格主永遠算在場上——即使 L 蓋住他，他的格子還是他的，不去場邊
+      set.add(effectiveId);
+    }
+    // L 正在蓋住某人時，L 也算在場上（不出現在場邊）
+    if (effectiveLiberoSub && liberoPlayer) {
+      set.add(liberoPlayer.id);
+    }
+    return set;
+  }, [ourPositions, regularSubMap, effectiveLiberoSub, liberoPlayer]);
+
+  const sidelinePlayers = roster.filter((p) => !effectivelyOnCourt.has(p.id));
+  const liberoOnSideline = !effectiveLiberoSub && liberoPlayer;
+
+  // 命中判定清單（我方＋對手）。用一個扁平型別讓 TypeScript 不必分辨聯集。
+  type HitTarget = {
+    side: Side;
+    playerId?: string;
+    zone?: number;
+    x: number;
+    y: number;
+    xNorm: number;
+    yNorm: number;
+  };
+  const hitTargets = useMemo<HitTarget[]>(
+    () => [
+      ...opponentZones.map((slot) => ({
+        side: "opponent" as const,
+        zone: slot.zone,
+        x: slot.x * 100,
+        y: slot.y * 200,
+        xNorm: slot.x,
+        yNorm: slot.y,
+      })),
+      ...ourPositions.map((pos) => ({
+        side: "us" as const,
+        playerId: pos.playerId,
+        x: pos.x * 100,
+        y: pos.y * 200,
+        xNorm: pos.x,
+        yNorm: pos.y,
+      })),
+    ],
+    [opponentZones, ourPositions],
+  );
+
+  // 座標轉換
+  const screenToSvg = (clientX: number, clientY: number) => {
     const CTM = svgRef.current?.getScreenCTM();
     if (!CTM) return { x: 50, y: 100 };
-    return { x: (e.clientX - CTM.e) / CTM.a, y: (e.clientY - CTM.f) / CTM.d };
+    return { x: (clientX - CTM.e) / CTM.a, y: (clientY - CTM.f) / CTM.d };
   };
-
   const svgToScreen = (x: number, y: number) => {
     const CTM = svgRef.current?.getScreenCTM();
     if (!CTM) return { x: 0, y: 0 };
     return { x: CTM.e + x * CTM.a, y: CTM.f + y * CTM.d };
   };
 
+  // ── 畫線手勢 ──
   const handlePointerDown = (e: React.PointerEvent) => {
-    if (!interactive) return;
-    const pt = getSvgPoint(e);
+    if (!interactive || draggingLibero) return;
+    const pt = screenToSvg(e.clientX, e.clientY);
     setDragStart(pt);
     setDragCurrent(pt);
   };
-
   const handlePointerMove = (e: React.PointerEvent) => {
     if (!dragStart) return;
-    setDragCurrent(getSvgPoint(e));
+    setDragCurrent(screenToSvg(e.clientX, e.clientY));
   };
-
-  const finishGesture = (releasePoint: { x: number; y: number } | null) => {
+  const finishGesture = (pt: { x: number; y: number } | null) => {
     setDragStart(null);
     setDragCurrent(null);
-    if (!releasePoint) return;
-
+    if (!pt) return;
     let nearest: (typeof hitTargets)[number] | null = null;
-    let nearestDistance = Infinity;
-    for (const target of hitTargets) {
-      const d = distance(releasePoint.x, releasePoint.y, target.x, target.y);
-      if (d < nearestDistance) {
-        nearestDistance = d;
-        nearest = target;
+    let nearestD = Infinity;
+    for (const t of hitTargets) {
+      const d = dist(pt.x, pt.y, t.x, t.y);
+      if (d < nearestD) {
+        nearestD = d;
+        nearest = t;
       }
     }
-    if (!nearest || nearestDistance > HIT_RADIUS) return;
-
-    const screen = svgToScreen(nearest.x, nearest.y);
+    if (!nearest || nearestD > HIT_RADIUS) return;
+    const scr = svgToScreen(nearest.x, nearest.y);
+    // L 蓋住的格子：動作歸屬為 L（L 才是實際打球的人），
+    // 但 hitTargets 的 playerId 保留格主 id（供自由球員拖曳邏輯使用），
+    // 所以在這裡才做轉換，不動 hitTargets。
+    let playerId = nearest.playerId;
+    if (nearest.side === "us" && playerId && liberoPlayer) {
+      const effectiveId = regularSubMap.get(playerId) ?? playerId;
+      if (effectiveId === effectiveLiberoSub) playerId = liberoPlayer.id;
+    }
     onPlayerTouch({
       side: nearest.side,
-      playerId: nearest.playerId,
+      playerId,
       zone: nearest.zone,
-      screenX: screen.x,
-      screenY: screen.y,
+      screenX: scr.x,
+      screenY: scr.y,
     });
   };
-
   const handlePointerUp = (e: React.PointerEvent) => {
-    if (!dragStart) return;
-    finishGesture(getSvgPoint(e));
+    if (dragStart) finishGesture(screenToSvg(e.clientX, e.clientY));
+  };
+  const handlePointerLeave = () => finishGesture(null);
+
+  // ── 自由球員拖曳 ──
+  const isValidLiberoTarget = (t: (typeof hitTargets)[number]): boolean => {
+    if (t.side !== "us" || !t.playerId) return false;
+    if (t.yNorm <= 0.75) return false; // 前排不合法
+    if (liberoPlayer && t.playerId === liberoPlayer.id) return false;
+    if (t.playerId === effectiveLiberoSub) return false; // 已在替換中
+    // 一般換人後，這個位置的「有效球員」也不能是自由球員
+    const effective = regularSubMap.get(t.playerId) ?? t.playerId;
+    if (liberoPlayer && effective === liberoPlayer.id) return false;
+    if (serving === "us") {
+      if (findNearestZone(t.xNorm, t.yNorm) === 1) return false; // 發球員不換
+    }
+    return true;
   };
 
-  const handlePointerLeave = () => {
-    // 滑出球場範圍視為取消這次手勢，不命中任何目標。
-    finishGesture(null);
+  const handleLiberoPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!interactive || !onLiberoSubstitute) return;
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setDraggingLibero(true);
+    setLiberoGhostScreen({ x: e.clientX, y: e.clientY });
   };
+  const handleLiberoPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (draggingLibero) setLiberoGhostScreen({ x: e.clientX, y: e.clientY });
+  };
+  const handleLiberoPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!draggingLibero) return;
+    setDraggingLibero(false);
+    setLiberoGhostScreen(null);
+    const svgPt = screenToSvg(e.clientX, e.clientY);
+    let nearest: (typeof hitTargets)[number] | null = null;
+    let nearestD = Infinity;
+    for (const t of hitTargets) {
+      const d = dist(svgPt.x, svgPt.y, t.x, t.y);
+      if (d < nearestD) {
+        nearestD = d;
+        nearest = t;
+      }
+    }
+    if (!nearest || nearestD > HIT_RADIUS * 1.8) return;
+    if (!isValidLiberoTarget(nearest)) return;
+    onLiberoSubstitute?.(nearest.playerId!);
+  };
+
+  // 是否為自由球員合法拖曳目標（SVG 高亮用）
+  const isLiberoDropHighlight = (pos: { playerId: string; x: number; y: number }) =>
+    draggingLibero &&
+    isValidLiberoTarget({
+      side: "us",
+      playerId: pos.playerId,
+      x: pos.x * 100,
+      y: pos.y * 200,
+      xNorm: pos.x,
+      yNorm: pos.y,
+    });
+
+  // 換人模式：有選中場邊球員時，場上所有我方球員都顯示藍色提示環
+  const subModeActive = !!selectedBenchPlayer;
+
+  const SIDELINE_W = 48;
+
+  // 球員圓圈顯示名字/背號/位置
+  const playerLabel = (p: { name: string; number: number; role: string }) =>
+    circleLabel === "name"
+      ? p.name.slice(0, 2) || p.role
+      : circleLabel === "number"
+        ? `${p.number}`
+        : p.role;
 
   return (
-    <div className="h-full w-full max-w-[420px] mx-auto flex flex-col justify-center items-center">
-      {/* 同 Court.tsx：以高度為主，寬度由 aspect-ratio 1/2 推算，避免球場長出視窗 */}
+    <div className="mx-auto flex h-full w-full max-w-[480px] items-center justify-center gap-2">
+      {/* 球場 SVG */}
       <div
-        className="h-full w-auto max-w-full relative bg-white border-4 border-[#111111] rounded-lg shadow-sm"
-        style={{ aspectRatio: "1/2" }}
+        className="relative flex-shrink-0 rounded-lg border-4 border-[#111111] bg-white shadow-sm"
+        style={{ height: "100%", aspectRatio: "1/2" }}
       >
         <svg
           ref={svgRef}
           viewBox="0 0 100 200"
           preserveAspectRatio="none"
-          className="w-full h-full touch-none select-none"
+          className="h-full w-full touch-none select-none"
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
           onPointerLeave={handlePointerLeave}
         >
           <rect x="0" y="0" width="100" height="200" fill="#fff" />
-          {/* 外框由 div 的 border-4 負責，SVG 只畫球場內部線條 */}
           <line x1="0" y1="100" x2="100" y2="100" stroke="#111" strokeWidth="2.5" />
           <line
             x1="0"
@@ -172,37 +307,28 @@ export default function RecordingCourt({
             strokeWidth="1"
             strokeDasharray="3 3"
           />
-
-          <text x="50" y="15" fontSize="6" fill="#111" textAnchor="middle" className="font-sans">
+          <text x="50" y="15" fontSize="6" fill="#111" textAnchor="middle">
             對手
           </text>
-          <text x="50" y="192" fontSize="6" fill="#111" textAnchor="middle" className="font-sans">
+          <text x="50" y="192" fontSize="6" fill="#111" textAnchor="middle">
             我方
           </text>
 
-          {/* 對手：沒有名單，只畫號位圈圈，灰底跟我方球員的圈圈做出區分 */}
+          {/* 對手號位圈 */}
           {opponentZones.map((slot) => {
-            const isFrontRow = slot.y > 0.25 && slot.y < 0.5;
-            const isServer = serving === "opponent" && slot.zone === 1;
+            const isServer = serving === "opponent" && slot.currentZone === 1;
             const x = slot.x * 100;
             const y = slot.y * 200;
             return (
-              <g key={`opp-${slot.zone}`} transform={`translate(${x}, ${y})`}>
+              <g key={`opp-${slot.zone}`} transform={`translate(${x},${y})`}>
                 <circle
                   r={isServer ? 7.5 : 6}
-                  fill={isFrontRow ? "#E5E5E5" : "#F5F5F5"}
+                  fill={slot.y < 0.5 ? "#E5E5E5" : "#F5F5F5"}
                   stroke="#999"
                   strokeWidth={isServer ? 1.5 : 1}
                   strokeDasharray="2 1"
                 />
-                <text
-                  y="2"
-                  fontSize="4"
-                  fontWeight="bold"
-                  fill="#666"
-                  textAnchor="middle"
-                  className="font-sans"
-                >
+                <text y="2" fontSize="4" fontWeight="bold" fill="#666" textAnchor="middle">
                   {slot.zone}
                 </text>
                 {isServer && (
@@ -214,49 +340,78 @@ export default function RecordingCourt({
             );
           })}
 
-          {/* 我方：用真實球員名單畫位置，邏輯跟 Court.tsx 的球員渲染一致（自由球員替換、前排標色） */}
+          {/* 我方球員圈 */}
           {ourPositions.map((pos) => {
-            const player = roster.find((p) => p.id === pos.playerId);
-            if (!player) return null;
+            // 記錄模式裡 L 的輪轉格子永遠跳過（和戰術板佔位切開；L 從場邊出發）
+            if (liberoPlayer && pos.playerId === liberoPlayer.id) return null;
 
-            let isLibero = false;
-            let displayPlayer = player;
-            if (liberoSubstitution === player.id) {
-              const libero = roster.find((p) => p.role === "L");
-              if (libero) {
-                isLibero = true;
-                displayPlayer = libero;
-              }
-            }
+            // 套用一般換人，取得格子的「有效主人」
+            const effectiveId = regularSubMap.get(pos.playerId) ?? pos.playerId;
+            const slotPlayer = roster.find((p) => p.id === effectiveId);
+            if (!slotPlayer) return null;
 
-            const isFrontRow = pos.y > 0.5 && pos.y < 0.75;
+            // L 是否正在「蓋住」此格（蓋住 ≠ 換人；格主不離場）
+            const isLiberoOverlay = effectiveId === effectiveLiberoSub && !!liberoPlayer;
+
+            const isFrontRow = pos.y > 0.5 && pos.y <= 0.75;
             const isServer = serving === "us" && pos.x > 0.7 && pos.y > 0.75;
-            const bgColor = isLibero ? "#FF6B00" : isFrontRow ? "#CCFF00" : "#FFFFFF";
+            const isDropTarget = isLiberoDropHighlight(pos);
+            const isSubTarget = subModeActive && !isFrontRow;
+            // L 蓋住時橘色；前排黃綠；後排白色
+            const fill = isLiberoOverlay ? "#FF6B00" : isFrontRow ? "#CCFF00" : "#FFFFFF";
             const x = pos.x * 100;
             const y = pos.y * 200;
 
             return (
-              <g key={pos.playerId} transform={`translate(${x}, ${y})`}>
+              <g key={pos.playerId} transform={`translate(${x},${y})`}>
+                {/* 拖曳自由球員時的目標提示環 */}
+                {isDropTarget && (
+                  <circle r="10" fill="none" stroke="#FF6B00" strokeWidth="2" opacity="0.6" />
+                )}
+                {/* 換人模式的可選提示環 */}
+                {subModeActive && (
+                  <circle
+                    r="10"
+                    fill="none"
+                    stroke="#3B82F6"
+                    strokeWidth="1.5"
+                    opacity="0.5"
+                    strokeDasharray="3 2"
+                  />
+                )}
                 <circle
                   r={isServer ? 7.5 : 6}
-                  fill={bgColor}
-                  stroke="#111"
+                  fill={fill}
+                  stroke={isDropTarget ? "#FF6B00" : isSubTarget ? "#3B82F6" : "#111"}
                   strokeWidth={isServer ? 1.5 : 1}
                 />
-                <text
-                  y="2"
-                  fontSize={circleLabel === "name" ? 3 : 4}
-                  fontWeight="bold"
-                  fill="#111"
-                  textAnchor="middle"
-                  className="font-sans"
-                >
-                  {circleLabel === "name"
-                    ? displayPlayer.name || displayPlayer.role
-                    : circleLabel === "number"
-                      ? displayPlayer.number
-                      : displayPlayer.role}
-                </text>
+                {isLiberoOverlay && liberoPlayer ? (
+                  // L 蓋住此格：主顯示 L 標籤，下方小字顯示被蓋格主的號碼
+                  <>
+                    <text
+                      y="1"
+                      fontSize={circleLabel === "name" ? 3 : 4}
+                      fontWeight="bold"
+                      fill="#fff"
+                      textAnchor="middle"
+                    >
+                      {playerLabel(liberoPlayer)}
+                    </text>
+                    <text y="5.5" fontSize="2.5" fill="rgba(255,255,255,0.75)" textAnchor="middle">
+                      /{slotPlayer.number}
+                    </text>
+                  </>
+                ) : (
+                  <text
+                    y="2"
+                    fontSize={circleLabel === "name" ? 3 : 4}
+                    fontWeight="bold"
+                    fill="#111"
+                    textAnchor="middle"
+                  >
+                    {playerLabel(slotPlayer)}
+                  </text>
+                )}
                 {isServer && (
                   <text y="-9" fontSize="6" textAnchor="middle">
                     🏐
@@ -266,7 +421,7 @@ export default function RecordingCourt({
             );
           })}
 
-          {/* 畫線連到球員：拖曳中的視覺回饋，純粹是手勢的提示線，不會被存下來。 */}
+          {/* 手勢軌跡線 */}
           {dragStart && dragCurrent && (
             <line
               x1={dragStart.x}
@@ -281,6 +436,99 @@ export default function RecordingCourt({
           )}
         </svg>
       </div>
+
+      {/* ── 場邊欄 ── */}
+      <div
+        className="flex h-full flex-shrink-0 flex-col items-center gap-2 overflow-y-auto py-1"
+        style={{ width: SIDELINE_W + 8 }}
+      >
+        {sidelinePlayers.length === 0 && (
+          <p className="mt-4 text-center text-[9px] text-gray-400">場邊</p>
+        )}
+
+        {sidelinePlayers.map((player) => {
+          const isLibero = player.role === "L";
+          const isLiberoDraggable = isLibero && !!liberoOnSideline;
+          const isSelected = player.id === selectedBenchPlayer;
+          // 是否為「一般換人後被換下場的球員」，顯示「換」小標籤
+          const isSubbedOut = regularSubs.some((s) => s.outPlayerId === player.id);
+          const label = playerLabel(player);
+
+          if (isLiberoDraggable) {
+            return (
+              <div
+                key={player.id}
+                onPointerDown={handleLiberoPointerDown}
+                onPointerMove={handleLiberoPointerMove}
+                onPointerUp={handleLiberoPointerUp}
+                className="relative flex cursor-grab flex-col items-center justify-center rounded-full border-2 border-orange-500 bg-orange-400 font-bold text-white touch-none select-none active:scale-95"
+                style={{
+                  width: SIDELINE_W,
+                  height: SIDELINE_W,
+                  touchAction: "none",
+                  userSelect: "none",
+                }}
+                title={`拖曳自由球員 #${player.number} 到後排球員`}
+              >
+                <span className="text-[10px] leading-none">L</span>
+                <span className="text-[10px] leading-none">#{player.number}</span>
+              </div>
+            );
+          }
+
+          return (
+            <button
+              key={player.id}
+              onClick={() => onBenchPlayerSelect?.(isSelected ? null : player.id)}
+              className={[
+                "relative flex flex-col items-center justify-center rounded-full border-2 font-bold text-xs transition-all",
+                isSelected
+                  ? "border-blue-500 bg-blue-100 text-blue-800 shadow-md scale-110"
+                  : "border-gray-400 bg-white text-gray-700 active:scale-95",
+              ].join(" ")}
+              style={{ width: SIDELINE_W, height: SIDELINE_W }}
+            >
+              <span className="leading-none text-[10px]">{label}</span>
+              <span className="leading-none text-[9px] opacity-70">#{player.number}</span>
+              {/* 換下場標記 */}
+              {isSubbedOut && (
+                <span className="absolute -bottom-0.5 -right-0.5 rounded-full bg-amber-400 px-0.5 text-[7px] font-bold text-white leading-tight">
+                  換
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* 自由球員拖曳殘影 */}
+      {draggingLibero && liberoGhostScreen && liberoPlayer && (
+        <div
+          style={{
+            position: "fixed",
+            left: liberoGhostScreen.x - SIDELINE_W / 2,
+            top: liberoGhostScreen.y - SIDELINE_W / 2,
+            width: SIDELINE_W,
+            height: SIDELINE_W,
+            borderRadius: "50%",
+            backgroundColor: "#FF6B00",
+            border: "2px solid #111",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 10,
+            fontWeight: "bold",
+            color: "white",
+            pointerEvents: "none",
+            zIndex: 9999,
+            opacity: 0.85,
+          }}
+        >
+          <span>L</span>
+          <span>#{liberoPlayer.number}</span>
+        </div>
+      )}
     </div>
   );
 }
