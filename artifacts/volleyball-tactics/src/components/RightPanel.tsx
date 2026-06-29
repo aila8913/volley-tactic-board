@@ -1,4 +1,4 @@
-import React, { useRef } from "react";
+import React, { useRef, useState } from "react";
 import { useTactics, ToolType } from "../hooks/useTactics";
 import { exportCourtAsPng, exportStateAsJson, importStateFromJson } from "../lib/exportUtils";
 import { SituationTag } from "../types/tactics";
@@ -40,8 +40,13 @@ export default function RightPanel() {
     projectSituation,
     setProjectSituation,
     saveProject,
+    saveProjectAs,
+    renameProject,
+    newProject,
+    activeProjectId,
     projects,
     loadProject,
+    deleteProject,
     importState,
     rotations,
     currentRotation,
@@ -57,6 +62,10 @@ export default function RightPanel() {
     isLayoutMode,
     setLayoutMode,
   } = useTactics();
+
+  // inline rename state: 哪一筆正在編輯名稱
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState("");
 
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -110,10 +119,7 @@ export default function RightPanel() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const handleNewProject = () => {
-    localStorage.removeItem("volleyboard_current");
-    window.location.reload();
-  };
+  const handleNewProject = () => newProject();
 
   const handleFinishLayout = () => {
     saveProject();
@@ -152,6 +158,9 @@ export default function RightPanel() {
               >
                 完成並儲存
               </button>
+              <p className="text-[10px] text-gray-500 mt-1 text-center">
+                {activeProjectId ? `將更新「${projectName || "未命名"}」` : "將建立新戰術"}
+              </p>
             </section>
             <section>
               <div className="flex justify-between items-center mb-2">
@@ -431,7 +440,15 @@ export default function RightPanel() {
         )}
 
         <section>
-          <h2 className="font-display mb-2 text-[15px] font-bold">戰術管理</h2>
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="font-display text-[15px] font-bold">戰術管理</h2>
+            {/* 目前是草稿（沒有 activeProjectId）還是正在編輯某個已存戰術 */}
+            <span
+              className={`text-[10px] font-bold px-1.5 py-0.5 wobbly-border ${activeProjectId ? "bg-[#CCFF00]" : "bg-gray-200 text-gray-500"}`}
+            >
+              {activeProjectId ? "正在編輯" : "草稿"}
+            </span>
+          </div>
           <div className="space-y-2">
             <input
               className="w-full wobbly-border px-2 py-1.5 text-xs bg-white outline-none focus:ring-2 focus:ring-[#CCFF00]"
@@ -459,20 +476,31 @@ export default function RightPanel() {
                 </option>
               ))}
             </select>
-            <div className="flex gap-2">
+            {/* 3 個按鈕：儲存（update-or-create）、另存新檔（永遠新增）、新建（清空編輯器） */}
+            <div className="grid grid-cols-3 gap-1.5">
               <button
                 onClick={() => {
                   saveProject();
-                  toast({ title: "專案已儲存" });
+                  toast({ title: activeProjectId ? "專案已更新" : "專案已儲存" });
                 }}
-                className="flex-1 wobbly-border py-1.5 bg-[#CCFF00] hover:bg-[#111] hover:text-[#CCFF00] transition-colors font-bold text-xs shadow-[2px_2px_0_0_#111]"
+                className="wobbly-border py-1.5 bg-[#CCFF00] hover:bg-[#111] hover:text-[#CCFF00] transition-colors font-bold text-xs shadow-[2px_2px_0_0_#111]"
                 data-testid="button-save-project"
               >
                 儲存
               </button>
               <button
+                onClick={() => {
+                  saveProjectAs();
+                  toast({ title: "已另存新檔" });
+                }}
+                className="wobbly-border py-1.5 bg-white hover:bg-gray-100 font-bold text-xs"
+                data-testid="button-save-project-as"
+              >
+                另存新檔
+              </button>
+              <button
                 onClick={handleNewProject}
-                className="flex-1 wobbly-border py-1.5 bg-white hover:bg-gray-100 font-bold text-xs"
+                className="wobbly-border py-1.5 bg-white hover:bg-gray-100 font-bold text-xs"
                 data-testid="button-new-project"
               >
                 新建
@@ -482,23 +510,61 @@ export default function RightPanel() {
             {projects.length > 0 && (
               <div className="border-2 border-[#111] bg-white p-2">
                 <div className="text-[10px] font-bold mb-1">已儲存 (點擊載入)</div>
-                <div className="space-y-1 max-h-[80px] overflow-y-auto">
+                <div className="space-y-1 max-h-[100px] overflow-y-auto">
                   {projects.map((p) => (
                     <div
                       key={p.id}
-                      className="flex justify-between items-center text-[10px] p-1 hover:bg-gray-100 cursor-pointer"
-                      onClick={() => {
-                        loadProject(p.id);
-                        toast({ title: "專案已載入" });
-                      }}
+                      className={`flex items-center text-[10px] p-1 gap-1 ${p.id === activeProjectId ? "bg-[#CCFF00]/30" : "hover:bg-gray-100"}`}
                     >
-                      <span className="truncate flex-1">{p.name || "未命名"}</span>
-                      <span className="text-gray-400 ml-1 shrink-0">
-                        {SITUATION_TEXT[p.situation]}
-                      </span>
-                      <span className="text-gray-400 ml-1 shrink-0">
-                        {new Date(p.date).toLocaleDateString()}
-                      </span>
+                      {/* 點名稱文字進入 inline 改名模式 */}
+                      {editingId === p.id ? (
+                        <input
+                          autoFocus
+                          className="flex-1 min-w-0 border border-[#111] px-1 text-[10px] outline-none"
+                          value={editingName}
+                          onChange={(e) => setEditingName(e.target.value)}
+                          onBlur={() => {
+                            if (editingName.trim()) renameProject(p.id, editingName.trim());
+                            setEditingId(null);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              if (editingName.trim()) renameProject(p.id, editingName.trim());
+                              setEditingId(null);
+                            } else if (e.key === "Escape") {
+                              setEditingId(null);
+                            }
+                          }}
+                        />
+                      ) : (
+                        <span
+                          className="truncate flex-1 cursor-pointer hover:underline"
+                          title="點擊載入，雙擊改名"
+                          onClick={() => {
+                            loadProject(p.id);
+                            toast({ title: "專案已載入" });
+                          }}
+                          onDoubleClick={() => {
+                            setEditingId(p.id);
+                            setEditingName(p.name || "");
+                          }}
+                        >
+                          {p.name || "未命名"}
+                        </span>
+                      )}
+                      <span className="text-gray-400 shrink-0">{SITUATION_TEXT[p.situation]}</span>
+                      {/* × 按鈕刪除這筆戰術 */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteProject(p.id);
+                        }}
+                        className="shrink-0 text-gray-400 hover:text-red-600 font-bold leading-none px-0.5"
+                        title="刪除"
+                        data-testid={`button-delete-project-${p.id}`}
+                      >
+                        ×
+                      </button>
                     </div>
                   ))}
                 </div>

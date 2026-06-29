@@ -13,6 +13,21 @@ import {
 import { findNearestZone, getZoneCoords, rotateZone } from "../lib/rotationLogic";
 import type { MatchPlayer } from "../types/match";
 
+// 把目前編輯器狀態打包成可存檔的 TacticsState snapshot，
+// saveProject / saveProjectAs 共用同一份邏輯，避免兩處分別維護欄位清單。
+function buildProjectData(state: TacticsStore): TacticsState {
+  return {
+    projectName: state.projectName,
+    teamName: state.teamName,
+    roster: state.roster,
+    liberoSubstitution: state.liberoSubstitution,
+    currentRotation: state.currentRotation,
+    rotations: state.rotations,
+    circleLabel: state.circleLabel,
+    labelToggles: state.labelToggles,
+  };
+}
+
 // 把目前場上的站位轉成「哪個格子站了誰」，方便用格子（1~6 號位）做吸附/換位/
 // 推算其他輪次的邏輯，而不用每次都跟 x/y 浮點數打交道。
 function positionsToZoneMap(positions: PlayerPosition[]): Map<number, string> {
@@ -60,6 +75,10 @@ interface TacticsStore extends TacticsState {
   // 跟 projectName/teamName 是同一種東西——存檔用的中繼資料，不是球場上的即時狀態。
   projectSituation: SituationTag;
 
+  // 目前正在編輯哪個已存戰術的 id。null 代表是還沒存過的新草稿。
+  // 存進 localStorage（看 partialize），重整頁面後知道上次在編輯哪個。
+  activeProjectId: string | null;
+
   // 是否處於「戰術布置」編輯模式——畫筆/防守範圍工具跟既有標記的選取/拖曳/刪除都鎖在這個
   // 模式裡才能用，平常球場只是唯讀的站位圖。故意不存進 localStorage（看 partialize），
   // 重新整理頁面一律回到唯讀檢視。
@@ -101,7 +120,14 @@ interface TacticsStore extends TacticsState {
 
   toggleLabel: (key: keyof TacticsState["labelToggles"]) => void;
 
+  // activeProjectId 有值 → update in-place；null → 新增並設定 activeProjectId
   saveProject: () => void;
+  // 永遠新增一筆（另存新檔），不管 activeProjectId 是否有值
+  saveProjectAs: () => void;
+  // 只更新 projects[] 裡那筆的 name，不動其他資料
+  renameProject: (id: string, name: string) => void;
+  // 重置編輯器回初始值，activeProjectId = null，不動 projects[]
+  newProject: () => void;
   loadProject: (id: string) => void;
   deleteProject: (id: string) => void;
   importState: (data: TacticsState) => void;
@@ -131,6 +157,7 @@ export const useTactics = create<TacticsStore>()(
       selectedObjectId: null,
       projects: [],
       projectSituation: "base",
+      activeProjectId: null,
       isLayoutMode: false,
 
       history: [],
@@ -359,25 +386,83 @@ export const useTactics = create<TacticsStore>()(
 
       saveProject: () =>
         set((state) => {
+          const data = buildProjectData(state);
+          // activeProjectId が設定されている場合は既存戦術を更新（update in-place）、
+          // null の場合は新規追加して activeProjectId をセット
+          if (state.activeProjectId) {
+            return {
+              projects: state.projects.map((p) =>
+                p.id === state.activeProjectId
+                  ? {
+                      ...p,
+                      name: state.projectName || "未命名",
+                      team: state.teamName || "無",
+                      date: new Date().toISOString(),
+                      situation: state.projectSituation,
+                      data,
+                    }
+                  : p,
+              ),
+            };
+          }
           const id = uuidv4();
-          const newProject: ProjectInfo = {
-            id,
-            name: state.projectName || "未命名",
-            team: state.teamName || "無",
-            date: new Date().toISOString(),
-            situation: state.projectSituation,
-            data: {
-              projectName: state.projectName,
-              teamName: state.teamName,
-              roster: state.roster,
-              liberoSubstitution: state.liberoSubstitution,
-              currentRotation: state.currentRotation,
-              rotations: state.rotations,
-              circleLabel: state.circleLabel,
-              labelToggles: state.labelToggles,
-            },
+          return {
+            projects: [
+              ...state.projects,
+              {
+                id,
+                name: state.projectName || "未命名",
+                team: state.teamName || "無",
+                date: new Date().toISOString(),
+                situation: state.projectSituation,
+                data,
+              },
+            ],
+            activeProjectId: id,
           };
-          return { projects: [...state.projects, newProject] };
+        }),
+
+      saveProjectAs: () =>
+        set((state) => {
+          const id = uuidv4();
+          const data = buildProjectData(state);
+          return {
+            projects: [
+              ...state.projects,
+              {
+                id,
+                name: state.projectName || "未命名",
+                team: state.teamName || "無",
+                date: new Date().toISOString(),
+                situation: state.projectSituation,
+                data,
+              },
+            ],
+            activeProjectId: id,
+          };
+        }),
+
+      renameProject: (id, name) =>
+        set((state) => ({
+          projects: state.projects.map((p) => (p.id === id ? { ...p, name } : p)),
+        })),
+
+      newProject: () =>
+        set({
+          projectName: "新戰術專案",
+          teamName: "",
+          roster: [],
+          liberoSubstitution: null,
+          currentRotation: 0,
+          rotations: emptyRotations,
+          circleLabel: "name",
+          labelToggles: { zone: false },
+          projectSituation: "base",
+          activeProjectId: null,
+          history: [],
+          historyIndex: -1,
+          selectedObjectId: null,
+          activeTool: "select",
         }),
 
       loadProject: (id) =>
@@ -387,6 +472,7 @@ export const useTactics = create<TacticsStore>()(
             return {
               ...proj.data,
               projectSituation: proj.situation,
+              activeProjectId: id,
               history: [proj.data.rotations[proj.data.currentRotation]],
               historyIndex: 0,
             };
@@ -397,6 +483,8 @@ export const useTactics = create<TacticsStore>()(
       deleteProject: (id) =>
         set((state) => ({
           projects: state.projects.filter((p) => p.id !== id),
+          // 削除したのが今編集中の戦術なら草稿状態に戻す
+          activeProjectId: state.activeProjectId === id ? null : state.activeProjectId,
         })),
 
       importState: (data) =>
@@ -420,6 +508,7 @@ export const useTactics = create<TacticsStore>()(
         labelToggles: state.labelToggles,
         projects: state.projects,
         projectSituation: state.projectSituation,
+        activeProjectId: state.activeProjectId,
       }),
     },
   ),
