@@ -179,36 +179,6 @@ export default function RightPanel() {
           </>
         ) : (
           <>
-            {/* 布置模式頂端：取消/儲存/另存新檔 */}
-            <section>
-              <div className="grid grid-cols-3 gap-1.5">
-                <button
-                  onClick={() => setLayoutMode(false)}
-                  className="wobbly-border py-1.5 bg-white hover:bg-gray-100 font-bold text-xs"
-                  data-testid="button-cancel-layout"
-                >
-                  取消
-                </button>
-                <button
-                  onClick={handleFinishLayout}
-                  className="wobbly-border py-1.5 bg-[#CCFF00] hover:bg-[#111] hover:text-[#CCFF00] transition-colors font-bold text-xs shadow-[2px_2px_0_0_#111]"
-                  data-testid="button-finish-layout"
-                >
-                  儲存
-                </button>
-                <button
-                  onClick={() => {
-                    saveProjectAs();
-                    setLayoutMode(false);
-                    toast({ title: "已另存新檔" });
-                  }}
-                  className="wobbly-border py-1.5 bg-white hover:bg-gray-100 font-bold text-xs"
-                  data-testid="button-save-as-layout"
-                >
-                  另存新檔
-                </button>
-              </div>
-            </section>
             <section>
               <div className="flex justify-between items-center mb-2">
                 <h2 className="font-display text-[15px] font-bold">畫筆工具</h2>
@@ -538,6 +508,36 @@ export default function RightPanel() {
                     </div>
                   </div>
                 )}
+              </div>
+            </section>
+            {/* 布置模式底端：取消/儲存/另存新檔 */}
+            <section>
+              <div className="grid grid-cols-3 gap-1.5">
+                <button
+                  onClick={() => setLayoutMode(false)}
+                  className="wobbly-border py-1.5 bg-white hover:bg-gray-100 font-bold text-xs"
+                  data-testid="button-cancel-layout"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleFinishLayout}
+                  className="wobbly-border py-1.5 bg-[#CCFF00] hover:bg-[#111] hover:text-[#CCFF00] transition-colors font-bold text-xs shadow-[2px_2px_0_0_#111]"
+                  data-testid="button-finish-layout"
+                >
+                  儲存
+                </button>
+                <button
+                  onClick={() => {
+                    saveProjectAs();
+                    setLayoutMode(false);
+                    toast({ title: "已另存新檔" });
+                  }}
+                  className="wobbly-border py-1.5 bg-white hover:bg-gray-100 font-bold text-xs"
+                  data-testid="button-save-as-layout"
+                >
+                  另存新檔
+                </button>
               </div>
             </section>
           </>
