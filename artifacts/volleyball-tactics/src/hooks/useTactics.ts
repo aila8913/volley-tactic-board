@@ -54,21 +54,12 @@ export type ToolType =
   | "ellipse"
   | "fan";
 
-export interface ProjectInfo {
-  id: string;
-  date: string;
-  // situation 就是這個戰術的名稱（基本輪轉、接發球…），不另外存 name/team 欄位。
-  situation: SituationTag;
-  data: TacticsState;
-}
-
 interface TacticsStore extends TacticsState {
   activeTool: ToolType;
   selectedObjectId: string | null;
-  projects: ProjectInfo[];
 
-  // 目前「戰術管理」面板裡選的情境標籤，存檔時打包進 ProjectInfo.situation，
-  // 跟 projectName/teamName 是同一種東西——存檔用的中繼資料，不是球場上的即時狀態。
+  // 戰術列表改由 API（/tactics）提供，不再存在 store 裡。
+  // 這裡只保留「目前正在編輯的戰術名稱」，存檔時作為 name 傳給 API。
   projectSituation: SituationTag;
 
   // 目前正在編輯哪個已存戰術的 id。null 代表是還沒存過的新草稿。
@@ -116,14 +107,15 @@ interface TacticsStore extends TacticsState {
 
   toggleLabel: (key: keyof TacticsState["labelToggles"]) => void;
 
-  // 永遠新增一筆——儲存就是建立新快照，不覆蓋既有的
-  saveProject: () => void;
-  saveProjectAs: () => void;
-  // 重置編輯器回初始值，activeProjectId = null，不動 projects[]
+  // 重置編輯器回初始值，activeProjectId = null
   newProject: () => void;
-  loadProject: (id: string) => void;
-  deleteProject: (id: string) => void;
+  // 只更新 activeProjectId（create mutation 成功後把伺服器回傳的 id 寫進來用）
+  setActiveProjectId: (id: string | null) => void;
+  // 把 API 回傳的 TacticsState 載入編輯器（取代原本從 projects[] 查找的版本）
+  loadProject: (data: TacticsState, id: string, name: string) => void;
   importState: (data: TacticsState) => void;
+  // 把目前編輯器狀態打包成可送給 API 的 TacticsState snapshot
+  buildSnapshot: () => TacticsState;
 }
 
 const emptyRotations: RotationState[] = Array(6)
@@ -146,7 +138,6 @@ export const useTactics = create<TacticsStore>()(
 
       activeTool: "select",
       selectedObjectId: null,
-      projects: [],
       projectSituation: "基礎輪轉",
       activeProjectId: null,
       isLayoutMode: false,
@@ -385,46 +376,7 @@ export const useTactics = create<TacticsStore>()(
           labelToggles: { ...state.labelToggles, [key]: !state.labelToggles[key] },
         })),
 
-      saveProject: () =>
-        set((state) => {
-          const data = buildProjectData(state);
-          // 有 activeProjectId → 覆蓋更新同一筆；沒有（草稿）→ 新建一筆
-          if (state.activeProjectId) {
-            return {
-              projects: state.projects.map((p) =>
-                p.id === state.activeProjectId
-                  ? {
-                      ...p,
-                      date: new Date().toISOString(),
-                      situation: state.projectSituation,
-                      data,
-                    }
-                  : p,
-              ),
-            };
-          }
-          const id = uuidv4();
-          return {
-            projects: [
-              ...state.projects,
-              { id, date: new Date().toISOString(), situation: state.projectSituation, data },
-            ],
-            activeProjectId: id,
-          };
-        }),
-
-      saveProjectAs: () =>
-        set((state) => {
-          const id = uuidv4();
-          const data = buildProjectData(state);
-          return {
-            projects: [
-              ...state.projects,
-              { id, date: new Date().toISOString(), situation: state.projectSituation, data },
-            ],
-            activeProjectId: id,
-          };
-        }),
+      setActiveProjectId: (id) => set({ activeProjectId: id }),
 
       newProject: () =>
         set({
@@ -442,27 +394,18 @@ export const useTactics = create<TacticsStore>()(
           activeTool: "select",
         }),
 
-      loadProject: (id) =>
-        set((state) => {
-          const proj = state.projects.find((p) => p.id === id);
-          if (proj && proj.data) {
-            return {
-              ...proj.data,
-              projectSituation: proj.situation,
-              activeProjectId: id,
-              history: [proj.data.rotations[proj.data.currentRotation]],
-              historyIndex: 0,
-            };
-          }
-          return state;
+      // data 來自 API 回傳的 Tactic.data，直接載入編輯器；
+      // id 和 name 同步更新 activeProjectId / projectSituation。
+      loadProject: (data, id, name) =>
+        set({
+          ...data,
+          projectSituation: name,
+          activeProjectId: id,
+          history: [data.rotations[data.currentRotation ?? 0]],
+          historyIndex: 0,
         }),
 
-      deleteProject: (id) =>
-        set((state) => ({
-          projects: state.projects.filter((p) => p.id !== id),
-          // 削除したのが今編集中の戦術なら草稿状態に戻す
-          activeProjectId: state.activeProjectId === id ? null : state.activeProjectId,
-        })),
+      buildSnapshot: () => buildProjectData(get()),
 
       importState: (data) =>
         set((state) => ({
@@ -481,7 +424,6 @@ export const useTactics = create<TacticsStore>()(
         rotations: state.rotations,
         circleLabel: state.circleLabel,
         labelToggles: state.labelToggles,
-        projects: state.projects,
         projectSituation: state.projectSituation,
         activeProjectId: state.activeProjectId,
       }),

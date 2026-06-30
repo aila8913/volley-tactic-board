@@ -29,10 +29,13 @@ import type {
   NewPlayer,
   NewRally,
   NewSet,
+  NewTactic,
   Player,
   Rally,
+  Tactic,
   UpdateEvent,
-  UpdateMatch
+  UpdateMatch,
+  UpdateTactic
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -1016,6 +1019,373 @@ export const useCreateEvent = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getCreateEventMutationOptions(options));
+    }
+
+export const getListTacticsUrl = () => {
+
+
+
+
+  return `/api/tactics`
+}
+
+/**
+ * @summary List all saved tactics for the current user
+ */
+export const listTactics = async ( options?: RequestInit): Promise<Tactic[]> => {
+
+  return customFetch<Tactic[]>(getListTacticsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListTacticsQueryKey = () => {
+    return [
+    `/api/tactics`
+    ] as const;
+    }
+
+
+export const getListTacticsQueryOptions = <TData = Awaited<ReturnType<typeof listTactics>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listTactics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListTacticsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listTactics>>> = ({ signal }) => listTactics({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listTactics>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListTacticsQueryResult = NonNullable<Awaited<ReturnType<typeof listTactics>>>
+export type ListTacticsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List all saved tactics for the current user
+ */
+
+export function useListTactics<TData = Awaited<ReturnType<typeof listTactics>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listTactics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListTacticsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getCreateTacticUrl = () => {
+
+
+
+
+  return `/api/tactics`
+}
+
+/**
+ * @summary Save a new tactic
+ */
+export const createTactic = async (newTactic: NewTactic, options?: RequestInit): Promise<Tactic> => {
+
+  return customFetch<Tactic>(getCreateTacticUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      newTactic,)
+  }
+);}
+
+
+
+
+export const getCreateTacticMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createTactic>>, TError,{data: BodyType<NewTactic>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createTactic>>, TError,{data: BodyType<NewTactic>}, TContext> => {
+
+const mutationKey = ['createTactic'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createTactic>>, {data: BodyType<NewTactic>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createTactic(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateTacticMutationResult = NonNullable<Awaited<ReturnType<typeof createTactic>>>
+    export type CreateTacticMutationBody = BodyType<NewTactic>
+    export type CreateTacticMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Save a new tactic
+ */
+export const useCreateTactic = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createTactic>>, TError,{data: BodyType<NewTactic>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createTactic>>,
+        TError,
+        {data: BodyType<NewTactic>},
+        TContext
+      > => {
+      return useMutation(getCreateTacticMutationOptions(options));
+    }
+
+export const getGetTacticUrl = (tacticId: string,) => {
+
+
+
+
+  return `/api/tactics/${tacticId}`
+}
+
+/**
+ * @summary Get a single tactic by id
+ */
+export const getTactic = async (tacticId: string, options?: RequestInit): Promise<Tactic> => {
+
+  return customFetch<Tactic>(getGetTacticUrl(tacticId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetTacticQueryKey = (tacticId: string,) => {
+    return [
+    `/api/tactics/${tacticId}`
+    ] as const;
+    }
+
+
+export const getGetTacticQueryOptions = <TData = Awaited<ReturnType<typeof getTactic>>, TError = ErrorType<unknown>>(tacticId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTactic>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetTacticQueryKey(tacticId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getTactic>>> = ({ signal }) => getTactic(tacticId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(tacticId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getTactic>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetTacticQueryResult = NonNullable<Awaited<ReturnType<typeof getTactic>>>
+export type GetTacticQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get a single tactic by id
+ */
+
+export function useGetTactic<TData = Awaited<ReturnType<typeof getTactic>>, TError = ErrorType<unknown>>(
+ tacticId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTactic>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetTacticQueryOptions(tacticId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getUpdateTacticUrl = (tacticId: string,) => {
+
+
+
+
+  return `/api/tactics/${tacticId}`
+}
+
+/**
+ * @summary Overwrite an existing tactic (name and/or data)
+ */
+export const updateTactic = async (tacticId: string,
+    updateTactic: UpdateTactic, options?: RequestInit): Promise<Tactic> => {
+
+  return customFetch<Tactic>(getUpdateTacticUrl(tacticId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updateTactic,)
+  }
+);}
+
+
+
+
+export const getUpdateTacticMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateTactic>>, TError,{tacticId: string;data: BodyType<UpdateTactic>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateTactic>>, TError,{tacticId: string;data: BodyType<UpdateTactic>}, TContext> => {
+
+const mutationKey = ['updateTactic'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateTactic>>, {tacticId: string;data: BodyType<UpdateTactic>}> = (props) => {
+          const {tacticId,data} = props ?? {};
+
+          return  updateTactic(tacticId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateTacticMutationResult = NonNullable<Awaited<ReturnType<typeof updateTactic>>>
+    export type UpdateTacticMutationBody = BodyType<UpdateTactic>
+    export type UpdateTacticMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Overwrite an existing tactic (name and/or data)
+ */
+export const useUpdateTactic = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateTactic>>, TError,{tacticId: string;data: BodyType<UpdateTactic>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateTactic>>,
+        TError,
+        {tacticId: string;data: BodyType<UpdateTactic>},
+        TContext
+      > => {
+      return useMutation(getUpdateTacticMutationOptions(options));
+    }
+
+export const getDeleteTacticUrl = (tacticId: string,) => {
+
+
+
+
+  return `/api/tactics/${tacticId}`
+}
+
+/**
+ * @summary Delete a tactic
+ */
+export const deleteTactic = async (tacticId: string, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteTacticUrl(tacticId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteTacticMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteTactic>>, TError,{tacticId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteTactic>>, TError,{tacticId: string}, TContext> => {
+
+const mutationKey = ['deleteTactic'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteTactic>>, {tacticId: string}> = (props) => {
+          const {tacticId} = props ?? {};
+
+          return  deleteTactic(tacticId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteTacticMutationResult = NonNullable<Awaited<ReturnType<typeof deleteTactic>>>
+
+    export type DeleteTacticMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Delete a tactic
+ */
+export const useDeleteTactic = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteTactic>>, TError,{tacticId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteTactic>>,
+        TError,
+        {tacticId: string},
+        TContext
+      > => {
+      return useMutation(getDeleteTacticMutationOptions(options));
     }
 
 export const getUpdateEventUrl = (eventId: number,) => {
