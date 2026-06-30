@@ -1,4 +1,4 @@
-import React, { useRef } from "react";
+import React, { useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useListTactics,
@@ -95,6 +95,21 @@ export default function RightPanel() {
     },
   });
 
+  // useUpdateTactic 另一個實例，專門用來改名（跟存檔的 updateTactic 分開，避免 pending 狀態互相干擾）
+  const renameTactic = useUpdateTactic({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListTacticsQueryKey() });
+        toast({ title: "已重新命名" });
+      },
+      onError: () => toast({ title: "改名失敗", variant: "destructive" }),
+    },
+  });
+
+  // 改名 inline 編輯的暫存狀態：editingId 是正在被改名的那筆 id
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState("");
+
   const handleTool = (tool: ToolType) => setActiveTool(tool);
 
   const toolBtnClass = (tool: ToolType) =>
@@ -168,27 +183,65 @@ export default function RightPanel() {
   const currentRotState = rotations[currentRotation];
   const selectedRange = currentRotState?.defenseRanges.find((dr) => dr.id === selectedObjectId);
 
+  // 把已儲存戰術的名稱送 API 更新；名稱沒變或是空的就只關閉 input
+  const handleRename = (t: (typeof tactics)[number]) => {
+    const trimmed = editingName.trim();
+    if (trimmed && trimmed !== t.name) {
+      renameTactic.mutate({
+        tacticId: t.id,
+        data: { name: trimmed, data: t.data as unknown as Record<string, unknown> },
+      });
+    }
+    setEditingId(null);
+  };
+
   // 戰術列表區塊（非布置模式和布置模式都會用到，抽出來避免重複）
-  const TacticsList = ({ maxHeight }: { maxHeight: string }) =>
-    tactics.length > 0 ? (
-      <div className="border-2 border-[#111] bg-white p-2">
-        <div className="text-[10px] font-bold mb-1">已儲存 (點擊載入)</div>
-        <div className={`space-y-1 overflow-y-auto`} style={{ maxHeight }}>
+  const TacticsList = ({ maxHeight }: { maxHeight: string }) => (
+    <div className="border-2 border-[#111] bg-white p-2">
+      <div className="text-[10px] font-bold mb-1">已儲存 (點擊載入)</div>
+      {tactics.length === 0 ? (
+        <p className="text-[10px] text-gray-400 py-1">尚無已儲存戰術</p>
+      ) : (
+        <div className="space-y-1 overflow-y-auto" style={{ maxHeight }}>
           {tactics.map((t) => (
             <div
               key={t.id}
               className={`flex items-center text-[10px] p-1 gap-1 ${t.id === activeProjectId ? "bg-[#CCFF00]/30" : "hover:bg-gray-100"}`}
             >
-              <span
-                className="truncate flex-1 cursor-pointer hover:underline"
-                onClick={() => {
-                  // t.data 是 API 回傳的 jsonb，型別斷言為 TacticsState
-                  loadProject(t.data as unknown as TacticsState, t.id, t.name);
-                  toast({ title: "專案已載入" });
+              {editingId === t.id ? (
+                <input
+                  autoFocus
+                  className="flex-1 text-[10px] border border-[#111] px-1 outline-none"
+                  value={editingName}
+                  onChange={(e) => setEditingName(e.target.value)}
+                  onBlur={() => handleRename(t)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleRename(t);
+                    if (e.key === "Escape") setEditingId(null);
+                  }}
+                />
+              ) : (
+                <span
+                  className="truncate flex-1 cursor-pointer hover:underline"
+                  onClick={() => {
+                    loadProject(t.data as unknown as TacticsState, t.id, t.name);
+                    toast({ title: "專案已載入" });
+                  }}
+                >
+                  {t.name}
+                </span>
+              )}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setEditingId(t.id);
+                  setEditingName(t.name);
                 }}
+                className="shrink-0 text-gray-400 hover:text-[#111] leading-none px-0.5"
+                title="改名"
               >
-                {t.name}
-              </span>
+                ✏
+              </button>
               <span className="text-gray-400 shrink-0">
                 {new Date(t.updatedAt).toLocaleDateString()}
               </span>
@@ -196,7 +249,6 @@ export default function RightPanel() {
                 onClick={(e) => {
                   e.stopPropagation();
                   deleteTactic.mutate({ tacticId: t.id });
-                  // 刪的是目前開啟的那個 → 回到草稿狀態
                   if (t.id === activeProjectId) setActiveProjectId(null);
                 }}
                 className="shrink-0 text-gray-400 hover:text-red-600 font-bold leading-none px-0.5"
@@ -208,8 +260,9 @@ export default function RightPanel() {
             </div>
           ))}
         </div>
-      </div>
-    ) : null;
+      )}
+    </div>
+  );
 
   return (
     <div className="flex flex-col h-full bg-[#f8f8f8]">
@@ -228,6 +281,13 @@ export default function RightPanel() {
                 data-testid="button-enter-layout-mode"
               >
                 進入戰術布置
+              </button>
+              <button
+                onClick={newProject}
+                className="w-full wobbly-border py-1.5 bg-white hover:bg-gray-100 font-bold text-xs mt-1.5"
+                data-testid="button-new-project"
+              >
+                ＋ 新建空白戰術
               </button>
             </section>
             <TacticsList maxHeight="160px" />
