@@ -23,8 +23,7 @@ type PlayerMatrixRow = {
 };
 
 // 把所有球序依「我方球員」分組，算出每個動作的得/失分次數。
-// touchedBy.playerId 有值代表是我方球員執行這個動作；
-// point.side === 'us' 代表那一球最終我方得分。
+// touchedBy.playerId 有值代表是我方球員；point.side === 'us' 代表我方得分。
 function buildPlayerMatrix(history: PointRecord[], players: MatchPlayer[]): PlayerMatrixRow[] {
   const map = new Map<string, PlayerMatrixRow>();
 
@@ -55,7 +54,6 @@ function buildPlayerMatrix(history: PointRecord[], players: MatchPlayer[]): Play
     }
   }
 
-  // 依背號由小到大排列
   return [...map.values()].sort((a, b) => a.number - b.number);
 }
 
@@ -68,7 +66,6 @@ export default function MatchResult({
   const currentSet = record?.currentSet;
   const completedSets = record?.completedSets ?? [];
 
-  // 比分總覽：已結束的局 + 進行中的局（已選發球方才算「開始了」）
   type SetRow = {
     setNumber: number;
     ourScore: number;
@@ -97,7 +94,6 @@ export default function MatchResult({
   const ourSetsWon = completedSets.filter((s) => s.ourScore > s.opponentScore).length;
   const opponentSetsWon = completedSets.filter((s) => s.opponentScore > s.ourScore).length;
 
-  // 合併所有局的球序，用來計算全場統計
   const allHistory: PointRecord[] = [
     ...completedSets.flatMap((s) => s.history ?? []),
     ...(currentSet?.history ?? []),
@@ -107,7 +103,7 @@ export default function MatchResult({
 
   return (
     <div className="flex flex-col gap-5 px-4 py-4">
-      {/* ── 比分總覽 ── */}
+      {/* ── 比分總覽：每局一張 pill 卡片 ── */}
       <section>
         <h2 className="mb-2 text-sm font-bold text-gray-700">比分總覽</h2>
 
@@ -180,12 +176,13 @@ export default function MatchResult({
         <h2 className="mb-2 text-sm font-bold text-gray-700">球員統計</h2>
 
         {playerRows.length === 0 ? (
-          <p className="text-xs text-muted-foreground">尚無記錄。在球場上畫線選動作後，這裡會顯示統計。</p>
+          <p className="text-xs text-muted-foreground">
+            尚無記錄。在球場上畫線選動作後，這裡會顯示統計。
+          </p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-xs">
               <thead>
-                {/* 第一行：# + 各動作名稱（各佔 2 欄） */}
                 <tr className="border-b-2 border-gray-300">
                   <th className="pb-1 text-left text-gray-500 font-normal w-6">#</th>
                   {ACTIONS.map((a) => (
@@ -198,7 +195,6 @@ export default function MatchResult({
                     </th>
                   ))}
                 </tr>
-                {/* 第二行：每個動作切出「得」「失」兩欄 */}
                 <tr className="border-b border-gray-200">
                   <th className="pb-0.5" />
                   {ACTIONS.flatMap((a) => [

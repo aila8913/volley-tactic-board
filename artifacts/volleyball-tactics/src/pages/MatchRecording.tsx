@@ -30,7 +30,7 @@ export default function MatchRecording() {
   const { id } = useParams<{ id: string }>();
   const match = useMatches((state) => state.matches.find((m) => m.id === id));
 
-  // 全部比賽清單 + 全部紀錄，用來組統計欄的多場列表
+  // 全部比賽清單 + 全部紀錄，用來組右側統計欄的多場列表
   const allMatches = useMatches((state) => state.matches);
   const recordingsByMatch = useRecording((state) => state.recordingsByMatch);
 
@@ -48,6 +48,7 @@ export default function MatchRecording() {
   const [gesture, setGesture] = useState<Gesture | null>(null);
 
   // ── 自由球員替換記憶 ──
+  // useRef 讓 useEffect 讀到最新值，避免陳舊閉包（stale closure）。
   const [previousLiberoTarget, setPreviousLiberoTarget] = useState<string | null>(null);
   const liberoSubRef = useRef(liberoSubstitution);
   liberoSubRef.current = liberoSubstitution;
@@ -64,6 +65,7 @@ export default function MatchRecording() {
   }, [match, setRoster]);
 
   // ── 自由球員自動輪轉接替 ──
+  // 每次我方輪轉（ourRotation 變動）檢查被替換的球員是否已輪到前排。
   const currentSet = record?.currentSet;
   useEffect(() => {
     const libSub = liberoSubRef.current;
@@ -108,7 +110,7 @@ export default function MatchRecording() {
   const ourSetsWon = completedSets.filter((s) => s.ourScore > s.opponentScore).length;
   const opponentSetsWon = completedSets.filter((s) => s.opponentScore > s.ourScore).length;
 
-  // 統計欄的場次列表：本場第一，其他有紀錄的場次依日期由新到舊排列
+  // 統計欄的場次列表：本場第一，其他有紀錄的場次依日期由新到舊
   const statsMatches = [
     match,
     ...allMatches
@@ -297,11 +299,10 @@ export default function MatchRecording() {
             )}
           </div>
 
-          {/* 每個 snap pane 是一場比賽的統計 */}
+          {/* 每個 snap pane 是一場比賽的統計；CSS scroll-snap 不需要任何 JS */}
           <div className="flex-1 flex overflow-x-auto snap-x snap-mandatory min-h-0 [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
             {statsMatches.map((m, i) => (
               <div key={m.id} className="w-72 flex-none snap-center flex flex-col min-h-0">
-                {/* 場次標題：固定在各自 pane 頂部 */}
                 <div className="shrink-0 bg-white border-b px-3 py-1.5 flex items-center gap-2">
                   <span className="text-xs font-bold truncate">vs {m.opponent}</span>
                   {m.id === id && (
@@ -313,7 +314,6 @@ export default function MatchRecording() {
                     {i + 1}/{statsMatches.length}
                   </span>
                 </div>
-                {/* 統計內容垂直可滾動 */}
                 <div className="flex-1 overflow-y-auto">
                   <MatchResult
                     players={m.players}
