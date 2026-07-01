@@ -90,10 +90,15 @@
    的球場 wrapper 從 `w-full + aspectRatio: "1/2"`（寬→高，可能超出視窗）改成
    `h-full w-auto max-w-full + aspectRatio: "1/2"`（高→寬，高度跟著頁面走）。
 
-6. **比賽紀錄要有對應的「結果呈現」畫面**：目前 `MatchRecording.tsx`/`RecordingCourt.tsx`
-   只負責寫入紀錄事件，還沒有看紀錄結果的地方。使用者想要能查看紀錄完的結果，可能會做成類似
-   「數據分析」的新頁面或分頁，但確切要呈現哪些數據（比分、輪轉紀錄、個人技術統計等）跟畫面
-   長什麼樣還沒想清楚，之後要先決定看哪些數據再設計畫面。
+6. ✅ **比賽紀錄要有對應的「結果呈現」畫面**：沒有做成獨立新頁面，而是把 `MatchRecording.tsx`
+   改成左右分欄：左邊維持原本的記錄操作，右邊新增常駐統計欄（新元件 `MatchResult.tsx`），用
+   CSS `scroll-snap`（不需要額外 JS）左右滑動切換「本場」跟其他有紀錄的場次。統計內容：
+   - **比分總覽**：每局一張 pill 卡片（贏＝綠、輸＝紅、進行中＝藍），外加局數小計。
+   - **換人紀錄**：本局／全場累計的一般換人次數（自由球員替換不計入，邏輯見
+     `MatchRecording.tsx` 的 `regularSubs`/`subCountsHistory`）。
+   - **球員統計**：依球衣號碼排序，把攻擊/發球/防守/攔網四種動作的得分/失分次數整理成一張
+     矩陣表格（`MatchResult.tsx` 的 `buildPlayerMatrix`，資料來源是 `PointRecord.touchedBy`/
+     `action`/`side`）。命中率等進階分析故意先不做，留給以後的數據分析頁面。
 
 7. **基礎輪轉位設定（左側獨立功能）**：
 
