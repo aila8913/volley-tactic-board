@@ -22,11 +22,13 @@ export default function PlayerNode({
   const {
     placePlayerOnCourt,
     placePlayerFree,
+    removePlayerFromCourt,
     selectedObjectId,
     setSelectedObjectId,
     activeTool,
     circleLabel,
     isLayoutMode,
+    courtView,
   } = useTactics();
   const [isDragging, setIsDragging] = useState(false);
 
@@ -41,16 +43,17 @@ export default function PlayerNode({
   const radius = 6;
 
   // 顯示位置計算：
-  // - layout mode 拖曳中 → 直接用游標座標
-  // - layout mode 靜止 → 用 position.x/y 直接換算（自由座標，不反推格子）
-  // - 非 layout mode → 從格子編號換算（確保完全對齊格子中心）
+  // - 戰術視圖：tacticPositions 存的是自由座標，直接換算（拖曳中用游標座標）
+  // - 輪轉視圖：positions 存的是格子座標，從格子編號換算確保對齊格子中心
   let x: number, y: number;
-  if (isLayoutMode && dragPos) {
-    x = dragPos.x;
-    y = dragPos.y;
-  } else if (isLayoutMode) {
-    x = position.x * 100;
-    y = position.y * 200;
+  if (courtView === "tactics") {
+    if (dragPos) {
+      x = dragPos.x;
+      y = dragPos.y;
+    } else {
+      x = position.x * 100;
+      y = position.y * 200;
+    }
   } else {
     const renderZone = dragZone ?? findNearestZone(position.x, position.y);
     const coords = getZoneCoords(renderZone);
@@ -58,9 +61,13 @@ export default function PlayerNode({
     y = coords.y * 200;
   }
 
+  // 戰術視圖 + 非布置模式：完全唯讀，不接受任何拖曳
+  const canDrag = courtView === "rotation" || (courtView === "tactics" && isLayoutMode);
+
   const handlePointerDown = (e: React.PointerEvent) => {
     e.stopPropagation();
     if (activeTool !== "select") return;
+    if (!canDrag) return;
     setSelectedObjectId(position.playerId);
     setIsDragging(true);
     (e.target as Element).setPointerCapture(e.pointerId);
@@ -75,7 +82,7 @@ export default function PlayerNode({
     rawX = Math.max(radius, Math.min(100 - radius, rawX));
     rawY = Math.max(radius, Math.min(200 - radius, rawY));
 
-    if (isLayoutMode) {
+    if (courtView === "tactics") {
       setDragPos({ x: rawX, y: rawY });
     } else {
       setDragZone(findNearestZone(rawX / 100, rawY / 200));
@@ -86,14 +93,21 @@ export default function PlayerNode({
     setIsDragging(false);
     (e.target as Element).releasePointerCapture(e.pointerId);
 
-    if (isLayoutMode && dragPos) {
-      // 正規化到 0~1 範圍再存進 store
+    if (courtView === "tactics" && dragPos) {
+      // 戰術視圖：自由座標存進 tacticPositions
       placePlayerFree(position.playerId, dragPos.x / 100, dragPos.y / 200);
       setDragPos(null);
-    } else if (dragZone !== null) {
+    } else if (courtView === "rotation" && dragZone !== null) {
+      // 輪轉視圖：格子吸附並推算全部 6 輪
       placePlayerOnCourt(position.playerId, dragZone);
       setDragZone(null);
     }
+  };
+
+  // 右鍵刪除：L 球員只移除目前輪次並還原被替換的人；一般球員從全部 6 輪移除。
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    removePlayerFromCourt(position.playerId);
   };
 
   return (
@@ -104,6 +118,7 @@ export default function PlayerNode({
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerUp}
+      onContextMenu={handleContextMenu}
       className={`cursor-grab touch-none ${isDragging ? "cursor-grabbing" : ""}`}
       style={{ transition: isDragging ? "none" : "transform 0.1s ease-out" }}
     >

@@ -49,6 +49,7 @@ export default function RightPanel() {
     history,
     isLayoutMode,
     setLayoutMode,
+    setCourtView,
   } = useTactics();
 
   const { toast } = useToast();
@@ -68,6 +69,8 @@ export default function RightPanel() {
         setActiveProjectId(created.id);
         toast({ title: "戰術已儲存" });
         setLayoutMode(false);
+        // 存完戰術後切到戰術視圖，讓教練馬上看到剛畫好的標記跟防守範圍
+        setCourtView("tactics");
       },
       onError: () => toast({ title: "儲存失敗", variant: "destructive" }),
     },
@@ -80,6 +83,7 @@ export default function RightPanel() {
         queryClient.invalidateQueries({ queryKey: getListTacticsQueryKey() });
         toast({ title: "戰術已更新" });
         setLayoutMode(false);
+        setCourtView("tactics");
       },
       onError: () => toast({ title: "更新失敗", variant: "destructive" }),
     },

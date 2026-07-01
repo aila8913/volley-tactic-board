@@ -19,12 +19,15 @@ export default function Court() {
     setSelectedObjectId,
     addDefenseRange,
     updateDefenseRange,
-    liberoSubstitution,
     placePlayerOnCourt,
     placePlayerFree,
     undo,
     redo,
     isLayoutMode,
+    courtView,
+    setCourtView,
+    startingLiberoId,
+    setStartingLiberoId,
   } = useTactics();
 
   const courtRef = useRef<SVGSVGElement>(null);
@@ -133,13 +136,15 @@ export default function Court() {
     if (!CTM) return;
     const rawX = (e.clientX - CTM.e) / CTM.a;
     const rawY = (e.clientY - CTM.f) / CTM.d;
-    // layout mode：自由座標放置，只影響目前輪次
-    // 一般模式：吸附到最近格子並自動傳播到其他輪次
-    if (isLayoutMode) {
-      placePlayerFree(playerId, rawX / 100, rawY / 200);
-    } else {
+
+    if (courtView === "rotation") {
+      // 輪轉視圖：吸附到最近格子，自動推算全部 6 個輪次
       placePlayerOnCourt(playerId, findNearestZone(rawX / 100, rawY / 200));
+    } else if (courtView === "tactics" && isLayoutMode) {
+      // 戰術視圖 + 布置模式：自由座標放置，只影響目前輪次的 tacticPositions
+      placePlayerFree(playerId, rawX / 100, rawY / 200);
     }
+    // 戰術視圖 + 非布置模式：不接受拖曳（唯讀）
   };
 
   useEffect(() => {
@@ -157,8 +162,42 @@ export default function Court() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [undo, redo]);
 
+  // 輪轉視圖中，指定先發的 L 球員不在場上時顯示在備位區。
+  // startingLiberoId === null 代表目前沒指定先發 L（備位區空白）。
+  const startingLibero = startingLiberoId
+    ? (roster.find((p) => p.id === startingLiberoId && p.role === "L") ?? null)
+    : null;
+  const liberoInSpot =
+    startingLibero && !rotation.positions.some((pos) => pos.playerId === startingLiberoId)
+      ? [startingLibero]
+      : [];
+
   return (
-    <div className="h-full w-full max-w-[500px] mx-auto flex flex-col justify-center items-center relative py-4">
+    <div className="h-full w-full max-w-[500px] mx-auto flex flex-col justify-center items-center relative pt-4 pb-14">
+      {/* 視圖切換：輪轉視圖只顯示站位圓圈，戰術視圖疊加顯示畫筆標記跟防守範圍 */}
+      <div className="flex gap-1 mb-2">
+        <button
+          onClick={() => setCourtView("rotation")}
+          className={`px-3 py-1 wobbly-border text-xs font-bold transition-colors ${
+            courtView === "rotation"
+              ? "bg-[#CCFF00] shadow-[2px_2px_0_0_#111]"
+              : "bg-white hover:bg-gray-100"
+          }`}
+        >
+          輪轉視圖
+        </button>
+        <button
+          onClick={() => setCourtView("tactics")}
+          className={`px-3 py-1 wobbly-border text-xs font-bold transition-colors ${
+            courtView === "tactics"
+              ? "bg-[#CCFF00] shadow-[2px_2px_0_0_#111]"
+              : "bg-white hover:bg-gray-100"
+          }`}
+        >
+          戰術視圖
+        </button>
+      </div>
+
       {/* 以高度為主、寬度自動縮：h-full 讓球場撐滿可用垂直空間，
           aspect-ratio 1/2 表示 width:height = 1:2，所以 width = height / 2。
           如果改成 w-full + aspectRatio，則 height = 2 * width，在寬螢幕上會讓球場長出視窗。 */}
@@ -295,47 +334,79 @@ export default function Court() {
             我方
           </text>
 
-          {/* Render Defense Ranges */}
-          {rotation.defenseRanges.map((dr) => (
-            <DefenseRange key={dr.id} range={dr} />
-          ))}
+          {/* 畫筆標記與防守範圍只在「戰術視圖」模式下顯示，
+              輪轉視圖只看站位圓圈，避免標記干擾判斷球員站哪裡。 */}
+          {courtView === "tactics" && (
+            <>
+              {rotation.defenseRanges.map((dr) => (
+                <DefenseRange key={dr.id} range={dr} />
+              ))}
+              {rotation.markers.map((m) => (
+                <Markers key={m.id} marker={m} />
+              ))}
+            </>
+          )}
 
-          {/* Render Markers */}
-          {rotation.markers.map((m) => (
-            <Markers key={m.id} marker={m} />
-          ))}
+          {/* Render Players
+              輪轉視圖：用 positions（格子吸附站位）
+              戰術視圖：用 tacticPositions（自由布置站位）；若尚未客製化（空陣列），
+                       用 positions 作為 fallback，並合併（tacticPositions 的人優先）。 */}
+          {(() => {
+            const tacticIds = new Set((rotation.tacticPositions ?? []).map((p) => p.playerId));
+            const displayPositions =
+              courtView === "rotation"
+                ? rotation.positions
+                : [
+                    ...rotation.positions.filter((p) => !tacticIds.has(p.playerId)),
+                    ...(rotation.tacticPositions ?? []),
+                  ];
 
-          {/* Render Players */}
-          {rotation.positions.map((pos) => {
-            const player = roster.find((p) => p.id === pos.playerId);
-            if (!player) return null;
-
-            let isLibero = false;
-            let displayPlayer = player;
-
-            if (liberoSubstitution === player.id) {
-              const libero = roster.find((p) => p.role === "L");
-              if (libero) {
-                isLibero = true;
-                displayPlayer = libero;
-              }
-            }
-
-            const isFrontRow = pos.y > 0.5 && pos.y < 0.75;
-
-            return (
-              <PlayerNode
-                key={pos.playerId}
-                player={displayPlayer}
-                position={pos}
-                isFrontRow={isFrontRow}
-                isLibero={isLibero}
-                courtRef={courtRef}
-              />
-            );
-          })}
+            return displayPositions.map((pos) => {
+              const player = roster.find((p) => p.id === pos.playerId);
+              if (!player) return null;
+              const isLibero = player.role === "L";
+              const isFrontRow = pos.y > 0.5 && pos.y < 0.75;
+              return (
+                <PlayerNode
+                  key={pos.playerId}
+                  player={player}
+                  position={pos}
+                  isFrontRow={isFrontRow}
+                  isLibero={isLibero}
+                  courtRef={courtRef}
+                />
+              );
+            });
+          })()}
         </svg>
       </div>
+
+      {/* 自由球員備位區：只在輪轉視圖且有 L 未上場時顯示。
+          橘色圓圈坐在球場正下方，跟場上的 PlayerNode 視覺一致。
+          直接用 HTML drag-and-drop（跟左側名單同一套），拖到球場後排就會觸發 handleDrop → placePlayerOnCourt。 */}
+      {courtView === "rotation" && liberoInSpot.length > 0 && (
+        <div className="absolute bottom-3 left-0 right-0 flex flex-col items-center gap-1">
+          <span className="text-[9px] text-gray-400 tracking-wide">L 備位 — 拖到後排上場</span>
+          <div className="flex gap-2 justify-center">
+            {liberoInSpot.map((p) => (
+              <div
+                key={p.id}
+                draggable
+                onDragStart={(e) => e.dataTransfer.setData("text/plain", p.id)}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  // 右鍵點備位區 L = 取消先發設定，備位區變空白
+                  setStartingLiberoId(null);
+                }}
+                className="w-10 h-10 rounded-full bg-[#FF6B00] border-2 border-[#111] flex items-center justify-center text-[11px] font-bold cursor-grab active:cursor-grabbing select-none"
+                title={`${p.name} #${p.number} — 拖到後排（1/5/6）上場；右鍵取消先發`}
+              >
+                #{p.number}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

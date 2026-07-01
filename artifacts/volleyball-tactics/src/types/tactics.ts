@@ -39,8 +39,22 @@ export interface Marker {
   text?: string;
 }
 
+export interface LiberoReplacement {
+  liberoId: string;
+  // 被替換下場的球員，連同其格子座標一起保存，移除 L 時才能還原到正確位置。
+  replacedPosition: PlayerPosition;
+}
+
 export interface RotationState {
+  // 輪轉視圖用：以格子吸附（1~6 號位）記錄的站位，placePlayerOnCourt 寫入。
+  // 換輪次時自動推算，是所有 6 個輪次的「骨架」。
   positions: PlayerPosition[];
+  // 戰術視圖用：在布置模式裡自由拖曳的站位，placePlayerFree 寫入。
+  // 空陣列代表還沒客製化，顯示時會以 positions 為 fallback。
+  tacticPositions: PlayerPosition[];
+  // 自由球員替換記錄：記錄「這個輪次 L 替換了誰」，移除 L 時用來還原。
+  // null 代表這個輪次沒有 L 上場。
+  liberoReplacement: LiberoReplacement | null;
   defenseRanges: DefenseRange[];
   markers: Marker[];
 }
