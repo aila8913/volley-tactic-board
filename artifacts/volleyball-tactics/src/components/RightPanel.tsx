@@ -1,18 +1,17 @@
-import React, { useRef } from "react";
+import React, { useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  useListTactics,
+  useCreateTactic,
+  useUpdateTactic,
+  useDeleteTactic,
+  getListTacticsQueryKey,
+} from "@workspace/api-client-react";
 import { useTactics, ToolType } from "../hooks/useTactics";
+import { TacticsState } from "../types/tactics";
 import { exportCourtAsPng, exportStateAsJson, importStateFromJson } from "../lib/exportUtils";
 import { Toaster } from "@/components/ui/toaster";
 import { useToast } from "@/hooks/use-toast";
-
-// 舊版資料相容：存的是英文 key，轉成中文顯示
-const LEGACY_SITUATION_TEXT: Record<string, string> = {
-  base: "基礎輪轉",
-  "serve-receive": "接發球",
-  defense: "防守",
-  attack: "進攻",
-  cover: "Cover保護",
-};
-const displaySituation = (s: string) => LEGACY_SITUATION_TEXT[s] ?? s;
 
 const COLORS = [
   "#CCFF00",
@@ -31,14 +30,12 @@ export default function RightPanel() {
     setActiveTool,
     projectSituation,
     setProjectSituation,
-    saveProject,
-    saveProjectAs,
     newProject,
     activeProjectId,
-    projects,
+    setActiveProjectId,
     loadProject,
-    deleteProject,
     importState,
+    buildSnapshot,
     rotations,
     currentRotation,
     setCurrentRotation,
@@ -52,10 +49,70 @@ export default function RightPanel() {
     history,
     isLayoutMode,
     setLayoutMode,
+    setCourtView,
   } = useTactics();
 
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const queryClient = useQueryClient();
+
+  // ── API hooks ──
+  // useListTactics：取得目前使用者的所有已儲存戰術（伺服器端）
+  const { data: tactics = [] } = useListTactics();
+
+  // useCreateTactic：新增一筆戰術，成功後讓 list query 重新抓資料
+  const createTactic = useCreateTactic({
+    mutation: {
+      onSuccess: (created) => {
+        queryClient.invalidateQueries({ queryKey: getListTacticsQueryKey() });
+        // 把伺服器回傳的 id 寫進 store，之後「儲存」才知道要覆寫哪筆
+        setActiveProjectId(created.id);
+        toast({ title: "戰術已儲存" });
+        setLayoutMode(false);
+        // 存完戰術後切到戰術視圖，讓教練馬上看到剛畫好的標記跟防守範圍
+        setCourtView("tactics");
+      },
+      onError: () => toast({ title: "儲存失敗", variant: "destructive" }),
+    },
+  });
+
+  // useUpdateTactic：覆寫既有戰術
+  const updateTactic = useUpdateTactic({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListTacticsQueryKey() });
+        toast({ title: "戰術已更新" });
+        setLayoutMode(false);
+        setCourtView("tactics");
+      },
+      onError: () => toast({ title: "更新失敗", variant: "destructive" }),
+    },
+  });
+
+  // useDeleteTactic：刪除戰術
+  const deleteTactic = useDeleteTactic({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListTacticsQueryKey() });
+      },
+      onError: () => toast({ title: "刪除失敗", variant: "destructive" }),
+    },
+  });
+
+  // useUpdateTactic 另一個實例，專門用來改名（跟存檔的 updateTactic 分開，避免 pending 狀態互相干擾）
+  const renameTactic = useUpdateTactic({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListTacticsQueryKey() });
+        toast({ title: "已重新命名" });
+      },
+      onError: () => toast({ title: "改名失敗", variant: "destructive" }),
+    },
+  });
+
+  // 改名 inline 編輯的暫存狀態：editingId 是正在被改名的那筆 id
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState("");
 
   const handleTool = (tool: ToolType) => setActiveTool(tool);
 
@@ -69,7 +126,7 @@ export default function RightPanel() {
     }
   };
 
-  const situationLabel = displaySituation(projectSituation) || "tactics";
+  const situationLabel = projectSituation || "tactics";
 
   const handleExportPNG = () => {
     exportCourtAsPng("court-wrapper", `${situationLabel}_輪次${currentRotation + 1}`);
@@ -102,22 +159,114 @@ export default function RightPanel() {
       const data = await importStateFromJson(file);
       importState(data);
       toast({ title: "匯入成功", description: "戰術板已更新" });
-    } catch (err) {
+    } catch {
       toast({ title: "匯入失敗", description: "檔案格式錯誤", variant: "destructive" });
     }
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const handleNewProject = () => newProject();
+  // 儲存：有 activeProjectId → 覆寫；沒有（草稿）→ 新建
+  // TacticsState を Record<string, unknown> にキャストするのは、
+  // codegen が additionalProperties:true から生成した NewTacticData の型要件を満たすため。
+  // 実際には TacticsState をそのまま JSON として送る。
+  const handleSave = () => {
+    const data = buildSnapshot() as unknown as Record<string, unknown>;
+    if (activeProjectId) {
+      updateTactic.mutate({ tacticId: activeProjectId, data: { name: projectSituation, data } });
+    } else {
+      createTactic.mutate({ data: { name: projectSituation, data } });
+    }
+  };
 
-  const handleFinishLayout = () => {
-    saveProject();
-    setLayoutMode(false);
-    toast({ title: "戰術已儲存" });
+  // 另存新檔：永遠建新的，不管目前有沒有 activeProjectId
+  const handleSaveAs = () => {
+    const data = buildSnapshot() as unknown as Record<string, unknown>;
+    createTactic.mutate({ data: { name: projectSituation, data } });
   };
 
   const currentRotState = rotations[currentRotation];
   const selectedRange = currentRotState?.defenseRanges.find((dr) => dr.id === selectedObjectId);
+
+  // 把已儲存戰術的名稱送 API 更新；名稱沒變或是空的就只關閉 input
+  const handleRename = (t: (typeof tactics)[number]) => {
+    const trimmed = editingName.trim();
+    if (trimmed && trimmed !== t.name) {
+      renameTactic.mutate({
+        tacticId: t.id,
+        data: { name: trimmed, data: t.data as unknown as Record<string, unknown> },
+      });
+    }
+    setEditingId(null);
+  };
+
+  // 戰術列表區塊（非布置模式和布置模式都會用到，抽出來避免重複）
+  const TacticsList = ({ maxHeight }: { maxHeight: string }) => (
+    <div className="border-2 border-[#111] bg-white p-2">
+      <div className="text-[10px] font-bold mb-1">已儲存 (點擊載入)</div>
+      {tactics.length === 0 ? (
+        <p className="text-[10px] text-gray-400 py-1">尚無已儲存戰術</p>
+      ) : (
+        <div className="space-y-1 overflow-y-auto" style={{ maxHeight }}>
+          {tactics.map((t) => (
+            <div
+              key={t.id}
+              className={`flex items-center text-[10px] p-1 gap-1 ${t.id === activeProjectId ? "bg-[#CCFF00]/30" : "hover:bg-gray-100"}`}
+            >
+              {editingId === t.id ? (
+                <input
+                  autoFocus
+                  className="flex-1 text-[10px] border border-[#111] px-1 outline-none"
+                  value={editingName}
+                  onChange={(e) => setEditingName(e.target.value)}
+                  onBlur={() => handleRename(t)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleRename(t);
+                    if (e.key === "Escape") setEditingId(null);
+                  }}
+                />
+              ) : (
+                <span
+                  className="truncate flex-1 cursor-pointer hover:underline"
+                  onClick={() => {
+                    loadProject(t.data as unknown as TacticsState, t.id, t.name);
+                    toast({ title: "專案已載入" });
+                  }}
+                >
+                  {t.name}
+                </span>
+              )}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setEditingId(t.id);
+                  setEditingName(t.name);
+                }}
+                className="shrink-0 text-gray-400 hover:text-[#111] leading-none px-0.5"
+                title="改名"
+              >
+                ✏
+              </button>
+              <span className="text-gray-400 shrink-0">
+                {new Date(t.updatedAt).toLocaleDateString()}
+              </span>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  deleteTactic.mutate({ tacticId: t.id });
+                  if (t.id === activeProjectId) setActiveProjectId(null);
+                }}
+                className="shrink-0 text-gray-400 hover:text-red-600 font-bold leading-none px-0.5"
+                title="刪除"
+                data-testid={`button-delete-project-${t.id}`}
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div className="flex flex-col h-full bg-[#f8f8f8]">
@@ -137,45 +286,15 @@ export default function RightPanel() {
               >
                 進入戰術布置
               </button>
+              <button
+                onClick={newProject}
+                className="w-full wobbly-border py-1.5 bg-white hover:bg-gray-100 font-bold text-xs mt-1.5"
+                data-testid="button-new-project"
+              >
+                ＋ 新建空白戰術
+              </button>
             </section>
-            {/* 非布置模式只顯示已儲存列表，不顯示命名和按鈕 */}
-            {projects.length > 0 && (
-              <div className="border-2 border-[#111] bg-white p-2">
-                <div className="text-[10px] font-bold mb-1">已儲存 (點擊載入)</div>
-                <div className="space-y-1 max-h-[160px] overflow-y-auto">
-                  {projects.map((p) => (
-                    <div
-                      key={p.id}
-                      className={`flex items-center text-[10px] p-1 gap-1 ${p.id === activeProjectId ? "bg-[#CCFF00]/30" : "hover:bg-gray-100"}`}
-                    >
-                      <span
-                        className="truncate flex-1 cursor-pointer hover:underline"
-                        onClick={() => {
-                          loadProject(p.id);
-                          toast({ title: "專案已載入" });
-                        }}
-                      >
-                        {displaySituation(p.situation)}
-                      </span>
-                      <span className="text-gray-400 shrink-0">
-                        {new Date(p.date).toLocaleDateString()}
-                      </span>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          deleteProject(p.id);
-                        }}
-                        className="shrink-0 text-gray-400 hover:text-red-600 font-bold leading-none px-0.5"
-                        title="刪除"
-                        data-testid={`button-delete-project-${p.id}`}
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            <TacticsList maxHeight="160px" />
           </>
         ) : (
           <>
@@ -189,13 +308,14 @@ export default function RightPanel() {
                 </span>
               </div>
               <input
-                  className="w-full wobbly-border px-2 py-1.5 text-xs bg-white outline-none focus:ring-2 focus:ring-[#CCFF00]"
-                  placeholder="情境名稱（如：接發11號強發）"
-                  value={projectSituation}
-                  onChange={(e) => setProjectSituation(e.target.value)}
-                  data-testid="input-project-situation"
-                />
+                className="w-full wobbly-border px-2 py-1.5 text-xs bg-white outline-none focus:ring-2 focus:ring-[#CCFF00]"
+                placeholder="戰術名稱（如：接發11號強發）"
+                value={projectSituation}
+                onChange={(e) => setProjectSituation(e.target.value)}
+                data-testid="input-project-situation"
+              />
             </section>
+
             <section>
               <div className="flex justify-between items-center mb-2">
                 <h2 className="font-display text-[15px] font-bold">畫筆工具</h2>
@@ -333,7 +453,6 @@ export default function RightPanel() {
                       ))}
                     </div>
                   </div>
-
                   {selectedRange.type === "circle" && (
                     <div>
                       <label className="text-[10px] mb-1 block">
@@ -351,7 +470,6 @@ export default function RightPanel() {
                       />
                     </div>
                   )}
-
                   {selectedRange.type === "ellipse" && (
                     <>
                       <div>
@@ -403,7 +521,6 @@ export default function RightPanel() {
                       </div>
                     </>
                   )}
-
                   {selectedRange.type === "fan" && (
                     <>
                       <div>
@@ -470,73 +587,36 @@ export default function RightPanel() {
                 </div>
               )}
             </section>
-            {/* 布置模式底部：命名 + 已儲存列表（存檔按鈕已在頂端，不重複） */}
+
             <section>
-        
-              <div className="space-y-2">
-                {projects.length > 0 && (
-                  <div className="border-2 border-[#111] bg-white p-2">
-                    <div className="text-[10px] font-bold mb-1">已儲存 (點擊載入)</div>
-                    <div className="space-y-1 max-h-[80px] overflow-y-auto">
-                      {projects.map((p) => (
-                        <div
-                          key={p.id}
-                          className={`flex items-center text-[10px] p-1 gap-1 ${p.id === activeProjectId ? "bg-[#CCFF00]/30" : "hover:bg-gray-100"}`}
-                        >
-                          <span
-                            className="truncate flex-1 cursor-pointer hover:underline"
-                            onClick={() => {
-                              loadProject(p.id);
-                              toast({ title: "專案已載入" });
-                            }}
-                          >
-                            {displaySituation(p.situation)}
-                          </span>
-                          <span className="text-gray-400 shrink-0">
-                            {new Date(p.date).toLocaleDateString()}
-                          </span>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              deleteProject(p.id);
-                            }}
-                            className="shrink-0 text-gray-400 hover:text-red-600 font-bold leading-none px-0.5"
-                            title="刪除"
-                            data-testid={`button-delete-project-${p.id}`}
-                          >
-                            ×
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
+              <TacticsList maxHeight="80px" />
             </section>
-            {/* 布置模式底端：取消/儲存/另存新檔 */}
+
+            {/* 布置模式底端：新建 / 儲存 / 另存新檔 */}
             <section>
               <div className="grid grid-cols-3 gap-1.5">
                 <button
-                  onClick={() => setLayoutMode(false)}
+                  onClick={() => {
+                    newProject();
+                    setLayoutMode(false);
+                  }}
                   className="wobbly-border py-1.5 bg-white hover:bg-gray-100 font-bold text-xs"
                   data-testid="button-cancel-layout"
                 >
-                  取消
+                  新建
                 </button>
                 <button
-                  onClick={handleFinishLayout}
-                  className="wobbly-border py-1.5 bg-[#CCFF00] hover:bg-[#111] hover:text-[#CCFF00] transition-colors font-bold text-xs shadow-[2px_2px_0_0_#111]"
+                  onClick={handleSave}
+                  disabled={createTactic.isPending || updateTactic.isPending}
+                  className="wobbly-border py-1.5 bg-[#CCFF00] hover:bg-[#111] hover:text-[#CCFF00] transition-colors font-bold text-xs shadow-[2px_2px_0_0_#111] disabled:opacity-50"
                   data-testid="button-finish-layout"
                 >
                   儲存
                 </button>
                 <button
-                  onClick={() => {
-                    saveProjectAs();
-                    setLayoutMode(false);
-                    toast({ title: "已另存新檔" });
-                  }}
-                  className="wobbly-border py-1.5 bg-white hover:bg-gray-100 font-bold text-xs"
+                  onClick={handleSaveAs}
+                  disabled={createTactic.isPending}
+                  className="wobbly-border py-1.5 bg-white hover:bg-gray-100 font-bold text-xs disabled:opacity-50"
                   data-testid="button-save-as-layout"
                 >
                   另存新檔

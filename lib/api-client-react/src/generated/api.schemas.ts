@@ -152,6 +152,30 @@ export interface NewEvent {
   source: EventSource;
 }
 
+export type TacticData = { [key: string]: unknown };
+
+export interface Tactic {
+  id: string;
+  name: string;
+  data: TacticData;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type NewTacticData = { [key: string]: unknown };
+
+export interface NewTactic {
+  name: string;
+  data: NewTacticData;
+}
+
+export type UpdateTacticData = { [key: string]: unknown };
+
+export interface UpdateTactic {
+  name?: string;
+  data?: UpdateTacticData;
+}
+
 export interface UpdateEvent {
   action?: EventAction;
   ballType?: BallType;

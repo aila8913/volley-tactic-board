@@ -6,3 +6,4 @@ export * from "./players";
 export * from "./sets";
 export * from "./rallies";
 export * from "./events";
+export * from "./tactics";

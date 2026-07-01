@@ -223,6 +223,73 @@ export const CreateEventBody = zod.object({
 
 
 /**
+ * @summary List all saved tactics for the current user
+ */
+export const ListTacticsResponseItem = zod.object({
+  "id": zod.string().uuid(),
+  "name": zod.string(),
+  "data": zod.record(zod.string(), zod.unknown()),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListTacticsResponse = zod.array(ListTacticsResponseItem)
+
+
+/**
+ * @summary Save a new tactic
+ */
+export const CreateTacticBody = zod.object({
+  "name": zod.string(),
+  "data": zod.record(zod.string(), zod.unknown())
+})
+
+
+/**
+ * @summary Get a single tactic by id
+ */
+export const GetTacticParams = zod.object({
+  "tacticId": zod.coerce.string().uuid()
+})
+
+export const GetTacticResponse = zod.object({
+  "id": zod.string().uuid(),
+  "name": zod.string(),
+  "data": zod.record(zod.string(), zod.unknown()),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Overwrite an existing tactic (name and/or data)
+ */
+export const UpdateTacticParams = zod.object({
+  "tacticId": zod.coerce.string().uuid()
+})
+
+export const UpdateTacticBody = zod.object({
+  "name": zod.string().optional(),
+  "data": zod.record(zod.string(), zod.unknown()).optional()
+})
+
+export const UpdateTacticResponse = zod.object({
+  "id": zod.string().uuid(),
+  "name": zod.string(),
+  "data": zod.record(zod.string(), zod.unknown()),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete a tactic
+ */
+export const DeleteTacticParams = zod.object({
+  "tacticId": zod.coerce.string().uuid()
+})
+
+
+/**
  * @summary Correct or fill in details on an existing event (e.g. during video review)
  */
 export const UpdateEventParams = zod.object({

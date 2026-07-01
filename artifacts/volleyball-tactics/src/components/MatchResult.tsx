@@ -1,5 +1,5 @@
 import { MatchPlayer } from "@/types/match";
-import { MatchRecordingState, PointRecord } from "@/types/recording";
+import { MatchRecordingState, PlayAction, PointRecord } from "@/types/recording";
 
 interface Props {
   players: MatchPlayer[];
@@ -8,33 +8,53 @@ interface Props {
   totalSubCount?: number;
 }
 
-// 把某局的歷史球序，依防守動作的球員分組，算出次數和得分次數。
-// 「得分率」的分子是「我方最終贏得這一分」的次數——沒有 quality 分數，
-// 用得分結果當代理指標，可以大致反映防守效果。
-function buildDefenseStats(
-  history: PointRecord[],
-  players: MatchPlayer[],
-): { playerId: string; name: string; number: number; total: number; won: number }[] {
-  // 只看有手勢記錄的防守動作，且是我方球員（有 playerId 的才是我方）。
-  const defenseRecords = history.filter((p) => p.action === "defense" && p.touchedBy?.playerId);
+const ACTIONS: PlayAction[] = ["attack", "serve", "defense", "block"];
+const ACTION_LABELS: Record<PlayAction, string> = {
+  attack: "攻擊",
+  serve: "發球",
+  defense: "防守",
+  block: "攔網",
+};
 
-  // Map<playerId, { total, won }>
-  const statsMap = new Map<string, { total: number; won: number }>();
-  for (const point of defenseRecords) {
-    const pid = point.touchedBy!.playerId!;
-    const entry = statsMap.get(pid) ?? { total: 0, won: 0 };
-    statsMap.set(pid, {
-      total: entry.total + 1,
-      won: entry.won + (point.side === "us" ? 1 : 0),
-    });
+type PlayerMatrixRow = {
+  playerId: string;
+  number: number;
+  stats: Record<PlayAction, { won: number; lost: number }>;
+};
+
+// 把所有球序依「我方球員」分組，算出每個動作的得/失分次數。
+// touchedBy.playerId 有值代表是我方球員；point.side === 'us' 代表我方得分。
+function buildPlayerMatrix(history: PointRecord[], players: MatchPlayer[]): PlayerMatrixRow[] {
+  const map = new Map<string, PlayerMatrixRow>();
+
+  for (const point of history) {
+    if (!point.action || !point.touchedBy?.playerId) continue;
+    const pid = point.touchedBy.playerId;
+    const player = players.find((p) => p.id === pid);
+    if (!player) continue;
+
+    if (!map.has(pid)) {
+      map.set(pid, {
+        playerId: pid,
+        number: player.number,
+        stats: {
+          attack: { won: 0, lost: 0 },
+          serve: { won: 0, lost: 0 },
+          defense: { won: 0, lost: 0 },
+          block: { won: 0, lost: 0 },
+        },
+      });
+    }
+
+    const row = map.get(pid)!;
+    if (point.side === "us") {
+      row.stats[point.action].won++;
+    } else {
+      row.stats[point.action].lost++;
+    }
   }
 
-  return [...statsMap.entries()]
-    .map(([playerId, stats]) => {
-      const player = players.find((p) => p.id === playerId);
-      return { playerId, name: player?.name ?? "?", number: player?.number ?? 0, ...stats };
-    })
-    .sort((a, b) => b.total - a.total);
+  return [...map.values()].sort((a, b) => a.number - b.number);
 }
 
 export default function MatchResult({
@@ -46,7 +66,6 @@ export default function MatchResult({
   const currentSet = record?.currentSet;
   const completedSets = record?.completedSets ?? [];
 
-  // 比分總覽：已結束的局 + 進行中的局（要已選發球方才算「開始了」）
   type SetRow = {
     setNumber: number;
     ourScore: number;
@@ -75,128 +94,153 @@ export default function MatchResult({
   const ourSetsWon = completedSets.filter((s) => s.ourScore > s.opponentScore).length;
   const opponentSetsWon = completedSets.filter((s) => s.opponentScore > s.ourScore).length;
 
-  // 合併所有局的球序，用來計算跨全場的防守統計。
-  // completedSets 的 history 在舊資料可能是 undefined，用 ?? [] 補空。
   const allHistory: PointRecord[] = [
     ...completedSets.flatMap((s) => s.history ?? []),
     ...(currentSet?.history ?? []),
   ];
 
-  const defenseStats = buildDefenseStats(allHistory, players);
+  const playerRows = buildPlayerMatrix(allHistory, players);
 
   return (
-    <div className="flex flex-col gap-6 px-4 py-4">
-      {/* ── 比分總覽 ── */}
+    <div className="flex flex-col gap-5 px-4 py-4">
+      {/* ── 比分總覽：每局一張 pill 卡片 ── */}
       <section>
         <h2 className="mb-2 text-sm font-bold text-gray-700">比分總覽</h2>
 
         {setRows.length === 0 ? (
           <p className="text-xs text-muted-foreground">尚未開始記分。</p>
         ) : (
-          <>
-            <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2">
+            <div className="flex gap-2 flex-wrap">
               {setRows.map((s) => {
                 const weWon = s.ourScore > s.opponentScore;
+                const inProgress = s.status === "in-progress";
                 return (
-                  <div key={s.setNumber} className="flex items-center gap-3 text-sm">
-                    <span className="w-14 text-xs text-gray-400">第 {s.setNumber} 局</span>
-                    {/* 贏的那一方分數加粗，輸的那方顏色變淡，視覺上一眼看出勝負 */}
+                  <div
+                    key={s.setNumber}
+                    className={`flex flex-col items-center rounded border px-2.5 py-1 min-w-[40px] text-center ${
+                      inProgress
+                        ? "border-blue-200 bg-blue-50"
+                        : weWon
+                          ? "border-green-200 bg-green-50"
+                          : "border-red-200 bg-red-50"
+                    }`}
+                  >
+                    <span className="text-[10px] leading-none text-gray-400">{s.setNumber}</span>
                     <span
-                      className={`w-6 text-right font-bold tabular-nums ${
-                        weWon ? "text-black" : "text-gray-400"
+                      className={`text-xs font-bold tabular-nums leading-none mt-0.5 ${
+                        inProgress ? "text-blue-600" : weWon ? "text-green-700" : "text-red-600"
                       }`}
                     >
-                      {s.ourScore}
+                      {s.ourScore}:{s.opponentScore}
                     </span>
-                    <span className="text-gray-300">:</span>
-                    <span
-                      className={`w-6 font-bold tabular-nums ${
-                        !weWon ? "text-black" : "text-gray-400"
-                      }`}
-                    >
-                      {s.opponentScore}
-                    </span>
-                    {s.status === "in-progress" ? (
-                      <span className="text-xs text-blue-500">進行中</span>
-                    ) : (
-                      <span className={`text-xs ${weWon ? "text-green-600" : "text-red-500"}`}>
-                        {weWon ? "我方" : "對手"}
-                      </span>
-                    )}
                   </div>
                 );
               })}
             </div>
 
-            {/* 只有至少一局結束才顯示局數小計 */}
             {completedSets.length > 0 && (
-              <div className="mt-3 border-t pt-2 text-xs text-gray-500">
-                局數 {ourSetsWon} : {opponentSetsWon}
-                {ourSetsWon > opponentSetsWon
-                  ? "　我方領先"
-                  : ourSetsWon < opponentSetsWon
-                    ? "　對手領先"
-                    : "　平手"}
+              <div className="text-xs text-gray-500">
+                局數{" "}
+                <span className={ourSetsWon > opponentSetsWon ? "font-bold text-green-700" : ""}>
+                  {ourSetsWon}
+                </span>
+                :
+                <span className={opponentSetsWon > ourSetsWon ? "font-bold text-red-600" : ""}>
+                  {opponentSetsWon}
+                </span>
               </div>
             )}
-          </>
+          </div>
         )}
       </section>
 
-      {/* ── 換人統計 ── */}
+      {/* ── 換人紀錄 ── */}
       <section>
-        <h2 className="mb-2 text-sm font-bold text-gray-700">換人紀錄</h2>
-        <div className="flex gap-6 text-sm">
+        <h2 className="mb-1.5 text-sm font-bold text-gray-700">換人紀錄</h2>
+        <div className="flex gap-5 text-sm">
           <div className="flex flex-col items-center gap-0.5">
-            <span className="text-2xl font-bold tabular-nums">{currentSetSubCount}</span>
-            <span className="text-xs text-muted-foreground">本局換人</span>
+            <span className="text-xl font-bold tabular-nums">{currentSetSubCount}</span>
+            <span className="text-xs text-muted-foreground">本局</span>
           </div>
           <div className="flex flex-col items-center gap-0.5">
-            <span className="text-2xl font-bold tabular-nums">{totalSubCount}</span>
+            <span className="text-xl font-bold tabular-nums">{totalSubCount}</span>
             <span className="text-xs text-muted-foreground">全場累計</span>
           </div>
         </div>
         <p className="mt-1 text-[11px] text-muted-foreground">僅計入一般換人（不含自由球員）。</p>
       </section>
 
-      {/* ── 防守統計 ── */}
+      {/* ── 球員動作統計表 ── */}
       <section>
-        <h2 className="mb-0.5 text-sm font-bold text-gray-700">防守統計</h2>
-        {/* 說明這個數字的來源，讓教練知道為什麼次數可能比實際少 */}
-        <p className="mb-3 text-xs text-muted-foreground">
-          僅計入有畫線手勢記錄的防守動作。得分率 = 防守後我方得分次數 ÷ 防守總次數。
-        </p>
+        <h2 className="mb-2 text-sm font-bold text-gray-700">球員統計</h2>
 
-        {defenseStats.length === 0 ? (
+        {playerRows.length === 0 ? (
           <p className="text-xs text-muted-foreground">
-            尚無防守記錄。在球場上畫線選「防守」動作後，這裡會顯示各球員的防守統計。
+            尚無記錄。在球場上畫線選動作後，這裡會顯示統計。
           </p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full border-collapse text-xs">
               <thead>
-                <tr className="border-b text-left text-xs text-gray-400">
-                  <th className="pb-1 font-normal">球員</th>
-                  <th className="pb-1 text-right font-normal">次數</th>
-                  <th className="pb-1 text-right font-normal">得分次數</th>
-                  <th className="pb-1 text-right font-normal">得分率</th>
+                <tr className="border-b-2 border-gray-300">
+                  <th className="pb-1 text-left text-gray-500 font-normal w-6">#</th>
+                  {ACTIONS.map((a) => (
+                    <th
+                      key={a}
+                      colSpan={2}
+                      className="pb-1 text-center font-semibold text-gray-700 border-l border-gray-200 px-1"
+                    >
+                      {ACTION_LABELS[a]}
+                    </th>
+                  ))}
+                </tr>
+                <tr className="border-b border-gray-200">
+                  <th className="pb-0.5" />
+                  {ACTIONS.flatMap((a) => [
+                    <th
+                      key={`${a}-won`}
+                      className="pb-0.5 text-right font-medium text-green-700 border-l border-gray-200 px-1"
+                    >
+                      得
+                    </th>,
+                    <th
+                      key={`${a}-lost`}
+                      className="pb-0.5 text-right font-medium text-red-600 px-1"
+                    >
+                      失
+                    </th>,
+                  ])}
                 </tr>
               </thead>
               <tbody>
-                {defenseStats.map((stat) => {
-                  const rate = Math.round((stat.won / stat.total) * 100);
-                  return (
-                    <tr key={stat.playerId} className="border-b border-gray-100">
-                      <td className="py-1.5">
-                        <span className="mr-1 text-xs text-gray-400">#{stat.number}</span>
-                        {stat.name}
-                      </td>
-                      <td className="py-1.5 text-right tabular-nums">{stat.total}</td>
-                      <td className="py-1.5 text-right tabular-nums">{stat.won}</td>
-                      <td className="py-1.5 text-right tabular-nums">{rate}%</td>
-                    </tr>
-                  );
-                })}
+                {playerRows.map((row) => (
+                  <tr key={row.playerId} className="border-b border-gray-100">
+                    <td className="py-1 font-semibold text-gray-700">{row.number}</td>
+                    {ACTIONS.flatMap((a) => {
+                      const s = row.stats[a];
+                      const hasData = s.won + s.lost > 0;
+                      return [
+                        <td
+                          key={`${a}-won`}
+                          className={`py-1 text-right tabular-nums border-l border-gray-200 px-1 ${
+                            hasData ? "text-green-700" : "text-gray-300"
+                          }`}
+                        >
+                          {hasData ? s.won : "—"}
+                        </td>,
+                        <td
+                          key={`${a}-lost`}
+                          className={`py-1 text-right tabular-nums px-1 ${
+                            hasData ? "text-red-600" : "text-gray-300"
+                          }`}
+                        >
+                          {hasData ? s.lost : "—"}
+                        </td>,
+                      ];
+                    })}
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>

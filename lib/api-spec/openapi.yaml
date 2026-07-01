@@ -12,6 +12,8 @@ tags:
     description: Health operations
   - name: matches
     description: Matches, and the players/sets/rallies/events nested under a match
+  - name: tactics
+    description: Saved tactics board configurations (rotations, markers, defense ranges)
 paths:
   /healthz:
     get:
@@ -227,6 +229,77 @@ paths:
               schema:
                 $ref: "#/components/schemas/MatchEvent"
 
+  /tactics:
+    get:
+      operationId: listTactics
+      tags: [tactics]
+      summary: List all saved tactics for the current user
+      responses:
+        "200":
+          description: List of tactics
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Tactic"
+    post:
+      operationId: createTactic
+      tags: [tactics]
+      summary: Save a new tactic
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewTactic"
+      responses:
+        "201":
+          description: Created tactic
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tactic"
+
+  /tactics/{tacticId}:
+    parameters:
+      - $ref: "#/components/parameters/TacticId"
+    get:
+      operationId: getTactic
+      tags: [tactics]
+      summary: Get a single tactic by id
+      responses:
+        "200":
+          description: The tactic
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tactic"
+    put:
+      operationId: updateTactic
+      tags: [tactics]
+      summary: Overwrite an existing tactic (name and/or data)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTactic"
+      responses:
+        "200":
+          description: Updated tactic
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tactic"
+    delete:
+      operationId: deleteTactic
+      tags: [tactics]
+      summary: Delete a tactic
+      responses:
+        "204":
+          description: Deleted
+
   /events/{eventId}:
     parameters:
       - $ref: "#/components/parameters/EventId"
@@ -281,6 +354,13 @@ components:
       required: true
       schema:
         type: integer
+    TacticId:
+      name: tacticId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
 
   schemas:
     HealthStatus:
@@ -513,6 +593,45 @@ components:
         source:
           $ref: "#/components/schemas/EventSource"
       required: [sequence, playerId, action, fromX, fromY, toX, toY, source]
+
+    Tactic:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        # TacticsState 的完整快照，以 jsonb 存在 DB，前端直接解析成 TacticsState 型別。
+        data:
+          type: object
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, name, data, createdAt, updatedAt]
+
+    NewTactic:
+      type: object
+      properties:
+        name:
+          type: string
+        data:
+          type: object
+          additionalProperties: true
+      required: [name, data]
+
+    UpdateTactic:
+      type: object
+      properties:
+        name:
+          type: string
+        data:
+          type: object
+          additionalProperties: true
 
     UpdateEvent:
       type: object
