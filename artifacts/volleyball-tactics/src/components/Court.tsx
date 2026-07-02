@@ -5,6 +5,31 @@ import PlayerNode from "./PlayerNode";
 import Markers from "./Markers";
 import DefenseRange from "./DefenseRange";
 
+// 輪轉視圖：viewBox 剛好等於球場本身（0~100 / 0~200），球員只能吸附在 6 個格子裡，
+// 嚴格對應真實比賽規則，不需要、也不應該讓人跑到界外。
+const VIEWBOX_ROTATION = "0 0 100 200";
+
+// 戰術視圖：白板要跟外層 panel 一樣大（不是固定留一小圈邊界），球場（100x200，
+// 1:2 比例）置中畫在裡面。用 wrapper 實際量到的寬高比決定要往哪個方向多留白，
+// 這樣球場才不會被拉伸變形——量不到尺寸（還沒 mount）就先退回跟球場一樣大。
+function computeTacticsViewBox(size: { width: number; height: number } | null): string {
+  if (!size || size.width <= 0 || size.height <= 0) return VIEWBOX_ROTATION;
+  const containerRatio = size.width / size.height;
+  let vw: number, vh: number;
+  if (containerRatio > 0.5) {
+    // panel 比球場（1:2）「寬」：高度吃滿球場的 200，寬度依 panel 比例往外撐開
+    vh = 200;
+    vw = vh * containerRatio;
+  } else {
+    // panel 比球場「窄／高」：寬度吃滿球場的 100，高度依 panel 比例往外撐開
+    vw = 100;
+    vh = vw / containerRatio;
+  }
+  const minX = -(vw - 100) / 2;
+  const minY = -(vh - 200) / 2;
+  return `${minX} ${minY} ${vw} ${vh}`;
+}
+
 export default function Court() {
   const {
     rotations,
@@ -31,7 +56,24 @@ export default function Court() {
   } = useTactics();
 
   const courtRef = useRef<SVGSVGElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const [drawingMarkerId, setDrawingMarkerId] = useState<string | null>(null);
+  // 戰術視圖白板要跟著 wrapper 的實際渲染尺寸縮放，這裡用 ResizeObserver 量測，
+  // 尺寸一變（切視圖、拉視窗、側欄開關擠壓版面）就重算 viewBox。
+  const [wrapperSize, setWrapperSize] = useState<{ width: number; height: number } | null>(null);
+
+  useEffect(() => {
+    if (!wrapperRef.current) return;
+    const el = wrapperRef.current;
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry) {
+        setWrapperSize({ width: entry.contentRect.width, height: entry.contentRect.height });
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   const rotation = rotations[currentRotation];
   if (!rotation) return null;
@@ -48,6 +90,8 @@ export default function Court() {
 
   const handlePointerDown = (e: React.PointerEvent) => {
     // Only process if clicking on the court background/svg directly
+    // （球場外圍那圈白板空間沒有畫任何形狀，點在那裡會直接落在 svg 根元素上，
+    // 跟點在 court-bg 上一樣都算「點空白處」）
     const target = e.target as Element;
     if (target.tagName === "svg" || target.id === "court-bg") {
       setSelectedObjectId(null);
@@ -172,8 +216,15 @@ export default function Court() {
       ? [startingLibero]
       : [];
 
+  // 戰術視圖不套用 max-w-[500px]：白板要撐滿整個中間 panel，不是固定寬度的球場卡片。
+  const tacticsViewBox = computeTacticsViewBox(wrapperSize);
+
   return (
-    <div className="h-full w-full max-w-[500px] mx-auto flex flex-col justify-center items-center relative pt-4 pb-14">
+    <div
+      className={`h-full w-full flex flex-col justify-center items-center relative pt-4 pb-14 ${
+        courtView === "tactics" ? "" : "max-w-[500px] mx-auto"
+      }`}
+    >
       {/* 視圖切換：輪轉視圖只顯示站位圓圈，戰術視圖疊加顯示畫筆標記跟防守範圍 */}
       <div className="flex gap-1 mb-2">
         <button
@@ -198,20 +249,28 @@ export default function Court() {
         </button>
       </div>
 
-      {/* 以高度為主、寬度自動縮：h-full 讓球場撐滿可用垂直空間，
-          aspect-ratio 1/2 表示 width:height = 1:2，所以 width = height / 2。
-          如果改成 w-full + aspectRatio，則 height = 2 * width，在寬螢幕上會讓球場長出視窗。 */}
+      {/* 輪轉視圖：以高度為主、寬度自動縮，h-full 讓球場撐滿可用垂直空間，
+          aspect-ratio 1/2 表示 width:height = 1:2，所以 width = height / 2；粗框、圓角、
+          陰影直接用 CSS 畫在 wrapper 上，因為這個視圖下 wrapper 跟球場永遠一樣大。
+          戰術視圖：wrapper 改成撐滿整個 panel（h-full w-full，不吃 aspect-ratio），
+          球場本身縮小成裡面的一塊，所以粗框改成畫在 SVG 裡、貼著球場的那個矩形上
+          （見下面 court-border 那個 <rect>），不會跟著白板一起被拉大。 */}
       <div
         id="court-wrapper"
-        className="h-full w-auto max-w-full relative bg-white border-4 border-[#111111] rounded-lg shadow-sm"
-        style={{ aspectRatio: "1/2" }}
+        ref={wrapperRef}
+        className={
+          courtView === "tactics"
+            ? "h-full w-full relative"
+            : "h-full w-auto max-w-full relative bg-white border-4 border-[#111111] rounded-lg shadow-sm"
+        }
+        style={courtView === "tactics" ? undefined : { aspectRatio: "1/2" }}
       >
         <svg
           id="court-svg"
           ref={courtRef}
           width="100%"
           height="100%"
-          viewBox="0 0 100 200"
+          viewBox={courtView === "tactics" ? tacticsViewBox : VIEWBOX_ROTATION}
           preserveAspectRatio="none"
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
@@ -254,6 +313,24 @@ export default function Court() {
 
           {/* Court Background */}
           <rect id="court-bg" x="0" y="0" width="100" height="200" fill="#fff" />
+
+          {/* 戰術視圖的球場粗框：輪轉視圖靠 wrapper 的 CSS border 畫框，戰術視圖 wrapper
+              撐滿整個 panel、跟球場不再一樣大，所以框要改成畫在 SVG 裡、貼著球場本身
+              （0,0 到 100,200），才會一直牢牢框住球場、不會被白板一起撐大。
+              要畫在 court-bg 之後（DOM 順序在它後面）才會蓋在球場的白色矩形上面顯示出來。 */}
+          {courtView === "tactics" && (
+            <rect
+              id="court-border"
+              x="0"
+              y="0"
+              width="100"
+              height="200"
+              fill="none"
+              stroke="#111111"
+              strokeWidth="2"
+              rx="3"
+            />
+          )}
 
           <g className="wobbly-svg">
             {/* Center Line (Net) — x 從 0 到 100 貼齊 div 邊框 */}
@@ -381,10 +458,16 @@ export default function Court() {
         </svg>
       </div>
 
-      {/* 自由球員備位區：只在輪轉視圖且有 L 未上場時顯示。
+      {/* 自由球員備位區：只要有 L 未上場就一律顯示，不分輪轉/戰術視圖——
+          跟左側球員名單、球場上的 PlayerNode 一樣，來源/現有球員永遠看得到、拖得動，
+          唯讀限制是由「放下的目標」（handleDrop／PlayerNode 的 canDrag）決定要不要生效，
+          不是靠隱藏來源本身。
+          positions 是兩個視圖共用的「誰在場上」依據（見 useTactics.ts 的 placeLiberoOnCourt），
+          所以「這位 L 在不在場上」的判斷結果在兩個視圖是一致的。
           橘色圓圈坐在球場正下方，跟場上的 PlayerNode 視覺一致。
-          直接用 HTML drag-and-drop（跟左側名單同一套），拖到球場後排就會觸發 handleDrop → placePlayerOnCourt。 */}
-      {courtView === "rotation" && liberoInSpot.length > 0 && (
+          直接用 HTML drag-and-drop（跟左側名單同一套），拖到球場後排就會觸發 handleDrop →
+          輪轉視圖走 placePlayerOnCourt、戰術視圖 + 布置模式走 placePlayerFree。 */}
+      {liberoInSpot.length > 0 && (
         <div className="absolute bottom-3 left-0 right-0 flex flex-col items-center gap-1">
           <span className="text-[9px] text-gray-400 tracking-wide">L 備位 — 拖到後排上場</span>
           <div className="flex gap-2 justify-center">

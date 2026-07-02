@@ -147,6 +147,45 @@ const emptyRotations: RotationState[] = Array(6)
 // 排球規則：自由球員只能在後排（1/5/6 號位），不能輪轉到前排。
 const BACK_ROW_ZONES = new Set([1, 5, 6]);
 
+// 自由球員上場的共用邏輯：不管從輪轉視圖（格子吸附，placePlayerOnCourt）還是
+// 戰術視圖（自由座標，placePlayerFree）上場，都要遵守同一套規則——
+// 同一時間只能有一位 L 在場上、上場時要頂替掉目標位置原本的人。
+// `positions` 是兩個視圖共用的「誰在場上」真正依據，所以這裡永遠寫回 positions，
+// 呼叫端各自決定要不要另外把座標疊進 tacticPositions（純視覺覆蓋，不影響「誰在場上」）。
+// zone 只用來判斷「這個座標蓋到了哪一格」，藉此找出被換下場的人，跟座標系統無關。
+function placeLiberoOnCourt(
+  rot: RotationState,
+  roster: MatchPlayer[],
+  playerId: string,
+  zone: number,
+  coords: { x: number; y: number },
+): RotationState {
+  const liberoIds = new Set(roster.filter((p) => p.role === "L").map((p) => p.id));
+
+  // 先把場上的 L 移除，並還原 liberoReplacement 記錄的被替換者，
+  // 這樣不管原本場上是哪個 L、有沒有 L，都能從乾淨的一般球員站位重新計算。
+  let basePositions = rot.positions.filter((p) => !liberoIds.has(p.playerId));
+  if (rot.liberoReplacement) {
+    basePositions = [...basePositions, rot.liberoReplacement.replacedPosition];
+  }
+
+  // 找目標格子現在站的人（即將被 L 替換的人）
+  const replacedPlayer = basePositions.find((p) => findNearestZone(p.x, p.y) === zone);
+
+  const newPositions = [
+    ...basePositions.filter((p) => findNearestZone(p.x, p.y) !== zone),
+    { playerId, x: coords.x, y: coords.y },
+  ];
+
+  return {
+    ...rot,
+    positions: newPositions,
+    liberoReplacement: replacedPlayer
+      ? ({ liberoId: playerId, replacedPosition: replacedPlayer } as LiberoReplacement)
+      : null,
+  };
+}
+
 export const useTactics = create<TacticsStore>()(
   persist(
     (set, get) => ({
@@ -249,35 +288,18 @@ export const useTactics = create<TacticsStore>()(
             if (!BACK_ROW_ZONES.has(zone)) return state; // 前排拒絕放置
 
             const r = state.currentRotation;
-            const rot = state.rotations[r];
-
-            // 找出這個輪次已經在場上的 L（可能是同一個人重新拖，或另一個 L）
-            const liberoIds = new Set(state.roster.filter((p) => p.role === "L").map((p) => p.id));
-
-            // 先把場上的 L 移除，並還原 liberoReplacement 記錄的被替換者
-            let basePositions = rot.positions.filter((p) => !liberoIds.has(p.playerId));
-            if (rot.liberoReplacement) {
-              basePositions = [...basePositions, rot.liberoReplacement.replacedPosition];
-            }
-
-            // 找目標格子現在站的人（即將被 L 替換的人）
-            const replacedPlayer = basePositions.find((p) => findNearestZone(p.x, p.y) === zone);
-
-            const liberoCoords = getZoneCoords(zone);
-            const newPositions = [
-              ...basePositions.filter((p) => findNearestZone(p.x, p.y) !== zone),
-              { playerId, x: liberoCoords.x, y: liberoCoords.y },
-            ];
-
             const newRotations = [...state.rotations];
-            newRotations[r] = {
-              ...rot,
-              positions: newPositions,
-              liberoReplacement: replacedPlayer
-                ? ({ liberoId: playerId, replacedPosition: replacedPlayer } as LiberoReplacement)
-                : null,
-            };
-            return { rotations: newRotations };
+            newRotations[r] = placeLiberoOnCourt(
+              newRotations[r],
+              state.roster,
+              playerId,
+              zone,
+              getZoneCoords(zone),
+            );
+            // 不管這個 L 是從備位區拖上場、還是直接從名單拖上場，
+            // 都要同步把它設成 startingLiberoId——這樣全域只會追蹤一個「先發」L，
+            // 備位區才不會跟場上狀態脫節（這正是 issue #14 bug 1 的根本原因）。
+            return { rotations: newRotations, startingLiberoId: playerId };
           }
 
           // ── 一般球員邏輯 ──────────────────────────────────────────────────────
@@ -335,7 +357,42 @@ export const useTactics = create<TacticsStore>()(
       placePlayerFree: (playerId, x, y) => {
         get().pushHistory();
         set((state) => {
+          const player = state.roster.find((p) => p.id === playerId);
+          const isLibero = player?.role === "L";
           const r = state.currentRotation;
+
+          // ── 自由球員邏輯 ──────────────────────────────────────────────────────
+          // 戰術視圖的自由座標放置也要遵守跟輪轉視圖一樣的規則：同一時間只能有一位 L
+          // 在場上、上場時要頂替掉目標位置原本的人。
+          // 過去這裡完全沒有 L 的特殊處理，只是把座標塞進 tacticPositions，
+          // 導致兩個 L 可以同時疊在場上、被頂替的人也還留在場上（issue #14 戰術視圖遺留 bug）。
+          if (isLibero) {
+            const zone = findNearestZone(x, y); // 只拿來判斷蓋到了哪個人／哪一格，座標仍用原始 x/y
+            if (!BACK_ROW_ZONES.has(zone)) return state; // 前排拒絕放置
+
+            const newRotations = [...state.rotations];
+            newRotations[r] = placeLiberoOnCourt(newRotations[r], state.roster, playerId, zone, {
+              x,
+              y,
+            });
+
+            // positions 換完人之後，tacticPositions 裡任何屬於「舊 L」或「剛被換下場那位」的
+            // 殘留自由座標都要清掉，不然戰術視圖還是會照著舊資料疊圖，變成幽靈重複站位。
+            const liberoIds = new Set(state.roster.filter((p) => p.role === "L").map((p) => p.id));
+            const replacedId = newRotations[r].liberoReplacement?.replacedPosition.playerId;
+            newRotations[r] = {
+              ...newRotations[r],
+              tacticPositions: [
+                ...newRotations[r].tacticPositions.filter(
+                  (p) => !liberoIds.has(p.playerId) && p.playerId !== replacedId,
+                ),
+                { playerId, x, y },
+              ],
+            };
+            return { rotations: newRotations, startingLiberoId: playerId };
+          }
+
+          // ── 一般球員邏輯 ──────────────────────────────────────────────────────
           const newRotations = [...state.rotations];
           // tacticPositions 存的是戰術視圖裡自由拖曳的站位，不影響 positions（格子輪轉）。
           const filtered = newRotations[r].tacticPositions.filter((p) => p.playerId !== playerId);
@@ -488,6 +545,10 @@ export const useTactics = create<TacticsStore>()(
             newRotations[r] = {
               ...rot,
               positions: newPositions,
+              // 這位 L 如果是在戰術視圖用自由座標上場的，tacticPositions 裡會留著它的座標；
+              // 這裡不清掉的話，positions 雖然移除了，但 tacticPositions 的殘留座標還是會讓
+              // 戰術視圖繼續畫出這個人（右鍵刪除在戰術視圖看起來像沒作用）。
+              tacticPositions: rot.tacticPositions.filter((p) => p.playerId !== playerId),
               liberoReplacement: null,
             };
             return { rotations: newRotations };
