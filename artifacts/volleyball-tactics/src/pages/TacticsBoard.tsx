@@ -1,5 +1,6 @@
 import React, { useEffect } from "react";
-import { useParams } from "wouter";
+import { useParams, Link } from "wouter";
+import { Button } from "@/components/ui/button";
 import LeftPanel from "../components/LeftPanel";
 import RightPanel from "../components/RightPanel";
 import Court from "../components/Court";
@@ -19,18 +20,33 @@ export default function TacticsBoard() {
     }
   }, [match, setRoster]);
 
+  // tournamentId 存在時返回該資料夾頁，否則返回根列表。
+  const backHref = match?.tournamentId ? `/tournaments/${match.tournamentId}` : "/";
+
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-white text-[#111111] font-sans">
-      <div className="w-[260px] border-r-2 border-[#111111] flex-shrink-0 flex flex-col">
-        <LeftPanel />
-      </div>
-      <div className="flex-1 flex flex-col relative overflow-hidden bg-white">
-        <div className="flex-1 p-4 flex items-center justify-center relative min-h-0">
-          <Court />
+    <div className="flex h-screen w-full flex-col overflow-hidden bg-white text-[#111111] font-sans">
+      <header className="flex items-center justify-between border-b-2 border-[#111] px-4 py-3 shrink-0">
+        <Button asChild variant="outline" size="sm">
+          <Link href={backHref}>← 比賽列表</Link>
+        </Button>
+        <h1 className="text-lg font-bold">{match ? `vs ${match.opponent}` : "戰術板"}</h1>
+        <Button asChild variant="outline" size="sm">
+          <Link href={`/matches/${id}/record`}>紀錄比賽</Link>
+        </Button>
+      </header>
+
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+        <div className="w-[260px] border-r-2 border-[#111111] flex-shrink-0 flex flex-col">
+          <LeftPanel />
         </div>
-      </div>
-      <div className="w-[250px] border-l-2 border-[#111111] flex-shrink-0 flex flex-col">
-        <RightPanel />
+        <div className="flex-1 flex flex-col relative overflow-hidden bg-white">
+          <div className="flex-1 p-4 flex items-center justify-center relative min-h-0">
+            <Court />
+          </div>
+        </div>
+        <div className="w-[250px] border-l-2 border-[#111111] flex-shrink-0 flex flex-col">
+          <RightPanel />
+        </div>
       </div>
       <svg className="hidden">
         <filter id="wobbly-filter">

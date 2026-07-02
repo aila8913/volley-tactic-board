@@ -15,7 +15,6 @@ export default function LeftPanel() {
     resetCurrentRotation,
     clearMarkers,
     startingLiberoId,
-    setStartingLiberoId,
   } = useTactics();
   const { id: matchId } = useParams<{ id: string }>();
   const updateMatchPlayers = useMatches((state) => state.updateMatchPlayers);
@@ -84,23 +83,17 @@ export default function LeftPanel() {
                 </span>
                 <span className="w-8 text-gray-500">{p.number}</span>
                 <span className="flex-1">{p.name}</span>
-                {onCourtIds.has(p.id) && <span className="text-[10px] text-gray-500">已上場</span>}
-                {/* L 球員才有「先發」按鈕：點選後該 L 出現在備位區，另一個 L 退出備位區 */}
-                {p.role === "L" && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setStartingLiberoId(p.id === startingLiberoId ? null : p.id);
-                    }}
-                    className={`text-[9px] px-1 py-0.5 rounded font-bold leading-none ${
-                      p.id === startingLiberoId
-                        ? "bg-orange-400 text-white"
-                        : "bg-gray-200 text-gray-500 hover:bg-orange-200"
-                    }`}
-                    title={p.id === startingLiberoId ? "點擊取消先發" : "設為先發自由球員"}
-                  >
-                    先發
-                  </button>
+                {/* 狀態顯示跟一般球員統一，不再用按鈕手動切換先發：
+                    已上場（含 L）沿用同一個「已上場」標籤；
+                    L 沒上場但被指定為先發（在球場備位區等待）則顯示「備位」，
+                    要變成先發只要把它拖到球場後排（Court.tsx 的 placePlayerOnCourt 會自動同步 startingLiberoId）。 */}
+                {onCourtIds.has(p.id) ? (
+                  <span className="text-[10px] text-gray-500">已上場</span>
+                ) : (
+                  p.role === "L" &&
+                  p.id === startingLiberoId && (
+                    <span className="text-[10px] text-[#FF6B00] font-bold">備位</span>
+                  )
                 )}
               </div>
             ))}

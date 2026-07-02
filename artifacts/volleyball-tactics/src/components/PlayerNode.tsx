@@ -34,12 +34,22 @@ export default function PlayerNode({
 
   // 格子吸附模式（非 layout mode）：拖曳中暫時吸附到的格子
   const [dragZone, setDragZone] = useState<number | null>(null);
-  // 自由移動模式（layout mode）：拖曳中的 SVG 座標（0~100 / 0~200 範圍）
+  // 自由移動模式（layout mode）：拖曳中的 SVG 座標（戰術視圖下可以超出 0~100 / 0~200，
+  // 讓球員畫得到界外——可拖曳範圍就是當下 SVG 的 viewBox，白板多大就能拖多遠）
   const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
+  // 自由球員專用：拖曳中的游標是否已經超出整塊白板（目前 viewBox）的下緣，
+  // 放開時視同拖回備位區（不上場）。
+  const [isOverBench, setIsOverBench] = useState(false);
 
   const nodeRef = useRef<SVGGElement>(null);
   const isSelected = selectedObjectId === position.playerId;
-  const bgColor = isLibero ? "#FF6B00" : isFrontRow ? "#CCFF00" : "#FFFFFF";
+  const bgColor = isOverBench
+    ? "#999999"
+    : isLibero
+      ? "#FF6B00"
+      : isFrontRow
+        ? "#CCFF00"
+        : "#FFFFFF";
   const radius = 6;
 
   // 顯示位置計算：
@@ -77,14 +87,32 @@ export default function PlayerNode({
     if (!isDragging || !courtRef.current) return;
     const CTM = courtRef.current.getScreenCTM();
     if (!CTM) return;
-    let rawX = (e.clientX - CTM.e) / CTM.a;
-    let rawY = (e.clientY - CTM.f) / CTM.d;
-    rawX = Math.max(radius, Math.min(100 - radius, rawX));
-    rawY = Math.max(radius, Math.min(200 - radius, rawY));
+    const unclampedX = (e.clientX - CTM.e) / CTM.a;
+    const unclampedY = (e.clientY - CTM.f) / CTM.d;
 
     if (courtView === "tactics") {
+      // 戰術視圖的白板大小會依 panel 尺寸即時變動（見 Court.tsx 的 computeTacticsViewBox），
+      // 不是寫死的常數，所以直接讀 SVG 當下實際的 viewBox 邊界，永遠跟畫面看到的一致。
+      const vb = courtRef.current.viewBox.baseVal;
+      const minX = vb.x;
+      const maxX = vb.x + vb.width;
+      const minY = vb.y;
+      const maxY = vb.y + vb.height;
+
+      // 自由球員專用：游標要真的拖出「整塊白板」（不只是球場本身）的下緣，才視同
+      // 「拖到備位區」——球場下緣到白板下緣之間那圈空間，是刻意留給「球員跑出界外」
+      // 這種戰術註解用的，不能一超過球場邊界就被判定成下場，要判斷未夾範圍前的座標，
+      // 不然下面夾完範圍後永遠不會超過白板邊界。
+      if (isLibero) {
+        setIsOverBench(unclampedY > maxY);
+      }
+      const rawX = Math.max(minX + radius, Math.min(maxX - radius, unclampedX));
+      const rawY = Math.max(minY + radius, Math.min(maxY - radius, unclampedY));
       setDragPos({ x: rawX, y: rawY });
     } else {
+      // 輪轉視圖：嚴格限制在球場範圍內，格子吸附一定要對到真正的比賽位置。
+      const rawX = Math.max(radius, Math.min(100 - radius, unclampedX));
+      const rawY = Math.max(radius, Math.min(200 - radius, unclampedY));
       setDragZone(findNearestZone(rawX / 100, rawY / 200));
     }
   };
@@ -94,9 +122,15 @@ export default function PlayerNode({
     (e.target as Element).releasePointerCapture(e.pointerId);
 
     if (courtView === "tactics" && dragPos) {
-      // 戰術視圖：自由座標存進 tacticPositions
-      placePlayerFree(position.playerId, dragPos.x / 100, dragPos.y / 200);
+      if (isLibero && isOverBench) {
+        // 拖出球場下緣＝送回備位、不上場，等同右鍵移除，只是換一個拖曳手勢完成。
+        removePlayerFromCourt(position.playerId);
+      } else {
+        // 戰術視圖：自由座標存進 tacticPositions
+        placePlayerFree(position.playerId, dragPos.x / 100, dragPos.y / 200);
+      }
       setDragPos(null);
+      setIsOverBench(false);
     } else if (courtView === "rotation" && dragZone !== null) {
       // 輪轉視圖：格子吸附並推算全部 6 輪
       placePlayerOnCourt(position.playerId, dragZone);
