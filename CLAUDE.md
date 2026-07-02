@@ -27,7 +27,8 @@ artifacts/   deployable apps (each independently runnable)
   volleyball-tactics/ main frontend (Vite + React)
   mockup-sandbox/     design/mockup sandbox, not shipped
 lib/         shared packages, imported by artifacts (not run directly)
-  db/                 Drizzle schema + DB client (schema/index.ts is currently empty — no tables yet)
+  db/                 Drizzle schema + DB client (schema/index.ts defines matches/players/sets/rallies/
+                      events/tactics — see "Current gaps" below)
   api-spec/           openapi.yaml + orval.config.ts (codegen source)
   api-client-react/   generated — do not hand-edit, regenerate via codegen
   api-zod/            generated — do not hand-edit, regenerate via codegen
@@ -59,11 +60,13 @@ and in `replit.md`.
 - No test framework is configured (no vitest/jest, no `*.test.ts` files anywhere).
 - ESLint (`eslint.config.mjs`) and Prettier (`.prettierrc.json`) are now configured at the root — run via
   `pnpm run lint` / `pnpm run format`.
-- `lib/db/src/schema/index.ts` now defines `matches` / `players` / `sets` / `rallies` / `events` (see
-  `docs/db-schema-spec.md`); not pushed to a real database yet (`DATABASE_URL` needed first).
+- `lib/db/src/schema/index.ts` defines `matches` / `players` / `sets` / `rallies` / `events` (see
+  `docs/db-schema-spec.md`) plus a `tactics` table backing the tactics-board save/load feature, which is
+  pushed and live (dev DB) — `artifacts/api-server/src/routes/tactics.ts` reads/writes it via Drizzle.
 - `lib/api-spec/openapi.yaml` covers the match-recording feature (see `docs/api-spec.md`); backend routes
-  for it aren't implemented yet (`artifacts/api-server/src/routes/` only has `/healthz`), and the frontend
-  doesn't call it yet either.
+  for match-recording specifically aren't implemented yet (`artifacts/api-server/src/routes/` currently
+  has `/healthz` and `tactics.ts`, not match-recording routes), and the frontend doesn't call the
+  match-recording API yet either.
 
 Don't invent commands like `pnpm test` or `pnpm lint` — they don't exist. If asked to verify changes,
 typecheck (`pnpm run typecheck`) is currently the only automated check available.

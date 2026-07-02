@@ -33,6 +33,11 @@ numbers.
 2. **Check the current backlog.** Run `gh issue list --state open --limit 100`. Cross-
    reference against what happened this session:
    - Work that this session's commits/diff appear to **finish** → candidate to close.
+   - **Design decisions that changed or were abandoned this session** → close the
+     affected issue immediately with a one-line reason (e.g. "decided not to implement",
+     "replaced by #NN", "design changed to X"). Don't leave stale open issues that no
+     longer reflect intent — they waste time in future sessions when you have to re-judge
+     whether they're still valid.
    - New gaps/ideas surfaced this session that aren't already tracked → candidate to
      create as new issues.
    - If `docs/tactics-board-todo.md` (or any other legacy TODO doc) still has unmigrated

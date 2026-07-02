@@ -9,8 +9,7 @@
 > Read this file, plus `gh issue list --state open` and recent `git log`, at the start
 > of a new session instead of re-exploring the whole codebase from scratch.
 
-_Last updated: 2026-07-02 (after PR #23 merge — libero substitution fix, tactics-view
-whiteboard, header nav)_
+_Last updated: 2026-07-02 (session: issue planning — added #24 複製比賽, #25 先發/先接切換; no code changes)_
 
 ## Current state
 
@@ -51,9 +50,18 @@ whiteboard, header nav)_
 - Tactics are persisted via PostgreSQL through the REST API (see commit `096a19f`).
   Full tactic management works: `activeProjectId` tracks which tactic is open, "save"
   overwrites it while "save as" always creates a new one, plus rename and delete.
-- Backend (`artifacts/api-server`) only has `/healthz` — the match-recording API routes
-  described in `docs/api-spec.md` are not implemented yet, and the frontend doesn't call
-  them yet either.
+- Backend (`artifacts/api-server`) has `/healthz` plus tactics routes
+  (`routes/tactics.ts`, registered in `routes/index.ts`) backing the tactics-save/load
+  flow above via Drizzle — it's not "only `/healthz`" (that claim in `CLAUDE.md`'s
+  "Current gaps" section is stale too, found while investigating deployment prep in
+  #26). The match-recording API routes described in `docs/api-spec.md` are still not
+  implemented, and the frontend doesn't call them yet either.
+- The dev-only path from frontend to backend relies on a Vite `server.proxy` rule
+  (`artifacts/volleyball-tactics/vite.config.ts`) forwarding `/api/*` to the API server,
+  and the generated API client's `baseUrl` is hardcoded to the relative path `/api`
+  (`lib/api-spec/orval.config.ts`). This assumes frontend and backend share an origin —
+  fine for local dev, but it's an open question for real deployment if they end up on
+  different hosts (see #26).
 - `docs/tactics-board-todo.md`'s "還沒做的事" section only pointed at #10/#12/#13, which
   are now all closed — that doc's remaining content is purely historical
   design-rationale notes at this point, no action needed on it.
@@ -79,8 +87,17 @@ status — the list below is a snapshot, not guaranteed up to date):
   球線軌跡記錄。
 - [#22](https://github.com/aila8913/volley-tatic-board/issues/22) — 動作分類擴充與重新
   設計（攻擊/防守/發球/犯規）。
+- [#24](https://github.com/aila8913/volley-tatic-board/issues/24) — 複製比賽：以現有人員
+  配置為範本快速建立新場次，複製後彈出編輯 dialog 讓使用者確認對手名稱和日期。
+- [#25](https://github.com/aila8913/volley-tatic-board/issues/25) — 先發/先接切換：LeftPanel
+  新增 checkbox，先接時整體輪次顯示往後退一格（`(r+5)%6`），只影響 display offset，
+  底層 `rotations[]` 資料不動。
 - Backend match-recording API routes (`docs/api-spec.md`) still unimplemented; frontend
   doesn't call them yet either.
+- [#26](https://github.com/aila8913/volley-tatic-board/issues/26) — 部署準備：讓使用者
+  可以自行找時間試用（換雲端 Postgres、後端放 Render/Railway、前端放 Vercel/Netlify），
+  含前後端目前假設同源（相對路徑 `/api`）的問題，部署前要先決定同源轉發或改用可設定的
+  baseUrl + CORS。
 
 ## Recently closed
 
