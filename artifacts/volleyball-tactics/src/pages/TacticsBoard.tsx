@@ -1,16 +1,16 @@
 import React, { useEffect } from "react";
 import { useParams, Link } from "wouter";
 import { Button } from "@/components/ui/button";
-import LeftPanel from "../components/LeftPanel";
-import RightPanel from "../components/RightPanel";
+import RotationTable from "../components/RotationTable";
+import TacticsBoardPanel from "../components/TacticsBoardPanel";
 import Court from "../components/Court";
 import { useMatches } from "../hooks/useMatches";
-import { useTactics } from "../hooks/useTactics";
+import { useRotationTable } from "../hooks/useRotationTable";
 
 export default function TacticsBoard() {
   const { id } = useParams<{ id: string }>();
   const match = useMatches((state) => state.matches.find((m) => m.id === id));
-  const setRoster = useTactics((state) => state.setRoster);
+  const setRoster = useRotationTable((state) => state.setRoster);
 
   // 進入戰術板時，把這場比賽名單帶進來，這樣球員設定才會跟外面比賽列表輸入的資訊一致。
   // 只在比賽資料本身變動時才重新同步，不然每次 render 都會跑。
@@ -31,13 +31,13 @@ export default function TacticsBoard() {
         </Button>
         <h1 className="text-lg font-bold">{match ? `vs ${match.opponent}` : "戰術板"}</h1>
         <Button asChild variant="outline" size="sm">
-          <Link href={`/matches/${id}/record`}>紀錄比賽</Link>
+          <Link href={`/matches/${id}/record`}>計分表</Link>
         </Button>
       </header>
 
       <div className="flex flex-1 min-h-0 overflow-hidden">
         <div className="w-[260px] border-r-2 border-[#111111] flex-shrink-0 flex flex-col">
-          <LeftPanel />
+          <RotationTable />
         </div>
         <div className="flex-1 flex flex-col relative overflow-hidden bg-white">
           <div className="flex-1 p-4 flex items-center justify-center relative min-h-0">
@@ -45,7 +45,7 @@ export default function TacticsBoard() {
           </div>
         </div>
         <div className="w-[250px] border-l-2 border-[#111111] flex-shrink-0 flex flex-col">
-          <RightPanel />
+          <TacticsBoardPanel />
         </div>
       </div>
       <svg className="hidden">

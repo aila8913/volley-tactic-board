@@ -11,6 +11,12 @@ const zoneCoords = {
 
 const shiftSequence = [1, 6, 5, 4, 3, 2];
 
+// 排球規則：自由球員只能在後排（1/5/6 號位），不能輪轉到前排。
+// 放在這裡（而不是某個 store 檔案裡）是因為輪轉表（格子吸附上場）跟戰術板
+// （戰術視圖自由拖曳上場）都要檢查這條規則，兩個 store 各自獨立、不互相 import
+// 對方的實作細節，所以共用的規則常數抽到大家都會 import 的 rotationLogic.ts。
+export const BACK_ROW_ZONES = new Set([1, 5, 6]);
+
 // 給定「輪轉了幾次」，回傳某個起始號位現在實際落在哪個號位。
 export function rotateZone(startZone: number, rotation: number): number {
   const currentIndex = shiftSequence.indexOf(startZone);

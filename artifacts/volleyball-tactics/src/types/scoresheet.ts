@@ -1,6 +1,7 @@
-// 紀錄模式（比賽期間快速記分）用的型別，跟戰術板（types/tactics.ts）的輪轉是分開的概念：
-// 戰術板的「目前輪次」是教練手動選來編輯/檢視戰術用的，紀錄模式的輪轉則是跟著比分自動算出來、
-// 反映場上真實狀況，兩者不能共用同一個欄位，所以獨立開一份 store（hooks/useRecording.ts）。
+// 計分表（比賽期間快速記分）用的型別，跟輪轉表/戰術板（types/rotationTable.ts、
+// types/tacticsBoard.ts）的輪轉是分開的概念：輪轉表的「目前輪次」是教練手動選來
+// 編輯/檢視戰術用的，計分表的輪轉則是跟著比分自動算出來、反映場上真實狀況，
+// 兩者不能共用同一個欄位，所以獨立開一份 store（hooks/useScoreSheet.ts）。
 
 // 發球方是哪一邊：'us' 是我方，'opponent' 是對手。我方輪轉用真實球員名單畫位置；
 // 對手沒有名單資料，只追蹤號位輪轉（見 lib/rotationLogic.ts 的 getZoneLayout）。
@@ -21,7 +22,7 @@ export interface PointRecord {
   action?: PlayAction;
   touchedBy?: {
     side: Side;
-    // 我方球員才有 playerId（對手只有號位沒有名單，見 RecordingCourt.tsx）。
+    // 我方球員才有 playerId（對手只有號位沒有名單，見 ScoreSheetCourt.tsx）。
     playerId?: string;
     zone?: number;
   };
@@ -47,7 +48,12 @@ export interface CompletedSet {
   history: PointRecord[];
 }
 
-export interface MatchRecordingState {
+export interface ScoreSheetState {
   currentSet: SetRecordingState;
   completedSets: CompletedSet[];
+  // 自由球員即時替補：記錄目前正在替補中的球員 id，null 代表沒有 L 在場上頂替別人。
+  // 這個欄位以前放在戰術板共用的 store 裡（全域唯一一份），但比賽是一場一場分開記錄的，
+  // 放在全域會導致切換不同比賽的計分表時互相污染彼此的替補狀態——所以搬來這裡，
+  // 跟著 recordingsByMatch 用 matchId 分開存，才是它真正該待的地方。
+  liberoSubstitution: string | null;
 }

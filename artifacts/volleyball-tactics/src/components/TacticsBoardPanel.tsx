@@ -7,8 +7,9 @@ import {
   useDeleteTactic,
   getListTacticsQueryKey,
 } from "@workspace/api-client-react";
-import { useTactics, ToolType } from "../hooks/useTactics";
-import { TacticsState } from "../types/tactics";
+import { useTacticsBoard, ToolType } from "../hooks/useTacticsBoard";
+import { useRotationTable } from "../hooks/useRotationTable";
+import { SavedTacticData } from "../types/tacticsBoard";
 import { exportCourtAsPng, exportStateAsJson, importStateFromJson } from "../lib/exportUtils";
 import { Toaster } from "@/components/ui/toaster";
 import { useToast } from "@/hooks/use-toast";
@@ -24,7 +25,7 @@ const COLORS = [
   "#111111",
 ];
 
-export default function RightPanel() {
+export default function TacticsBoardPanel() {
   const {
     activeTool,
     setActiveTool,
@@ -36,9 +37,7 @@ export default function RightPanel() {
     loadProject,
     importState,
     buildSnapshot,
-    rotations,
-    currentRotation,
-    setCurrentRotation,
+    tacticsByRotation,
     removeMarker,
     removeDefenseRange,
     selectedObjectId,
@@ -50,7 +49,9 @@ export default function RightPanel() {
     isLayoutMode,
     setLayoutMode,
     setCourtView,
-  } = useTactics();
+  } = useTacticsBoard();
+  const currentRotation = useRotationTable((state) => state.currentRotation);
+  const setCurrentRotation = useRotationTable((state) => state.setCurrentRotation);
 
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -144,12 +145,13 @@ export default function RightPanel() {
     setCurrentRotation(originalRotation);
   };
 
+  // 匯出 JSON：直接用 buildSnapshot() 組出完整資料，不再直接讀 localStorage 的原始字串——
+  // 拆成兩個 store 之後，「目前狀態」分散在 volleyboard_rotationtable 跟
+  // volleyboard_tacticsboard 兩把 localStorage key 裡，靠字串組合會很脆弱，
+  // buildSnapshot() 已經知道怎麼把兩邊資料併成一份，直接重用最單純。
   const handleExportJSON = () => {
-    const stateStr = localStorage.getItem("volleyboard_current");
-    if (stateStr) {
-      exportStateAsJson(JSON.parse(stateStr).state, situationLabel);
-      toast({ title: "匯出成功", description: "JSON 下載中..." });
-    }
+    exportStateAsJson(buildSnapshot(), situationLabel);
+    toast({ title: "匯出成功", description: "JSON 下載中..." });
   };
 
   const handleImportJSON = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -166,9 +168,9 @@ export default function RightPanel() {
   };
 
   // 儲存：有 activeProjectId → 覆寫；沒有（草稿）→ 新建
-  // TacticsState を Record<string, unknown> にキャストするのは、
+  // SavedTacticData を Record<string, unknown> にキャストするのは、
   // codegen が additionalProperties:true から生成した NewTacticData の型要件を満たすため。
-  // 実際には TacticsState をそのまま JSON として送る。
+  // 実際には SavedTacticData をそのまま JSON として送る。
   const handleSave = () => {
     const data = buildSnapshot() as unknown as Record<string, unknown>;
     if (activeProjectId) {
@@ -184,7 +186,7 @@ export default function RightPanel() {
     createTactic.mutate({ data: { name: projectSituation, data } });
   };
 
-  const currentRotState = rotations[currentRotation];
+  const currentRotState = tacticsByRotation[currentRotation];
   const selectedRange = currentRotState?.defenseRanges.find((dr) => dr.id === selectedObjectId);
 
   // 把已儲存戰術的名稱送 API 更新；名稱沒變或是空的就只關閉 input
@@ -228,7 +230,7 @@ export default function RightPanel() {
                 <span
                   className="truncate flex-1 cursor-pointer hover:underline"
                   onClick={() => {
-                    loadProject(t.data as unknown as TacticsState, t.id, t.name);
+                    loadProject(t.data as unknown as SavedTacticData, t.id, t.name);
                     toast({ title: "專案已載入" });
                   }}
                 >
