@@ -69,11 +69,11 @@ numbers.
    - Close: `gh issue close <n> --comment "Resolved by <commit-hash-or-summary>"`
    - Create: `gh issue create --title "..." --body "..."` — write bodies with enough
      context that a future session (or future you) understands _why_, not just _what_.
-     For large-scope items that need careful design before implementation (this
-     project's convention, see existing entries in `docs/tactics-board-todo.md` that say
-     "範圍很大，先進 Plan 模式"), consider labeling with a `needs-plan` label — create it
-     with `gh label create needs-plan --description "Design in Plan mode before
-implementing" --color FBCA04` if it doesn't exist yet.
+     Apply labels per the taxonomy in [CONTRIBUTING.md](../../../CONTRIBUTING.md) — type
+     - area, plus `needs-plan` for large-scope items that need design discussion before
+       implementation (this project's convention, see existing entries in
+       `docs/tactics-board-todo.md` that say "範圍很大，先進 Plan 模式") and `priority:*`
+       only when genuinely urgent/essential, not by default.
 
 5. **Refresh `docs/PROGRESS.md`.** Overwrite (don't append to) the "Current state" and
    "Known gaps / next big pieces" sections to reflect reality after this session,
