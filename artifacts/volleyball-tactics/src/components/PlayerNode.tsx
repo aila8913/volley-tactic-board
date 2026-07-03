@@ -28,13 +28,16 @@ export default function PlayerNode({
     activeTool,
     isLayoutMode,
     courtView,
-    removePlayerTacticPositions,
+    removePlayerFromTacticView,
   } = useTacticsBoard();
-  // 從場上移除球員是輪轉表 + 戰術板兩邊都要處理的事：輪轉表清掉站位，戰術板清掉
-  // 戰術視圖裡殘留的自由座標，兩個 store 各管各的，這裡（呼叫端）一次呼叫兩邊。
+  // 輪轉視圖跟戰術視圖的「移除」現在是兩件完全獨立的事：輪轉視圖動的是輪轉表的
+  // 即時站位，戰術視圖只動這張快照（tacticPositions），彼此不影響對方。
   const removeFromCourt = (playerId: string) => {
-    removePlayerFromCourt(playerId);
-    removePlayerTacticPositions(playerId);
+    if (courtView === "tactics") {
+      removePlayerFromTacticView(playerId);
+    } else {
+      removePlayerFromCourt(playerId);
+    }
   };
   const [isDragging, setIsDragging] = useState(false);
 

@@ -31,9 +31,8 @@ const emptyRotations: RotationPositions[] = Array(6)
   .fill(null)
   .map(() => ({ positions: [], liberoReplacement: null }));
 
-// 自由球員上場的共用邏輯：不管從輪轉視圖（格子吸附，placePlayerOnCourt）還是
-// 戰術板的戰術視圖（自由座標，戰術板呼叫下面的 placeLiberoFree）上場，都要遵守同一套
-// 規則——同一時間只能有一位 L 在場上、上場時要頂替掉目標位置原本的人。
+// 自由球員上場的共用邏輯（輪轉視圖，格子吸附）：同一時間只能有一位 L 在場上、
+// 上場時要頂替掉目標位置原本的人。戰術布置現在是獨立的自由畫布，不會呼叫這裡。
 // zone 只用來判斷「這個座標蓋到了哪一格」，藉此找出被換下場的人，跟座標系統無關。
 function placeLiberoOnCourt(
   rot: RotationPositions,
@@ -77,15 +76,6 @@ interface RotationTableStore extends RotationTableData {
   // 已經在場上的人拖到別的格子，都是呼叫這個。放開時格子已經有人會直接互換位置；
   // 這個格子排定之後，其他 5 個輪次會依照「輪轉了幾格」自動推算，不用每輪都重新拖。
   placePlayerOnCourt: (playerId: string, zone: number, referenceRotation?: number) => void;
-  // 給戰術板的「戰術視圖」自由拖曳自由球員用：一樣要遵守「同時只能一位 L 在場上、
-  // 上場要頂替後排球員」的規則，只是座標不吸附格子。戰術板自己不擁有站位資料，
-  // 所以這個動作放在輪轉表這邊，讓戰術板呼叫（見 hooks/useTacticsBoard.ts 的 placePlayerFree）。
-  placeLiberoFree: (
-    rotationIndex: number,
-    playerId: string,
-    zone: number,
-    coords: { x: number; y: number },
-  ) => void;
   // 把球員從所有 6 個輪次的站位裡移除（右鍵刪除、3×2 格子的「×」按鈕用這個）。
   removePlayerFromCourt: (playerId: string) => void;
   // 只清空目前輪次的站位（LeftPanel「重置站位」按鈕的一部分——按鈕還會另外呼叫
@@ -200,20 +190,6 @@ export const useRotationTable = create<RotationTableStore>()(
           });
 
           return { rotations: newRotations };
-        });
-      },
-
-      placeLiberoFree: (rotationIndex, playerId, zone, coords) => {
-        set((state) => {
-          const newRotations = [...state.rotations];
-          newRotations[rotationIndex] = placeLiberoOnCourt(
-            newRotations[rotationIndex],
-            state.roster,
-            playerId,
-            zone,
-            coords,
-          );
-          return { rotations: newRotations, startingLiberoId: playerId };
         });
       },
 
