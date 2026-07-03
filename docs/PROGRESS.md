@@ -9,15 +9,34 @@
 > Read this file, plus `gh issue list --state open` and recent `git log`, at the start
 > of a new session instead of re-exploring the whole codebase from scratch.
 
-_Last updated: 2026-07-03 (session: renamed/split the tactics board into three
-independent features, then decoupled tactics-board editing from live rotation-table
-state; see below)_
+_Last updated: 2026-07-03 (session: added onboarding docs for an incoming
+frontend/UI-UX teammate — root `README.md`, `docs/onboarding.md`, plus linking them up
+with the `CONTRIBUTING.md` another session had just written; see below)_
 
 ## Current state
 
-- On `main`, latest commit `a0a0f65`. Working tree has one pre-existing uncommitted
-  change (`CLAUDE.md`, not part of this session's work — left as-is) plus the usual
-  untracked personal note file (`排球比賽的特性.txt`).
+- On `main`, latest commit `af228db` (PR #33). Working tree clean.
+- **New human-facing onboarding docs exist** (PR #33), written for a teammate who is new
+  to programming/Git/GitHub/AI-agent collaboration (design/PM background):
+  - Root [`README.md`](../README.md) — project one-liner, points first to
+    `docs/flow-diagrams.html` for a fast mental model before reading code, tech-stack
+    table, quick-start commands, repo layout guide (what's editable vs. generated), and
+    links out to the other two docs.
+  - [`docs/onboarding.md`](./onboarding.md) — zero-background primer on what Git/GitHub/
+    an AI agent (Claude Code) actually are, an environment-install checklist, and what
+    `CLAUDE.md` plus the `catch-up`/`ship`/`wrap-up` skills do. Links out to
+    `CONTRIBUTING.md` for the concrete commit/PR/label mechanics rather than duplicating
+    them.
+  - `CONTRIBUTING.md` (created by another session alongside the new issue-label
+    taxonomy) had its opening section reworked this session to point at `README.md`'s
+    quick-start instead of `CLAUDE.md` (which only lists env-var names, not runnable
+    commands), and `.claude/skills/wrap-up/SKILL.md`'s label-creation instructions were
+    updated to reference `CONTRIBUTING.md`'s taxonomy instead of a one-off `needs-plan`
+    snippet, so the label rules live in one place.
+- Also landed since the last real update to this file: PR #31 (offline
+  `docs/flow-diagrams.html`, already reflected below) and PR #32 (fixed the `ship` skill
+  to branch _before_ committing, avoiding local/`origin` `main` divergence after
+  squash-merge).
 - **The former single "tactics board" is now three independently-named features**, both
   in conversation and in code (PR #28):
   - **輪轉表 (rotation table)** — `components/RotationTable.tsx` (was `LeftPanel.tsx`) +
