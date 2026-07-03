@@ -9,62 +9,68 @@
 > Read this file, plus `gh issue list --state open` and recent `git log`, at the start
 > of a new session instead of re-exploring the whole codebase from scratch.
 
-_Last updated: 2026-07-02 (session: issue planning — added #24 複製比賽, #25 先發/先接切換; no code changes)_
+_Last updated: 2026-07-03 (session: renamed/split the tactics board into three
+independent features, then decoupled tactics-board editing from live rotation-table
+state; see below)_
 
 ## Current state
 
-- On `main`, latest commit `def20be` (merge of PR #23). Working tree is clean except an
-  untracked personal note file (`排球比賽的特性.txt`, not part of the codebase).
-- Frontend (`artifacts/volleyball-tactics`) has a working tactics board: drag-and-drop
-  player placement onto 6 court zones, rotation auto-calculation, layout-mode-gated
-  drawing tools (arrows/lines/attack-line/text/volleyball + defense-range shapes), and a
-  match-recording page with a split-panel result view (`MatchResult.tsx`).
-- **Libero (自由球員) substitution logic is now fully correct in both court views**
-  (closes #14 — see PR #23, commit `5dcc4ed`, plus the follow-up fixes in the same PR):
-  - `placePlayerOnCourt` (rotation view) and `placePlayerFree` (tactics view) share one
-    substitution helper (`placeLiberoOnCourt` in `useTactics.ts`) — only one libero can
-    ever be on court at a time, back-row-only is enforced in both views, and
-    `startingLiberoId` stays in sync regardless of which view triggered the swap.
-  - Right-click removal in tactics view now also clears the leftover `tacticPositions`
-    entry (previously only `positions` was cleared, so the removed libero kept
-    rendering).
-  - LeftPanel no longer has a manual "先發" toggle button — status is shown the same way
-    as regular players ("已上場" / "備位"), matching regular drag-based interaction.
-  - Dragging a libero past the court's/whiteboard's bottom edge in tactics view sends
-    them back to the bench (same effect as right-click removal), gated so it doesn't
-    conflict with the new out-of-bounds drawing feature below.
-- **Tactics view ("戰術視圖") is now a resizable whiteboard**, not a fixed-size court
-  card:
-  - The SVG viewBox is computed dynamically (`Court.tsx`, `computeTacticsViewBox` +
-    `ResizeObserver`) to exactly match the center panel's rendered aspect ratio, so the
-    court (still logically 100x200 / 1:2) sits centered inside it without distortion.
-    Rotation view is unaffected — it stays strictly clamped to the real court/6 zones.
-  - Players, arrows, markers, and defense-range shapes can now be placed/drawn outside
-    the court boundary (illustrating players running out of bounds, arrows flying off,
-    off-court notes). The thick court border and rounded corners are drawn as an SVG
-    `<rect id="court-border">` around the literal court sub-rectangle (not the whole
-    whiteboard) so the frame always hugs the real court regardless of panel size.
-  - No background color distinction between "court" and "whiteboard margin" — just the
-    border marks the boundary (per explicit user preference; an earlier gray-fill
-    version was reverted).
-- Tactics are persisted via PostgreSQL through the REST API (see commit `096a19f`).
-  Full tactic management works: `activeProjectId` tracks which tactic is open, "save"
-  overwrites it while "save as" always creates a new one, plus rename and delete.
-- Backend (`artifacts/api-server`) has `/healthz` plus tactics routes
-  (`routes/tactics.ts`, registered in `routes/index.ts`) backing the tactics-save/load
-  flow above via Drizzle — it's not "only `/healthz`" (that claim in `CLAUDE.md`'s
-  "Current gaps" section is stale too, found while investigating deployment prep in
-  #26). The match-recording API routes described in `docs/api-spec.md` are still not
-  implemented, and the frontend doesn't call them yet either.
-- The dev-only path from frontend to backend relies on a Vite `server.proxy` rule
-  (`artifacts/volleyball-tactics/vite.config.ts`) forwarding `/api/*` to the API server,
-  and the generated API client's `baseUrl` is hardcoded to the relative path `/api`
-  (`lib/api-spec/orval.config.ts`). This assumes frontend and backend share an origin —
-  fine for local dev, but it's an open question for real deployment if they end up on
-  different hosts (see #26).
-- `docs/tactics-board-todo.md`'s "還沒做的事" section only pointed at #10/#12/#13, which
-  are now all closed — that doc's remaining content is purely historical
-  design-rationale notes at this point, no action needed on it.
+- On `main`, latest commit `a0a0f65`. Working tree has one pre-existing uncommitted
+  change (`CLAUDE.md`, not part of this session's work — left as-is) plus the usual
+  untracked personal note file (`排球比賽的特性.txt`).
+- **The former single "tactics board" is now three independently-named features**, both
+  in conversation and in code (PR #28):
+  - **輪轉表 (rotation table)** — `components/RotationTable.tsx` (was `LeftPanel.tsx`) +
+    `hooks/useRotationTable.ts` (was part of `useTactics.ts`). Owns `roster`, per-rotation
+    `positions`/`liberoReplacement`, `currentRotation`, `startingLiberoId`, `circleLabel`.
+  - **戰術板 (tactics board)** — `components/TacticsBoardPanel.tsx` (was `RightPanel.tsx`)
+    - `hooks/useTacticsBoard.ts`. Owns `tacticsByRotation` (markers/defense
+      ranges/tactics-view positions), tool state, undo/redo, project save/load.
+  - **計分表 (scoresheet)** — `pages/ScoreSheet.tsx` (was `MatchRecording.tsx`) +
+    `hooks/useScoreSheet.ts` (was `useRecording.ts`), plus renamed
+    `ScoreSheetCourt.tsx`/`ScoreSheetStats.tsx`. `liberoSubstitution` moved from the
+    shared tactics store into `ScoreSheetState`, keyed per matchId (previously a single
+    global value that would leak across different matches' scoresheets — fixed as part
+    of the split).
+  - `pages/TacticsBoard.tsx` still hosts 輪轉表 (left) + `Court.tsx` (center) + 戰術板
+    (right) **simultaneously side by side** — a same-day attempt to make them a
+    page-flip (only one mounted at a time) was tried and reverted; the user wants both
+    always visible.
+- **Tactics-board editing is now a one-time snapshot, not a live view of rotation-table
+  data** (same-day follow-up after the split, PR #30):
+  - Clicking "戰術布置" calls `useTacticsBoard.enterTacticsLayout()`, which copies
+    `useRotationTable`'s current-rotation positions into `tacticPositions` once, then
+    editing is fully independent — nothing written in 戰術布置 flows back to
+    `useRotationTable` anymore, including the libero (no more back-row-only rule or
+    `startingLiberoId` sync while in tactics view; it's just a plain marker there now).
+    Every click on "戰術布置" re-snapshots and overwrites whatever was there — there is
+    no "resume"; to keep edits, save as a tactic and reload it.
+  - A separate "編輯" button (disabled until a saved tactic is loaded from the list)
+    resumes editing the _currently loaded_ data as-is, without re-snapshotting — this is
+    the path for editing a previously-saved tactic.
+  - Removing a player branches by which view is active: rotation view still calls
+    `useRotationTable.removePlayerFromCourt`; tactics view now calls
+    `useTacticsBoard.removePlayerFromTacticView` (local to the current snapshot only).
+    The old cross-store cleanup action was removed as unnecessary.
+  - Layout-mode footer is now **取消 / 儲存 / 另存新檔** (cancel discards without
+    saving and returns to rotation view; "＋新建空白戰術" was removed entirely, along
+    with the now-dead `newProject` action).
+  - **Fixed a real bug found while testing this**: `Markers.tsx` (arrows/dashed
+    lines/attack lines/text/volleyball icons) had no drag-to-move logic at all — only
+    click-to-select — unlike `DefenseRange.tsx` which already supported dragging. Added
+    the same pointer-capture drag pattern to all marker types.
+- **Operation-flow / state-machine reference docs exist for all three features** plus a
+  page-transition overview, saved as a self-contained offline file at
+  `docs/flow-diagrams.html` (open directly in a browser, no dev server needed) — closes
+  #27. Keep this updated per the `wrap-up` skill's step for it (overwrite the "recent
+  changes" callout each session, don't accumulate one).
+- New UI bugs found while manually testing this session's changes are tracked in
+  [#29](https://github.com/aila8913/volley-tatic-board/issues/29) (not fixed yet):
+  court bottom boundary line too thin in tactics view; question of why libero defaults
+  to the bench slot; "重置站位" has no confirmation/undo; "← 比賽列表" should be
+  available on every screen.
+- Backend (`artifacts/api-server`) and its tactics-save/load flow are unchanged this
+  session. Match-recording API routes (`docs/api-spec.md`) are still unimplemented.
 
 ## Known gaps / next big pieces
 
@@ -72,35 +78,39 @@ Tracked in GitHub Issues (open backlog, check `gh issue list --state open` for c
 status — the list below is a snapshot, not guaranteed up to date):
 
 - [#17](https://github.com/aila8913/volley-tatic-board/issues/17) — UX 重整：視圖控制
-  流程（新增/布置模式重疊）、輪次選擇改成純數字按鈕、頁首漢堡選單（顯示設定 + 匯出/
-  匯入搬過去）。Design is fully written out in the issue body, ready to implement.
+  流程、輪次選擇改成純數字按鈕、頁首漢堡選單。**Note:** this session's work went the
+  opposite direction on part of this — it kept (and even cross-store-wired) the
+  "重置站位"/"清除畫筆" buttons that #17 wanted removed, and `RotationThumbnails.tsx`
+  still shows visual dot-thumbnails rather than plain numbers. Not a deliberate rejection
+  of #17, just unrelated work — worth reconciling before implementing #17.
 - [#18](https://github.com/aila8913/volley-tatic-board/issues/18) — 備位自由球員在球場
-  上要有明確的淺紅色外框標示區（目前只有 LeftPanel 文字標籤 + 球場下方的橘色圓圈，還
-  沒有專屬的視覺框）。Not implemented yet — the current libero bench UI (added this
-  session) is functional but doesn't match this issue's exact visual spec.
-- [#19](https://github.com/aila8913/volley-tatic-board/issues/19) — 紀錄版面（
-  `MatchRecording.tsx`）UI 簡化與調整，placeholder issue that depends on #20/#21 landing
-  first.
-- [#20](https://github.com/aila8913/volley-tatic-board/issues/20) — 紀錄版面多項 Bug 與
-  功能補齊。
-- [#21](https://github.com/aila8913/volley-tatic-board/issues/21) — 紀錄互動重新設計：
-  球線軌跡記錄。
+  上要有明確的淺紅色外框標示區。Still just a plain orange circle, no dedicated frame.
+  Also now only ever shown in rotation view (tactics view dropped it entirely as part of
+  the snapshot decoupling, since it's a rotation-table-only concept).
+- [#19](https://github.com/aila8913/volley-tatic-board/issues/19) — 計分表（
+  `pages/ScoreSheet.tsx`, issue body still says `MatchRecording.tsx`) UI 簡化與調整,
+  placeholder issue depending on #20/#21.
+- [#20](https://github.com/aila8913/volley-tatic-board/issues/20) — 計分表多項 Bug 與
+  功能補齊. Bug 2 (場外換人入口) confirmed already resolved by earlier work (see
+  comment on the issue); Bug 1/3 + sub-count-limit UI still open.
+- [#21](https://github.com/aila8913/volley-tatic-board/issues/21) — 球線軌跡記錄. The
+  issue's "current state" description was stale (described click-to-menu, but the app
+  already uses a drag-line gesture) — corrected via comment. Core ask (recording the
+  actual trajectory as analyzable data, not just resolving a hit target) still open.
 - [#22](https://github.com/aila8913/volley-tatic-board/issues/22) — 動作分類擴充與重新
   設計（攻擊/防守/發球/犯規）。
-- [#24](https://github.com/aila8913/volley-tatic-board/issues/24) — 複製比賽：以現有人員
-  配置為範本快速建立新場次，複製後彈出編輯 dialog 讓使用者確認對手名稱和日期。
-- [#25](https://github.com/aila8913/volley-tatic-board/issues/25) — 先發/先接切換：LeftPanel
-  新增 checkbox，先接時整體輪次顯示往後退一格（`(r+5)%6`），只影響 display offset，
-  底層 `rotations[]` 資料不動。
+- [#24](https://github.com/aila8913/volley-tatic-board/issues/24) — 複製比賽。
+- [#25](https://github.com/aila8913/volley-tatic-board/issues/25) — 先發/先接切換。
+- [#26](https://github.com/aila8913/volley-tatic-board/issues/26) — 部署準備。
+- [#29](https://github.com/aila8913/volley-tatic-board/issues/29) — 這個 session 手動
+  測試戰術布置時發現的 4 個小問題（見上方 Current state），還沒修。
 - Backend match-recording API routes (`docs/api-spec.md`) still unimplemented; frontend
   doesn't call them yet either.
-- [#26](https://github.com/aila8913/volley-tatic-board/issues/26) — 部署準備：讓使用者
-  可以自行找時間試用（換雲端 Postgres、後端放 Render/Railway、前端放 Vercel/Netlify），
-  含前後端目前假設同源（相對路徑 `/api`）的問題，部署前要先決定同源轉發或改用可設定的
-  baseUrl + CORS。
 
 ## Recently closed
 
+- #27 — 輪轉表/戰術板/計分表操作流程圖 + 狀態機圖 + 頁面跳轉大圖，存成
+  `docs/flow-diagrams.html`。
 - #14 — libero substitution bug + 先發 UX unification, fully fixed in PR #23 (commit
   `5dcc4ed`); PR #16 had only partially fixed it (rotation view only), see the
   clarifying comment added on the issue.

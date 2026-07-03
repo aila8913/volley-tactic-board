@@ -1,0 +1,2195 @@
+<title>輪轉表 / 戰術板 / 計分表 — 操作流程與狀態機</title>
+<style>
+  :root {
+    --bg: #14181b;
+    --surface: #1d2226;
+    --surface-2: #242a2e;
+    --border: rgba(237, 234, 226, 0.14);
+    --text: #edeae2;
+    --muted: #98a29a;
+    --amber: #f2b705;
+    --green: #4fa179;
+    --blue: #5c9ce6;
+    --red: #e2544a;
+  }
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family:
+      "Segoe UI",
+      system-ui,
+      -apple-system,
+      sans-serif;
+    line-height: 1.6;
+  }
+  h1,
+  h2,
+  h3,
+  .eyebrow {
+    font-family: "Bahnschrift", "Arial Narrow", "Helvetica Neue", sans-serif;
+    text-wrap: balance;
+  }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 2.5rem 1.5rem 4rem;
+  }
+
+  header.page {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding-bottom: 1.25rem;
+    margin-bottom: 1.25rem;
+    border-bottom: 1px solid var(--border);
+  }
+  header.page h1 {
+    font-size: clamp(1.6rem, 3vw, 2.1rem);
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    margin: 0;
+  }
+  header.page p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.95rem;
+    max-width: 70ch;
+  }
+  .meta {
+    font-family: Consolas, "SF Mono", monospace;
+    font-size: 0.78rem;
+    color: var(--muted);
+    margin-top: 0.25rem;
+  }
+
+  nav.toc {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 2.5rem;
+  }
+  nav.toc a {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--text);
+    text-decoration: none;
+    padding: 0.4rem 0.8rem;
+    border-radius: 999px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+  }
+  nav.toc a:hover,
+  nav.toc a:focus-visible {
+    border-color: var(--amber);
+    color: var(--amber);
+  }
+  nav.toc a:focus-visible {
+    outline: 2px solid var(--amber);
+    outline-offset: 2px;
+  }
+
+  section {
+    margin-bottom: 3.5rem;
+  }
+  .eyebrow {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+    margin: 0 0 0.3rem;
+  }
+  h2 {
+    font-size: 1.3rem;
+    margin: 0 0 0.25rem;
+    font-weight: 700;
+  }
+  .section-intro {
+    color: var(--muted);
+    font-size: 0.92rem;
+    margin: 0 0 1.25rem;
+    max-width: 74ch;
+  }
+  .callout {
+    display: flex;
+    gap: 0.7rem;
+    align-items: flex-start;
+    background: rgba(79, 161, 121, 0.1);
+    border: 1px solid rgba(79, 161, 121, 0.4);
+    border-radius: 10px;
+    padding: 0.8rem 1rem;
+    margin-bottom: 1.5rem;
+    font-size: 0.85rem;
+    color: var(--text);
+  }
+  .callout b {
+    color: var(--green);
+  }
+
+  /* ---------- operation flow cards ---------- */
+  .phase-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+  .phase-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem 1.4rem;
+  }
+  .phase-connector {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 2rem;
+    color: var(--muted);
+    font-size: 1.1rem;
+  }
+  .phase-head {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+    margin-bottom: 0.6rem;
+  }
+  .phase-tag {
+    font-family: Consolas, monospace;
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 0.15rem 0.5rem;
+    border-radius: 5px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+  .phase-head h3 {
+    margin: 0;
+    font-size: 1.05rem;
+  }
+  .phase-note {
+    color: var(--muted);
+    font-size: 0.85rem;
+    margin: 0.15rem 0 0.9rem;
+  }
+
+  .lane {
+    margin-bottom: 1rem;
+  }
+  .lane:last-child {
+    margin-bottom: 0;
+  }
+  .lane-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 700;
+    margin-bottom: 0.4rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    display: inline-block;
+  }
+  .dot.amber {
+    background: var(--amber);
+  }
+  .dot.green {
+    background: var(--green);
+  }
+  .dot.blue {
+    background: var(--blue);
+  }
+  .dot.muted {
+    background: var(--muted);
+  }
+  .dot.red {
+    background: var(--red);
+  }
+
+  .step-row {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    overflow-x: auto;
+    padding-bottom: 0.3rem;
+  }
+  .step {
+    flex: 0 0 auto;
+    padding: 0.45rem 0.7rem;
+    border-radius: 7px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    font-size: 0.82rem;
+    white-space: nowrap;
+  }
+  .step.commit {
+    border-color: var(--amber);
+    color: var(--amber);
+  }
+  .lane.green .step.commit {
+    border-color: var(--green);
+    color: var(--green);
+  }
+  .lane.blue .step.commit {
+    border-color: var(--blue);
+    color: var(--blue);
+  }
+  .lane.red .step.commit {
+    border-color: var(--red);
+    color: var(--red);
+  }
+  .arrow {
+    flex: 0 0 auto;
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+  .warn {
+    font-family: Consolas, monospace;
+    font-size: 0.72rem;
+    color: var(--red);
+    background: rgba(226, 84, 74, 0.12);
+    border: 1px solid rgba(226, 84, 74, 0.35);
+    border-radius: 5px;
+    padding: 0.05rem 0.35rem;
+    margin-left: 0.3rem;
+    white-space: nowrap;
+  }
+  .phase-card.dashed {
+    border-style: dashed;
+    border-color: rgba(226, 84, 74, 0.5);
+    opacity: 0.9;
+  }
+
+  /* ---------- state machine ---------- */
+  .diagram-shell {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1rem;
+    overflow-x: auto;
+  }
+  .diagram-shell svg {
+    display: block;
+    min-width: 760px;
+    width: 100%;
+    height: auto;
+  }
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.1rem;
+    margin: 1rem 0 1.5rem;
+    font-size: 0.82rem;
+    color: var(--muted);
+  }
+  .legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .legend .swatch {
+    width: 1.1rem;
+    height: 0.2rem;
+    border-radius: 2px;
+    display: inline-block;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+    margin-top: 1.5rem;
+  }
+  .table-shell {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+  th,
+  td {
+    text-align: left;
+    padding: 0.55rem 0.8rem;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  th {
+    font-family: "Bahnschrift", sans-serif;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    background: var(--surface-2);
+  }
+  td {
+    color: var(--text);
+  }
+  td.code {
+    font-family: Consolas, monospace;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+  tr:last-child td {
+    border-bottom: none;
+  }
+  td .warn {
+    margin-left: 0.4rem;
+  }
+
+  /* ---------- bug list ---------- */
+  .bug-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+  }
+  .bug {
+    display: flex;
+    gap: 0.8rem;
+    padding: 0.8rem 1rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    align-items: flex-start;
+  }
+  .bug-num {
+    flex: 0 0 auto;
+    min-width: 2.4rem;
+    height: 1.6rem;
+    border-radius: 999px;
+    padding: 0 0.5rem;
+    background: rgba(226, 84, 74, 0.15);
+    border: 1px solid rgba(226, 84, 74, 0.5);
+    color: var(--red);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: Consolas, monospace;
+    font-size: 0.72rem;
+    font-weight: 700;
+  }
+  .bug-body b {
+    display: block;
+    font-size: 0.92rem;
+    margin-bottom: 0.15rem;
+  }
+  .bug-body span {
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+  .bug-body .ref {
+    font-family: Consolas, monospace;
+    font-size: 0.75rem;
+    color: var(--muted);
+  }
+
+  footer {
+    color: var(--muted);
+    font-size: 0.8rem;
+    border-top: 1px solid var(--border);
+    padding-top: 1.25rem;
+    font-family: Consolas, monospace;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .phase-card {
+      transition: border-color 0.15s ease;
+    }
+    .phase-card:hover {
+      border-color: rgba(237, 234, 226, 0.3);
+    }
+    nav.toc a {
+      transition:
+        border-color 0.15s ease,
+        color 0.15s ease;
+    }
+  }
+</style>
+
+<div class="wrap">
+  <header class="page">
+    <p class="eyebrow">Issue #27 · 三個功能拆分後的操作流程總覽</p>
+    <h1>輪轉表 / 戰術板 / 計分表 — 操作流程與狀態機</h1>
+    <p>
+      這份文件原本只涵蓋計分表，現在補上輪轉表跟戰術板兩張小圖，外加一張大圖串起三個頁面怎麼跳轉、各自用哪些資料。程式碼命名已經照重構後的實際狀態更新（RotationTable
+      / TacticsBoardPanel / ScoreSheet）。
+    </p>
+    <p class="meta">對照 commit f3f2b7d（三方拆分重構，PR #28）</p>
+  </header>
+
+  <nav class="toc">
+    <a href="#macro">大圖・頁面跳轉</a>
+    <a href="#rotation">輪轉表</a>
+    <a href="#tactics">戰術板</a>
+    <a href="#scoresheet">計分表</a>
+  </nav>
+
+  <!-- ===================== MACRO SECTION ===================== -->
+  <section id="macro">
+    <p class="eyebrow">Part 0</p>
+    <h2>大圖 — 頁面跳轉與功能使用</h2>
+    <p class="section-intro">
+      三個頁面之間怎麼跳、每個頁面實際用哪些
+      store。細節操作留給下面三張小圖，這張圖只回答「我現在在哪、可以去哪、卡住的話是什麼原因」。
+    </p>
+
+    <div class="diagram-shell">
+      <svg
+        viewBox="0 0 1000 480"
+        xmlns="http://www.w3.org/2000/svg"
+        role="img"
+        aria-label="頁面跳轉大圖"
+      >
+        <defs>
+          <marker id="m-amber" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 Z" fill="#f2b705" />
+          </marker>
+          <marker id="m-blue" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 Z" fill="#5c9ce6" />
+          </marker>
+          <marker id="m-muted" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 Z" fill="#98a29a" />
+          </marker>
+          <marker id="m-red" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 Z" fill="#e2544a" />
+          </marker>
+        </defs>
+
+        <g fill="none" stroke-width="2">
+          <!-- MatchList -> TacticsBoardPage -->
+          <path d="M300,140 Q 400,110 500,150" stroke="#f2b705" marker-end="url(#m-amber)" />
+          <!-- TacticsBoardPage -> MatchList -->
+          <path
+            d="M500,190 Q 400,220 300,180"
+            stroke="#98a29a"
+            stroke-dasharray="5 4"
+            marker-end="url(#m-muted)"
+          />
+          <!-- MatchList -> ScoreSheetPage -->
+          <path d="M300,260 Q 550,340 780,220" stroke="#5c9ce6" marker-end="url(#m-blue)" />
+          <!-- ScoreSheetPage -> MatchList -->
+          <path
+            d="M780,260 Q 550,380 300,300"
+            stroke="#98a29a"
+            stroke-dasharray="5 4"
+            marker-end="url(#m-muted)"
+          />
+          <!-- TacticsBoardPage -> ScoreSheetPage -->
+          <path
+            d="M690,150 Q 730,130 780,150"
+            stroke="#f2b705"
+            stroke-width="3"
+            marker-end="url(#m-amber)"
+          />
+          <!-- ScoreSheetPage -> TacticsBoardPage (guard) -->
+          <path
+            d="M780,190 Q 730,210 690,190"
+            stroke="#e2544a"
+            stroke-dasharray="6 5"
+            marker-end="url(#m-red)"
+          />
+        </g>
+
+        <g
+          font-family="Segoe UI, sans-serif"
+          font-size="12.5"
+          paint-order="stroke"
+          stroke="#14181b"
+          stroke-width="4"
+        >
+          <text x="330" y="118" fill="#f2b705">點 MatchCard「戰術板」</text>
+          <text x="330" y="235" fill="#98a29a">← 比賽列表</text>
+          <text x="420" y="330" fill="#5c9ce6">點 MatchCard「計分表」</text>
+          <text x="480" y="395" fill="#98a29a">← 比賽列表</text>
+          <text x="680" y="125" fill="#f2b705" font-weight="700">頁首「計分表」按鈕</text>
+          <text x="600" y="215" fill="#e2544a" font-weight="700">
+            頁首「戰術板」/ hasLineup=false 時的導引
+          </text>
+        </g>
+
+        <g font-family="Bahnschrift, sans-serif">
+          <!-- MatchList -->
+          <rect
+            x="60"
+            y="100"
+            width="240"
+            height="180"
+            rx="12"
+            fill="#1d2226"
+            stroke="#98a29a"
+            stroke-width="1.5"
+          />
+          <text
+            x="180"
+            y="132"
+            text-anchor="middle"
+            fill="#edeae2"
+            font-size="15"
+            font-weight="700"
+          >
+            比賽列表
+          </text>
+          <text
+            x="180"
+            y="152"
+            text-anchor="middle"
+            fill="#98a29a"
+            font-family="Consolas,monospace"
+            font-size="10.5"
+          >
+            MatchList.tsx · route "/"
+          </text>
+          <text
+            x="180"
+            y="180"
+            text-anchor="middle"
+            fill="#98a29a"
+            font-family="Consolas,monospace"
+            font-size="10"
+          >
+            useMatches
+          </text>
+          <text x="180" y="200" text-anchor="middle" fill="#98a29a" font-size="10.5">
+            每張 MatchCard 有兩顆按鈕
+          </text>
+          <text x="180" y="218" text-anchor="middle" fill="#98a29a" font-size="10.5">
+            「戰術板」／「計分表」
+          </text>
+
+          <!-- TacticsBoardPage -->
+          <rect
+            x="500"
+            y="100"
+            width="240"
+            height="180"
+            rx="12"
+            fill="#242a2e"
+            stroke="#f2b705"
+            stroke-width="2"
+          />
+          <text
+            x="620"
+            y="128"
+            text-anchor="middle"
+            fill="#edeae2"
+            font-size="15"
+            font-weight="700"
+          >
+            輪轉表／戰術板頁
+          </text>
+          <text
+            x="620"
+            y="148"
+            text-anchor="middle"
+            fill="#98a29a"
+            font-family="Consolas,monospace"
+            font-size="10"
+          >
+            TacticsBoard.tsx
+          </text>
+          <text
+            x="620"
+            y="164"
+            text-anchor="middle"
+            fill="#98a29a"
+            font-family="Consolas,monospace"
+            font-size="10"
+          >
+            route "/matches/:id/board"
+          </text>
+          <text x="620" y="188" text-anchor="middle" fill="#f2b705" font-size="10.5">
+            輪轉表 = RotationTable + useRotationTable
+          </text>
+          <text x="620" y="206" text-anchor="middle" fill="#5c9ce6" font-size="10.5">
+            戰術板 = TacticsBoardPanel + useTacticsBoard
+          </text>
+          <text x="620" y="224" text-anchor="middle" fill="#98a29a" font-size="10.5">
+            共用 Court.tsx 畫球場
+          </text>
+          <text x="620" y="250" text-anchor="middle" fill="#98a29a" font-size="10">
+            外層頁面本身沒改名（刻意保留）
+          </text>
+
+          <!-- ScoreSheetPage -->
+          <rect
+            x="780"
+            y="100"
+            width="200"
+            height="180"
+            rx="12"
+            fill="#1d2226"
+            stroke="#5c9ce6"
+            stroke-width="1.5"
+          />
+          <text
+            x="880"
+            y="128"
+            text-anchor="middle"
+            fill="#edeae2"
+            font-size="15"
+            font-weight="700"
+          >
+            計分表頁
+          </text>
+          <text
+            x="880"
+            y="148"
+            text-anchor="middle"
+            fill="#98a29a"
+            font-family="Consolas,monospace"
+            font-size="10"
+          >
+            ScoreSheet.tsx
+          </text>
+          <text
+            x="880"
+            y="164"
+            text-anchor="middle"
+            fill="#98a29a"
+            font-family="Consolas,monospace"
+            font-size="10"
+          >
+            route "/matches/:id/record"
+          </text>
+          <text x="880" y="190" text-anchor="middle" fill="#5c9ce6" font-size="10.5">
+            useScoreSheet（讀寫，keyed by matchId）
+          </text>
+          <text x="880" y="208" text-anchor="middle" fill="#f2b705" font-size="10.5">
+            useRotationTable（只讀站位/roster）
+          </text>
+
+          <!-- guard note box -->
+          <rect
+            x="60"
+            y="330"
+            width="920"
+            height="90"
+            rx="10"
+            fill="#1d2226"
+            stroke="#e2544a"
+            stroke-width="1.5"
+            stroke-dasharray="6 5"
+          />
+          <text x="80" y="358" fill="#e2544a" font-size="12.5" font-weight="700">
+            guard：hasLineup
+          </text>
+          <text x="80" y="380" fill="#98a29a" font-size="11.5">
+            計分表頁進來時會檢查 useRotationTable 的 rotations
+            是否「至少一輪有站位」——沒有的話不顯示記分畫面，
+          </text>
+          <text x="80" y="398" fill="#98a29a" font-size="11.5">
+            只顯示「請先到戰術板把先發球員拖上場」+「前往戰術板」按鈕，強制導去輪轉表頁排陣，不能跳過這一步直接記分。
+          </text>
+        </g>
+      </svg>
+    </div>
+
+    <div class="table-shell">
+      <table>
+        <thead>
+          <tr>
+            <th>頁面</th>
+            <th>路由</th>
+            <th>使用的 store</th>
+            <th>備註</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>比賽列表</td>
+            <td class="code">/</td>
+            <td class="code">useMatches</td>
+            <td>入口頁，每場比賽兩個按鈕</td>
+          </tr>
+          <tr>
+            <td>輪轉表／戰術板頁</td>
+            <td class="code">/matches/:id/board</td>
+            <td class="code">useRotationTable + useTacticsBoard</td>
+            <td>兩個獨立 store，戰術板單向依賴輪轉表</td>
+          </tr>
+          <tr>
+            <td>計分表頁</td>
+            <td class="code">/matches/:id/record</td>
+            <td class="code">useScoreSheet（讀寫）+ useRotationTable（唯讀）</td>
+            <td>受 hasLineup guard 保護</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ===================== ROTATION TABLE SECTION ===================== -->
+  <section id="rotation">
+    <p class="eyebrow">Part 1</p>
+    <h2>輪轉表 — 操作流程與狀態機</h2>
+    <p class="section-intro">
+      誰、站在哪個位置——這是輪轉表唯一關心的事。大部分操作都是「拖一下、立刻生效」，沒有計分表那種多步驟選單，但换人/移除/重置這幾個操作會跨到戰術板的資料，是這次拆分後最需要注意的地方。
+    </p>
+
+    <div class="phase-list">
+      <div class="phase-card">
+        <div class="phase-head">
+          <span class="phase-tag">A</span>
+          <h3>尚未設定球員</h3>
+        </div>
+        <p class="phase-note">條件：<code>roster.length === 0</code>。</p>
+        <div class="step-row">
+          <div class="step">顯示「尚未設定球員，點右上角「編輯」新增」</div>
+          <div class="arrow">→</div>
+          <div class="step">點「編輯」→ 開啟編輯名單彈窗</div>
+          <div class="arrow">→</div>
+          <div class="step commit">填姓名/背號/位置 → 儲存 → setRoster()</div>
+        </div>
+      </div>
+
+      <div class="phase-connector">↓</div>
+
+      <div class="phase-card">
+        <div class="phase-head">
+          <span class="phase-tag">B</span>
+          <h3>已有名單，尚未排陣</h3>
+        </div>
+        <p class="phase-note">
+          條件：<code>roster.length &gt; 0</code>，但
+          <code>hasRotations</code>（六輪裡有沒有任何站位）還是
+          false——這時「輪次選擇」區塊還不會顯示。
+        </p>
+        <div class="step-row">
+          <div class="step">名單顯示在面板上，可拖曳</div>
+          <div class="arrow">→</div>
+          <div class="step">拖到球場任一格</div>
+          <div class="arrow">→</div>
+          <div class="step commit">placePlayerOnCourt() 命中，進入 C</div>
+        </div>
+      </div>
+
+      <div class="phase-connector">↓</div>
+
+      <div class="phase-card">
+        <div class="phase-head">
+          <span class="phase-tag">C</span>
+          <h3>編輯中 — 主要停留狀態</h3>
+        </div>
+        <p class="phase-note">
+          六個輪次的縮圖 + 站位球場都在這裡操作，離開這裡的唯一方式是跳頁（見大圖）。
+        </p>
+
+        <div class="lane amber">
+          <div class="lane-label"><span class="dot amber"></span>C1 · 拖曳排陣（一般球員）</div>
+          <div class="step-row">
+            <div class="step">從名單或場上拖球員</div>
+            <div class="arrow">→</div>
+            <div class="step">放到某個格子（1~6 號位）</div>
+            <div class="arrow">→</div>
+            <div class="step commit">placePlayerOnCourt() — 自動推算其他 5 輪</div>
+          </div>
+        </div>
+
+        <div class="lane green">
+          <div class="lane-label"><span class="dot green"></span>C2 · 自由球員上場</div>
+          <div class="step-row">
+            <div class="step">拖 L 到後排（1/5/6）</div>
+            <div class="arrow">→</div>
+            <div class="step">前排格子會直接拒絕，沒有提示</div>
+            <div class="arrow">→</div>
+            <div class="step commit">頂替原本站那格的人 + 同步 startingLiberoId</div>
+          </div>
+        </div>
+
+        <div class="lane red">
+          <div class="lane-label"><span class="dot red"></span>C3 · 移除球員（跨 store）</div>
+          <div class="step-row">
+            <div class="step">右鍵球員 / L 拖出球場下緣</div>
+            <div class="arrow">→</div>
+            <div class="step commit">
+              removePlayerFromCourt()（輪轉表）+ removePlayerTacticPositions()（戰術板）
+            </div>
+            <span class="warn">⚠ R2</span>
+          </div>
+        </div>
+
+        <div class="lane">
+          <div class="lane-label"><span class="dot muted"></span>C4 · 切換輪次</div>
+          <div class="step-row">
+            <div class="step">點 6 個縮圖之一</div>
+            <div class="arrow">→</div>
+            <div class="step commit">setCurrentRotation(i)</div>
+            <div class="arrow">→</div>
+            <div class="step">（背景）戰術板訂閱這個變化，重置自己的 undo 歷史/選取/視圖</div>
+          </div>
+        </div>
+
+        <div class="lane red">
+          <div class="lane-label"><span class="dot red"></span>C5 · 重置站位（跨 store）</div>
+          <div class="step-row">
+            <div class="step">點「重置站位」</div>
+            <div class="arrow">→</div>
+            <div class="step commit">
+              resetCurrentRotationPositions()（輪轉表）+
+              resetCurrentRotationTactics()（戰術板）一次呼叫兩邊
+            </div>
+            <span class="warn">⚠ R3</span>
+          </div>
+        </div>
+
+        <div class="lane">
+          <div class="lane-label"><span class="dot muted"></span>C6 · 備位區操作</div>
+          <div class="step-row">
+            <div class="step">先發 L 本輪不在場上時顯示備位圈（畫在 Court.tsx）</div>
+            <div class="arrow">→</div>
+            <div class="step">拖到後排上場 / 右鍵取消先發</div>
+            <div class="arrow">→</div>
+            <div class="step commit">placePlayerOnCourt() / setStartingLiberoId(null)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="diagram-shell" style="margin-top: 1.5rem">
+    <div class="legend" style="margin-top: 0">
+      <span><span class="swatch" style="background: var(--amber)"></span>一般球員站位</span>
+      <span><span class="swatch" style="background: var(--green)"></span>自由球員</span>
+      <span
+        ><span class="swatch" style="background: var(--red)"></span>跨 store
+        呼叫（戰術板也要跟著動）</span
+      >
+      <span><span class="swatch" style="background: var(--muted)"></span>導覽 / 切換 / 取消</span>
+    </div>
+    <svg
+      viewBox="0 0 900 420"
+      xmlns="http://www.w3.org/2000/svg"
+      role="img"
+      aria-label="輪轉表狀態機圖"
+    >
+      <defs>
+        <marker id="r-amber" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+          <path d="M0,0 L8,4 L0,8 Z" fill="#f2b705" />
+        </marker>
+        <marker id="r-green" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+          <path d="M0,0 L8,4 L0,8 Z" fill="#4fa179" />
+        </marker>
+        <marker id="r-red" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+          <path d="M0,0 L8,4 L0,8 Z" fill="#e2544a" />
+        </marker>
+        <marker id="r-muted" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+          <path d="M0,0 L8,4 L0,8 Z" fill="#98a29a" />
+        </marker>
+      </defs>
+      <g fill="none" stroke-width="2">
+        <path d="M230,90 L430,90" stroke="#98a29a" marker-end="url(#r-muted)" />
+        <path d="M600,120 L600,190" stroke="#98a29a" marker-end="url(#r-muted)" />
+        <path d="M500,290 Q 560,230 640,270" stroke="#f2b705" marker-end="url(#r-amber)" />
+        <path d="M500,320 Q 560,380 640,340" stroke="#4fa179" marker-end="url(#r-green)" />
+        <path d="M760,270 Q 830,300 760,330" stroke="#e2544a" marker-end="url(#r-red)" />
+        <path
+          d="M470,250 Q 550,200 620,240"
+          stroke="#98a29a"
+          stroke-dasharray="5 4"
+          marker-end="url(#r-muted)"
+        />
+        <path
+          d="M470,360 Q 550,400 620,370"
+          stroke="#e2544a"
+          stroke-dasharray="6 5"
+          marker-end="url(#r-red)"
+        />
+      </g>
+      <g
+        font-family="Segoe UI, sans-serif"
+        font-size="12"
+        paint-order="stroke"
+        stroke="#14181b"
+        stroke-width="4"
+      >
+        <text x="250" y="78" fill="#98a29a">設定 ≥1 位球員</text>
+        <text x="608" y="160" fill="#98a29a">拖曳排陣命中</text>
+        <text x="510" y="248" fill="#f2b705">拖曳/換位 (C1)</text>
+        <text x="510" y="378" fill="#4fa179">自由球員上場 (C2)</text>
+        <text x="770" y="245" fill="#e2544a">移除 (C3) ⚠R2</text>
+        <text x="440" y="215" fill="#98a29a">切換輪次 (C4)</text>
+        <text x="440" y="405" fill="#e2544a">重置站位 (C5) ⚠R3</text>
+      </g>
+      <g font-family="Bahnschrift, sans-serif">
+        <rect
+          x="30"
+          y="55"
+          width="200"
+          height="70"
+          rx="10"
+          fill="#1d2226"
+          stroke="#98a29a"
+          stroke-width="1.5"
+        />
+        <text x="130" y="83" text-anchor="middle" fill="#edeae2" font-size="14" font-weight="700">
+          A · 尚未設定球員
+        </text>
+        <text
+          x="130"
+          y="103"
+          text-anchor="middle"
+          fill="#98a29a"
+          font-family="Consolas,monospace"
+          font-size="10.5"
+        >
+          roster.length === 0
+        </text>
+
+        <rect
+          x="430"
+          y="55"
+          width="200"
+          height="70"
+          rx="10"
+          fill="#1d2226"
+          stroke="#98a29a"
+          stroke-width="1.5"
+        />
+        <text x="530" y="83" text-anchor="middle" fill="#edeae2" font-size="14" font-weight="700">
+          B · 尚未排陣
+        </text>
+        <text
+          x="530"
+          y="103"
+          text-anchor="middle"
+          fill="#98a29a"
+          font-family="Consolas,monospace"
+          font-size="10.5"
+        >
+          hasRotations === false
+        </text>
+
+        <rect
+          x="480"
+          y="190"
+          width="240"
+          height="180"
+          rx="12"
+          fill="#242a2e"
+          stroke="#edeae2"
+          stroke-width="2"
+        />
+        <text x="600" y="222" text-anchor="middle" fill="#edeae2" font-size="15" font-weight="700">
+          C · 編輯中
+        </text>
+        <text
+          x="600"
+          y="242"
+          text-anchor="middle"
+          fill="#98a29a"
+          font-family="Consolas,monospace"
+          font-size="10.5"
+        >
+          hasRotations === true
+        </text>
+        <text x="600" y="264" text-anchor="middle" fill="#98a29a" font-size="10.5">
+          C1~C6 都是離開再回來
+        </text>
+        <text x="600" y="282" text-anchor="middle" fill="#98a29a" font-size="10.5">
+          的自迴圈，沒有子選單
+        </text>
+      </g>
+    </svg>
+
+    <div class="table-shell" style="margin-top: 1.5rem">
+      <table>
+        <thead>
+          <tr>
+            <th>狀態</th>
+            <th>事件 / 條件</th>
+            <th>下一狀態</th>
+            <th>備註</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>A 尚未設定球員</td>
+            <td class="code">setRoster(≥1 人)</td>
+            <td>B 尚未排陣</td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td>B 尚未排陣</td>
+            <td class="code">placePlayerOnCourt() 命中</td>
+            <td>C 編輯中</td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td>C 編輯中</td>
+            <td class="code">拖曳/換位（C1）</td>
+            <td>C 編輯中</td>
+            <td>自動推算其他 5 輪</td>
+          </tr>
+          <tr>
+            <td>C 編輯中</td>
+            <td class="code">自由球員上場（C2）</td>
+            <td>C 編輯中</td>
+            <td>只能後排，前排靜默拒絕</td>
+          </tr>
+          <tr>
+            <td>C 編輯中</td>
+            <td class="code">移除球員（C3）</td>
+            <td>C 編輯中</td>
+            <td>需同時清輪轉表+戰術板兩邊<span class="warn">⚠R2</span></td>
+          </tr>
+          <tr>
+            <td>C 編輯中</td>
+            <td class="code">切換輪次（C4）</td>
+            <td>C 編輯中</td>
+            <td>觸發戰術板的訂閱同步</td>
+          </tr>
+          <tr>
+            <td>C 編輯中</td>
+            <td class="code">重置站位（C5）</td>
+            <td>C 編輯中</td>
+            <td>同時清輪轉表+戰術板兩邊<span class="warn">⚠R3</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <section>
+    <p class="eyebrow">Part 1 · 已知問題</p>
+    <h2>輪轉表 — 已知問題與缺口</h2>
+    <div class="bug-list">
+      <div class="bug">
+        <div class="bug-num">R1</div>
+        <div class="bug-body">
+          <b>刪除球員不會清掉場上殘留站位</b
+          ><span
+            >編輯名單彈窗存檔時只呼叫 setRoster()，不會順便清掉 rotations[].positions
+            裡指向已刪除球員 id 的殘留紀錄。Court.tsx
+            因為找不到球員會直接不渲染，畫面上看起來正常，但那個格子其實還卡著一個「幽靈站位」——下次有人被拖進同一格時才會被默默蓋掉，中間這段時間那格既看不到也選不到。</span
+          ><br /><span class="ref"
+            >RosterEditDialog.tsx onSubmit → useRotationTable.ts setRoster()</span
+          >
+        </div>
+      </div>
+      <div class="bug">
+        <div class="bug-num">R2</div>
+        <div class="bug-body">
+          <b>移除球員是兩個 store 各自的動作</b
+          ><span
+            >右鍵刪除/拖出下緣，會同時呼叫輪轉表的 removePlayerFromCourt 跟戰術板的
+            removePlayerTacticPositions。這兩個呼叫寫在同一個元件裡目前沒問題，但如果之後有第三個地方也要「移除球員」，很容易漏呼叫其中一個，留下殘影。</span
+          ><br /><span class="ref">components/PlayerNode.tsx · removeFromCourt()</span>
+        </div>
+      </div>
+      <div class="bug">
+        <div class="bug-num">R3</div>
+        <div class="bug-body">
+          <b>「重置站位」按鈕放在輪轉表面板，實際操作兩個 store</b
+          ><span
+            >目前只有「全部清空」跟「不清」兩個選項，沒有「只清站位、保留畫筆」這種中間選項。</span
+          ><br /><span class="ref">components/RotationTable.tsx · handleResetRotation()</span>
+        </div>
+      </div>
+      <div class="bug">
+        <div class="bug-num">R4</div>
+        <div class="bug-body">
+          <b>沒有要求排滿 6 個人才算「排好」</b
+          ><span
+            >hasRotations 只檢查「至少一輪有站位」，這個寬鬆判斷也是計分表 hasLineup
+            的資料來源，兩邊共用同一個缺口。</span
+          ><br /><span class="ref">交叉參照計分表 ⚠S7</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== TACTICS BOARD SECTION ===================== -->
+  <section id="tactics">
+    <p class="eyebrow">Part 2</p>
+    <h2>戰術板 — 操作流程與狀態機</h2>
+
+    <div class="callout">
+      <b>自上次更新以來的變化（2026-07-03）：</b
+      >戰術板從「讀輪轉表即時站位當背景」改成「進入戰術布置那一刻拍一張快照，之後完全獨立」——下面內文提到「讀輪轉表站位當背景」的地方已經不準確，實際行為是：點「戰術布置」→
+      `enterTacticsLayout()` 複製一份站位 →
+      之後編輯不再寫回輪轉表。自由球員在戰術布置裡也不再檢查「只能站後排」，變成一般標記。連帶：入口按鈕改成「戰術布置」（用輪轉表重拍）/「編輯」（沿用已載入的已儲存戰術，需先點清單才會亮起）；布置模式底部是「取消／儲存／另存新檔」；畫筆物件（箭頭/文字/排球）原本不能拖曳移動的
+      bug 已修正。舊的「已知問題」清單裡 T3、T5 已經因為這次改動而不再適用，見下方標註。
+    </div>
+
+    <p class="section-intro">
+      戰術板只有兩種模式：唯讀檢視、跟戰術布置。大部分操作只在布置模式裡才能做，進入布置時會把輪轉表當下的站位拍一張快照，之後編輯完全獨立，不會寫回輪轉表。
+    </p>
+
+    <div class="phase-list">
+      <div class="phase-card">
+        <div class="phase-head">
+          <span class="phase-tag">A</span>
+          <h3>唯讀檢視（預設）</h3>
+        </div>
+        <p class="phase-note">
+          條件：<code>isLayoutMode === false</code
+          >。可以切輪轉/戰術視圖，但不能新增/選取/拖曳任何標記。
+        </p>
+        <div class="step-row">
+          <div class="step">顯示「戰術布置」＋「編輯」（預設鎖住）＋已儲存戰術列表</div>
+          <div class="arrow">→</div>
+          <div class="step">點已存清單裡的某個戰術</div>
+          <div class="arrow">→</div>
+          <div class="step commit">loadProject() 載入該戰術（唯讀檢視），「編輯」按鈕解鎖</div>
+        </div>
+        <div class="step-row" style="margin-top: 0.4rem">
+          <div class="step">點「戰術布置」</div>
+          <div class="arrow">→</div>
+          <div class="step commit">
+            enterTacticsLayout()：用輪轉表現在的站位重新拍照 → 進入 B（蓋掉目前顯示的內容）
+          </div>
+        </div>
+        <div class="step-row" style="margin-top: 0.4rem">
+          <div class="step">點「編輯」（需先載入過一個已儲存戰術才會亮起）</div>
+          <div class="arrow">→</div>
+          <div class="step commit">setLayoutMode(true) → 進入 B，沿用剛載入的那份，不重新拍照</div>
+        </div>
+      </div>
+
+      <div class="phase-connector">↓</div>
+
+      <div class="phase-card">
+        <div class="phase-head">
+          <span class="phase-tag">B</span>
+          <h3>戰術布置模式 — 主要工作狀態</h3>
+        </div>
+        <p class="phase-note">
+          條件：<code>isLayoutMode === true</code>。畫面換成畫筆工具 / 防守範圍 / 戰術管理。
+        </p>
+
+        <div class="lane amber">
+          <div class="lane-label">
+            <span class="dot amber"></span>B1 · 畫線工具（箭頭/虛線/攻擊線）
+          </div>
+          <div class="step-row">
+            <div class="step">選工具</div>
+            <div class="arrow">→</div>
+            <div class="step">在球場空白處按下</div>
+            <div class="arrow">→</div>
+            <div class="step">拖曳中持續更新終點</div>
+            <div class="arrow">→</div>
+            <div class="step commit">鬆開 → addMarker() 定案，自動切回選取</div>
+          </div>
+        </div>
+
+        <div class="lane amber">
+          <div class="lane-label"><span class="dot amber"></span>B2 · 文字／排球／防守範圍工具</div>
+          <div class="step-row">
+            <div class="step">選工具</div>
+            <div class="arrow">→</div>
+            <div class="step">點一下球場</div>
+            <div class="arrow">→</div>
+            <div class="step commit">addMarker() / addDefenseRange()，立刻切回選取</div>
+          </div>
+        </div>
+
+        <div class="lane blue">
+          <div class="lane-label"><span class="dot blue"></span>B3 · 戰術視圖自由拖曳站位</div>
+          <div class="step-row">
+            <div class="step">拖球員（名單或場上）</div>
+            <div class="arrow">→</div>
+            <div class="step">鬆開</div>
+            <div class="arrow">→</div>
+            <div class="step commit">placePlayerFree()——一般球員只寫自己的 tacticPositions</div>
+          </div>
+          <div class="step-row" style="margin-top: 0.4rem">
+            <div class="step">若是自由球員</div>
+            <div class="arrow">→</div>
+            <div class="step commit">
+              （2026-07-03 起）跟一般球員一樣，只是普通標記，不檢查後排、不寫回輪轉表
+            </div>
+          </div>
+        </div>
+
+        <div class="lane">
+          <div class="lane-label"><span class="dot muted"></span>B4 · 選取／刪除／undo</div>
+          <div class="step-row">
+            <div class="step">點某個標記/防守範圍</div>
+            <div class="arrow">→</div>
+            <div class="step">按「刪除選取標記」或 Ctrl+Z/Ctrl+Y</div>
+            <div class="arrow">→</div>
+            <div class="step commit">removeMarker/removeDefenseRange 或 undo()/redo()</div>
+            <span class="warn">⚠ T4</span>
+          </div>
+        </div>
+
+        <div class="lane green">
+          <div class="lane-label"><span class="dot green"></span>B5 · 取消 / 儲存 / 另存新檔</div>
+          <div class="step-row">
+            <div class="step">「取消」</div>
+            <div class="arrow">→</div>
+            <div class="step commit">不呼叫存檔 API，直接回 A（輪轉表）</div>
+          </div>
+          <div class="step-row" style="margin-top: 0.4rem">
+            <div class="step">「儲存」（有 activeProjectId 就覆寫，沒有就新建）</div>
+            <div class="arrow">→</div>
+            <div class="step commit">buildSnapshot() 合併兩邊資料 → create/updateTactic</div>
+            <div class="arrow">→</div>
+            <div class="step">回到 A（輪轉表）</div>
+          </div>
+          <div class="step-row" style="margin-top: 0.4rem">
+            <div class="step">「另存新檔」</div>
+            <div class="arrow">→</div>
+            <div class="step commit">buildSnapshot() → 永遠 createTactic（複製一份新的）</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="phase-connector">↓</div>
+
+      <div class="phase-card">
+        <div class="phase-head">
+          <span class="phase-tag">·</span>
+          <h3>分享匯出（兩種模式都看得到）</h3>
+        </div>
+        <div class="step-row">
+          <div class="step">匯出 PNG / 匯出 6 輪 PNG</div>
+          <div class="step">匯出 JSON（buildSnapshot 直接輸出）</div>
+          <div class="step">匯入 JSON（importState 分派給兩個 store）</div>
+        </div>
+        <span class="warn">⚠ T1</span>
+      </div>
+    </div>
+  </section>
+
+  <div class="diagram-shell" style="margin-top: 1.5rem">
+    <div class="legend" style="margin-top: 0">
+      <span><span class="swatch" style="background: var(--amber)"></span>畫筆/防守範圍</span>
+      <span
+        ><span class="swatch" style="background: var(--blue)"></span>自由站位（含跨 store
+        自由球員）</span
+      >
+      <span><span class="swatch" style="background: var(--muted)"></span>選取/刪除/undo</span>
+      <span><span class="swatch" style="background: var(--green)"></span>模式切換/存檔</span>
+      <span><span class="swatch" style="background: var(--red)"></span>背景同步（來自輪轉表）</span>
+    </div>
+    <svg
+      viewBox="0 0 820 360"
+      xmlns="http://www.w3.org/2000/svg"
+      role="img"
+      aria-label="戰術板狀態機圖"
+    >
+      <defs>
+        <marker id="t-amber" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+          <path d="M0,0 L8,4 L0,8 Z" fill="#f2b705" />
+        </marker>
+        <marker id="t-blue" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+          <path d="M0,0 L8,4 L0,8 Z" fill="#5c9ce6" />
+        </marker>
+        <marker id="t-muted" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+          <path d="M0,0 L8,4 L0,8 Z" fill="#98a29a" />
+        </marker>
+        <marker id="t-green" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+          <path d="M0,0 L8,4 L0,8 Z" fill="#4fa179" />
+        </marker>
+        <marker id="t-red" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+          <path d="M0,0 L8,4 L0,8 Z" fill="#e2544a" />
+        </marker>
+      </defs>
+      <g fill="none" stroke-width="2">
+        <path
+          d="M300,150 Q 400,100 500,150"
+          stroke="#4fa179"
+          stroke-width="3"
+          marker-end="url(#t-green)"
+        />
+        <path
+          d="M500,190 Q 400,240 300,190"
+          stroke="#4fa179"
+          stroke-width="3"
+          marker-end="url(#t-green)"
+        />
+        <path d="M600,120 Q 660,70 600,90" stroke="#f2b705" marker-end="url(#t-amber)" />
+        <path d="M600,250 Q 660,300 600,270" stroke="#5c9ce6" marker-end="url(#t-blue)" />
+        <path d="M660,150 Q 730,150 660,190" stroke="#98a29a" marker-end="url(#t-muted)" />
+        <path
+          d="M180,90 Q 120,150 180,210"
+          stroke="#e2544a"
+          stroke-dasharray="6 5"
+          marker-end="url(#t-red)"
+        />
+        <path
+          d="M540,90 Q 620,40 560,90"
+          stroke="#e2544a"
+          stroke-dasharray="6 5"
+          marker-end="url(#t-red)"
+        />
+      </g>
+      <g
+        font-family="Segoe UI, sans-serif"
+        font-size="12"
+        paint-order="stroke"
+        stroke="#14181b"
+        stroke-width="4"
+      >
+        <text x="335" y="115" fill="#4fa179" font-weight="700">進入戰術布置</text>
+        <text x="335" y="235" fill="#4fa179" font-weight="700">儲存/新建 → 回唯讀</text>
+        <text x="608" y="75" fill="#f2b705">畫筆/防守範圍 (B1,B2)</text>
+        <text x="608" y="320" fill="#5c9ce6">自由站位 (B3) ⚠T5</text>
+        <text x="695" y="175" fill="#98a29a">選取/刪除/undo (B4) ⚠T4</text>
+        <text x="70" y="150" fill="#e2544a">輪轉切換 → 重置 undo/選取</text>
+      </g>
+      <g font-family="Bahnschrift, sans-serif">
+        <rect
+          x="60"
+          y="115"
+          width="120"
+          height="70"
+          rx="10"
+          fill="#1d2226"
+          stroke="#98a29a"
+          stroke-width="1.5"
+        />
+        <text x="120" y="145" text-anchor="middle" fill="#edeae2" font-size="13" font-weight="700">
+          A · 唯讀
+        </text>
+        <text
+          x="120"
+          y="163"
+          text-anchor="middle"
+          fill="#98a29a"
+          font-family="Consolas,monospace"
+          font-size="10"
+        >
+          isLayoutMode=false
+        </text>
+
+        <rect
+          x="480"
+          y="115"
+          width="240"
+          height="90"
+          rx="12"
+          fill="#242a2e"
+          stroke="#edeae2"
+          stroke-width="2"
+        />
+        <text x="600" y="145" text-anchor="middle" fill="#edeae2" font-size="14" font-weight="700">
+          B · 戰術布置
+        </text>
+        <text
+          x="600"
+          y="163"
+          text-anchor="middle"
+          fill="#98a29a"
+          font-family="Consolas,monospace"
+          font-size="10.5"
+        >
+          isLayoutMode=true
+        </text>
+        <text x="600" y="181" text-anchor="middle" fill="#98a29a" font-size="10.5">
+          B1~B5 都是自迴圈
+        </text>
+      </g>
+    </svg>
+
+    <div class="table-shell" style="margin-top: 1.5rem">
+      <table>
+        <thead>
+          <tr>
+            <th>狀態</th>
+            <th>事件 / 條件</th>
+            <th>下一狀態</th>
+            <th>備註</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>A 唯讀</td>
+            <td class="code">setLayoutMode(true)</td>
+            <td>B 戰術布置</td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td>B 戰術布置</td>
+            <td class="code">畫筆/防守範圍工具（B1,B2）</td>
+            <td>B 戰術布置</td>
+            <td>用完自動切回選取</td>
+          </tr>
+          <tr>
+            <td>B 戰術布置</td>
+            <td class="code">自由站位（B3）</td>
+            <td>B 戰術布置</td>
+            <td>自由球員分支呼叫輪轉表<span class="warn">⚠T5</span></td>
+          </tr>
+          <tr>
+            <td>B 戰術布置</td>
+            <td class="code">選取/刪除/undo（B4）</td>
+            <td>B 戰術布置</td>
+            <td>只管畫筆，不管站位<span class="warn">⚠T4</span></td>
+          </tr>
+          <tr>
+            <td>B 戰術布置</td>
+            <td class="code">儲存/另存/新建</td>
+            <td>A 唯讀</td>
+            <td>—</td>
+          </tr>
+          <tr>
+            <td>A / B（任一）</td>
+            <td class="code">輪轉表 currentRotation 變動（背景）</td>
+            <td>同一狀態</td>
+            <td>重置 undo 歷史/選取/視圖，跨 store 訂閱</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <section>
+    <p class="eyebrow">Part 2 · 已知問題</p>
+    <h2>戰術板 — 已知問題與缺口</h2>
+    <div class="bug-list">
+      <div class="bug">
+        <div class="bug-num">T1</div>
+        <div class="bug-body">
+          <b>匯出 6 輪 PNG 會暫時搶走 currentRotation</b
+          ><span
+            >依序切 6 次輪次、每次等 300ms
+            再匯出，過程中沒有鎖住其他操作，使用者手動切輪次可能跟自動匯出的切換打架。</span
+          ><br /><span class="ref">components/TacticsBoardPanel.tsx · handleExportAllPNG()</span>
+        </div>
+      </div>
+      <div class="bug">
+        <div class="bug-num">T2</div>
+        <div class="bug-body">
+          <b>存檔格式仍是「輪轉表+戰術板」綁在一起的單一快照</b
+          ><span
+            >buildSnapshot/loadProject 把兩個 store 的資料攤平成同一份
+            JSON（沿用拆分前的格式，確保舊存檔還讀得到）。如果之後想讓兩邊分開存檔，目前的 API
+            沒有對應的資料結構。</span
+          ><br /><span class="ref">types/tacticsBoard.ts · SavedTacticData</span>
+        </div>
+      </div>
+      <div class="bug">
+        <div class="bug-num">T3</div>
+        <div class="bug-body">
+          <b>（不再適用）「新建空白戰術」會把輪轉表也清空</b
+          ><span
+            >2026-07-03 更新：「＋新建空白戰術」按鈕已經整個移除，`newProject()` 這個 action
+            也刪掉了——這個問題連同它的成因一起消失，不是被修好，是被拿掉了。</span
+          >
+        </div>
+      </div>
+      <div class="bug">
+        <div class="bug-num">T4</div>
+        <div class="bug-body">
+          <b>undo/redo 不涵蓋輪轉視圖的站位拖曳</b
+          ><span
+            >這是這次重構刻意的行為改變——拆分前兩者共用一條 undo 記錄，現在 Ctrl+Z
+            只復原畫筆/防守範圍/戰術視圖自由站位，不會復原剛拖錯的站位。</span
+          ><br /><span class="ref">hooks/useTacticsBoard.ts · undo()/redo()</span>
+        </div>
+      </div>
+      <div class="bug">
+        <div class="bug-num">T5</div>
+        <div class="bug-body">
+          <b>（不再適用）自由球員自由拖曳沒有失敗提示</b
+          ><span
+            >2026-07-03 更新：戰術布置現在完全獨立於輪轉表，自由球員不再檢查「只能站後排」，
+            拖到哪裡都會成功——這個「合法性檢查沒有提示」的問題連同檢查本身一起消失了。</span
+          >
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== SCORESHEET SECTION ===================== -->
+  <section id="scoresheet">
+    <p class="eyebrow">Part 3</p>
+    <h2>計分表 — 操作流程與狀態機</h2>
+
+    <div class="callout">
+      <b>自重構以來的變化：</b>頁面/檔名從 MatchRecording 改成 ScoreSheet，useRecording 改成
+      useScoreSheet；liberoSubstitution 不再是全域共用一份，現在跟著 matchId 存在 useScoreSheet
+      裡，不同比賽的計分表不會再互相污染替補狀態。下面的操作邏輯本身沒有變。
+    </div>
+
+    <p class="section-intro">
+      照畫面實際會經過的順序排列。C
+      是整場比賽大部分時間停留的地方，裡面四條路徑（得分／復原／換人／自由球員）彼此獨立，但都會回到同一個「Rally
+      Idle」畫面。
+    </p>
+
+    <div class="phase-list">
+      <div class="phase-card">
+        <div class="phase-head">
+          <span class="phase-tag">A</span>
+          <h3>尚未設定先發</h3>
+        </div>
+        <p class="phase-note">
+          條件：輪轉表六個輪轉裡「至少一個」放了球員（hasLineup）。只要求 1 個，不要求全部 6
+          個，也不要求指定自由球員。
+        </p>
+        <div class="step-row">
+          <div class="step">顯示提示「請先到戰術板把先發球員拖上場」</div>
+          <div class="arrow">→</div>
+          <div class="step">點「前往戰術板」</div>
+          <div class="arrow">→</div>
+          <div class="step commit">離開此頁，到輪轉表拖曳排陣</div>
+        </div>
+        <span class="warn">⚠ S7</span>
+      </div>
+
+      <div class="phase-connector">↓</div>
+
+      <div class="phase-card">
+        <div class="phase-head">
+          <span class="phase-tag">B</span>
+          <h3>選發球方（每一局開始）</h3>
+        </div>
+        <p class="phase-note">
+          條件：<code>currentSet.serving === null</code>，每新開一局都會回到這裡。
+        </p>
+        <div class="step-row">
+          <div class="step">顯示「這局由誰先發球？」</div>
+          <div class="arrow">→</div>
+          <div class="step">點「我方先發」或「對手先發」</div>
+          <div class="arrow">→</div>
+          <div class="step commit">startSet() 寫入 serving，其餘（比分/輪轉）不變</div>
+        </div>
+      </div>
+
+      <div class="phase-connector">↓</div>
+
+      <div class="phase-card">
+        <div class="phase-head">
+          <span class="phase-tag">C</span>
+          <h3>Rally Idle — 一局進行中的主畫面</h3>
+        </div>
+        <p class="phase-note">
+          四條操作路徑都從這裡出發，也都回到這裡。球場可互動的前提是沒有選單開著、沒有正在拖自由球員。
+        </p>
+
+        <div class="lane amber">
+          <div class="lane-label"><span class="dot amber"></span>C1 · 記一球（畫線手勢）</div>
+          <div class="step-row">
+            <div class="step">在球場上拖曳畫線</div>
+            <div class="arrow">→</div>
+            <div class="step">鬆開，命中球員/區域（誤差半徑內）</div>
+            <div class="arrow">→</div>
+            <div class="step">動作選單：發球/防守/攻擊/擋網</div>
+            <div class="arrow">→</div>
+            <div class="step">結果選單：得分/失分</div>
+            <div class="arrow">→</div>
+            <div class="step commit">scorePoint() — 記分、可能換輪轉、換發球方</div>
+          </div>
+        </div>
+
+        <div class="lane">
+          <div class="lane-label"><span class="dot muted"></span>C2 · 復原上一球</div>
+          <div class="step-row">
+            <div class="step">「復原上一球」按鈕（history 為空時鎖住）</div>
+            <div class="arrow">→</div>
+            <div class="step commit">undoLastPoint() — 還原比分/輪轉/發球方</div>
+            <span class="warn">⚠ S1</span>
+          </div>
+        </div>
+
+        <div class="lane green">
+          <div class="lane-label"><span class="dot green"></span>C3 · 一般換人</div>
+          <div class="step-row">
+            <div class="step">點板凳球員</div>
+            <div class="arrow">→</div>
+            <div class="step">畫面出現「換人模式」提示 + 場上球員高亮</div>
+            <div class="arrow">→</div>
+            <div class="step">點場上任一球員</div>
+            <div class="arrow">→</div>
+            <div class="step commit">handleRegularSub() 完成替補</div>
+            <span class="warn">⚠ S2 ⚠ S3</span>
+          </div>
+        </div>
+
+        <div class="lane blue">
+          <div class="lane-label"><span class="dot blue"></span>C4 · 自由球員替補（拖曳）</div>
+          <div class="step-row">
+            <div class="step">從邊線拖曳自由球員圖示</div>
+            <div class="arrow">→</div>
+            <div class="step">拖到後排球員身上（前排/發球者不可選）</div>
+            <div class="arrow">→</div>
+            <div class="step commit">setLiberoSubstitution(matchId, id) 標記覆蓋對象</div>
+            <span class="warn">⚠ S4</span>
+          </div>
+          <div class="step-row" style="margin-top: 0.4rem">
+            <div class="step">（背景，非使用者觸發）輪轉一改變</div>
+            <div class="arrow">→</div>
+            <div class="step">檢查被覆蓋的位置是否轉到前排</div>
+            <div class="arrow">→</div>
+            <div class="step commit">自動歸位或换回上一個覆蓋對象</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="phase-connector">↓</div>
+
+      <div class="phase-card">
+        <div class="phase-head">
+          <span class="phase-tag">D</span>
+          <h3>下一局</h3>
+        </div>
+        <p class="phase-note">按鈕永遠可按，沒有勝負分數判斷（不檢查 25 分 / 差 2 分）。</p>
+        <div class="step-row">
+          <div class="step">點「下一局」</div>
+          <div class="arrow">→</div>
+          <div class="step">封存本局比分/歷史到 completedSets</div>
+          <div class="arrow">→</div>
+          <div class="step commit">
+            建立新的一局（輪轉歸零、發球方清空、liberoSubstitution 歸零）→ 回到 B
+          </div>
+          <span class="warn">⚠ S8</span>
+        </div>
+      </div>
+
+      <div class="phase-connector">↓</div>
+
+      <div class="phase-card dashed">
+        <div class="phase-head">
+          <span class="phase-tag">E</span>
+          <h3>比賽結束 — 尚未實作</h3>
+        </div>
+        <p class="phase-note">
+          目前唯一離開這個循環的方式，是手動點頁首導覽離開，狀態仍留在背景（Zustand
+          persist）。沒有終局判斷、沒有結束按鈕、沒有賽後統計畫面。
+        </p>
+        <span class="warn">⚠ S6</span>
+      </div>
+    </div>
+  </section>
+
+  <div class="diagram-shell" style="margin-top: 1.5rem">
+    <div class="legend" style="margin-top: 0">
+      <span><span class="swatch" style="background: var(--amber)"></span>得分流程</span>
+      <span><span class="swatch" style="background: var(--green)"></span>一般換人</span>
+      <span><span class="swatch" style="background: var(--blue)"></span>自由球員</span>
+      <span><span class="swatch" style="background: var(--muted)"></span>導覽 / 取消 / 復原</span>
+      <span
+        ><span class="swatch" style="background: var(--red); opacity: 0.8"></span
+        >未實作（虛線）</span
+      >
+    </div>
+
+    <svg
+      viewBox="0 0 1220 760"
+      xmlns="http://www.w3.org/2000/svg"
+      role="img"
+      aria-label="計分表狀態機圖"
+    >
+      <defs>
+        <marker id="ah-amber" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+          <path d="M0,0 L8,4 L0,8 Z" fill="#f2b705" />
+        </marker>
+        <marker id="ah-green" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+          <path d="M0,0 L8,4 L0,8 Z" fill="#4fa179" />
+        </marker>
+        <marker id="ah-blue" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+          <path d="M0,0 L8,4 L0,8 Z" fill="#5c9ce6" />
+        </marker>
+        <marker id="ah-muted" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+          <path d="M0,0 L8,4 L0,8 Z" fill="#98a29a" />
+        </marker>
+        <marker id="ah-red" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+          <path d="M0,0 L8,4 L0,8 Z" fill="#e2544a" />
+        </marker>
+      </defs>
+
+      <g fill="none" stroke-width="2">
+        <path d="M300,75 L470,75" stroke="#98a29a" marker-end="url(#ah-muted)" />
+        <path d="M600,110 L600,350" stroke="#f2b705" marker-end="url(#ah-amber)" />
+        <path d="M660,350 Q 800,300 880,225" stroke="#f2b705" marker-end="url(#ah-amber)" />
+        <path
+          d="M930,260 Q 860,335 700,378"
+          stroke="#98a29a"
+          stroke-dasharray="5 4"
+          marker-end="url(#ah-muted)"
+        />
+        <path d="M1010,260 L1010,350" stroke="#f2b705" marker-end="url(#ah-amber)" />
+        <path
+          d="M880,388 Q 800,405 730,398"
+          stroke="#f2b705"
+          stroke-width="3"
+          marker-end="url(#ah-amber)"
+        />
+        <path d="M560,350 Q 600,290 640,350" stroke="#98a29a" marker-end="url(#ah-muted)" />
+        <path d="M470,375 Q 400,320 320,305" stroke="#4fa179" marker-end="url(#ah-green)" />
+        <path
+          d="M190,340 Q 320,400 470,405"
+          stroke="#98a29a"
+          stroke-dasharray="5 4"
+          marker-end="url(#ah-muted)"
+        />
+        <path
+          d="M300,340 Q 400,420 470,420"
+          stroke="#4fa179"
+          stroke-width="3"
+          marker-end="url(#ah-green)"
+        />
+        <path d="M500,440 Q 400,470 320,480" stroke="#5c9ce6" marker-end="url(#ah-blue)" />
+        <path
+          d="M190,460 Q 380,410 540,440"
+          stroke="#98a29a"
+          stroke-dasharray="5 4"
+          marker-end="url(#ah-muted)"
+        />
+        <path
+          d="M320,505 Q 420,480 500,460"
+          stroke="#5c9ce6"
+          stroke-width="3"
+          marker-end="url(#ah-blue)"
+        />
+        <path d="M560,440 Q 600,495 640,440" stroke="#5c9ce6" marker-end="url(#ah-blue)" />
+        <path
+          d="M730,400 C 1160,400 1160,75 730,75"
+          stroke="#f2b705"
+          stroke-width="3"
+          marker-end="url(#ah-amber)"
+        />
+        <path
+          d="M600,440 L600,650"
+          stroke="#e2544a"
+          stroke-dasharray="6 5"
+          marker-end="url(#ah-red)"
+        />
+      </g>
+
+      <g
+        font-family="Segoe UI, sans-serif"
+        font-size="12.5"
+        paint-order="stroke"
+        stroke="#14181b"
+        stroke-width="4"
+      >
+        <text x="305" y="63" fill="#98a29a">
+          設定 ≥1 個輪轉的球員
+          <tspan fill="#e2544a">⚠S7</tspan>
+        </text>
+        <text x="608" y="235" fill="#f2b705">startSet(我方/對手先發)</text>
+        <text x="720" y="270" fill="#f2b705">拖曳畫線→鬆開觸球員/區域</text>
+        <text x="855" y="330" fill="#98a29a">取消（點背景）</text>
+        <text x="1015" y="310" fill="#f2b705">選動作</text>
+        <text x="740" y="415" fill="#f2b705" font-weight="700">選得分/失分 → scorePoint()</text>
+        <text x="530" y="300" fill="#98a29a">
+          復原上一球（history≠0）
+          <tspan fill="#e2544a">⚠S1</tspan>
+        </text>
+        <text x="330" y="320" fill="#4fa179">點板凳球員</text>
+        <text x="200" y="390" fill="#98a29a">取消</text>
+        <text x="330" y="440" fill="#4fa179" font-weight="700">
+          handleRegularSub()
+          <tspan fill="#e2544a">⚠S2 ⚠S3</tspan>
+        </text>
+        <text x="345" y="470" fill="#5c9ce6">拖曳自由球員</text>
+        <text x="210" y="425" fill="#98a29a">放開（無效目標）</text>
+        <text x="330" y="530" fill="#5c9ce6" font-weight="700">
+          合法後排 → setLiberoSubstitution
+          <tspan fill="#e2544a">⚠S4</tspan>
+        </text>
+        <text x="530" y="500" fill="#5c9ce6">輪轉變動 → 自動判斷歸位</text>
+        <text x="1030" y="240" fill="#f2b705" font-weight="700">
+          下一局（永遠可按）
+          <tspan fill="#e2544a">⚠S8</tspan>
+        </text>
+        <text x="612" y="560" fill="#e2544a">⚠S6 沒有結束比賽按鈕/賽後統計</text>
+      </g>
+
+      <g font-family="Bahnschrift, sans-serif">
+        <rect
+          x="40"
+          y="40"
+          width="260"
+          height="70"
+          rx="10"
+          fill="#1d2226"
+          stroke="#98a29a"
+          stroke-width="1.5"
+        />
+        <text x="170" y="68" text-anchor="middle" fill="#edeae2" font-size="15" font-weight="700">
+          A · 尚未設定先發
+        </text>
+        <text
+          x="170"
+          y="88"
+          text-anchor="middle"
+          fill="#98a29a"
+          font-family="Consolas,monospace"
+          font-size="11"
+        >
+          hasLineup === false
+        </text>
+
+        <rect
+          x="470"
+          y="40"
+          width="260"
+          height="70"
+          rx="10"
+          fill="#1d2226"
+          stroke="#98a29a"
+          stroke-width="1.5"
+        />
+        <text x="600" y="68" text-anchor="middle" fill="#edeae2" font-size="15" font-weight="700">
+          B · 選發球方
+        </text>
+        <text
+          x="600"
+          y="88"
+          text-anchor="middle"
+          fill="#98a29a"
+          font-family="Consolas,monospace"
+          font-size="11"
+        >
+          serving === null
+        </text>
+
+        <rect
+          x="470"
+          y="350"
+          width="260"
+          height="90"
+          rx="12"
+          fill="#242a2e"
+          stroke="#edeae2"
+          stroke-width="2"
+        />
+        <text x="600" y="385" text-anchor="middle" fill="#edeae2" font-size="16" font-weight="700">
+          C0 · Rally Idle
+        </text>
+        <text
+          x="600"
+          y="406"
+          text-anchor="middle"
+          fill="#98a29a"
+          font-family="Consolas,monospace"
+          font-size="11"
+        >
+          本局進行中的預設狀態
+        </text>
+        <text
+          x="600"
+          y="424"
+          text-anchor="middle"
+          fill="#98a29a"
+          font-family="Consolas,monospace"
+          font-size="11"
+        >
+          四條路徑的中樞
+        </text>
+
+        <rect
+          x="880"
+          y="190"
+          width="260"
+          height="70"
+          rx="10"
+          fill="#1d2226"
+          stroke="#f2b705"
+          stroke-width="1.5"
+        />
+        <text x="1010" y="218" text-anchor="middle" fill="#edeae2" font-size="14" font-weight="700">
+          C1a · 動作選單
+        </text>
+        <text
+          x="1010"
+          y="238"
+          text-anchor="middle"
+          fill="#98a29a"
+          font-family="Consolas,monospace"
+          font-size="11"
+        >
+          發球/防守/攻擊/擋網
+        </text>
+
+        <rect
+          x="880"
+          y="350"
+          width="260"
+          height="70"
+          rx="10"
+          fill="#1d2226"
+          stroke="#f2b705"
+          stroke-width="1.5"
+        />
+        <text x="1010" y="378" text-anchor="middle" fill="#edeae2" font-size="14" font-weight="700">
+          C1b · 結果選單
+        </text>
+        <text
+          x="1010"
+          y="398"
+          text-anchor="middle"
+          fill="#98a29a"
+          font-family="Consolas,monospace"
+          font-size="11"
+        >
+          得分/失分
+        </text>
+
+        <rect
+          x="60"
+          y="270"
+          width="260"
+          height="70"
+          rx="10"
+          fill="#1d2226"
+          stroke="#4fa179"
+          stroke-width="1.5"
+        />
+        <text x="190" y="298" text-anchor="middle" fill="#edeae2" font-size="14" font-weight="700">
+          C3 · 換人模式
+        </text>
+        <text
+          x="190"
+          y="318"
+          text-anchor="middle"
+          fill="#98a29a"
+          font-family="Consolas,monospace"
+          font-size="11"
+        >
+          已選板凳球員
+        </text>
+
+        <rect
+          x="60"
+          y="460"
+          width="260"
+          height="70"
+          rx="10"
+          fill="#1d2226"
+          stroke="#5c9ce6"
+          stroke-width="1.5"
+        />
+        <text x="190" y="488" text-anchor="middle" fill="#edeae2" font-size="14" font-weight="700">
+          C4 · 拖曳自由球員
+        </text>
+        <text
+          x="190"
+          y="508"
+          text-anchor="middle"
+          fill="#98a29a"
+          font-family="Consolas,monospace"
+          font-size="11"
+        >
+          尋找合法後排目標
+        </text>
+
+        <rect
+          x="470"
+          y="650"
+          width="260"
+          height="70"
+          rx="10"
+          fill="#1d2226"
+          stroke="#e2544a"
+          stroke-width="1.5"
+          stroke-dasharray="6 5"
+        />
+        <text x="600" y="678" text-anchor="middle" fill="#edeae2" font-size="14" font-weight="700">
+          E · 比賽結束（未實作）
+        </text>
+        <text
+          x="600"
+          y="698"
+          text-anchor="middle"
+          fill="#98a29a"
+          font-family="Consolas,monospace"
+          font-size="11"
+        >
+          無按鈕、無賽後統計畫面
+        </text>
+      </g>
+    </svg>
+  </div>
+
+  <div class="table-shell">
+    <table>
+      <thead>
+        <tr>
+          <th>狀態</th>
+          <th>事件 / 條件</th>
+          <th>下一狀態</th>
+          <th>備註</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>A 尚未設定先發</td>
+          <td class="code">hasLineup 變 true</td>
+          <td>B 選發球方</td>
+          <td>只檢查「≥1 個輪轉有球員」<span class="warn">⚠S7</span></td>
+        </tr>
+        <tr>
+          <td>B 選發球方</td>
+          <td class="code">startSet(side)</td>
+          <td>C0 Rally Idle</td>
+          <td>只寫 serving，不動比分/輪轉</td>
+        </tr>
+        <tr>
+          <td>C0 Rally Idle</td>
+          <td class="code">畫線鬆開命中目標</td>
+          <td>C1a 動作選單</td>
+          <td>球場暫時不可互動</td>
+        </tr>
+        <tr>
+          <td>C1a 動作選單</td>
+          <td class="code">點背景 / 選動作</td>
+          <td>C0 / C1b</td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td>C1b 結果選單</td>
+          <td class="code">選得分或失分 → scorePoint()</td>
+          <td>C0 Rally Idle</td>
+          <td>可能換輪轉、換發球方</td>
+        </tr>
+        <tr>
+          <td>C0 Rally Idle</td>
+          <td class="code">點「復原上一球」（history≠0）</td>
+          <td>C0 Rally Idle</td>
+          <td>只還原比分/輪轉/發球，不還原換人狀態<span class="warn">⚠S1</span></td>
+        </tr>
+        <tr>
+          <td>C0 Rally Idle</td>
+          <td class="code">選板凳球員</td>
+          <td>C3 換人模式</td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td>C3 換人模式</td>
+          <td class="code">取消 / 點場上球員</td>
+          <td>C0 Rally Idle</td>
+          <td>
+            不記入持久化狀態<span class="warn">⚠S2</span>、無 6 人上限<span class="warn">⚠S3</span>
+          </td>
+        </tr>
+        <tr>
+          <td>C0 Rally Idle</td>
+          <td class="code">拖曳自由球員</td>
+          <td>C4 拖曳自由球員</td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td>C4 拖曳自由球員</td>
+          <td class="code">放到合法/不合法目標</td>
+          <td>C0 Rally Idle</td>
+          <td>驗證邏輯與戰術板不共用<span class="warn">⚠S4</span></td>
+        </tr>
+        <tr>
+          <td>C0 Rally Idle</td>
+          <td class="code">輪轉變動（背景）</td>
+          <td>C0 Rally Idle</td>
+          <td>自動判斷自由球員是否需歸位</td>
+        </tr>
+        <tr>
+          <td>C0 Rally Idle</td>
+          <td class="code">點「下一局」（永遠可按）</td>
+          <td>B 選發球方</td>
+          <td>無勝負分數判斷<span class="warn">⚠S8</span>；liberoSubstitution 隨局歸零</td>
+        </tr>
+        <tr>
+          <td>C0 Rally Idle</td>
+          <td class="code">（不存在的事件）</td>
+          <td>E 比賽結束</td>
+          <td>尚未實作，僅能靠導覽離開<span class="warn">⚠S6</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <section>
+    <p class="eyebrow">Part 3 · 已知問題</p>
+    <h2>計分表 — 已知問題與缺口</h2>
+    <p class="section-intro">編號對應上面兩張圖裡的 ⚠ 標記。</p>
+
+    <div class="bug-list">
+      <div class="bug">
+        <div class="bug-num">S1</div>
+        <div class="bug-body">
+          <b>復原不會還原換人狀態</b
+          ><span
+            >復原上一球只還原比分/輪轉/發球方，不會還原同一時間點發生的一般換人或自由球員替補。</span
+          ><br /><span class="ref">hooks/useScoreSheet.ts · undoLastPoint()</span>
+        </div>
+      </div>
+      <div class="bug">
+        <div class="bug-num">S2</div>
+        <div class="bug-body">
+          <b>換人紀錄不會持久化</b
+          ><span
+            >regularSubs / subCountsHistory 是純 React 元件內的
+            state，重整頁面會整局換人紀錄消失（比分/輪轉不會消失，因為那是 Zustand persist）。</span
+          ><br /><span class="ref">pages/ScoreSheet.tsx（元件內 useState）</span>
+        </div>
+      </div>
+      <div class="bug">
+        <div class="bug-num">S3</div>
+        <div class="bug-body">
+          <b>沒有 6 次換人上限</b><span>換人次數有算、有顯示，但沒有任何地方擋下第 7 次換人。</span
+          ><br /><span class="ref">issue #20「功能補齊」項目 3</span>
+        </div>
+      </div>
+      <div class="bug">
+        <div class="bug-num">S4</div>
+        <div class="bug-body">
+          <b>自由球員規則兩套邏輯各自維護</b
+          ><span
+            >計分表頁的 isValidLiberoTarget 跟輪轉表的 placeLiberoOnCourt
+            是兩份獨立邏輯，只是「概念一致」，沒有共用函式 —
+            未來輪轉表規則改了，計分表不會自動跟著改。</span
+          ><br /><span class="ref"
+            >components/ScoreSheetCourt.tsx vs hooks/useRotationTable.ts</span
+          >
+        </div>
+      </div>
+      <div class="bug">
+        <div class="bug-num">S5</div>
+        <div class="bug-body">
+          <b>沒有暫停功能</b
+          ><span
+            >整個 codebase 完全沒有 timeout 概念 —
+            沒有按鈕、沒有欄位、沒有型別。不是「還沒接上」，是根本不存在。</span
+          >
+        </div>
+      </div>
+      <div class="bug">
+        <div class="bug-num">S6</div>
+        <div class="bug-body">
+          <b>沒有結束比賽流程</b
+          ><span
+            >沒有終局判斷、沒有「結束比賽」按鈕，也沒有獨立的賽後統計畫面。目前唯一離開循環的方式是手動導覽走人。</span
+          ><br /><span class="ref">issue #20 Bug 3</span>
+        </div>
+      </div>
+      <div class="bug">
+        <div class="bug-num">S7</div>
+        <div class="bug-body">
+          <b>先發檢查太寬鬆</b
+          ><span
+            >hasLineup
+            只要求「六個輪轉裡至少一個有球員」就會放行，不檢查六個輪轉是否都排好、也不檢查是否指定了自由球員。</span
+          ><br /><span class="ref"
+            >pages/ScoreSheet.tsx · hasLineup 判斷式；交叉參照輪轉表 ⚠R4</span
+          >
+        </div>
+      </div>
+      <div class="bug">
+        <div class="bug-num">S8</div>
+        <div class="bug-body">
+          <b>下一局沒有勝負判斷</b
+          ><span
+            >「下一局」按鈕永遠可按，不檢查 25 分 / 差 2 分（或第五局 15 分）的勝局條件，0:0
+            按下去也會被封存成一局。</span
+          ><br /><span class="ref">hooks/useScoreSheet.ts · nextSet()</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    來源：RotationTable.tsx / TacticsBoardPanel.tsx / ScoreSheet.tsx / Court.tsx / PlayerNode.tsx /
+    useRotationTable.ts / useTacticsBoard.ts / useScoreSheet.ts / ScoreSheetCourt.tsx /
+    ScoreSheetStats.tsx / RadialMenu.tsx · 對照 commit f3f2b7d（三方拆分重構，PR #28）· 追蹤於 issue
+    #27
+  </footer>
+</div>

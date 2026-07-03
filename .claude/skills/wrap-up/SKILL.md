@@ -80,7 +80,16 @@ implementing" --color FBCA04` if it doesn't exist yet.
    referencing issue numbers instead of re-explaining their full detail. Update the
    "Recently closed" section with what was just closed. Update the "Last updated" date.
 
-6. **Remind, don't act.** If there are still uncommitted changes after all this, remind
+6. **Refresh `docs/flow-diagrams.html` if the interaction flows changed this session.**
+   This is the 輪轉表/戰術板/計分表 operation-flow + state-machine reference (originally
+   built as a Claude Artifact, copied into the repo on 2026-07-03 so it survives offline
+   instead of living only at a claude.ai URL). Same "snapshot, not changelog" rule as
+   `docs/PROGRESS.md`: if the file has a "recent changes" note, **overwrite it with only
+   what changed since the last wrap-up** — don't accumulate a growing per-session log
+   inside it. If nothing about the flows/screens/state machines changed this session,
+   leave the file untouched.
+
+7. **Remind, don't act.** If there are still uncommitted changes after all this, remind
    the user to commit — don't commit on their behalf unless they ask.
 
 ## What NOT to do

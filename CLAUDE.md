@@ -38,7 +38,7 @@ scripts/     one-off TS scripts run via tsx
 ## Commands
 
 - `pnpm --filter @workspace/api-server run dev` — run the API server (port from `$PORT`)
-- `PORT=5173 BASE_PATH="/" pnpm --filter @workspace/volleyball-tactics run dev` — run the frontend dev server
+- `pnpm --filter @workspace/volleyball-tactics run dev` — run the frontend dev server
 - `pnpm run typecheck` — full typecheck (runs `typecheck:libs` via `tsc --build` first, then artifacts/scripts)
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate `api-client-react` + `api-zod` from
