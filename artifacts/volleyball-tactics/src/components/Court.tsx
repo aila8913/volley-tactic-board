@@ -53,7 +53,6 @@ export default function Court() {
     redo,
     isLayoutMode,
     courtView,
-    setCourtView,
   } = useTacticsBoard();
   const placePlayerOnCourt = useRotationTable((state) => state.placePlayerOnCourt);
   const placePlayerFree = useTacticsBoard((state) => state.placePlayerFree);
@@ -229,30 +228,6 @@ export default function Court() {
         courtView === "tactics" ? "" : "max-w-[500px] mx-auto"
       }`}
     >
-      {/* 視圖切換：輪轉視圖只顯示站位圓圈，戰術視圖疊加顯示畫筆標記跟防守範圍 */}
-      <div className="flex gap-1 mb-2">
-        <button
-          onClick={() => setCourtView("rotation")}
-          className={`px-3 py-1 wobbly-border text-xs font-bold transition-colors ${
-            courtView === "rotation"
-              ? "bg-[#CCFF00] shadow-[2px_2px_0_0_#111]"
-              : "bg-white hover:bg-gray-100"
-          }`}
-        >
-          輪轉視圖
-        </button>
-        <button
-          onClick={() => setCourtView("tactics")}
-          className={`px-3 py-1 wobbly-border text-xs font-bold transition-colors ${
-            courtView === "tactics"
-              ? "bg-[#CCFF00] shadow-[2px_2px_0_0_#111]"
-              : "bg-white hover:bg-gray-100"
-          }`}
-        >
-          戰術視圖
-        </button>
-      </div>
-
       {/* 輪轉視圖：以高度為主、寬度自動縮，h-full 讓球場撐滿可用垂直空間，
           aspect-ratio 1/2 表示 width:height = 1:2，所以 width = height / 2；粗框、圓角、
           陰影直接用 CSS 畫在 wrapper 上，因為這個視圖下 wrapper 跟球場永遠一樣大。
@@ -429,20 +404,15 @@ export default function Court() {
           )}
 
           {/* Render Players
-              輪轉視圖：用 positions（格子吸附站位，來自輪轉表）
-              戰術視圖：用 tacticPositions（自由布置站位，來自戰術板）；若尚未客製化
-                       （空陣列），用 positions 作為 fallback，並合併（tacticPositions 的人優先）。 */}
+              輪轉視圖：用 positions（格子吸附站位，來自輪轉表，即時資料）。
+              戰術視圖：用 tacticPositions（進入戰術布置那一刻從輪轉表拍的快照，之後
+              完全獨立編輯，見 useTacticsBoard.ts 的 enterTacticsLayout）——不需要
+              再跟輪轉表的即時站位合併，快照本身就是完整的一份。 */}
           {(() => {
-            const tacticIds = new Set(
-              (rotationTactics.tacticPositions ?? []).map((p) => p.playerId),
-            );
             const displayPositions =
               courtView === "rotation"
                 ? rotationPositions.positions
-                : [
-                    ...rotationPositions.positions.filter((p) => !tacticIds.has(p.playerId)),
-                    ...(rotationTactics.tacticPositions ?? []),
-                  ];
+                : rotationTactics.tacticPositions;
 
             return displayPositions.map((pos) => {
               const player = roster.find((p) => p.id === pos.playerId);
@@ -464,16 +434,9 @@ export default function Court() {
         </svg>
       </div>
 
-      {/* 自由球員備位區：只要有 L 未上場就一律顯示，不分輪轉/戰術視圖——
-          跟左側球員名單、球場上的 PlayerNode 一樣，來源/現有球員永遠看得到、拖得動，
-          唯讀限制是由「放下的目標」（handleDrop／PlayerNode 的 canDrag）決定要不要生效，
-          不是靠隱藏來源本身。
-          positions 是兩個視圖共用的「誰在場上」依據（見 useRotationTable.ts 的
-          placeLiberoOnCourt），所以「這位 L 在不在場上」的判斷結果在兩個視圖是一致的。
-          橘色圓圈坐在球場正下方，跟場上的 PlayerNode 視覺一致。
-          直接用 HTML drag-and-drop（跟左側名單同一套），拖到球場後排就會觸發 handleDrop →
-          輪轉視圖走 placePlayerOnCourt、戰術視圖 + 布置模式走 placePlayerFree。 */}
-      {liberoInSpot.length > 0 && (
+      {/* 自由球員備位區：只在輪轉視圖顯示——這是「先發 L 還沒上場」這個輪轉表自己的
+          概念，戰術布置是獨立的快照畫布，沒有「備位」這回事（快照裡有誰就是有誰）。 */}
+      {courtView === "rotation" && liberoInSpot.length > 0 && (
         <div className="absolute bottom-3 left-0 right-0 flex flex-col items-center gap-1">
           <span className="text-[9px] text-gray-400 tracking-wide">L 備位 — 拖到後排上場</span>
           <div className="flex gap-2 justify-center">

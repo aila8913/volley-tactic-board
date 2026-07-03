@@ -31,9 +31,9 @@ export default function TacticsBoardPanel() {
     setActiveTool,
     projectSituation,
     setProjectSituation,
-    newProject,
     activeProjectId,
     setActiveProjectId,
+    setSelectedObjectId,
     loadProject,
     importState,
     buildSnapshot,
@@ -49,6 +49,7 @@ export default function TacticsBoardPanel() {
     isLayoutMode,
     setLayoutMode,
     setCourtView,
+    enterTacticsLayout,
   } = useTacticsBoard();
   const currentRotation = useRotationTable((state) => state.currentRotation);
   const setCurrentRotation = useRotationTable((state) => state.setCurrentRotation);
@@ -70,8 +71,8 @@ export default function TacticsBoardPanel() {
         setActiveProjectId(created.id);
         toast({ title: "戰術已儲存" });
         setLayoutMode(false);
-        // 存完戰術後切到戰術視圖，讓教練馬上看到剛畫好的標記跟防守範圍
-        setCourtView("tactics");
+        // 存完戰術後回到輪轉表——戰術布置的工作告一段落，畫面回到「誰站哪」的畫面。
+        setCourtView("rotation");
       },
       onError: () => toast({ title: "儲存失敗", variant: "destructive" }),
     },
@@ -84,7 +85,7 @@ export default function TacticsBoardPanel() {
         queryClient.invalidateQueries({ queryKey: getListTacticsQueryKey() });
         toast({ title: "戰術已更新" });
         setLayoutMode(false);
-        setCourtView("tactics");
+        setCourtView("rotation");
       },
       onError: () => toast({ title: "更新失敗", variant: "destructive" }),
     },
@@ -180,10 +181,20 @@ export default function TacticsBoardPanel() {
     }
   };
 
-  // 另存新檔：永遠建新的，不管目前有沒有 activeProjectId
+  // 另存新檔：永遠建新的一筆，不管目前有沒有 activeProjectId——跟「儲存」的差別是
+  // 「儲存」在已經有 activeProjectId 時會覆寫原本那筆，另存新檔則是複製一份新的。
   const handleSaveAs = () => {
     const data = buildSnapshot() as unknown as Record<string, unknown>;
     createTactic.mutate({ data: { name: projectSituation, data } });
+  };
+
+  // 取消：不呼叫存檔 API，直接放棄這次編輯、回到輪轉表——這次在球場上動的東西
+  // （畫筆、移動的球員快照）不會被存進資料庫，但也不會特別復原，下次按「戰術布置」
+  // 本來就會用輪轉表重新拍一張乾淨的照片蓋過去。
+  const handleCancel = () => {
+    setSelectedObjectId(null);
+    setLayoutMode(false);
+    setCourtView("rotation");
   };
 
   const currentRotState = tacticsByRotation[currentRotation];
@@ -278,22 +289,25 @@ export default function TacticsBoardPanel() {
             <section>
               <h2 className="font-display mb-2 text-[15px] font-bold">戰術布置</h2>
               <p className="text-[10px] text-gray-500 mb-2">
-                進入後才能使用箭頭、文字、防守範圍等工具標註戰術；平常球場只顯示已經畫好的內容，
-                不能選取或修改。
+                「戰術布置」用輪轉表現在的站位重新編排一個戰術。想修改已儲存的戰術，先在下面清單點一個載入，「編輯」才會亮起。
               </p>
               <button
-                onClick={() => setLayoutMode(true)}
+                onClick={() => enterTacticsLayout()}
                 className="w-full wobbly-border py-1.5 bg-[#CCFF00] hover:bg-[#111] hover:text-[#CCFF00] transition-colors font-bold text-xs shadow-[2px_2px_0_0_#111]"
                 data-testid="button-enter-layout-mode"
               >
-                進入戰術布置
+                戰術布置
               </button>
               <button
-                onClick={newProject}
-                className="w-full wobbly-border py-1.5 bg-white hover:bg-gray-100 font-bold text-xs mt-1.5"
-                data-testid="button-new-project"
+                onClick={() => {
+                  setLayoutMode(true);
+                  setCourtView("tactics");
+                }}
+                disabled={!activeProjectId}
+                className="w-full wobbly-border py-1.5 bg-white hover:bg-gray-100 font-bold text-xs mt-1.5 disabled:opacity-40 disabled:hover:bg-white"
+                data-testid="button-edit-current"
               >
-                ＋ 新建空白戰術
+                編輯
               </button>
             </section>
             <TacticsList maxHeight="160px" />
@@ -594,18 +608,15 @@ export default function TacticsBoardPanel() {
               <TacticsList maxHeight="80px" />
             </section>
 
-            {/* 布置模式底端：新建 / 儲存 / 另存新檔 */}
+            {/* 布置模式底端：取消 / 儲存 / 另存新檔 */}
             <section>
               <div className="grid grid-cols-3 gap-1.5">
                 <button
-                  onClick={() => {
-                    newProject();
-                    setLayoutMode(false);
-                  }}
+                  onClick={handleCancel}
                   className="wobbly-border py-1.5 bg-white hover:bg-gray-100 font-bold text-xs"
                   data-testid="button-cancel-layout"
                 >
-                  新建
+                  取消
                 </button>
                 <button
                   onClick={handleSave}

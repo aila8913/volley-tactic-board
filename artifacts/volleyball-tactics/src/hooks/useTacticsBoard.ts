@@ -10,7 +10,6 @@ import {
   SavedTacticData,
 } from "../types/tacticsBoard";
 import { useRotationTable } from "./useRotationTable";
-import { findNearestZone, BACK_ROW_ZONES } from "../lib/rotationLogic";
 
 export type ToolType =
   | "select"
@@ -57,10 +56,15 @@ interface TacticsBoardStore extends TacticsBoardData {
   undo: () => void;
   redo: () => void;
 
-  // 戰術布置模式下的自由放置：直接用正規化座標（0~1 範圍），只影響目前輪次，不做格子吸附也不做輪轉傳播。
-  // 放自由球員時需要改動「誰在場上」，那是輪轉表的資料，所以這裡會呼叫 useRotationTable 的
-  // placeLiberoFree——戰術板讀得到、也用得到輪轉表的動作，但輪轉表完全不知道戰術板存在，
-  // 這就是我們說好的「單向依賴」：戰術板依賴輪轉表，反過來不行。
+  // 進入戰術布置的唯一入口：把輪轉表「當下」的即時站位複製一份到 tacticPositions，
+  // 當作這次編輯的起點。之後不管在戰術布置裡怎麼拖，都只改這份複製出來的快照，
+  // 不會寫回輪轉表——兩邊從這一刻起完全獨立。每次點「戰術布置」都會重新拍照、
+  // 蓋掉上次编輯的內容（想保留上次的編輯，要先另存成戰術，之後用「已儲存」載入）。
+  enterTacticsLayout: () => void;
+
+  // 戰術布置模式下的自由放置：直接用正規化座標（0~1 範圍），只影響目前輪次的快照，
+  // 不做格子吸附、不做輪轉傳播，也不寫回輪轉表——自由球員在這裡就是普通的一個標記，
+  // 不再強制「只能站後排」（那是輪轉表的比賽規則，戰術布置只是自由畫布）。
   placePlayerFree: (playerId: string, x: number, y: number) => void;
   addDefenseRange: (range: Omit<DefenseRange, "id">) => void;
   updateDefenseRange: (id: string, updates: Partial<DefenseRange>) => void;
@@ -72,13 +76,10 @@ interface TacticsBoardStore extends TacticsBoardData {
   // 只清空目前輪次的畫筆/自由站位（LeftPanel「重置站位」按鈕的另一半，
   // 跟 useRotationTable.resetCurrentRotationPositions 一起被呼叫）。
   resetCurrentRotationTactics: () => void;
-  // 球員被移出球場時（輪轉表的 removePlayerFromCourt），戰術視圖裡殘留的自由站位
-  // 也要清掉，不然會變成沒人認領的幽靈站位。呼叫端（PlayerNode.tsx）要同時呼叫
-  // useRotationTable.removePlayerFromCourt 跟這個函式。
-  removePlayerTacticPositions: (playerId: string) => void;
+  // 在戰術布置裡移除一個人：只影響「這張快照」（目前輪次的 tacticPositions），
+  // 不動輪轉表——跟輪轉表那邊的 removePlayerFromCourt 是兩件事，各自獨立。
+  removePlayerFromTacticView: (playerId: string) => void;
 
-  // 重置編輯器回初始值，activeProjectId = null；同時清空輪轉表（新戰術從空白開始）。
-  newProject: () => void;
   setActiveProjectId: (id: string | null) => void;
   // 把 API 回傳的已存戰術資料載入編輯器，同時分派給輪轉表 + 戰術板兩個 store。
   loadProject: (data: SavedTacticData, id: string, name: string) => void;
@@ -157,47 +158,33 @@ export const useTacticsBoard = create<TacticsBoardStore>()(
           return state;
         }),
 
+      enterTacticsLayout: () => {
+        const rt = useRotationTable.getState();
+        const r = rt.currentRotation;
+        // 複製（不是參照）目前輪次的即時站位，當作這次布置的起點——之後怎麼編輯
+        // 都只碰這份副本，跟輪轉表的即時資料從這一刻起完全脫鉤。
+        const snapshot = rt.rotations[r].positions.map((p) => ({ ...p }));
+        set((state) => {
+          const newTactics = [...state.tacticsByRotation];
+          newTactics[r] = { ...newTactics[r], tacticPositions: snapshot };
+          return {
+            tacticsByRotation: newTactics,
+            isLayoutMode: true,
+            courtView: "tactics",
+            activeTool: "select",
+            selectedObjectId: null,
+            history: [newTactics[r]],
+            historyIndex: 0,
+          };
+        });
+      },
+
       placePlayerFree: (playerId, x, y) => {
         get().pushHistory();
-        const rt = useRotationTable.getState();
-        const player = rt.roster.find((p) => p.id === playerId);
-        const isLibero = player?.role === "L";
-        const r = rt.currentRotation;
-
-        // ── 自由球員邏輯 ──────────────────────────────────────────────────────
-        // 戰術視圖的自由座標放置也要遵守跟輪轉視圖一樣的規則：同一時間只能有一位 L
-        // 在場上、上場時要頂替掉目標位置原本的人。這部分邏輯（誰在場上）屬於輪轉表，
-        // 所以交給 useRotationTable.placeLiberoFree 處理，這裡只負責戰術視圖自己的
-        // tacticPositions 顯示座標。
-        if (isLibero) {
-          const zone = findNearestZone(x, y); // 只拿來判斷蓋到了哪個人／哪一格，座標仍用原始 x/y
-          if (!BACK_ROW_ZONES.has(zone)) return; // 前排拒絕放置
-
-          rt.placeLiberoFree(r, playerId, zone, { x, y });
-
-          // positions 換完人之後，tacticPositions 裡任何屬於「舊 L」或「剛被換下場那位」的
-          // 殘留自由座標都要清掉，不然戰術視圖還是會照著舊資料疊圖，變成幽靈重複站位。
-          const updatedRot = useRotationTable.getState().rotations[r];
-          const liberoIds = new Set(rt.roster.filter((p) => p.role === "L").map((p) => p.id));
-          const replacedId = updatedRot.liberoReplacement?.replacedPosition.playerId;
-
-          set((state) => {
-            const newTactics = [...state.tacticsByRotation];
-            newTactics[r] = {
-              ...newTactics[r],
-              tacticPositions: [
-                ...newTactics[r].tacticPositions.filter(
-                  (p) => !liberoIds.has(p.playerId) && p.playerId !== replacedId,
-                ),
-                { playerId, x, y },
-              ],
-            };
-            return { tacticsByRotation: newTactics };
-          });
-          return;
-        }
-
-        // ── 一般球員邏輯 ──────────────────────────────────────────────────────
+        const r = useRotationTable.getState().currentRotation;
+        // 戰術布置是自由畫布，自由球員在這裡跟一般球員一視同仁——只改這張快照的
+        // tacticPositions，不檢查「只能站後排」（那是輪轉表的比賽規則），也不寫回
+        // startingLiberoId。
         set((state) => {
           const newTactics = [...state.tacticsByRotation];
           const filtered = newTactics[r].tacticPositions.filter((p) => p.playerId !== playerId);
@@ -306,29 +293,18 @@ export const useTacticsBoard = create<TacticsBoardStore>()(
         });
       },
 
-      removePlayerTacticPositions: (playerId) =>
-        set((state) => ({
-          tacticsByRotation: state.tacticsByRotation.map((rt) => ({
-            ...rt,
-            tacticPositions: rt.tacticPositions.filter((p) => p.playerId !== playerId),
-          })),
-        })),
+      removePlayerFromTacticView: (playerId) =>
+        set((state) => {
+          const r = useRotationTable.getState().currentRotation;
+          const newTactics = [...state.tacticsByRotation];
+          newTactics[r] = {
+            ...newTactics[r],
+            tacticPositions: newTactics[r].tacticPositions.filter((p) => p.playerId !== playerId),
+          };
+          return { tacticsByRotation: newTactics, selectedObjectId: null };
+        }),
 
       setActiveProjectId: (id) => set({ activeProjectId: id }),
-
-      newProject: () => {
-        useRotationTable.getState().resetAll();
-        set({
-          tacticsByRotation: emptyTacticsByRotation,
-          labelToggles: { zone: false },
-          projectSituation: "基礎輪轉",
-          activeProjectId: null,
-          history: [],
-          historyIndex: -1,
-          selectedObjectId: null,
-          activeTool: "select",
-        });
-      },
 
       // data 來自 API 回傳的 Tactic.data，分派給輪轉表 + 戰術板兩個 store。
       // 舊存檔可能沒有 tacticPositions/markers/defenseRanges，加 ?? [] 做向後相容。
@@ -357,6 +333,10 @@ export const useTacticsBoard = create<TacticsBoardStore>()(
           history: [tacticsByRotation[data.currentRotation ?? 0]],
           historyIndex: 0,
           selectedObjectId: null,
+          // 點已儲存戰術是「檢視」，不是自動進入編輯——中間球場切去戰術視圖顯示這張
+          // 快照，但先保持唯讀；要編輯的話再按「編輯」。
+          isLayoutMode: false,
+          courtView: "tactics",
         });
       },
 
@@ -383,6 +363,8 @@ export const useTacticsBoard = create<TacticsBoardStore>()(
             history: [tacticsByRotation[data.currentRotation ?? 0]],
             historyIndex: 0,
             selectedObjectId: null,
+            isLayoutMode: false,
+            courtView: "tactics" as const,
           };
         });
       },
