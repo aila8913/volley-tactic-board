@@ -1,7 +1,8 @@
 import React, { useRef, useState } from "react";
-import { PlayerPosition } from "../types/tactics";
+import { PlayerPosition } from "../types/rotationTable";
 import { MatchPlayer } from "../types/match";
-import { useTactics } from "../hooks/useTactics";
+import { useRotationTable } from "../hooks/useRotationTable";
+import { useTacticsBoard } from "../hooks/useTacticsBoard";
 import { findNearestZone, getZoneCoords } from "../lib/rotationLogic";
 
 interface PlayerNodeProps {
@@ -19,17 +20,22 @@ export default function PlayerNode({
   isLibero,
   courtRef,
 }: PlayerNodeProps) {
+  const { placePlayerOnCourt, removePlayerFromCourt, circleLabel } = useRotationTable();
   const {
-    placePlayerOnCourt,
     placePlayerFree,
-    removePlayerFromCourt,
     selectedObjectId,
     setSelectedObjectId,
     activeTool,
-    circleLabel,
     isLayoutMode,
     courtView,
-  } = useTactics();
+    removePlayerTacticPositions,
+  } = useTacticsBoard();
+  // 從場上移除球員是輪轉表 + 戰術板兩邊都要處理的事：輪轉表清掉站位，戰術板清掉
+  // 戰術視圖裡殘留的自由座標，兩個 store 各管各的，這裡（呼叫端）一次呼叫兩邊。
+  const removeFromCourt = (playerId: string) => {
+    removePlayerFromCourt(playerId);
+    removePlayerTacticPositions(playerId);
+  };
   const [isDragging, setIsDragging] = useState(false);
 
   // 格子吸附模式（非 layout mode）：拖曳中暫時吸附到的格子
@@ -124,7 +130,7 @@ export default function PlayerNode({
     if (courtView === "tactics" && dragPos) {
       if (isLibero && isOverBench) {
         // 拖出球場下緣＝送回備位、不上場，等同右鍵移除，只是換一個拖曳手勢完成。
-        removePlayerFromCourt(position.playerId);
+        removeFromCourt(position.playerId);
       } else {
         // 戰術視圖：自由座標存進 tacticPositions
         placePlayerFree(position.playerId, dragPos.x / 100, dragPos.y / 200);
@@ -141,7 +147,7 @@ export default function PlayerNode({
   // 右鍵刪除：L 球員只移除目前輪次並還原被替換的人；一般球員從全部 6 輪移除。
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
-    removePlayerFromCourt(position.playerId);
+    removeFromCourt(position.playerId);
   };
 
   return (

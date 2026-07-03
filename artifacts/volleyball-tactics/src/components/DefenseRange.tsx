@@ -1,10 +1,10 @@
 import React, { useRef } from "react";
-import { DefenseRange as DefenseRangeType } from "../types/tactics";
-import { useTactics } from "../hooks/useTactics";
+import { DefenseRange as DefenseRangeType } from "../types/tacticsBoard";
+import { useTacticsBoard } from "../hooks/useTacticsBoard";
 
 export default function DefenseRange({ range }: { range: DefenseRangeType }) {
   const { selectedObjectId, setSelectedObjectId, activeTool, updateDefenseRange, isLayoutMode } =
-    useTactics();
+    useTacticsBoard();
   const isDragging = useRef(false);
   const dragStart = useRef({ x: 0, y: 0, initialX: 0, initialY: 0 });
 

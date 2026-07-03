@@ -1,8 +1,15 @@
-import { Link } from 'wouter';
-import { Pencil, Trash2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
-import { Match } from '@/types/match';
+import { Link } from "wouter";
+import { Pencil, Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+  CardFooter,
+} from "@/components/ui/card";
+import { Match } from "@/types/match";
 
 interface MatchCardProps {
   match: Match;
@@ -36,7 +43,7 @@ export default function MatchCard({ match, onEdit, onDelete }: MatchCardProps) {
           <Link href={`/matches/${match.id}/board`}>戰術板</Link>
         </Button>
         <Button asChild variant="outline">
-          <Link href={`/matches/${match.id}/record`}>紀錄</Link>
+          <Link href={`/matches/${match.id}/record`}>計分表</Link>
         </Button>
       </CardFooter>
     </Card>

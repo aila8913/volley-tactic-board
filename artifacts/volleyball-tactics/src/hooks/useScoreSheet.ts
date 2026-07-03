@@ -1,11 +1,11 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { MatchRecordingState, PointRecord, Side, SetRecordingState } from "../types/recording";
+import { ScoreSheetState, PointRecord, Side, SetRecordingState } from "../types/scoresheet";
 
-interface RecordingStore {
+interface ScoreSheetStore {
   // 用 matchId 當 key，這樣每場比賽的比分/輪轉是分開存的，跟 useMatches 用陣列存比賽列表不同，
   // 這裡用物件存是因為查特定一場的記錄比「列出所有場」更常用，物件用 id 查比陣列 find 快也好寫。
-  recordingsByMatch: Record<string, MatchRecordingState>;
+  recordingsByMatch: Record<string, ScoreSheetState>;
   startSet: (matchId: string, servingFirst: Side) => void;
   // meta 是快速操作手勢（畫線連到球員→選動作→選得失分）帶來的附加資訊，純記錄用，
   // 不影響比分/輪轉怎麼算——所以舊的「按按鈕得分」呼叫方式（不傳 meta）一樣能用。
@@ -16,6 +16,7 @@ interface RecordingStore {
   ) => void;
   undoLastPoint: (matchId: string) => void;
   nextSet: (matchId: string) => void;
+  setLiberoSubstitution: (matchId: string, playerId: string | null) => void;
 }
 
 const makeEmptySet = (setNumber: number): SetRecordingState => ({
@@ -29,11 +30,12 @@ const makeEmptySet = (setNumber: number): SetRecordingState => ({
 });
 
 const getOrInitRecord = (
-  byMatch: Record<string, MatchRecordingState>,
+  byMatch: Record<string, ScoreSheetState>,
   matchId: string,
-): MatchRecordingState => byMatch[matchId] ?? { currentSet: makeEmptySet(1), completedSets: [] };
+): ScoreSheetState =>
+  byMatch[matchId] ?? { currentSet: makeEmptySet(1), completedSets: [], liberoSubstitution: null };
 
-export const useRecording = create<RecordingStore>()(
+export const useScoreSheet = create<ScoreSheetStore>()(
   persist(
     (set) => ({
       recordingsByMatch: {},
@@ -147,11 +149,25 @@ export const useRecording = create<RecordingStore>()(
                   },
                 ],
                 currentSet: makeEmptySet(finished.setNumber + 1),
+                // 換新的一局，自由球員替補狀態歸零（跟原本 handleNextSet 手動呼叫
+                // setLiberoSubstitution(null) 是同一件事，現在收進 store 自己的動作裡）。
+                liberoSubstitution: null,
               },
             },
           };
         }),
+
+      setLiberoSubstitution: (matchId, playerId) =>
+        set((state) => {
+          const record = getOrInitRecord(state.recordingsByMatch, matchId);
+          return {
+            recordingsByMatch: {
+              ...state.recordingsByMatch,
+              [matchId]: { ...record, liberoSubstitution: playerId },
+            },
+          };
+        }),
     }),
-    { name: "volleyboard_recording" },
+    { name: "volleyboard_scoresheet" },
   ),
 );

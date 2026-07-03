@@ -1,10 +1,10 @@
 import React, { useState } from "react";
-import { Marker as MarkerType } from "../types/tactics";
-import { useTactics } from "../hooks/useTactics";
+import { Marker as MarkerType } from "../types/tacticsBoard";
+import { useTacticsBoard } from "../hooks/useTacticsBoard";
 
 export default function Markers({ marker }: { marker: MarkerType }) {
   const { selectedObjectId, setSelectedObjectId, activeTool, updateMarker, isLayoutMode } =
-    useTactics();
+    useTacticsBoard();
   const [isEditingText, setIsEditingText] = useState(false);
   const [tempText, setTempText] = useState(marker.text || "");
 

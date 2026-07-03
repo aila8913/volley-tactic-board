@@ -1,5 +1,6 @@
 import React, { useRef, useState, useEffect } from "react";
-import { useTactics, ToolType } from "../hooks/useTactics";
+import { useRotationTable } from "../hooks/useRotationTable";
+import { useTacticsBoard, ToolType } from "../hooks/useTacticsBoard";
 import { findNearestZone } from "../lib/rotationLogic";
 import PlayerNode from "./PlayerNode";
 import Markers from "./Markers";
@@ -31,10 +32,14 @@ function computeTacticsViewBox(size: { width: number; height: number } | null): 
 }
 
 export default function Court() {
+  // 站位資料（誰在場上哪個位置）來自輪轉表；畫筆/防守範圍/戰術視圖自由站位來自戰術板。
+  // Court 是兩邊資料實際「合流顯示」的地方——戰術板要疊圖畫在球員身上，天生就要同時
+  // 讀兩個 store，這跟我們說好的「戰術板依賴輪轉表」並不衝突：這裡只是元件同時訂閱
+  // 兩個 store，不是其中一個 store 內部互相呼叫。
+  const { rotations, currentRotation, roster, startingLiberoId, setStartingLiberoId } =
+    useRotationTable();
   const {
-    rotations,
-    currentRotation,
-    roster,
+    tacticsByRotation,
     labelToggles,
     activeTool,
     setActiveTool,
@@ -44,16 +49,14 @@ export default function Court() {
     setSelectedObjectId,
     addDefenseRange,
     updateDefenseRange,
-    placePlayerOnCourt,
-    placePlayerFree,
     undo,
     redo,
     isLayoutMode,
     courtView,
     setCourtView,
-    startingLiberoId,
-    setStartingLiberoId,
-  } = useTactics();
+  } = useTacticsBoard();
+  const placePlayerOnCourt = useRotationTable((state) => state.placePlayerOnCourt);
+  const placePlayerFree = useTacticsBoard((state) => state.placePlayerFree);
 
   const courtRef = useRef<SVGSVGElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -75,8 +78,9 @@ export default function Court() {
     return () => observer.disconnect();
   }, []);
 
-  const rotation = rotations[currentRotation];
-  if (!rotation) return null;
+  const rotationPositions = rotations[currentRotation];
+  const rotationTactics = tacticsByRotation[currentRotation];
+  if (!rotationPositions || !rotationTactics) return null;
 
   const getSvgPoint = (e: React.PointerEvent) => {
     if (!courtRef.current) return { x: 50, y: 100 };
@@ -97,8 +101,9 @@ export default function Court() {
       setSelectedObjectId(null);
       const pt = getSvgPoint(e);
 
-      // 畫筆/防守範圍工具只能在「戰術布置」模式裡新增——理論上不在這個模式時 RightPanel
-      // 不會顯示這些工具按鈕，activeTool 也就不會被設成它們，這裡是再多一層防呆。
+      // 畫筆/防守範圍工具只能在「戰術布置」模式裡新增——理論上不在這個模式時
+      // TacticsBoardPanel 不會顯示這些工具按鈕，activeTool 也就不會被設成它們，
+      // 這裡是再多一層防呆。
       if (isLayoutMode && ["arrow", "dashed", "attack"].includes(activeTool)) {
         // Zustand doesn't return the ID, so we need to rely on the fact that it pushes to the end.
         // But since we can't synchronously get the ID easily without modifying addMarker,
@@ -145,8 +150,7 @@ export default function Court() {
     if (drawingMarkerId === "drawing") {
       const pt = getSvgPoint(e);
       // We assume the last marker added is the one being drawn
-      const currentRotState = rotations[currentRotation];
-      const markers = currentRotState.markers;
+      const markers = rotationTactics.markers;
       if (markers.length > 0) {
         const lastMarker = markers[markers.length - 1];
         if (lastMarker.points && lastMarker.points.length === 2) {
@@ -212,7 +216,7 @@ export default function Court() {
     ? (roster.find((p) => p.id === startingLiberoId && p.role === "L") ?? null)
     : null;
   const liberoInSpot =
-    startingLibero && !rotation.positions.some((pos) => pos.playerId === startingLiberoId)
+    startingLibero && !rotationPositions.positions.some((pos) => pos.playerId === startingLiberoId)
       ? [startingLibero]
       : [];
 
@@ -415,27 +419,29 @@ export default function Court() {
               輪轉視圖只看站位圓圈，避免標記干擾判斷球員站哪裡。 */}
           {courtView === "tactics" && (
             <>
-              {rotation.defenseRanges.map((dr) => (
+              {rotationTactics.defenseRanges.map((dr) => (
                 <DefenseRange key={dr.id} range={dr} />
               ))}
-              {rotation.markers.map((m) => (
+              {rotationTactics.markers.map((m) => (
                 <Markers key={m.id} marker={m} />
               ))}
             </>
           )}
 
           {/* Render Players
-              輪轉視圖：用 positions（格子吸附站位）
-              戰術視圖：用 tacticPositions（自由布置站位）；若尚未客製化（空陣列），
-                       用 positions 作為 fallback，並合併（tacticPositions 的人優先）。 */}
+              輪轉視圖：用 positions（格子吸附站位，來自輪轉表）
+              戰術視圖：用 tacticPositions（自由布置站位，來自戰術板）；若尚未客製化
+                       （空陣列），用 positions 作為 fallback，並合併（tacticPositions 的人優先）。 */}
           {(() => {
-            const tacticIds = new Set((rotation.tacticPositions ?? []).map((p) => p.playerId));
+            const tacticIds = new Set(
+              (rotationTactics.tacticPositions ?? []).map((p) => p.playerId),
+            );
             const displayPositions =
               courtView === "rotation"
-                ? rotation.positions
+                ? rotationPositions.positions
                 : [
-                    ...rotation.positions.filter((p) => !tacticIds.has(p.playerId)),
-                    ...(rotation.tacticPositions ?? []),
+                    ...rotationPositions.positions.filter((p) => !tacticIds.has(p.playerId)),
+                    ...(rotationTactics.tacticPositions ?? []),
                   ];
 
             return displayPositions.map((pos) => {
@@ -462,8 +468,8 @@ export default function Court() {
           跟左側球員名單、球場上的 PlayerNode 一樣，來源/現有球員永遠看得到、拖得動，
           唯讀限制是由「放下的目標」（handleDrop／PlayerNode 的 canDrag）決定要不要生效，
           不是靠隱藏來源本身。
-          positions 是兩個視圖共用的「誰在場上」依據（見 useTactics.ts 的 placeLiberoOnCourt），
-          所以「這位 L 在不在場上」的判斷結果在兩個視圖是一致的。
+          positions 是兩個視圖共用的「誰在場上」依據（見 useRotationTable.ts 的
+          placeLiberoOnCourt），所以「這位 L 在不在場上」的判斷結果在兩個視圖是一致的。
           橘色圓圈坐在球場正下方，跟場上的 PlayerNode 視覺一致。
           直接用 HTML drag-and-drop（跟左側名單同一套），拖到球場後排就會觸發 handleDrop →
           輪轉視圖走 placePlayerOnCourt、戰術視圖 + 布置模式走 placePlayerFree。 */}

@@ -1,8 +1,8 @@
 import React from "react";
-import { useTactics } from "../hooks/useTactics";
+import { useRotationTable } from "../hooks/useRotationTable";
 
 export default function RotationThumbnails() {
-  const { rotations, currentRotation, setCurrentRotation } = useTactics();
+  const { rotations, currentRotation, setCurrentRotation } = useRotationTable();
 
   return (
     <div className="flex gap-2 px-1 pt-2 pb-1">

@@ -1,27 +1,25 @@
 import { useState } from "react";
 import { useParams } from "wouter";
-import { useTactics } from "../hooks/useTactics";
+import { useRotationTable } from "../hooks/useRotationTable";
+import { useTacticsBoard } from "../hooks/useTacticsBoard";
 import { useMatches } from "../hooks/useMatches";
 import { MatchPlayer } from "../types/match";
 import RotationThumbnails from "./RotationThumbnails";
 import RosterEditDialog from "./RosterEditDialog";
 
-export default function LeftPanel() {
-  const {
-    roster,
-    setRoster,
-    rotations,
-    currentRotation,
-    resetCurrentRotation,
-    clearMarkers,
-    startingLiberoId,
-  } = useTactics();
+export default function RotationTable() {
+  const { roster, setRoster, rotations, currentRotation, startingLiberoId } = useRotationTable();
+  const resetCurrentRotationPositions = useRotationTable(
+    (state) => state.resetCurrentRotationPositions,
+  );
+  const resetCurrentRotationTactics = useTacticsBoard((state) => state.resetCurrentRotationTactics);
+  const clearMarkers = useTacticsBoard((state) => state.clearMarkers);
   const { id: matchId } = useParams<{ id: string }>();
   const updateMatchPlayers = useMatches((state) => state.updateMatchPlayers);
   const [isRosterDialogOpen, setIsRosterDialogOpen] = useState(false);
 
-  // 球員名單同時要存進戰術板自己的 roster，也要回寫到比賽列表那邊的 match.players，
-  // 這樣下次重新進這個戰術板時兩邊才不會兜不起來。
+  // 球員名單同時要存進輪轉表自己的 roster，也要回寫到比賽列表那邊的 match.players，
+  // 這樣下次重新進這個畫面時兩邊才不會兜不起來。
   const handleRosterSave = (players: MatchPlayer[]) => {
     setRoster(players);
     if (matchId) {
@@ -34,17 +32,17 @@ export default function LeftPanel() {
   // 目前輪次場上的球員 id，用來在名單上標示「已上場」。
   const onCourtIds = new Set(rotations[currentRotation].positions.map((p) => p.playerId));
 
+  // 「重置站位」要同時清空輪轉表（站位）跟戰術板（這個輪次的畫筆/自由站位）——
+  // 兩個 store 各自只管自己的資料，由按下按鈕的這一刻各自呼叫一次，這就是我們說好的
+  // 「資料用傳輸的」：不是互相偷看對方內部，而是外層明確呼叫兩邊。
+  const handleResetRotation = () => {
+    resetCurrentRotationPositions();
+    resetCurrentRotationTactics();
+  };
+
   return (
     <div className="flex flex-col h-full bg-[#f8f8f8]">
       <div className="p-4 overflow-y-auto flex-1 space-y-5">
-        {/* Title */}
-        <div className="flex items-center gap-2 mb-1">
-          <div className="w-6 h-6 bg-[#CCFF00] wobbly-border rounded-full flex items-center justify-center font-bold text-sm">
-            V
-          </div>
-          <h1 className="font-display text-3xl tracking-tight">VolleyBoard</h1>
-        </div>
-
         {/* 球員名單：可拖到球場（輪轉視圖吸附格子；戰術視圖+布置模式自由放置） */}
         <section>
           <div className="flex items-center justify-between mb-3">
@@ -107,7 +105,7 @@ export default function LeftPanel() {
             <RotationThumbnails />
             <div className="flex gap-2 mt-1">
               <button
-                onClick={resetCurrentRotation}
+                onClick={handleResetRotation}
                 className="flex-1 wobbly-border bg-white px-2 py-1 text-xs font-bold hover:bg-gray-100"
               >
                 重置站位

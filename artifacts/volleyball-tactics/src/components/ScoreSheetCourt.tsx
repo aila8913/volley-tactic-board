@@ -1,7 +1,7 @@
 import React, { useMemo, useRef, useState } from "react";
-import { useTactics } from "../hooks/useTactics";
+import { useRotationTable } from "../hooks/useRotationTable";
 import { findNearestZone, getZoneLayout } from "../lib/rotationLogic";
-import { Side } from "../types/recording";
+import { Side } from "../types/scoresheet";
 
 export interface TouchedTarget {
   side: Side;
@@ -16,7 +16,7 @@ export interface RegularSub {
   inPlayerId: string;
 }
 
-interface RecordingCourtProps {
+interface ScoreSheetCourtProps {
   ourRotation: number;
   opponentRotation: number;
   serving: "us" | "opponent" | null;
@@ -28,6 +28,11 @@ interface RecordingCourtProps {
   // 目前場邊被選中、準備換上場的球員 id；設定後球場進入「換人模式」
   selectedBenchPlayer?: string | null;
   onBenchPlayerSelect?: (playerId: string | null) => void;
+  // 自由球員即時替補狀態：以前這個元件自己去共用 store 讀，但這個狀態其實是「這一場
+  // 比賽」的計分表資料（見 types/scoresheet.ts 的 ScoreSheetState.liberoSubstitution），
+  // 不是輪轉表/戰術板共用的東西，所以改由外層（pages/ScoreSheet.tsx，已經知道自己在看
+  // 哪個 matchId）當 prop 傳進來，這個元件不用管資料實際存在哪個 store。
+  liberoSubstitution: string | null;
 }
 
 const HIT_RADIUS = 11;
@@ -36,7 +41,7 @@ function dist(ax: number, ay: number, bx: number, by: number) {
   return Math.hypot(ax - bx, ay - by);
 }
 
-export default function RecordingCourt({
+export default function ScoreSheetCourt({
   ourRotation,
   opponentRotation,
   serving,
@@ -46,11 +51,11 @@ export default function RecordingCourt({
   regularSubs = [],
   selectedBenchPlayer = null,
   onBenchPlayerSelect,
-}: RecordingCourtProps) {
-  const roster = useTactics((state) => state.roster);
-  const rotations = useTactics((state) => state.rotations);
-  const liberoSubstitution = useTactics((state) => state.liberoSubstitution);
-  const circleLabel = useTactics((state) => state.circleLabel);
+  liberoSubstitution,
+}: ScoreSheetCourtProps) {
+  const roster = useRotationTable((state) => state.roster);
+  const rotations = useRotationTable((state) => state.rotations);
+  const circleLabel = useRotationTable((state) => state.circleLabel);
 
   const svgRef = useRef<SVGSVGElement>(null);
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
@@ -89,11 +94,11 @@ export default function RecordingCourt({
   // L 也算在場上（蓋住中）。兩個人都不在場邊。L 離開（effectiveLiberoSub = null）
   // 時，主人繼續在場上，L 回場邊。
   //
-  // 記錄模式裡 L 的輪轉格子永遠跳過（和戰術板的佔位切開）。
+  // 計分表裡 L 的輪轉格子永遠跳過（和戰術板的佔位切開）。
   const effectivelyOnCourt = useMemo(() => {
     const set = new Set<string>();
     for (const pos of ourPositions) {
-      // 跳過自由球員自己的輪轉位置（記錄模式裡 L 永遠從場邊出發）
+      // 跳過自由球員自己的輪轉位置（計分表裡 L 永遠從場邊出發）
       if (liberoPlayer && pos.playerId === liberoPlayer.id) continue;
       // 一般換人後，格主是替補進來的球員
       const effectiveId = regularSubMap.get(pos.playerId) ?? pos.playerId;
@@ -342,7 +347,7 @@ export default function RecordingCourt({
 
           {/* 我方球員圈 */}
           {ourPositions.map((pos) => {
-            // 記錄模式裡 L 的輪轉格子永遠跳過（和戰術板佔位切開；L 從場邊出發）
+            // 計分表裡 L 的輪轉格子永遠跳過（和戰術板佔位切開；L 從場邊出發）
             if (liberoPlayer && pos.playerId === liberoPlayer.id) return null;
 
             // 套用一般換人，取得格子的「有效主人」

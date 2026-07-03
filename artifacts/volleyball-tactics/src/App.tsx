@@ -1,4 +1,4 @@
-import React from 'react';
+import React from "react";
 import { Switch, Route, Router as WouterRouter } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -6,7 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import TacticsBoard from "@/pages/TacticsBoard";
 import MatchList from "@/pages/MatchList";
-import MatchRecording from "@/pages/MatchRecording";
+import ScoreSheet from "@/pages/ScoreSheet";
 import TournamentDetail from "@/pages/TournamentDetail";
 
 const queryClient = new QueryClient();
@@ -17,7 +17,7 @@ function Router() {
       <Route path="/" component={MatchList} />
       <Route path="/tournaments/:id" component={TournamentDetail} />
       <Route path="/matches/:id/board" component={TacticsBoard} />
-      <Route path="/matches/:id/record" component={MatchRecording} />
+      <Route path="/matches/:id/record" component={ScoreSheet} />
       <Route component={NotFound} />
     </Switch>
   );

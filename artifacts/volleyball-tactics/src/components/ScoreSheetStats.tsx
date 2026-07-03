@@ -1,9 +1,9 @@
 import { MatchPlayer } from "@/types/match";
-import { MatchRecordingState, PlayAction, PointRecord } from "@/types/recording";
+import { ScoreSheetState, PlayAction, PointRecord } from "@/types/scoresheet";
 
 interface Props {
   players: MatchPlayer[];
-  record: MatchRecordingState | undefined;
+  record: ScoreSheetState | undefined;
   currentSetSubCount?: number;
   totalSubCount?: number;
 }
@@ -57,7 +57,7 @@ function buildPlayerMatrix(history: PointRecord[], players: MatchPlayer[]): Play
   return [...map.values()].sort((a, b) => a.number - b.number);
 }
 
-export default function MatchResult({
+export default function ScoreSheetStats({
   players,
   record,
   currentSetSubCount = 0,

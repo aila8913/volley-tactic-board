@@ -2,12 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { useMatches } from "@/hooks/useMatches";
-import { useTactics } from "@/hooks/useTactics";
-import { useRecording } from "@/hooks/useRecording";
-import RecordingCourt, { TouchedTarget, RegularSub } from "@/components/RecordingCourt";
+import { useRotationTable } from "@/hooks/useRotationTable";
+import { useScoreSheet } from "@/hooks/useScoreSheet";
+import ScoreSheetCourt, { TouchedTarget, RegularSub } from "@/components/ScoreSheetCourt";
 import RadialMenu, { RadialMenuOption } from "@/components/RadialMenu";
-import MatchResult from "@/components/MatchResult";
-import { PlayAction } from "@/types/recording";
+import ScoreSheetStats from "@/components/ScoreSheetStats";
+import { PlayAction } from "@/types/scoresheet";
 
 const ACTION_OPTIONS: RadialMenuOption<PlayAction>[] = [
   { value: "serve", label: "發球", position: "top" },
@@ -26,24 +26,26 @@ type Gesture =
   | { step: "action"; target: TouchedTarget }
   | { step: "outcome"; target: TouchedTarget; action: PlayAction };
 
-export default function MatchRecording() {
+export default function ScoreSheet() {
   const { id } = useParams<{ id: string }>();
   const match = useMatches((state) => state.matches.find((m) => m.id === id));
 
   // 全部比賽清單 + 全部紀錄，用來組右側統計欄的多場列表
   const allMatches = useMatches((state) => state.matches);
-  const recordingsByMatch = useRecording((state) => state.recordingsByMatch);
+  const recordingsByMatch = useScoreSheet((state) => state.recordingsByMatch);
 
-  const setRoster = useTactics((state) => state.setRoster);
-  const rotations = useTactics((state) => state.rotations);
-  const liberoSubstitution = useTactics((state) => state.liberoSubstitution);
-  const setLiberoSubstitution = useTactics((state) => state.setLiberoSubstitution);
+  const setRoster = useRotationTable((state) => state.setRoster);
+  const rotations = useRotationTable((state) => state.rotations);
 
-  const record = useRecording((state) => (id ? state.recordingsByMatch[id] : undefined));
-  const startSet = useRecording((state) => state.startSet);
-  const scorePoint = useRecording((state) => state.scorePoint);
-  const undoLastPoint = useRecording((state) => state.undoLastPoint);
-  const nextSet = useRecording((state) => state.nextSet);
+  const record = useScoreSheet((state) => (id ? state.recordingsByMatch[id] : undefined));
+  const startSet = useScoreSheet((state) => state.startSet);
+  const scorePoint = useScoreSheet((state) => state.scorePoint);
+  const undoLastPoint = useScoreSheet((state) => state.undoLastPoint);
+  const nextSet = useScoreSheet((state) => state.nextSet);
+  const setLiberoSubstitution = useScoreSheet((state) => state.setLiberoSubstitution);
+  // 這場比賽目前的自由球員替補狀態——現在跟著 matchId 存在 useScoreSheet 裡（見
+  // types/scoresheet.ts 的說明），不會再跟別場比賽的計分表互相污染。
+  const liberoSubstitution = record?.liberoSubstitution ?? null;
 
   const [gesture, setGesture] = useState<Gesture | null>(null);
 
@@ -69,7 +71,7 @@ export default function MatchRecording() {
   const currentSet = record?.currentSet;
   useEffect(() => {
     const libSub = liberoSubRef.current;
-    if (!currentSet || currentSet.serving === null || !libSub) return;
+    if (!currentSet || currentSet.serving === null || !libSub || !id) return;
 
     const positions = (rotations[currentSet.ourRotation] ?? rotations[0]).positions;
     const targetPos = positions.find((p) => p.playerId === libSub);
@@ -82,13 +84,13 @@ export default function MatchRecording() {
       const prevPos = positions.find((p) => p.playerId === prev);
       if (prevPos && prevPos.y > 0.75) {
         setPreviousLiberoTarget(libSub);
-        setLiberoSubstitution(prev);
+        setLiberoSubstitution(id, prev);
         return;
       }
     }
 
     setPreviousLiberoTarget(libSub);
-    setLiberoSubstitution(null);
+    setLiberoSubstitution(id, null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentSet?.ourRotation]);
 
@@ -148,7 +150,7 @@ export default function MatchRecording() {
     if (liberoSubstitution !== null) {
       setPreviousLiberoTarget(liberoSubstitution);
     }
-    setLiberoSubstitution(targetPlayerId);
+    setLiberoSubstitution(id, targetPlayerId);
     setSelectedBenchPlayer(null);
   };
 
@@ -158,15 +160,16 @@ export default function MatchRecording() {
       return [...cleaned, { outPlayerId, inPlayerId }];
     });
     if (outPlayerId === liberoSubstitution) {
-      setLiberoSubstitution(null);
+      setLiberoSubstitution(id, null);
     }
     setSelectedBenchPlayer(null);
   };
 
   const handleNextSet = () => {
     setSubCountsHistory((prev) => [...prev, regularSubs.length]);
+    // nextSet 本身現在就會把 liberoSubstitution 歸零（見 hooks/useScoreSheet.ts），
+    // 這裡不用再另外呼叫一次。
     nextSet(id);
-    setLiberoSubstitution(null);
     setPreviousLiberoTarget(null);
     setRegularSubs([]);
     setSelectedBenchPlayer(null);
@@ -185,7 +188,7 @@ export default function MatchRecording() {
       </header>
 
       <div className="flex flex-1 min-h-0">
-        {/* ── 左欄：比賽紀錄 ── */}
+        {/* ── 左欄：計分表 ── */}
         <div className="flex flex-1 flex-col min-h-0 border-r-2 border-[#111]">
           {!hasLineup ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-4 px-4 text-center">
@@ -204,7 +207,9 @@ export default function MatchRecording() {
                 {completedSets.length > 0 && (
                   <span className="text-xs text-gray-400">
                     局數&nbsp;
-                    <span className={ourSetsWon > opponentSetsWon ? "font-bold text-green-600" : ""}>
+                    <span
+                      className={ourSetsWon > opponentSetsWon ? "font-bold text-green-600" : ""}
+                    >
                       {ourSetsWon}
                     </span>
                     :
@@ -246,7 +251,9 @@ export default function MatchRecording() {
                 <>
                   {selectedBenchPlayer ? (
                     <div className="flex w-full items-center justify-between rounded-lg border border-blue-300 bg-blue-50 px-3 py-1.5 text-sm">
-                      <span className="font-semibold text-blue-700">換人模式：點球場上的球員換下</span>
+                      <span className="font-semibold text-blue-700">
+                        換人模式：點球場上的球員換下
+                      </span>
                       <button
                         onClick={() => setSelectedBenchPlayer(null)}
                         className="text-xs text-blue-500 underline"
@@ -259,7 +266,7 @@ export default function MatchRecording() {
                   )}
 
                   <div className="flex min-h-0 w-full flex-1 items-center justify-center">
-                    <RecordingCourt
+                    <ScoreSheetCourt
                       ourRotation={currentSet.ourRotation}
                       opponentRotation={currentSet.opponentRotation}
                       serving={currentSet.serving}
@@ -269,6 +276,7 @@ export default function MatchRecording() {
                       regularSubs={regularSubs}
                       selectedBenchPlayer={selectedBenchPlayer}
                       onBenchPlayerSelect={setSelectedBenchPlayer}
+                      liberoSubstitution={liberoSubstitution}
                     />
                   </div>
 
@@ -315,7 +323,7 @@ export default function MatchRecording() {
                   </span>
                 </div>
                 <div className="flex-1 overflow-y-auto">
-                  <MatchResult
+                  <ScoreSheetStats
                     players={m.players}
                     record={recordingsByMatch[m.id]}
                     currentSetSubCount={m.id === id ? currentSubCount : undefined}
