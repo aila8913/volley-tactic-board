@@ -1,13 +1,13 @@
-import { useState } from 'react';
-import { useParams, Link } from 'wouter';
-import { ArrowLeft } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { useMatches } from '@/hooks/useMatches';
-import { useTournaments } from '@/hooks/useTournaments';
-import MatchFormDialog from '@/components/MatchFormDialog';
-import MatchCard from '@/components/MatchCard';
-import { Match } from '@/types/match';
+import { useState } from "react";
+import { useParams } from "wouter";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import BackToMatchListButton from "@/components/BackToMatchListButton";
+import { useMatches } from "@/hooks/useMatches";
+import { useTournaments } from "@/hooks/useTournaments";
+import MatchFormDialog from "@/components/MatchFormDialog";
+import MatchCard from "@/components/MatchCard";
+import { Match } from "@/types/match";
 
 // 資料夾的內頁——只顯示歸在這個資料夾底下的比賽 (tournamentId 等於這個資料夾的 id)。
 export default function TournamentDetail() {
@@ -36,7 +36,7 @@ export default function TournamentDetail() {
   };
 
   const handleDelete = (matchId: string) => {
-    if (window.confirm('確定要刪除這場比賽嗎？')) {
+    if (window.confirm("確定要刪除這場比賽嗎？")) {
       deleteMatch(matchId);
     }
   };
@@ -45,9 +45,7 @@ export default function TournamentDetail() {
     return (
       <div className="flex min-h-screen w-full flex-col items-center justify-center gap-4 bg-white px-4 text-center">
         <p className="text-muted-foreground">找不到這個資料夾。</p>
-        <Button asChild variant="outline">
-          <Link href="/">回到比賽列表</Link>
-        </Button>
+        <BackToMatchListButton />
       </div>
     );
   }
@@ -55,12 +53,7 @@ export default function TournamentDetail() {
   return (
     <div className="min-h-screen w-full bg-white">
       <div className="mx-auto max-w-3xl px-4 py-8">
-        <Button asChild variant="ghost" className="mb-4 -ml-2">
-          <Link href="/">
-            <ArrowLeft className="mr-1 h-4 w-4" />
-            回到比賽列表
-          </Link>
-        </Button>
+        <BackToMatchListButton className="mb-4 -ml-2" />
 
         <div className="mb-6 flex items-center justify-between">
           <h1 className="text-2xl font-bold">{tournament.name}</h1>
