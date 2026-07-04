@@ -1082,9 +1082,12 @@ stateDiagram-v2
     <h2>計分表 — 操作流程與狀態機</h2>
 
     <div class="callout">
-      <b>自重構以來的變化：</b>頁面/檔名從 MatchRecording 改成 ScoreSheet，useRecording 改成
-      useScoreSheet；liberoSubstitution 不再是全域共用一份，現在跟著 matchId 存在 useScoreSheet
-      裡，不同比賽的計分表不會再互相污染替補狀態。下面的操作邏輯本身沒有變。
+      <b>自上次更新以來的變化（2026-07-04）：</b>C1
+      記一球的手勢從「拖曳畫線」改成「直接點選」（放開時一樣是找命中誤差半徑內最近的目標，點跟拖曳結果相同，只是不強迫使用者拖曳）；動作選單從
+      4 大類（發球/防守/攻擊/擋網）擴充成 6 大類（發球/接發/舉球/攻擊/攔網/防守），對齊 `events`
+      表的
+      `eventActionEnum`；點選目標新增「對手(全體)」（不挑對手是哪個球員/位置）；新增「沒看到」按鈕，跳過選動作直接記得/失分，不建立任何動作紀錄；得/失分改成相對於「這球的動作方」判定，不再永遠對應我方。下面的
+      C1 內容已經更新反映這些變化。
     </div>
 
     <p class="section-intro">
@@ -1144,17 +1147,22 @@ stateDiagram-v2
         </p>
 
         <div class="lane amber">
-          <div class="lane-label"><span class="dot amber"></span>C1 · 記一球（畫線手勢）</div>
+          <div class="lane-label"><span class="dot amber"></span>C1 · 記一球（點選手勢）</div>
           <div class="step-row">
-            <div class="step">在球場上拖曳畫線</div>
+            <div class="step">點選我方球員 / 對手(全體)</div>
             <div class="arrow">→</div>
-            <div class="step">鬆開，命中球員/區域（誤差半徑內）</div>
+            <div class="step">動作選單：發球/接發/舉球/攻擊/攔網/防守（6 大類）</div>
             <div class="arrow">→</div>
-            <div class="step">動作選單：發球/防守/攻擊/擋網</div>
-            <div class="arrow">→</div>
-            <div class="step">結果選單：得分/失分</div>
+            <div class="step">結果選單：得分/失分（相對這球的動作方判定）</div>
             <div class="arrow">→</div>
             <div class="step commit">scorePoint() — 記分、可能換輪轉、換發球方</div>
+          </div>
+          <div class="step-row" style="margin-top: 0.4rem">
+            <div class="step">或：點「沒看到」按鈕</div>
+            <div class="arrow">→</div>
+            <div class="step">直接跳結果選單（跳過選動作）</div>
+            <div class="arrow">→</div>
+            <div class="step commit">scorePoint() — 只記分，不建立任何動作紀錄</div>
           </div>
         </div>
 
@@ -1255,8 +1263,8 @@ stateDiagram-v2
     A: A · 尚未設定先發（hasLineup === false）
     B: B · 選發球方（serving === null）
     C0: C0 · Rally Idle（本局進行中，四條路徑的中樞）
-    C1a: C1a · 動作選單（發球/防守/攻擊/擋網）
-    C1b: C1b · 結果選單（得分/失分）
+    C1a: C1a · 動作選單（發球/接發/舉球/攻擊/攔網/防守，6 大類）
+    C1b: C1b · 結果選單（得分/失分，相對動作方判定）
     C3: C3 · 換人模式（已選板凳球員）
     C4: C4 · 拖曳自由球員（尋找合法後排目標）
     E: E · 比賽結束（未實作）
@@ -1264,9 +1272,10 @@ stateDiagram-v2
     [*] --> A
     A --> B: hasLineup 變 true ⚠S7
     B --> C0: startSet(我方/對手先發)
-    C0 --> C1a: 拖曳畫線→鬆開觸球員/區域
+    C0 --> C1a: 點選我方球員／對手(全體)
     C1a --> C0: 取消（點背景）
     C1a --> C1b: 選動作
+    C0 --> C1b: 點「沒看到」（跳過選動作）
     C1b --> C0: 選得分/失分 → scorePoint()
     C0 --> C0: 復原上一球（history≠0）⚠S1
     C0 --> C3: 點板凳球員
@@ -1304,7 +1313,7 @@ stateDiagram-v2
         </tr>
         <tr>
           <td>C0 Rally Idle</td>
-          <td class="code">畫線鬆開命中目標</td>
+          <td class="code">點選我方球員／對手(全體)</td>
           <td>C1a 動作選單</td>
           <td>球場暫時不可互動</td>
         </tr>
@@ -1315,10 +1324,16 @@ stateDiagram-v2
           <td>—</td>
         </tr>
         <tr>
+          <td>C0 Rally Idle</td>
+          <td class="code">點「沒看到」</td>
+          <td>C1b 結果選單</td>
+          <td>跳過選動作，不建立動作紀錄</td>
+        </tr>
+        <tr>
           <td>C1b 結果選單</td>
           <td class="code">選得分或失分 → scorePoint()</td>
           <td>C0 Rally Idle</td>
-          <td>可能換輪轉、換發球方</td>
+          <td>相對這球的動作方判定；可能換輪轉、換發球方</td>
         </tr>
         <tr>
           <td>C0 Rally Idle</td>

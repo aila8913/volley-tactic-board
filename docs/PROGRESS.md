@@ -9,13 +9,76 @@
 > Read this file, plus `gh issue list --state open` and recent `git log`, at the start
 > of a new session instead of re-exploring the whole codebase from scratch.
 
-_Last updated: 2026-07-04 (session: rewrote `docs/flow-diagrams.html`'s 4 hand-coded SVG
-diagrams as Mermaid.js diagrams — see below for the offline/CDN tradeoff this
-introduced)_
+_Last updated: 2026-07-04 (session: fixed #29's tactics-board testing bugs (PR #46);
+designed and shipped ScoreSheet simple-tier recording improvements — 6-category actions,
+"對手(全體)"/"沒看到" paths, side-relative scoring (PR #47, closes #22); produced an ERD
+exploring how simple-tier and advanced-tier recording will share the same `events`
+schema; reconciled a pre-existing unpushed local commit on `main`)_
 
 ## Current state
 
-- On `main`, latest commit `af228db` (PR #33). Working tree clean.
+- On `main`, latest commit `beee58e` (PR #48). Working tree clean.
+- **ScoreSheet(計分表)簡易版 recording flow redesigned** (PR #47, closes #22 for the
+  simple-tier scope):
+  - Action categories expanded from 4 (`serve`/`defense`/`attack`/`block`) to 6
+    (`serve`/`receive`/`set`/`attack`/`block`/`dig`), matching `lib/db/src/schema/
+events.ts`'s `eventActionEnum` — `types/scoresheet.ts`.
+  - `RadialMenu.tsx` no longer hardcodes 4 fixed positions (`top`/`right`/`bottom`/
+    `left`) — it now auto-computes each option's angle from array length + a
+    `startAngle` prop, so it scales to any option count without a two-tier submenu
+    (resolves the "RadialMenu can't fit >4 options" concern #22 raised).
+  - New "對手(全體)" tap target on `ScoreSheetCourt.tsx`: records the action as
+    `side: "opponent", playerId: undefined` when the point came from an opponent's own
+    unforced error (no opposing roster exists to attribute it to a specific player).
+  - New "沒看到" button: skips action selection entirely, records only the point
+    outcome on `rallies`-equivalent state with zero action/player attribution.
+  - Fixed a real scoring bug: 得分/失分 outcome is now judged relative to the tapped
+    target's `side` (the actor), not always relative to "us" — previously tapping
+    "對手(全體)" → attack → "得分" incorrectly added to our own score.
+  - `ScoreSheetStats.tsx`'s player-action matrix updated to the same 6 categories.
+- **`docs/match-recording-erd.html` added**: an ERD design doc (rendered first as a
+  Claude Artifact, then saved into the repo) exploring how the already-shipped
+  ScoreSheet(簡易版) and the still-unimplemented `events`-table pipeline(進階版) should
+  share one schema instead of staying parallel. Key decisions captured there: a new
+  `events.side` column (home/away, notNull — who performed the touch, independent of
+  `rallies.winner`), `events.playerId` becomes nullable (opponent-side actions have no
+  roster to point at), `fromX/fromY/toX/toY` become nullable (simple tier never records
+  coordinates) — none of this schema change has been implemented yet, it's design-only.
+- **Issue #22 closed**, its unfinished scope (action sub-types like 跳發/飄球/跳飄,
+  Violation category, Outcome detail expansion) split into new follow-on
+  [#51](https://github.com/aila8913/volley-tatic-board/issues/51) since that part is
+  advanced-tier (post-match video review) work, not simple-tier.
+- **Issue #29 fixed** (PR #46): tactics-view court bottom border now uses
+  `vector-effect="non-scaling-stroke"` so it doesn't get squished by the viewBox;
+  "重置站位" now has a `window.confirm` guard; "← 比賽列表" extracted into a shared
+  `BackToMatchListButton.tsx` and added to `TacticsBoard`/`ScoreSheet`/
+  `TournamentDetail`/`not-found` (previously missing on some of those screens entirely).
+- **Two new bugs/ideas filed this session**, not yet worked on:
+  - [#49](https://github.com/aila8913/volley-tatic-board/issues/49) — tactics-board
+    whiteboard height should fill the whole middle panel, not match the court's own
+    size. Note: `Court.tsx` already has comments claiming this is the intended design
+    (`h-full w-full`, no `aspectRatio`) — worth checking why actual behavior doesn't
+    match the stated intent before assuming it needs new code.
+  - [#50](https://github.com/aila8913/volley-tatic-board/issues/50) — ScoreSheet action
+    options should be context-aware based on who's currently serving (serve/receive
+    should be mutually exclusive depending on `currentSet.serving`); user noted more
+    context rules may follow but hasn't defined them yet.
+- **A pre-existing, unrelated-to-this-session problem was found and fixed while
+  shipping**: local `main` had a commit (`a28749f`, the Mermaid.js flow-diagrams
+  rewrite) that had never been pushed to `origin/main`. This caused a divergence when
+  PR #46 was squash-merged (same pattern PR #32 tried to prevent, but that fix only
+  covers commits made _during_ a session — this one predated it). Resolved with a merge
+  commit (same precedent as PR #31's "Merge origin/main after squash-merging" pattern),
+  then pushed so local/origin `main` are back in sync.
+- Previously landed (still true, unchanged this session): new onboarding docs (PR #33),
+  the three-way 輪轉表/戰術板/計分表 split (PR #28), tactics-board snapshot decoupling
+  (PR #30), offline `docs/flow-diagrams.html` (PR #31, now also carries issue-number
+  cross-references added this session for #35–#45 via issue #34's fix).
+- Backend (`artifacts/api-server`) and match-recording API routes (`docs/api-spec.md`)
+  are **still fully unimplemented** — this remains the single biggest gap before any of
+  #51's advanced-tier work or a real stats/analysis page can be built. This was
+  discussed at length this session (see conversation on `docs/match-recording-erd.html`)
+  but no backend code was written.
 - **New human-facing onboarding docs exist** (PR #33), written for a teammate who is new
   to programming/Git/GitHub/AI-agent collaboration (design/PM background):
   - Root [`README.md`](../README.md) — project one-liner, points first to
@@ -90,13 +153,6 @@ introduced)_
     (`cdn.jsdelivr.net`) via an ES module `<script>` tag at the bottom of the file, so
     an internet connection is required to render the diagrams (the file still opens
     fine with no dev server, just needs network access).
-- New UI bugs found while manually testing this session's changes are tracked in
-  [#29](https://github.com/aila8913/volley-tatic-board/issues/29) (not fixed yet):
-  court bottom boundary line too thin in tactics view; question of why libero defaults
-  to the bench slot; "重置站位" has no confirmation/undo; "← 比賽列表" should be
-  available on every screen.
-- Backend (`artifacts/api-server`) and its tactics-save/load flow are unchanged this
-  session. Match-recording API routes (`docs/api-spec.md`) are still unimplemented.
 
 ## Known gaps / next big pieces
 
@@ -119,22 +175,32 @@ status — the list below is a snapshot, not guaranteed up to date):
 - [#20](https://github.com/aila8913/volley-tatic-board/issues/20) — 計分表多項 Bug 與
   功能補齊. Bug 2 (場外換人入口) confirmed already resolved by earlier work (see
   comment on the issue); Bug 1/3 + sub-count-limit UI still open.
-- [#21](https://github.com/aila8913/volley-tatic-board/issues/21) — 球線軌跡記錄. The
-  issue's "current state" description was stale (described click-to-menu, but the app
-  already uses a drag-line gesture) — corrected via comment. Core ask (recording the
-  actual trajectory as analyzable data, not just resolving a hit target) still open.
-- [#22](https://github.com/aila8913/volley-tatic-board/issues/22) — 動作分類擴充與重新
-  設計（攻擊/防守/發球/犯規）。
+- [#21](https://github.com/aila8913/volley-tatic-board/issues/21) — 球線軌跡記錄（進
+  階版：精確座標記錄）. Highly related to new issue #51 — both are "advanced tier"
+  recording scope, probably worth designing together. This session's ERD work leans
+  towards resolving #21's open "落點要精確座標還是號位" question in favor of precise
+  coordinates (zone becomes a derived display value, not an input field).
 - [#24](https://github.com/aila8913/volley-tatic-board/issues/24) — 複製比賽。
 - [#25](https://github.com/aila8913/volley-tatic-board/issues/25) — 先發/先接切換。
 - [#26](https://github.com/aila8913/volley-tatic-board/issues/26) — 部署準備。
-- [#29](https://github.com/aila8913/volley-tatic-board/issues/29) — 這個 session 手動
-  測試戰術布置時發現的 4 個小問題（見上方 Current state），還沒修。
+- [#49](https://github.com/aila8913/volley-tatic-board/issues/49) — 戰術板白板高度應
+  撐滿中間 panel，而非跟著球場大小。
+- [#50](https://github.com/aila8913/volley-tatic-board/issues/50) — 計分表動作選項應
+  依發球方做情境限制（發球/接發互斥）。
+- [#51](https://github.com/aila8913/volley-tatic-board/issues/51) — 進階版：動作子分
+  類、犯規類型與 Outcome 細節擴充（#22 的後續，見上方 Current state）。Blocked on
+  match-recording 後端完全沒實作這件事——真的要落地前，`events` 表的 CRUD 得先動工。
 - Backend match-recording API routes (`docs/api-spec.md`) still unimplemented; frontend
-  doesn't call them yet either.
+  doesn't call them yet either. This remains the prerequisite for #51 and any real
+  post-match stats/analysis page (see `docs/match-recording-erd.html` for the design
+  direction discussed this session).
 
 ## Recently closed
 
+- #22 — 簡易版所需的動作分類擴充（4→6 大類，對齊 events 表）與 RadialMenu 選項數量
+  限制已在 PR #47 完成；子分類/犯規類型/Outcome 細節拆到 #51 繼續追蹤。
+- #29 — 戰術布置測試發現的邊框、確認彈窗、返回按鈕問題，已在 PR #46 修正。
+- #34 — flow-diagrams.html 的 T5 標記矛盾，已修正並補上已知問題對應的 issue 連結。
 - #27 — 輪轉表/戰術板/計分表操作流程圖 + 狀態機圖 + 頁面跳轉大圖，存成
   `docs/flow-diagrams.html`。
 - #14 — libero substitution bug + 先發 UX unification, fully fixed in PR #23 (commit
