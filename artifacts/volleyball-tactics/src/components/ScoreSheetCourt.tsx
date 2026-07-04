@@ -125,8 +125,22 @@ export default function ScoreSheetCourt({
     xNorm: number;
     yNorm: number;
   };
+  // 「對手(全體)」的固定位置：對手半場左上角空白處，跟 6 個號位圈(y 30~80)、
+  // 「對手」標題文字(x=50, y=15)都不重疊。沒有 playerId 也沒有 zone——代表
+  // 「這球是對手做的，但不挑是哪個位置/哪個人」，對應 side=opponent、playerId
+  // 留空的簡易版記錄情境（對手自己失誤導致我方得分時，我們沒有對手名單可以指定）。
+  const OPPONENT_ALL_X = 12;
+  const OPPONENT_ALL_Y = 12;
+
   const hitTargets = useMemo<HitTarget[]>(
     () => [
+      {
+        side: "opponent" as const,
+        x: OPPONENT_ALL_X,
+        y: OPPONENT_ALL_Y,
+        xNorm: OPPONENT_ALL_X / 100,
+        yNorm: OPPONENT_ALL_Y / 200,
+      },
       ...opponentZones.map((slot) => ({
         side: "opponent" as const,
         zone: slot.zone,
@@ -318,6 +332,24 @@ export default function ScoreSheetCourt({
           <text x="50" y="192" fontSize="6" fill="#111" textAnchor="middle">
             我方
           </text>
+
+          {/* 對手(全體)：虛線框，跟下面號位圈的實心圓區分——這是「不挑細節」的選項 */}
+          <g transform={`translate(${OPPONENT_ALL_X},${OPPONENT_ALL_Y})`}>
+            <rect
+              x="-10"
+              y="-6"
+              width="20"
+              height="12"
+              rx="3"
+              fill="#fff"
+              stroke="#999"
+              strokeWidth="1"
+              strokeDasharray="2 1"
+            />
+            <text y="2" fontSize="3.5" fontWeight="bold" fill="#666" textAnchor="middle">
+              對手
+            </text>
+          </g>
 
           {/* 對手號位圈 */}
           {opponentZones.map((slot) => {

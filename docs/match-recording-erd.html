@@ -1,0 +1,630 @@
+<title>比賽記錄 ERD — 簡易版／進階版整合</title>
+<style>
+  :root {
+    --bg: #14181b;
+    --surface: #1d2226;
+    --surface-2: #242a2e;
+    --border: rgba(237, 234, 226, 0.16);
+    --border-strong: rgba(237, 234, 226, 0.3);
+    --text: #edeae2;
+    --muted: #98a29a;
+    --amber: #f2b705;
+    --green: #4fa179;
+    --blue: #5c9ce6;
+  }
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family:
+      "Segoe UI",
+      system-ui,
+      -apple-system,
+      sans-serif;
+    line-height: 1.6;
+  }
+  h1,
+  h2,
+  .eyebrow {
+    font-family: "Bahnschrift", "Arial Narrow", "Helvetica Neue", sans-serif;
+    text-wrap: balance;
+  }
+  code,
+  .mono {
+    font-family: Consolas, "SF Mono", monospace;
+  }
+  .wrap {
+    max-width: 1600px;
+    margin: 0 auto;
+    padding: 2.5rem 1.75rem 4rem;
+  }
+  header.page {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    padding-bottom: 1.25rem;
+    margin-bottom: 2rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .eyebrow {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--muted);
+    margin: 0;
+  }
+  header.page h1 {
+    font-size: clamp(1.5rem, 2.6vw, 2rem);
+    font-weight: 700;
+    margin: 0;
+    letter-spacing: 0.01em;
+  }
+  header.page p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.95rem;
+    max-width: 76ch;
+  }
+
+  /* ── 圖例 ── */
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.4rem;
+    margin: 0 0 1.75rem;
+    padding: 0.85rem 1.1rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 0.82rem;
+    color: var(--muted);
+  }
+  .legend .item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    white-space: nowrap;
+  }
+  .badge {
+    font-family: Consolas, "SF Mono", monospace;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    line-height: 1.4;
+  }
+  .badge.pk {
+    color: #171307;
+    background: var(--amber);
+  }
+  .badge.fk {
+    color: #0b141f;
+    background: var(--blue);
+  }
+  .pip {
+    width: 0.6rem;
+    height: 0.6rem;
+    border-radius: 50%;
+    display: inline-block;
+  }
+  .pip.both {
+    background: var(--green);
+  }
+  .pip.advanced {
+    background: var(--blue);
+    box-shadow: 0 0 0 2px rgba(92, 156, 230, 0.25);
+  }
+  .pip.opp {
+    background: transparent;
+    border: 1.5px solid var(--amber);
+  }
+
+  /* ── 圖表畫布：固定寬度，外層自己捲動，避免撐開版面 ── */
+  .diagram-shell {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background:
+      linear-gradient(var(--surface) 0 0),
+      repeating-linear-gradient(
+        0deg,
+        rgba(237, 234, 226, 0.035) 0,
+        rgba(237, 234, 226, 0.035) 1px,
+        transparent 1px,
+        transparent 28px
+      ),
+      repeating-linear-gradient(
+        90deg,
+        rgba(237, 234, 226, 0.035) 0,
+        rgba(237, 234, 226, 0.035) 1px,
+        transparent 1px,
+        transparent 28px
+      );
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+  }
+  .canvas {
+    position: relative;
+    width: 1500px;
+    height: 730px;
+  }
+  .canvas svg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+  }
+  .conn-line {
+    fill: none;
+    stroke: var(--blue);
+    stroke-width: 1.75;
+    opacity: 0.75;
+  }
+  .conn-dot {
+    fill: var(--blue);
+  }
+  .conn-label {
+    font-family: Consolas, "SF Mono", monospace;
+    font-size: 11px;
+    fill: var(--muted);
+  }
+
+  .entity {
+    position: absolute;
+    background: var(--surface-2);
+    border: 1px solid var(--border-strong);
+    border-radius: 7px;
+    overflow: hidden;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+  }
+  .entity > header {
+    background: rgba(242, 183, 5, 0.08);
+    border-bottom: 1px solid var(--border-strong);
+    padding: 0.55rem 0.8rem;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+  .entity > header .name {
+    font-family: Consolas, "SF Mono", monospace;
+    font-weight: 700;
+    font-size: 0.92rem;
+    letter-spacing: 0.01em;
+    color: var(--text);
+  }
+  .entity > header .table-tag {
+    font-size: 0.66rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .fields {
+    display: flex;
+    flex-direction: column;
+  }
+  .field {
+    display: grid;
+    grid-template-columns: 28px 1fr auto;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.32rem 0.8rem;
+    border-bottom: 1px solid rgba(237, 234, 226, 0.06);
+    font-size: 0.78rem;
+  }
+  .field:last-child {
+    border-bottom: none;
+  }
+  .field .col-name {
+    color: var(--text);
+    white-space: nowrap;
+  }
+  .field .col-type {
+    color: var(--muted);
+    font-size: 0.72rem;
+    text-align: right;
+    white-space: nowrap;
+  }
+  .field.nullable .col-name {
+    color: var(--muted);
+  }
+  .field .tier-pip {
+    width: 0.55rem;
+    height: 0.55rem;
+    border-radius: 50%;
+    flex: none;
+  }
+  .field .tier-pip.both {
+    background: var(--green);
+  }
+  .field .tier-pip.advanced {
+    background: var(--blue);
+    box-shadow: 0 0 0 2px rgba(92, 156, 230, 0.25);
+  }
+  .field .tier-pip.opp {
+    background: transparent;
+    border: 1.5px solid var(--amber);
+  }
+  .footnote {
+    padding: 0.5rem 0.8rem 0.7rem;
+    font-size: 0.71rem;
+    color: var(--muted);
+    font-style: italic;
+    border-top: 1px dashed var(--border);
+  }
+
+  /* ── 定位每個實體卡片 ── */
+  #ent-match {
+    left: 40px;
+    top: 40px;
+    width: 280px;
+  }
+  #ent-players {
+    left: 40px;
+    top: 320px;
+    width: 280px;
+  }
+  #ent-sets {
+    left: 400px;
+    top: 40px;
+    width: 250px;
+  }
+  #ent-rallies {
+    left: 730px;
+    top: 40px;
+    width: 260px;
+  }
+  #ent-events {
+    left: 1070px;
+    top: 40px;
+    width: 390px;
+  }
+
+  section.notes {
+    margin-top: 0.5rem;
+  }
+  section.notes h2 {
+    font-size: 1.05rem;
+    margin: 0 0 0.6rem;
+  }
+  .notes ul {
+    margin: 0;
+    padding-left: 1.2rem;
+    color: var(--muted);
+    font-size: 0.86rem;
+  }
+  .notes li {
+    margin-bottom: 0.45rem;
+  }
+  .notes li::marker {
+    color: var(--amber);
+  }
+  .notes code {
+    color: var(--text);
+    background: var(--surface);
+    padding: 0.05rem 0.35rem;
+    border-radius: 3px;
+    font-size: 0.82em;
+  }
+</style>
+
+<div class="wrap">
+  <header class="page">
+    <p class="eyebrow">
+      Volley Tactics Board · docs/db-schema-spec.md 討論草稿
+    </p>
+    <h1>比賽記錄 ERD — 簡易版／進階版共用同一張 events 表</h1>
+    <p>
+      Match → Players / Sets → Rallies → Events
+      的巢狀關係維持原樣；今天討論的結論反映在
+      <code class="mono">events</code>
+      的欄位標記上——簡易版（賽中快速記分）點選目標（我方球員／對手(全體)／沒看到）
+      → 選動作 →
+      選得失分，只填綠點與圈選欄位；進階版（賽後補填）才會用到藍點欄位。
+      「沒看到」這條路徑完全不建立 event，只直接記在
+      <code class="mono">rallies</code> 上。
+    </p>
+  </header>
+
+  <div class="legend">
+    <div class="item"><span class="badge pk">PK</span> 主鍵</div>
+    <div class="item">
+      <span class="badge fk">FK</span> 外鍵（指向上層實體）
+    </div>
+    <div class="item">
+      <span class="pip both"></span> 兩版都會填（簡易版即可）
+    </div>
+    <div class="item">
+      <span class="pip advanced"></span> 僅進階版填寫（nullable）
+    </div>
+    <div class="item">
+      <span class="pip opp"></span> 對手(全體)時留空（nullable）
+    </div>
+    <div class="item" style="color: var(--muted)">灰字＝可為 null</div>
+  </div>
+
+  <div class="diagram-shell">
+    <div class="canvas">
+      <svg viewBox="0 0 1500 730" aria-hidden="true">
+        <!-- Match -> Players -->
+        <path class="conn-line" d="M180,230 V320" />
+        <circle class="conn-dot" cx="180" cy="320" r="3.5" />
+        <text class="conn-label" x="188" y="278">1 : *</text>
+
+        <!-- Match -> Sets -->
+        <path class="conn-line" d="M320,135 H360 V115 H400" />
+        <circle class="conn-dot" cx="400" cy="115" r="3.5" />
+        <text class="conn-label" x="330" y="128">1 : *</text>
+
+        <!-- Sets -> Rallies -->
+        <path class="conn-line" d="M650,115 H690 V155 H730" />
+        <circle class="conn-dot" cx="730" cy="155" r="3.5" />
+        <text class="conn-label" x="655" y="148">1 : *</text>
+
+        <!-- Rallies -> Events -->
+        <path class="conn-line" d="M990,155 H1030 V162 H1070" />
+        <circle class="conn-dot" cx="1070" cy="162" r="3.5" />
+        <text class="conn-label" x="995" y="148">1 : *</text>
+
+        <!-- Players -> Events (playerId FK) -->
+        <path class="conn-line" d="M320,435 H1030 V450 H1070" />
+        <circle class="conn-dot" cx="1070" cy="450" r="3.5" />
+        <text class="conn-label" x="640" y="428">playerId · 1 : *</text>
+      </svg>
+
+      <!-- Match -->
+      <div class="entity" id="ent-match">
+        <header>
+          <span class="name">matches</span><span class="table-tag">比賽</span>
+        </header>
+        <div class="fields">
+          <div class="field">
+            <span class="badge pk">PK</span><span class="col-name">id</span
+            ><span class="col-type">serial</span>
+          </div>
+          <div class="field">
+            <span></span><span class="col-name">name</span
+            ><span class="col-type">text</span>
+          </div>
+          <div class="field">
+            <span></span><span class="col-name">date</span
+            ><span class="col-type">timestamptz</span>
+          </div>
+          <div class="field">
+            <span></span><span class="col-name">opponent</span
+            ><span class="col-type">text</span>
+          </div>
+          <div class="field nullable">
+            <span></span><span class="col-name">location</span
+            ><span class="col-type">text?</span>
+          </div>
+          <div class="field nullable">
+            <span></span><span class="col-name">videoUrl</span
+            ><span class="col-type">text?</span>
+          </div>
+          <div class="field">
+            <span></span><span class="col-name">createdAt</span
+            ><span class="col-type">timestamptz</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Players -->
+      <div class="entity" id="ent-players">
+        <header>
+          <span class="name">players</span
+          ><span class="table-tag">球員名單</span>
+        </header>
+        <div class="fields">
+          <div class="field">
+            <span class="badge pk">PK</span><span class="col-name">id</span
+            ><span class="col-type">serial</span>
+          </div>
+          <div class="field">
+            <span class="badge fk">FK</span><span class="col-name">matchId</span
+            ><span class="col-type">→ matches</span>
+          </div>
+          <div class="field">
+            <span></span><span class="col-name">name</span
+            ><span class="col-type">text</span>
+          </div>
+          <div class="field">
+            <span></span><span class="col-name">number</span
+            ><span class="col-type">int</span>
+          </div>
+          <div class="field">
+            <span></span><span class="col-name">role</span
+            ><span class="col-type">enum(5)</span>
+          </div>
+        </div>
+        <div class="footnote">名單掛在比賽底下，不是獨立球隊實體。</div>
+      </div>
+
+      <!-- Sets -->
+      <div class="entity" id="ent-sets">
+        <header>
+          <span class="name">sets</span><span class="table-tag">局</span>
+        </header>
+        <div class="fields">
+          <div class="field">
+            <span class="badge pk">PK</span><span class="col-name">id</span
+            ><span class="col-type">serial</span>
+          </div>
+          <div class="field">
+            <span class="badge fk">FK</span><span class="col-name">matchId</span
+            ><span class="col-type">→ matches</span>
+          </div>
+          <div class="field">
+            <span></span><span class="col-name">setNumber</span
+            ><span class="col-type">int</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Rallies -->
+      <div class="entity" id="ent-rallies">
+        <header>
+          <span class="name">rallies</span
+          ><span class="table-tag">一分（一個來回）</span>
+        </header>
+        <div class="fields">
+          <div class="field">
+            <span class="badge pk">PK</span><span class="col-name">id</span
+            ><span class="col-type">serial</span>
+          </div>
+          <div class="field">
+            <span class="badge fk">FK</span><span class="col-name">setId</span
+            ><span class="col-type">→ sets</span>
+          </div>
+          <div class="field">
+            <span></span><span class="col-name">rallyNumber</span
+            ><span class="col-type">int</span>
+          </div>
+          <div class="field">
+            <span></span><span class="col-name">homeScore</span
+            ><span class="col-type">int</span>
+          </div>
+          <div class="field">
+            <span></span><span class="col-name">awayScore</span
+            ><span class="col-type">int</span>
+          </div>
+          <div class="field">
+            <span></span><span class="col-name">winner</span
+            ><span class="col-type">home / away</span>
+          </div>
+        </div>
+        <div class="footnote">
+          得失分依據就是 <code style="color: var(--text)">winner</code>，不會在
+          event 上重複記一次。「我方球員」「對手(全體)」都會建立 1 個
+          event；「沒看到」則完全不建立 event，直接記在這張表上。
+        </div>
+      </div>
+
+      <!-- Events -->
+      <div class="entity" id="ent-events">
+        <header>
+          <span class="name">events</span><span class="table-tag">一球</span>
+        </header>
+        <div class="fields">
+          <div class="field">
+            <span class="badge pk">PK</span><span class="col-name">id</span
+            ><span class="col-type">serial</span>
+          </div>
+          <div class="field">
+            <span class="badge fk">FK</span><span class="col-name">rallyId</span
+            ><span class="col-type">→ rallies</span>
+          </div>
+          <div class="field">
+            <span class="tier-pip both"></span
+            ><span class="col-name">sequence</span
+            ><span class="col-type">int</span>
+          </div>
+          <div class="field">
+            <span class="tier-pip both"></span><span class="col-name">side</span
+            ><span class="col-type">home / away</span>
+          </div>
+          <div class="field nullable">
+            <span class="tier-pip opp"></span>
+            <span class="col-name"
+              >playerId <span class="badge fk">FK</span></span
+            ><span class="col-type">→ players?</span>
+          </div>
+          <div class="field">
+            <span class="tier-pip both"></span
+            ><span class="col-name">action</span
+            ><span class="col-type">enum(6)</span>
+          </div>
+          <div class="field">
+            <span class="tier-pip both"></span
+            ><span class="col-name">source</span
+            ><span class="col-type">live / review</span>
+          </div>
+          <div class="field nullable">
+            <span class="tier-pip advanced"></span
+            ><span class="col-name">ballType</span
+            ><span class="col-type">enum(4)?</span>
+          </div>
+          <div class="field nullable">
+            <span class="tier-pip advanced"></span
+            ><span class="col-name">quality</span
+            ><span class="col-type">0–3?</span>
+          </div>
+          <div class="field nullable">
+            <span class="tier-pip advanced"></span
+            ><span class="col-name">fromX / fromY</span
+            ><span class="col-type">real?</span>
+          </div>
+          <div class="field nullable">
+            <span class="tier-pip advanced"></span
+            ><span class="col-name">toX / toY</span
+            ><span class="col-type">real?</span>
+          </div>
+          <div class="field nullable">
+            <span class="tier-pip advanced"></span
+            ><span class="col-name">videoTimestamp</span
+            ><span class="col-type">int?</span>
+          </div>
+          <div class="field nullable">
+            <span></span><span class="col-name">tags</span
+            ><span class="col-type">text[]</span>
+          </div>
+          <div class="field nullable">
+            <span></span><span class="col-name">note</span
+            ><span class="col-type">text?</span>
+          </div>
+        </div>
+        <div class="footnote">
+          今天的異動：<code style="color: var(--text)"
+            >fromX/fromY/toX/toY</code
+          >
+          要從現有的 <code style="color: var(--text)">.notNull()</code> 改成可為
+          null， 簡易版才填得進這張表。
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <section class="notes">
+    <h2>跟現有 <code>lib/db/src/schema/</code> 的差異</h2>
+    <ul>
+      <li>
+        <code>matches</code> / <code>players</code> / <code>sets</code> /
+        <code>rallies</code> 維持現狀，沒有異動。
+      </li>
+      <li>
+        <code>events.action</code> 沿用現有 6 大類（serve / receive / set /
+        attack / block / dig），簡易版跟進階版共用同一組分類，不再各自一套。
+      </li>
+      <li>
+        <code>events.fromX</code> / <code>fromY</code> / <code>toX</code> /
+        <code>toY</code> 需要從 <code>.notNull()</code> 改成可為 null——支援
+        簡易版不記座標的情況。
+      </li>
+      <li>
+        新增 <code>events.side</code>（home / away，必填）：對手自己失誤
+        導致我方得分時，這一球的「動作方」是對手，不是我方球員，需要獨立於
+        <code>rallies.winner</code>（得分方）之外記錄「誰做了這個動作」。
+      </li>
+      <li>
+        <code>events.playerId</code> 改成可為 null：點選「對手(全體)」時，
+        因為沒有存對手名單，<code>playerId</code> 留空，只靠新的
+        <code>side = away</code> 標示這是對方的動作。<code>action</code>
+        本身維持 <code>.notNull()</code>——「對手(全體)」一樣要選動作大類。
+      </li>
+      <li>
+        「沒看到」路徑（連是哪一方動作都判斷不出來）不建立 event，直接把
+        得失分記在 <code>rallies.homeScore</code> / <code>awayScore</code> /
+        <code>winner</code> 上，event 表不用因此 再新增任何 nullable 欄位。
+      </li>
+      <li>
+        <code>tactics</code>
+        表（戰術板存檔用）跟這條記錄／統計的資料流無關，此圖刻意不畫進來。
+      </li>
+    </ul>
+  </section>
+</div>

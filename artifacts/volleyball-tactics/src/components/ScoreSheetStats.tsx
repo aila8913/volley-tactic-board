@@ -8,12 +8,16 @@ interface Props {
   totalSubCount?: number;
 }
 
-const ACTIONS: PlayAction[] = ["attack", "serve", "defense", "block"];
+// 跟 pages/ScoreSheet.tsx 的 ACTION_OPTIONS 用同一組 6 大類、同樣的順序跟用字，
+// 這樣兩個畫面看到的動作分類才會一致。
+const ACTIONS: PlayAction[] = ["serve", "receive", "set", "attack", "block", "dig"];
 const ACTION_LABELS: Record<PlayAction, string> = {
-  attack: "攻擊",
   serve: "發球",
-  defense: "防守",
+  receive: "接發",
+  set: "舉球",
+  attack: "攻擊",
   block: "攔網",
+  dig: "防守",
 };
 
 type PlayerMatrixRow = {
@@ -38,10 +42,12 @@ function buildPlayerMatrix(history: PointRecord[], players: MatchPlayer[]): Play
         playerId: pid,
         number: player.number,
         stats: {
-          attack: { won: 0, lost: 0 },
           serve: { won: 0, lost: 0 },
-          defense: { won: 0, lost: 0 },
+          receive: { won: 0, lost: 0 },
+          set: { won: 0, lost: 0 },
+          attack: { won: 0, lost: 0 },
           block: { won: 0, lost: 0 },
+          dig: { won: 0, lost: 0 },
         },
       });
     }

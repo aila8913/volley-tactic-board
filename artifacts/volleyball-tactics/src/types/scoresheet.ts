@@ -7,8 +7,11 @@
 // 對手沒有名單資料，只追蹤號位輪轉（見 lib/rotationLogic.ts 的 getZoneLayout）。
 export type Side = "us" | "opponent";
 
-// 快速操作手勢（畫線連到球員→選動作→選得失分）裡，「選動作」那一步的四個選項。
-export const PLAY_ACTIONS = ["serve", "defense", "attack", "block"] as const;
+// 快速操作手勢（點選球員/對手(全體)→選動作→選得失分）裡，「選動作」那一步的選項。
+// 這 6 大類刻意跟 lib/db/src/schema/events.ts 的 eventActionEnum 對齊，是簡易版（這裡）
+// 跟進階版（events 表）共用同一套分類的第一步——之前是各自一套（這裡只有 4 類、
+// events 表已經是 6 類），現在統一成 6 類，之後兩邊的統計才能直接放在一起比較。
+export const PLAY_ACTIONS = ["serve", "receive", "set", "attack", "block", "dig"] as const;
 export type PlayAction = (typeof PLAY_ACTIONS)[number];
 
 // 紀錄每一分發生時的狀況，用來支援「復原上一球」：
