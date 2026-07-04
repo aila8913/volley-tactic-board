@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
 import { useParams, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import BackToMatchListButton from "@/components/BackToMatchListButton";
@@ -10,22 +11,36 @@ import RadialMenu, { RadialMenuOption } from "@/components/RadialMenu";
 import ScoreSheetStats from "@/components/ScoreSheetStats";
 import { PlayAction } from "@/types/scoresheet";
 
+// 6 大類跟 lib/db/src/schema/events.ts 的 eventActionEnum 對齊（見
+// types/scoresheet.ts 的說明）。陣列順序就是 RadialMenu 從正上方順時針排列的順序，
+// 跟現在用哪個字沒關係，純粹排版用。
 const ACTION_OPTIONS: RadialMenuOption<PlayAction>[] = [
-  { value: "serve", label: "發球", position: "top" },
-  { value: "defense", label: "防守", position: "left" },
-  { value: "attack", label: "攻擊", position: "right" },
-  { value: "block", label: "擋網", position: "bottom" },
+  { value: "serve", label: "發球" },
+  { value: "receive", label: "接發" },
+  { value: "set", label: "舉球" },
+  { value: "attack", label: "攻擊" },
+  { value: "block", label: "攔網" },
+  { value: "dig", label: "防守" },
 ];
 
 type Outcome = "win" | "lose";
+// 順序維持 [lose, win]：RadialMenu 用 startAngle=180 時，2 個選項會落在
+// 180°（左）／0°（右），跟以前寫死 position="left"/"right" 的畫面完全一樣。
+//
+// 標籤維持單純的「得分／失分」，不寫死「我方／對方」——這兩個字是相對於
+// 「這一球的動作方」來看的（見 handleOutcomeSelect），動作方是誰由前一步
+// （點我方球員 / 對手(全體)）決定，「得分／失分」本身不用跟著切換文字。
 const OUTCOME_OPTIONS: RadialMenuOption<Outcome>[] = [
-  { value: "lose", label: "失分", position: "left" },
-  { value: "win", label: "得分", position: "right" },
+  { value: "lose", label: "失分" },
+  { value: "win", label: "得分" },
 ];
 
 type Gesture =
   | { step: "action"; target: TouchedTarget }
-  | { step: "outcome"; target: TouchedTarget; action: PlayAction };
+  | { step: "outcome"; target: TouchedTarget; action: PlayAction }
+  // 「沒看到」：只知道螢幕上點下去的位置（給 RadialMenu 當中心點），
+  // 沒有 target 也沒有 action——直接跳去選得/失分，不記錄是誰、做了什麼動作。
+  | { step: "outcome-only"; screenX: number; screenY: number };
 
 export default function ScoreSheet() {
   const { id } = useParams<{ id: string }>();
@@ -128,21 +143,41 @@ export default function ScoreSheet() {
   };
 
   const handleActionSelect = (action: PlayAction) => {
-    if (!gesture) return;
+    if (!gesture || gesture.step !== "action") return;
     setGesture({ step: "outcome", target: gesture.target, action });
   };
 
   const handleOutcomeSelect = (outcome: Outcome) => {
-    if (!gesture || gesture.step !== "outcome") return;
-    scorePoint(id, outcome === "win" ? "us" : "opponent", {
-      action: gesture.action,
-      touchedBy: {
-        side: gesture.target.side,
-        playerId: gesture.target.playerId,
-        zone: gesture.target.zone,
-      },
-    });
+    if (!gesture) return;
+    if (gesture.step === "outcome") {
+      // 「得分／失分」是相對於這一球的動作方（target.side）來看，不是永遠對應
+      // 我方：對手(全體)做了這個動作時，「得分」代表對手拿到這一分，得加的是
+      // 對手的分數；「失分」代表對手沒拿到這一分（我方拿到）。動作方是我方球員
+      // 時邏輯相反過來，一樣是「這個動作方自己得分還是失分」。
+      const actorSide = gesture.target.side;
+      const side = outcome === "win" ? actorSide : actorSide === "us" ? "opponent" : "us";
+      scorePoint(id, side, {
+        action: gesture.action,
+        touchedBy: {
+          side: gesture.target.side,
+          playerId: gesture.target.playerId,
+          zone: gesture.target.zone,
+        },
+      });
+    } else if (gesture.step === "outcome-only") {
+      // 「沒看到」沒有動作方可以參照，固定用我方視角（得分=我方加分）。
+      // 不帶 meta，scorePoint 本來就支援（見 useScoreSheet.ts 的
+      // meta?: Pick<PointRecord, "action" | "touchedBy">），只更新比分/輪轉，
+      // 不會生出任何動作/球員的紀錄。
+      scorePoint(id, outcome === "win" ? "us" : "opponent");
+    }
     setGesture(null);
+  };
+
+  // 「沒看到」按鈕：跳過選動作，直接用按鈕本身的螢幕座標當 RadialMenu 中心，
+  // 彈出得/失分選單。
+  const handleNoSight = (e: ReactPointerEvent) => {
+    setGesture({ step: "outcome-only", screenX: e.clientX, screenY: e.clientY });
   };
 
   const handleLiberoSubstitute = (targetPlayerId: string) => {
@@ -285,6 +320,9 @@ export default function ScoreSheet() {
                     >
                       復原上一球
                     </Button>
+                    <Button variant="ghost" onPointerDown={handleNoSight}>
+                      沒看到
+                    </Button>
                     <Button variant="ghost" onClick={handleNextSet}>
                       下一局
                     </Button>
@@ -347,6 +385,16 @@ export default function ScoreSheet() {
           options={OUTCOME_OPTIONS}
           onSelect={handleOutcomeSelect}
           onCancel={() => setGesture(null)}
+          startAngle={180}
+        />
+      )}
+      {gesture?.step === "outcome-only" && (
+        <RadialMenu
+          center={{ x: gesture.screenX, y: gesture.screenY }}
+          options={OUTCOME_OPTIONS}
+          onSelect={handleOutcomeSelect}
+          onCancel={() => setGesture(null)}
+          startAngle={180}
         />
       )}
     </div>
