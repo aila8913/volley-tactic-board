@@ -1,6 +1,7 @@
 import React, { useEffect } from "react";
 import { useParams, Link } from "wouter";
 import { Button } from "@/components/ui/button";
+import BackToMatchListButton from "../components/BackToMatchListButton";
 import RotationTable from "../components/RotationTable";
 import TacticsBoardPanel from "../components/TacticsBoardPanel";
 import Court from "../components/Court";
@@ -26,9 +27,7 @@ export default function TacticsBoard() {
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden bg-white text-[#111111] font-sans">
       <header className="flex items-center justify-between border-b-2 border-[#111] px-4 py-3 shrink-0">
-        <Button asChild variant="outline" size="sm">
-          <Link href={backHref}>← 比賽列表</Link>
-        </Button>
+        <BackToMatchListButton href={backHref} />
         <h1 className="text-lg font-bold">{match ? `vs ${match.opponent}` : "戰術板"}</h1>
         <Button asChild variant="outline" size="sm">
           <Link href={`/matches/${id}/record`}>計分表</Link>

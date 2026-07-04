@@ -35,7 +35,10 @@ export default function RotationTable() {
   // 「重置站位」要同時清空輪轉表（站位）跟戰術板（這個輪次的畫筆/自由站位）——
   // 兩個 store 各自只管自己的資料，由按下按鈕的這一刻各自呼叫一次，這就是我們說好的
   // 「資料用傳輸的」：不是互相偷看對方內部，而是外層明確呼叫兩邊。
+  // 這個動作沒有 undo，點錯會直接清空——用瀏覽器內建的 window.confirm() 擋一下，
+  // 跟 MatchList.tsx / TournamentDetail.tsx 刪除比賽/賽事時用的是同一套簡單彈窗模式。
   const handleResetRotation = () => {
+    if (!window.confirm("確定要重置目前輪次的站位嗎？此動作無法復原。")) return;
     resetCurrentRotationPositions();
     resetCurrentRotationTactics();
   };

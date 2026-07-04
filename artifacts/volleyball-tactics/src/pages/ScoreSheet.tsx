@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, Link } from "wouter";
 import { Button } from "@/components/ui/button";
+import BackToMatchListButton from "@/components/BackToMatchListButton";
 import { useMatches } from "@/hooks/useMatches";
 import { useRotationTable } from "@/hooks/useRotationTable";
 import { useScoreSheet } from "@/hooks/useScoreSheet";
@@ -98,9 +99,7 @@ export default function ScoreSheet() {
     return (
       <div className="flex min-h-screen w-full flex-col items-center justify-center gap-4 bg-white px-4 text-center">
         <p className="text-muted-foreground">找不到這場比賽。</p>
-        <Button asChild variant="outline">
-          <Link href="/">回到比賽列表</Link>
-        </Button>
+        <BackToMatchListButton />
       </div>
     );
   }
@@ -178,9 +177,7 @@ export default function ScoreSheet() {
   return (
     <div className="flex h-screen w-full flex-col bg-white">
       <header className="flex items-center justify-between border-b-2 border-[#111] px-4 py-3 shrink-0">
-        <Button asChild variant="outline" size="sm">
-          <Link href="/">← 比賽列表</Link>
-        </Button>
+        <BackToMatchListButton />
         <h1 className="text-lg font-bold">vs {match.opponent}</h1>
         <Button asChild variant="outline" size="sm">
           <Link href={`/matches/${id}/board`}>戰術板</Link>
