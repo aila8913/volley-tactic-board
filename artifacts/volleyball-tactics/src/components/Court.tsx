@@ -296,7 +296,12 @@ export default function Court() {
           {/* 戰術視圖的球場粗框：輪轉視圖靠 wrapper 的 CSS border 畫框，戰術視圖 wrapper
               撐滿整個 panel、跟球場不再一樣大，所以框要改成畫在 SVG 裡、貼著球場本身
               （0,0 到 100,200），才會一直牢牢框住球場、不會被白板一起撐大。
-              要畫在 court-bg 之後（DOM 順序在它後面）才會蓋在球場的白色矩形上面顯示出來。 */}
+              要畫在 court-bg 之後（DOM 順序在它後面）才會蓋在球場的白色矩形上面顯示出來。
+              vectorEffect="non-scaling-stroke"：這個 svg 用 preserveAspectRatio="none"，
+              viewBox 的寬高會依 panel 形狀各自獨立縮放（見上面 computeTacticsViewBox），
+              框線粗細若不加這個屬性會跟著被壓扁——尤其面板偏窄長時，垂直方向縮放比例
+              較小，下緣那條水平線就會顯得特別細。加上這個屬性後粗細固定用「螢幕像素」
+              計算，不受 viewBox 縮放影響，維持跟輪轉視圖的 CSS 粗框一樣的視覺粗細。 */}
           {courtView === "tactics" && (
             <rect
               id="court-border"
@@ -306,7 +311,8 @@ export default function Court() {
               height="200"
               fill="none"
               stroke="#111111"
-              strokeWidth="2"
+              strokeWidth="3"
+              vectorEffect="non-scaling-stroke"
               rx="3"
             />
           )}
