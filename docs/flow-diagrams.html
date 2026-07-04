@@ -740,7 +740,7 @@ stateDiagram-v2
             裡指向已刪除球員 id 的殘留紀錄。Court.tsx
             因為找不到球員會直接不渲染，畫面上看起來正常，但那個格子其實還卡著一個「幽靈站位」——下次有人被拖進同一格時才會被默默蓋掉，中間這段時間那格既看不到也選不到。</span
           ><br /><span class="ref"
-            >RosterEditDialog.tsx onSubmit → useRotationTable.ts setRoster()</span
+            >RosterEditDialog.tsx onSubmit → useRotationTable.ts setRoster() · issue #35</span
           >
         </div>
       </div>
@@ -751,7 +751,7 @@ stateDiagram-v2
           ><span
             >右鍵刪除/拖出下緣，會同時呼叫輪轉表的 removePlayerFromCourt 跟戰術板的
             removePlayerTacticPositions。這兩個呼叫寫在同一個元件裡目前沒問題，但如果之後有第三個地方也要「移除球員」，很容易漏呼叫其中一個，留下殘影。</span
-          ><br /><span class="ref">components/PlayerNode.tsx · removeFromCourt()</span>
+          ><br /><span class="ref">components/PlayerNode.tsx · removeFromCourt() · issue #36</span>
         </div>
       </div>
       <div class="bug">
@@ -760,7 +760,10 @@ stateDiagram-v2
           <b>「重置站位」按鈕放在輪轉表面板，實際操作兩個 store</b
           ><span
             >目前只有「全部清空」跟「不清」兩個選項，沒有「只清站位、保留畫筆」這種中間選項。</span
-          ><br /><span class="ref">components/RotationTable.tsx · handleResetRotation()</span>
+          ><br /><span class="ref"
+            >components/RotationTable.tsx · handleResetRotation() · 確認彈窗已在 issue #29
+            修正</span
+          >
         </div>
       </div>
       <div class="bug">
@@ -770,7 +773,7 @@ stateDiagram-v2
           ><span
             >hasRotations 只檢查「至少一輪有站位」，這個寬鬆判斷也是計分表 hasLineup
             的資料來源，兩邊共用同一個缺口。</span
-          ><br /><span class="ref">交叉參照計分表 ⚠S7</span>
+          ><br /><span class="ref">交叉參照計分表 ⚠S7 · issue #37</span>
         </div>
       </div>
     </div>
@@ -934,8 +937,8 @@ stateDiagram-v2
     <div class="legend" style="margin-top: 0">
       <span><span class="swatch" style="background: var(--amber)"></span>畫筆/防守範圍</span>
       <span
-        ><span class="swatch" style="background: var(--blue)"></span>自由站位（含跨 store
-        自由球員）</span
+        ><span class="swatch" style="background: var(--blue)"></span
+        >自由站位（含自由球員，一般標記）</span
       >
       <span><span class="swatch" style="background: var(--muted)"></span>選取/刪除/undo</span>
       <span><span class="swatch" style="background: var(--green)"></span>模式切換/存檔</span>
@@ -949,7 +952,7 @@ stateDiagram-v2
     [*] --> A
     A --> B: 進入戰術布置（setLayoutMode(true)）
     B --> B: 畫筆/防守範圍（B1,B2）
-    B --> B: 戰術視圖自由站位（B3）⚠T5
+    B --> B: 戰術視圖自由站位（B3）
     B --> B: 選取/刪除/undo（B4）⚠T4
     B --> A: 儲存/另存/新建 → 回唯讀
 
@@ -988,7 +991,7 @@ stateDiagram-v2
             <td>B 戰術布置</td>
             <td class="code">自由站位（B3）</td>
             <td>B 戰術布置</td>
-            <td>自由球員分支呼叫輪轉表<span class="warn">⚠T5</span></td>
+            <td>一般標記，不檢查後排、不寫回輪轉表</td>
           </tr>
           <tr>
             <td>B 戰術布置</td>
@@ -1024,7 +1027,9 @@ stateDiagram-v2
           ><span
             >依序切 6 次輪次、每次等 300ms
             再匯出，過程中沒有鎖住其他操作，使用者手動切輪次可能跟自動匯出的切換打架。</span
-          ><br /><span class="ref">components/TacticsBoardPanel.tsx · handleExportAllPNG()</span>
+          ><br /><span class="ref"
+            >components/TacticsBoardPanel.tsx · handleExportAllPNG() · issue #38</span
+          >
         </div>
       </div>
       <div class="bug">
@@ -1035,7 +1040,7 @@ stateDiagram-v2
             >buildSnapshot/loadProject 把兩個 store 的資料攤平成同一份
             JSON（沿用拆分前的格式，確保舊存檔還讀得到）。如果之後想讓兩邊分開存檔，目前的 API
             沒有對應的資料結構。</span
-          ><br /><span class="ref">types/tacticsBoard.ts · SavedTacticData</span>
+          ><br /><span class="ref">types/tacticsBoard.ts · SavedTacticData · issue #39</span>
         </div>
       </div>
       <div class="bug">
@@ -1055,7 +1060,7 @@ stateDiagram-v2
           ><span
             >這是這次重構刻意的行為改變——拆分前兩者共用一條 undo 記錄，現在 Ctrl+Z
             只復原畫筆/防守範圍/戰術視圖自由站位，不會復原剛拖錯的站位。</span
-          ><br /><span class="ref">hooks/useTacticsBoard.ts · undo()/redo()</span>
+          ><br /><span class="ref">hooks/useTacticsBoard.ts · undo()/redo() · issue #40</span>
         </div>
       </div>
       <div class="bug">
@@ -1381,7 +1386,7 @@ stateDiagram-v2
           <b>復原不會還原換人狀態</b
           ><span
             >復原上一球只還原比分/輪轉/發球方，不會還原同一時間點發生的一般換人或自由球員替補。</span
-          ><br /><span class="ref">hooks/useScoreSheet.ts · undoLastPoint()</span>
+          ><br /><span class="ref">hooks/useScoreSheet.ts · undoLastPoint() · issue #41</span>
         </div>
       </div>
       <div class="bug">
@@ -1391,7 +1396,7 @@ stateDiagram-v2
           ><span
             >regularSubs / subCountsHistory 是純 React 元件內的
             state，重整頁面會整局換人紀錄消失（比分/輪轉不會消失，因為那是 Zustand persist）。</span
-          ><br /><span class="ref">pages/ScoreSheet.tsx（元件內 useState）</span>
+          ><br /><span class="ref">pages/ScoreSheet.tsx（元件內 useState）· issue #42</span>
         </div>
       </div>
       <div class="bug">
@@ -1410,7 +1415,7 @@ stateDiagram-v2
             是兩份獨立邏輯，只是「概念一致」，沒有共用函式 —
             未來輪轉表規則改了，計分表不會自動跟著改。</span
           ><br /><span class="ref"
-            >components/ScoreSheetCourt.tsx vs hooks/useRotationTable.ts</span
+            >components/ScoreSheetCourt.tsx vs hooks/useRotationTable.ts · issue #43</span
           >
         </div>
       </div>
@@ -1421,7 +1426,7 @@ stateDiagram-v2
           ><span
             >整個 codebase 完全沒有 timeout 概念 —
             沒有按鈕、沒有欄位、沒有型別。不是「還沒接上」，是根本不存在。</span
-          >
+          ><br /><span class="ref">issue #44</span>
         </div>
       </div>
       <div class="bug">
@@ -1441,7 +1446,7 @@ stateDiagram-v2
             >hasLineup
             只要求「六個輪轉裡至少一個有球員」就會放行，不檢查六個輪轉是否都排好、也不檢查是否指定了自由球員。</span
           ><br /><span class="ref"
-            >pages/ScoreSheet.tsx · hasLineup 判斷式；交叉參照輪轉表 ⚠R4</span
+            >pages/ScoreSheet.tsx · hasLineup 判斷式；交叉參照輪轉表 ⚠R4 · issue #37</span
           >
         </div>
       </div>
@@ -1452,7 +1457,7 @@ stateDiagram-v2
           ><span
             >「下一局」按鈕永遠可按，不檢查 25 分 / 差 2 分（或第五局 15 分）的勝局條件，0:0
             按下去也會被封存成一局。</span
-          ><br /><span class="ref">hooks/useScoreSheet.ts · nextSet()</span>
+          ><br /><span class="ref">hooks/useScoreSheet.ts · nextSet() · issue #45</span>
         </div>
       </div>
     </div>
