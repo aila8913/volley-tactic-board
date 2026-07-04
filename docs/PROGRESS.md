@@ -9,9 +9,9 @@
 > Read this file, plus `gh issue list --state open` and recent `git log`, at the start
 > of a new session instead of re-exploring the whole codebase from scratch.
 
-_Last updated: 2026-07-03 (session: added onboarding docs for an incoming
-frontend/UI-UX teammate — root `README.md`, `docs/onboarding.md`, plus linking them up
-with the `CONTRIBUTING.md` another session had just written; see below)_
+_Last updated: 2026-07-04 (session: rewrote `docs/flow-diagrams.html`'s 4 hand-coded SVG
+diagrams as Mermaid.js diagrams — see below for the offline/CDN tradeoff this
+introduced)_
 
 ## Current state
 
@@ -79,10 +79,17 @@ with the `CONTRIBUTING.md` another session had just written; see below)_
     click-to-select — unlike `DefenseRange.tsx` which already supported dragging. Added
     the same pointer-capture drag pattern to all marker types.
 - **Operation-flow / state-machine reference docs exist for all three features** plus a
-  page-transition overview, saved as a self-contained offline file at
-  `docs/flow-diagrams.html` (open directly in a browser, no dev server needed) — closes
-  #27. Keep this updated per the `wrap-up` skill's step for it (overwrite the "recent
+  page-transition overview, saved as a file at `docs/flow-diagrams.html` — closes #27.
+  Keep this updated per the `wrap-up` skill's step for it (overwrite the "recent
   changes" callout each session, don't accumulate one).
+  - **All 4 diagrams were rewritten from hand-coded SVG (manual x/y coordinates for
+    every box/arrow/text label) to [Mermaid.js](https://mermaid.js.org/) syntax**
+    (`stateDiagram-v2` / flowchart blocks in `<pre class="mermaid">` tags) — much
+    easier to edit the diagram content without fighting coordinates. **Tradeoff: the
+    file is no longer fully offline** — it now loads `mermaid.js` from a CDN
+    (`cdn.jsdelivr.net`) via an ES module `<script>` tag at the bottom of the file, so
+    an internet connection is required to render the diagrams (the file still opens
+    fine with no dev server, just needs network access).
 - New UI bugs found while manually testing this session's changes are tracked in
   [#29](https://github.com/aila8913/volley-tatic-board/issues/29) (not fixed yet):
   court bottom boundary line too thin in tactics view; question of why libero defaults

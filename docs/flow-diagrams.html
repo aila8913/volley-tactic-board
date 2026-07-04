@@ -281,6 +281,17 @@
     width: 100%;
     height: auto;
   }
+  /* Mermaid renders into the <pre class="mermaid"> tag we put the diagram
+     source in. Before mermaid.js runs, that's just a <pre> full of plain
+     text (browsers add default margin/monospace styling) - reset that so
+     there's no flash of oddly-styled text, and let .diagram-shell's own
+     padding/border do the framing instead. */
+  pre.mermaid {
+    margin: 0;
+    background: transparent;
+    font-family: inherit;
+    white-space: normal;
+  }
   .legend {
     display: flex;
     flex-wrap: wrap;
@@ -439,254 +450,31 @@
     </p>
 
     <div class="diagram-shell">
-      <svg
-        viewBox="0 0 1000 480"
-        xmlns="http://www.w3.org/2000/svg"
-        role="img"
-        aria-label="頁面跳轉大圖"
-      >
-        <defs>
-          <marker id="m-amber" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
-            <path d="M0,0 L8,4 L0,8 Z" fill="#f2b705" />
-          </marker>
-          <marker id="m-blue" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
-            <path d="M0,0 L8,4 L0,8 Z" fill="#5c9ce6" />
-          </marker>
-          <marker id="m-muted" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
-            <path d="M0,0 L8,4 L0,8 Z" fill="#98a29a" />
-          </marker>
-          <marker id="m-red" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
-            <path d="M0,0 L8,4 L0,8 Z" fill="#e2544a" />
-          </marker>
-        </defs>
+      <pre class="mermaid">
+flowchart LR
+    ML["比賽列表<br/>MatchList.tsx · route /<br/>useMatches<br/>每張 MatchCard 有兩顆按鈕：「戰術板」／「計分表」"]
+    TB["輪轉表／戰術板頁<br/>TacticsBoard.tsx · route /matches/:id/board<br/>輪轉表 = RotationTable + useRotationTable<br/>戰術板 = TacticsBoardPanel + useTacticsBoard<br/>共用 Court.tsx 畫球場（外層頁面本身沒改名，刻意保留）"]
+    SS["計分表頁<br/>ScoreSheet.tsx · route /matches/:id/record<br/>useScoreSheet（讀寫，keyed by matchId）<br/>useRotationTable（只讀站位/roster）"]
 
-        <g fill="none" stroke-width="2">
-          <!-- MatchList -> TacticsBoardPage -->
-          <path d="M300,140 Q 400,110 500,150" stroke="#f2b705" marker-end="url(#m-amber)" />
-          <!-- TacticsBoardPage -> MatchList -->
-          <path
-            d="M500,190 Q 400,220 300,180"
-            stroke="#98a29a"
-            stroke-dasharray="5 4"
-            marker-end="url(#m-muted)"
-          />
-          <!-- MatchList -> ScoreSheetPage -->
-          <path d="M300,260 Q 550,340 780,220" stroke="#5c9ce6" marker-end="url(#m-blue)" />
-          <!-- ScoreSheetPage -> MatchList -->
-          <path
-            d="M780,260 Q 550,380 300,300"
-            stroke="#98a29a"
-            stroke-dasharray="5 4"
-            marker-end="url(#m-muted)"
-          />
-          <!-- TacticsBoardPage -> ScoreSheetPage -->
-          <path
-            d="M690,150 Q 730,130 780,150"
-            stroke="#f2b705"
-            stroke-width="3"
-            marker-end="url(#m-amber)"
-          />
-          <!-- ScoreSheetPage -> TacticsBoardPage (guard) -->
-          <path
-            d="M780,190 Q 730,210 690,190"
-            stroke="#e2544a"
-            stroke-dasharray="6 5"
-            marker-end="url(#m-red)"
-          />
-        </g>
+    ML -->|"點 MatchCard「戰術板」"| TB
+    TB -.->|"← 比賽列表"| ML
+    ML -->|"點 MatchCard「計分表」"| SS
+    SS -.->|"← 比賽列表"| ML
+    TB ==>|"頁首「計分表」按鈕"| SS
+    SS -.->|"頁首「戰術板」／hasLineup=false 時的導引"| TB
 
-        <g
-          font-family="Segoe UI, sans-serif"
-          font-size="12.5"
-          paint-order="stroke"
-          stroke="#14181b"
-          stroke-width="4"
-        >
-          <text x="330" y="118" fill="#f2b705">點 MatchCard「戰術板」</text>
-          <text x="330" y="235" fill="#98a29a">← 比賽列表</text>
-          <text x="420" y="330" fill="#5c9ce6">點 MatchCard「計分表」</text>
-          <text x="480" y="395" fill="#98a29a">← 比賽列表</text>
-          <text x="680" y="125" fill="#f2b705" font-weight="700">頁首「計分表」按鈕</text>
-          <text x="600" y="215" fill="#e2544a" font-weight="700">
-            頁首「戰術板」/ hasLineup=false 時的導引
-          </text>
-        </g>
+    classDef page fill:#242a2e,stroke:#98a29a,color:#edeae2;
+    class ML,TB,SS page;
+      </pre>
+    </div>
 
-        <g font-family="Bahnschrift, sans-serif">
-          <!-- MatchList -->
-          <rect
-            x="60"
-            y="100"
-            width="240"
-            height="180"
-            rx="12"
-            fill="#1d2226"
-            stroke="#98a29a"
-            stroke-width="1.5"
-          />
-          <text
-            x="180"
-            y="132"
-            text-anchor="middle"
-            fill="#edeae2"
-            font-size="15"
-            font-weight="700"
-          >
-            比賽列表
-          </text>
-          <text
-            x="180"
-            y="152"
-            text-anchor="middle"
-            fill="#98a29a"
-            font-family="Consolas,monospace"
-            font-size="10.5"
-          >
-            MatchList.tsx · route "/"
-          </text>
-          <text
-            x="180"
-            y="180"
-            text-anchor="middle"
-            fill="#98a29a"
-            font-family="Consolas,monospace"
-            font-size="10"
-          >
-            useMatches
-          </text>
-          <text x="180" y="200" text-anchor="middle" fill="#98a29a" font-size="10.5">
-            每張 MatchCard 有兩顆按鈕
-          </text>
-          <text x="180" y="218" text-anchor="middle" fill="#98a29a" font-size="10.5">
-            「戰術板」／「計分表」
-          </text>
-
-          <!-- TacticsBoardPage -->
-          <rect
-            x="500"
-            y="100"
-            width="240"
-            height="180"
-            rx="12"
-            fill="#242a2e"
-            stroke="#f2b705"
-            stroke-width="2"
-          />
-          <text
-            x="620"
-            y="128"
-            text-anchor="middle"
-            fill="#edeae2"
-            font-size="15"
-            font-weight="700"
-          >
-            輪轉表／戰術板頁
-          </text>
-          <text
-            x="620"
-            y="148"
-            text-anchor="middle"
-            fill="#98a29a"
-            font-family="Consolas,monospace"
-            font-size="10"
-          >
-            TacticsBoard.tsx
-          </text>
-          <text
-            x="620"
-            y="164"
-            text-anchor="middle"
-            fill="#98a29a"
-            font-family="Consolas,monospace"
-            font-size="10"
-          >
-            route "/matches/:id/board"
-          </text>
-          <text x="620" y="188" text-anchor="middle" fill="#f2b705" font-size="10.5">
-            輪轉表 = RotationTable + useRotationTable
-          </text>
-          <text x="620" y="206" text-anchor="middle" fill="#5c9ce6" font-size="10.5">
-            戰術板 = TacticsBoardPanel + useTacticsBoard
-          </text>
-          <text x="620" y="224" text-anchor="middle" fill="#98a29a" font-size="10.5">
-            共用 Court.tsx 畫球場
-          </text>
-          <text x="620" y="250" text-anchor="middle" fill="#98a29a" font-size="10">
-            外層頁面本身沒改名（刻意保留）
-          </text>
-
-          <!-- ScoreSheetPage -->
-          <rect
-            x="780"
-            y="100"
-            width="200"
-            height="180"
-            rx="12"
-            fill="#1d2226"
-            stroke="#5c9ce6"
-            stroke-width="1.5"
-          />
-          <text
-            x="880"
-            y="128"
-            text-anchor="middle"
-            fill="#edeae2"
-            font-size="15"
-            font-weight="700"
-          >
-            計分表頁
-          </text>
-          <text
-            x="880"
-            y="148"
-            text-anchor="middle"
-            fill="#98a29a"
-            font-family="Consolas,monospace"
-            font-size="10"
-          >
-            ScoreSheet.tsx
-          </text>
-          <text
-            x="880"
-            y="164"
-            text-anchor="middle"
-            fill="#98a29a"
-            font-family="Consolas,monospace"
-            font-size="10"
-          >
-            route "/matches/:id/record"
-          </text>
-          <text x="880" y="190" text-anchor="middle" fill="#5c9ce6" font-size="10.5">
-            useScoreSheet（讀寫，keyed by matchId）
-          </text>
-          <text x="880" y="208" text-anchor="middle" fill="#f2b705" font-size="10.5">
-            useRotationTable（只讀站位/roster）
-          </text>
-
-          <!-- guard note box -->
-          <rect
-            x="60"
-            y="330"
-            width="920"
-            height="90"
-            rx="10"
-            fill="#1d2226"
-            stroke="#e2544a"
-            stroke-width="1.5"
-            stroke-dasharray="6 5"
-          />
-          <text x="80" y="358" fill="#e2544a" font-size="12.5" font-weight="700">
-            guard：hasLineup
-          </text>
-          <text x="80" y="380" fill="#98a29a" font-size="11.5">
-            計分表頁進來時會檢查 useRotationTable 的 rotations
-            是否「至少一輪有站位」——沒有的話不顯示記分畫面，
-          </text>
-          <text x="80" y="398" fill="#98a29a" font-size="11.5">
-            只顯示「請先到戰術板把先發球員拖上場」+「前往戰術板」按鈕，強制導去輪轉表頁排陣，不能跳過這一步直接記分。
-          </text>
-        </g>
-      </svg>
+    <div
+      class="callout"
+      style="background: rgba(226, 84, 74, 0.1); border-color: rgba(226, 84, 74, 0.4)"
+    >
+      <b style="color: var(--red)">guard：hasLineup —</b>
+      計分表頁進來時會檢查 useRotationTable 的 rotations
+      是否「至少一輪有站位」——沒有的話不顯示記分畫面，只顯示「請先到戰術板把先發球員拖上場」+「前往戰術板」按鈕，強制導去輪轉表頁排陣，不能跳過這一步直接記分。
     </div>
 
     <div class="table-shell">
@@ -861,140 +649,25 @@
       >
       <span><span class="swatch" style="background: var(--muted)"></span>導覽 / 切換 / 取消</span>
     </div>
-    <svg
-      viewBox="0 0 900 420"
-      xmlns="http://www.w3.org/2000/svg"
-      role="img"
-      aria-label="輪轉表狀態機圖"
-    >
-      <defs>
-        <marker id="r-amber" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
-          <path d="M0,0 L8,4 L0,8 Z" fill="#f2b705" />
-        </marker>
-        <marker id="r-green" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
-          <path d="M0,0 L8,4 L0,8 Z" fill="#4fa179" />
-        </marker>
-        <marker id="r-red" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
-          <path d="M0,0 L8,4 L0,8 Z" fill="#e2544a" />
-        </marker>
-        <marker id="r-muted" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
-          <path d="M0,0 L8,4 L0,8 Z" fill="#98a29a" />
-        </marker>
-      </defs>
-      <g fill="none" stroke-width="2">
-        <path d="M230,90 L430,90" stroke="#98a29a" marker-end="url(#r-muted)" />
-        <path d="M600,120 L600,190" stroke="#98a29a" marker-end="url(#r-muted)" />
-        <path d="M500,290 Q 560,230 640,270" stroke="#f2b705" marker-end="url(#r-amber)" />
-        <path d="M500,320 Q 560,380 640,340" stroke="#4fa179" marker-end="url(#r-green)" />
-        <path d="M760,270 Q 830,300 760,330" stroke="#e2544a" marker-end="url(#r-red)" />
-        <path
-          d="M470,250 Q 550,200 620,240"
-          stroke="#98a29a"
-          stroke-dasharray="5 4"
-          marker-end="url(#r-muted)"
-        />
-        <path
-          d="M470,360 Q 550,400 620,370"
-          stroke="#e2544a"
-          stroke-dasharray="6 5"
-          marker-end="url(#r-red)"
-        />
-      </g>
-      <g
-        font-family="Segoe UI, sans-serif"
-        font-size="12"
-        paint-order="stroke"
-        stroke="#14181b"
-        stroke-width="4"
-      >
-        <text x="250" y="78" fill="#98a29a">設定 ≥1 位球員</text>
-        <text x="608" y="160" fill="#98a29a">拖曳排陣命中</text>
-        <text x="510" y="248" fill="#f2b705">拖曳/換位 (C1)</text>
-        <text x="510" y="378" fill="#4fa179">自由球員上場 (C2)</text>
-        <text x="770" y="245" fill="#e2544a">移除 (C3) ⚠R2</text>
-        <text x="440" y="215" fill="#98a29a">切換輪次 (C4)</text>
-        <text x="440" y="405" fill="#e2544a">重置站位 (C5) ⚠R3</text>
-      </g>
-      <g font-family="Bahnschrift, sans-serif">
-        <rect
-          x="30"
-          y="55"
-          width="200"
-          height="70"
-          rx="10"
-          fill="#1d2226"
-          stroke="#98a29a"
-          stroke-width="1.5"
-        />
-        <text x="130" y="83" text-anchor="middle" fill="#edeae2" font-size="14" font-weight="700">
-          A · 尚未設定球員
-        </text>
-        <text
-          x="130"
-          y="103"
-          text-anchor="middle"
-          fill="#98a29a"
-          font-family="Consolas,monospace"
-          font-size="10.5"
-        >
-          roster.length === 0
-        </text>
+    <pre class="mermaid">
+stateDiagram-v2
+    A: A · 尚未設定球員（roster.length === 0）
+    B: B · 尚未排陣（hasRotations === false）
+    C: C · 編輯中（hasRotations === true）
 
-        <rect
-          x="430"
-          y="55"
-          width="200"
-          height="70"
-          rx="10"
-          fill="#1d2226"
-          stroke="#98a29a"
-          stroke-width="1.5"
-        />
-        <text x="530" y="83" text-anchor="middle" fill="#edeae2" font-size="14" font-weight="700">
-          B · 尚未排陣
-        </text>
-        <text
-          x="530"
-          y="103"
-          text-anchor="middle"
-          fill="#98a29a"
-          font-family="Consolas,monospace"
-          font-size="10.5"
-        >
-          hasRotations === false
-        </text>
+    [*] --> A
+    A --> B: 設定 ≥1 位球員
+    B --> C: 拖曳排陣命中
+    C --> C: 拖曳/換位（C1）
+    C --> C: 自由球員上場（C2）
+    C --> C: 移除球員（C3）⚠R2
+    C --> C: 切換輪次（C4）
+    C --> C: 重置站位（C5）⚠R3
 
-        <rect
-          x="480"
-          y="190"
-          width="240"
-          height="180"
-          rx="12"
-          fill="#242a2e"
-          stroke="#edeae2"
-          stroke-width="2"
-        />
-        <text x="600" y="222" text-anchor="middle" fill="#edeae2" font-size="15" font-weight="700">
-          C · 編輯中
-        </text>
-        <text
-          x="600"
-          y="242"
-          text-anchor="middle"
-          fill="#98a29a"
-          font-family="Consolas,monospace"
-          font-size="10.5"
-        >
-          hasRotations === true
-        </text>
-        <text x="600" y="264" text-anchor="middle" fill="#98a29a" font-size="10.5">
-          C1~C6 都是離開再回來
-        </text>
-        <text x="600" y="282" text-anchor="middle" fill="#98a29a" font-size="10.5">
-          的自迴圈，沒有子選單
-        </text>
-      </g>
-    </svg>
+    note right of C
+        C1~C6 都是離開再回來的自迴圈，沒有子選單
+    end note
+    </pre>
 
     <div class="table-shell" style="margin-top: 1.5rem">
       <table>
@@ -1268,125 +941,25 @@
       <span><span class="swatch" style="background: var(--green)"></span>模式切換/存檔</span>
       <span><span class="swatch" style="background: var(--red)"></span>背景同步（來自輪轉表）</span>
     </div>
-    <svg
-      viewBox="0 0 820 360"
-      xmlns="http://www.w3.org/2000/svg"
-      role="img"
-      aria-label="戰術板狀態機圖"
-    >
-      <defs>
-        <marker id="t-amber" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
-          <path d="M0,0 L8,4 L0,8 Z" fill="#f2b705" />
-        </marker>
-        <marker id="t-blue" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
-          <path d="M0,0 L8,4 L0,8 Z" fill="#5c9ce6" />
-        </marker>
-        <marker id="t-muted" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
-          <path d="M0,0 L8,4 L0,8 Z" fill="#98a29a" />
-        </marker>
-        <marker id="t-green" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
-          <path d="M0,0 L8,4 L0,8 Z" fill="#4fa179" />
-        </marker>
-        <marker id="t-red" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
-          <path d="M0,0 L8,4 L0,8 Z" fill="#e2544a" />
-        </marker>
-      </defs>
-      <g fill="none" stroke-width="2">
-        <path
-          d="M300,150 Q 400,100 500,150"
-          stroke="#4fa179"
-          stroke-width="3"
-          marker-end="url(#t-green)"
-        />
-        <path
-          d="M500,190 Q 400,240 300,190"
-          stroke="#4fa179"
-          stroke-width="3"
-          marker-end="url(#t-green)"
-        />
-        <path d="M600,120 Q 660,70 600,90" stroke="#f2b705" marker-end="url(#t-amber)" />
-        <path d="M600,250 Q 660,300 600,270" stroke="#5c9ce6" marker-end="url(#t-blue)" />
-        <path d="M660,150 Q 730,150 660,190" stroke="#98a29a" marker-end="url(#t-muted)" />
-        <path
-          d="M180,90 Q 120,150 180,210"
-          stroke="#e2544a"
-          stroke-dasharray="6 5"
-          marker-end="url(#t-red)"
-        />
-        <path
-          d="M540,90 Q 620,40 560,90"
-          stroke="#e2544a"
-          stroke-dasharray="6 5"
-          marker-end="url(#t-red)"
-        />
-      </g>
-      <g
-        font-family="Segoe UI, sans-serif"
-        font-size="12"
-        paint-order="stroke"
-        stroke="#14181b"
-        stroke-width="4"
-      >
-        <text x="335" y="115" fill="#4fa179" font-weight="700">進入戰術布置</text>
-        <text x="335" y="235" fill="#4fa179" font-weight="700">儲存/新建 → 回唯讀</text>
-        <text x="608" y="75" fill="#f2b705">畫筆/防守範圍 (B1,B2)</text>
-        <text x="608" y="320" fill="#5c9ce6">自由站位 (B3) ⚠T5</text>
-        <text x="695" y="175" fill="#98a29a">選取/刪除/undo (B4) ⚠T4</text>
-        <text x="70" y="150" fill="#e2544a">輪轉切換 → 重置 undo/選取</text>
-      </g>
-      <g font-family="Bahnschrift, sans-serif">
-        <rect
-          x="60"
-          y="115"
-          width="120"
-          height="70"
-          rx="10"
-          fill="#1d2226"
-          stroke="#98a29a"
-          stroke-width="1.5"
-        />
-        <text x="120" y="145" text-anchor="middle" fill="#edeae2" font-size="13" font-weight="700">
-          A · 唯讀
-        </text>
-        <text
-          x="120"
-          y="163"
-          text-anchor="middle"
-          fill="#98a29a"
-          font-family="Consolas,monospace"
-          font-size="10"
-        >
-          isLayoutMode=false
-        </text>
+    <pre class="mermaid">
+stateDiagram-v2
+    A: A · 唯讀（isLayoutMode === false）
+    B: B · 戰術布置（isLayoutMode === true）
 
-        <rect
-          x="480"
-          y="115"
-          width="240"
-          height="90"
-          rx="12"
-          fill="#242a2e"
-          stroke="#edeae2"
-          stroke-width="2"
-        />
-        <text x="600" y="145" text-anchor="middle" fill="#edeae2" font-size="14" font-weight="700">
-          B · 戰術布置
-        </text>
-        <text
-          x="600"
-          y="163"
-          text-anchor="middle"
-          fill="#98a29a"
-          font-family="Consolas,monospace"
-          font-size="10.5"
-        >
-          isLayoutMode=true
-        </text>
-        <text x="600" y="181" text-anchor="middle" fill="#98a29a" font-size="10.5">
-          B1~B5 都是自迴圈
-        </text>
-      </g>
-    </svg>
+    [*] --> A
+    A --> B: 進入戰術布置（setLayoutMode(true)）
+    B --> B: 畫筆/防守範圍（B1,B2）
+    B --> B: 戰術視圖自由站位（B3）⚠T5
+    B --> B: 選取/刪除/undo（B4）⚠T4
+    B --> A: 儲存/另存/新建 → 回唯讀
+
+    note left of A
+        輪轉切換 → 重置 undo/選取（背景，跨 store 訂閱）
+    end note
+    note right of B
+        B1~B5 都是自迴圈
+    end note
+    </pre>
 
     <div class="table-shell" style="margin-top: 1.5rem">
       <table>
@@ -1672,334 +1245,33 @@
       >
     </div>
 
-    <svg
-      viewBox="0 0 1220 760"
-      xmlns="http://www.w3.org/2000/svg"
-      role="img"
-      aria-label="計分表狀態機圖"
-    >
-      <defs>
-        <marker id="ah-amber" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
-          <path d="M0,0 L8,4 L0,8 Z" fill="#f2b705" />
-        </marker>
-        <marker id="ah-green" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
-          <path d="M0,0 L8,4 L0,8 Z" fill="#4fa179" />
-        </marker>
-        <marker id="ah-blue" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
-          <path d="M0,0 L8,4 L0,8 Z" fill="#5c9ce6" />
-        </marker>
-        <marker id="ah-muted" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
-          <path d="M0,0 L8,4 L0,8 Z" fill="#98a29a" />
-        </marker>
-        <marker id="ah-red" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
-          <path d="M0,0 L8,4 L0,8 Z" fill="#e2544a" />
-        </marker>
-      </defs>
+    <pre class="mermaid">
+stateDiagram-v2
+    A: A · 尚未設定先發（hasLineup === false）
+    B: B · 選發球方（serving === null）
+    C0: C0 · Rally Idle（本局進行中，四條路徑的中樞）
+    C1a: C1a · 動作選單（發球/防守/攻擊/擋網）
+    C1b: C1b · 結果選單（得分/失分）
+    C3: C3 · 換人模式（已選板凳球員）
+    C4: C4 · 拖曳自由球員（尋找合法後排目標）
+    E: E · 比賽結束（未實作）
 
-      <g fill="none" stroke-width="2">
-        <path d="M300,75 L470,75" stroke="#98a29a" marker-end="url(#ah-muted)" />
-        <path d="M600,110 L600,350" stroke="#f2b705" marker-end="url(#ah-amber)" />
-        <path d="M660,350 Q 800,300 880,225" stroke="#f2b705" marker-end="url(#ah-amber)" />
-        <path
-          d="M930,260 Q 860,335 700,378"
-          stroke="#98a29a"
-          stroke-dasharray="5 4"
-          marker-end="url(#ah-muted)"
-        />
-        <path d="M1010,260 L1010,350" stroke="#f2b705" marker-end="url(#ah-amber)" />
-        <path
-          d="M880,388 Q 800,405 730,398"
-          stroke="#f2b705"
-          stroke-width="3"
-          marker-end="url(#ah-amber)"
-        />
-        <path d="M560,350 Q 600,290 640,350" stroke="#98a29a" marker-end="url(#ah-muted)" />
-        <path d="M470,375 Q 400,320 320,305" stroke="#4fa179" marker-end="url(#ah-green)" />
-        <path
-          d="M190,340 Q 320,400 470,405"
-          stroke="#98a29a"
-          stroke-dasharray="5 4"
-          marker-end="url(#ah-muted)"
-        />
-        <path
-          d="M300,340 Q 400,420 470,420"
-          stroke="#4fa179"
-          stroke-width="3"
-          marker-end="url(#ah-green)"
-        />
-        <path d="M500,440 Q 400,470 320,480" stroke="#5c9ce6" marker-end="url(#ah-blue)" />
-        <path
-          d="M190,460 Q 380,410 540,440"
-          stroke="#98a29a"
-          stroke-dasharray="5 4"
-          marker-end="url(#ah-muted)"
-        />
-        <path
-          d="M320,505 Q 420,480 500,460"
-          stroke="#5c9ce6"
-          stroke-width="3"
-          marker-end="url(#ah-blue)"
-        />
-        <path d="M560,440 Q 600,495 640,440" stroke="#5c9ce6" marker-end="url(#ah-blue)" />
-        <path
-          d="M730,400 C 1160,400 1160,75 730,75"
-          stroke="#f2b705"
-          stroke-width="3"
-          marker-end="url(#ah-amber)"
-        />
-        <path
-          d="M600,440 L600,650"
-          stroke="#e2544a"
-          stroke-dasharray="6 5"
-          marker-end="url(#ah-red)"
-        />
-      </g>
-
-      <g
-        font-family="Segoe UI, sans-serif"
-        font-size="12.5"
-        paint-order="stroke"
-        stroke="#14181b"
-        stroke-width="4"
-      >
-        <text x="305" y="63" fill="#98a29a">
-          設定 ≥1 個輪轉的球員
-          <tspan fill="#e2544a">⚠S7</tspan>
-        </text>
-        <text x="608" y="235" fill="#f2b705">startSet(我方/對手先發)</text>
-        <text x="720" y="270" fill="#f2b705">拖曳畫線→鬆開觸球員/區域</text>
-        <text x="855" y="330" fill="#98a29a">取消（點背景）</text>
-        <text x="1015" y="310" fill="#f2b705">選動作</text>
-        <text x="740" y="415" fill="#f2b705" font-weight="700">選得分/失分 → scorePoint()</text>
-        <text x="530" y="300" fill="#98a29a">
-          復原上一球（history≠0）
-          <tspan fill="#e2544a">⚠S1</tspan>
-        </text>
-        <text x="330" y="320" fill="#4fa179">點板凳球員</text>
-        <text x="200" y="390" fill="#98a29a">取消</text>
-        <text x="330" y="440" fill="#4fa179" font-weight="700">
-          handleRegularSub()
-          <tspan fill="#e2544a">⚠S2 ⚠S3</tspan>
-        </text>
-        <text x="345" y="470" fill="#5c9ce6">拖曳自由球員</text>
-        <text x="210" y="425" fill="#98a29a">放開（無效目標）</text>
-        <text x="330" y="530" fill="#5c9ce6" font-weight="700">
-          合法後排 → setLiberoSubstitution
-          <tspan fill="#e2544a">⚠S4</tspan>
-        </text>
-        <text x="530" y="500" fill="#5c9ce6">輪轉變動 → 自動判斷歸位</text>
-        <text x="1030" y="240" fill="#f2b705" font-weight="700">
-          下一局（永遠可按）
-          <tspan fill="#e2544a">⚠S8</tspan>
-        </text>
-        <text x="612" y="560" fill="#e2544a">⚠S6 沒有結束比賽按鈕/賽後統計</text>
-      </g>
-
-      <g font-family="Bahnschrift, sans-serif">
-        <rect
-          x="40"
-          y="40"
-          width="260"
-          height="70"
-          rx="10"
-          fill="#1d2226"
-          stroke="#98a29a"
-          stroke-width="1.5"
-        />
-        <text x="170" y="68" text-anchor="middle" fill="#edeae2" font-size="15" font-weight="700">
-          A · 尚未設定先發
-        </text>
-        <text
-          x="170"
-          y="88"
-          text-anchor="middle"
-          fill="#98a29a"
-          font-family="Consolas,monospace"
-          font-size="11"
-        >
-          hasLineup === false
-        </text>
-
-        <rect
-          x="470"
-          y="40"
-          width="260"
-          height="70"
-          rx="10"
-          fill="#1d2226"
-          stroke="#98a29a"
-          stroke-width="1.5"
-        />
-        <text x="600" y="68" text-anchor="middle" fill="#edeae2" font-size="15" font-weight="700">
-          B · 選發球方
-        </text>
-        <text
-          x="600"
-          y="88"
-          text-anchor="middle"
-          fill="#98a29a"
-          font-family="Consolas,monospace"
-          font-size="11"
-        >
-          serving === null
-        </text>
-
-        <rect
-          x="470"
-          y="350"
-          width="260"
-          height="90"
-          rx="12"
-          fill="#242a2e"
-          stroke="#edeae2"
-          stroke-width="2"
-        />
-        <text x="600" y="385" text-anchor="middle" fill="#edeae2" font-size="16" font-weight="700">
-          C0 · Rally Idle
-        </text>
-        <text
-          x="600"
-          y="406"
-          text-anchor="middle"
-          fill="#98a29a"
-          font-family="Consolas,monospace"
-          font-size="11"
-        >
-          本局進行中的預設狀態
-        </text>
-        <text
-          x="600"
-          y="424"
-          text-anchor="middle"
-          fill="#98a29a"
-          font-family="Consolas,monospace"
-          font-size="11"
-        >
-          四條路徑的中樞
-        </text>
-
-        <rect
-          x="880"
-          y="190"
-          width="260"
-          height="70"
-          rx="10"
-          fill="#1d2226"
-          stroke="#f2b705"
-          stroke-width="1.5"
-        />
-        <text x="1010" y="218" text-anchor="middle" fill="#edeae2" font-size="14" font-weight="700">
-          C1a · 動作選單
-        </text>
-        <text
-          x="1010"
-          y="238"
-          text-anchor="middle"
-          fill="#98a29a"
-          font-family="Consolas,monospace"
-          font-size="11"
-        >
-          發球/防守/攻擊/擋網
-        </text>
-
-        <rect
-          x="880"
-          y="350"
-          width="260"
-          height="70"
-          rx="10"
-          fill="#1d2226"
-          stroke="#f2b705"
-          stroke-width="1.5"
-        />
-        <text x="1010" y="378" text-anchor="middle" fill="#edeae2" font-size="14" font-weight="700">
-          C1b · 結果選單
-        </text>
-        <text
-          x="1010"
-          y="398"
-          text-anchor="middle"
-          fill="#98a29a"
-          font-family="Consolas,monospace"
-          font-size="11"
-        >
-          得分/失分
-        </text>
-
-        <rect
-          x="60"
-          y="270"
-          width="260"
-          height="70"
-          rx="10"
-          fill="#1d2226"
-          stroke="#4fa179"
-          stroke-width="1.5"
-        />
-        <text x="190" y="298" text-anchor="middle" fill="#edeae2" font-size="14" font-weight="700">
-          C3 · 換人模式
-        </text>
-        <text
-          x="190"
-          y="318"
-          text-anchor="middle"
-          fill="#98a29a"
-          font-family="Consolas,monospace"
-          font-size="11"
-        >
-          已選板凳球員
-        </text>
-
-        <rect
-          x="60"
-          y="460"
-          width="260"
-          height="70"
-          rx="10"
-          fill="#1d2226"
-          stroke="#5c9ce6"
-          stroke-width="1.5"
-        />
-        <text x="190" y="488" text-anchor="middle" fill="#edeae2" font-size="14" font-weight="700">
-          C4 · 拖曳自由球員
-        </text>
-        <text
-          x="190"
-          y="508"
-          text-anchor="middle"
-          fill="#98a29a"
-          font-family="Consolas,monospace"
-          font-size="11"
-        >
-          尋找合法後排目標
-        </text>
-
-        <rect
-          x="470"
-          y="650"
-          width="260"
-          height="70"
-          rx="10"
-          fill="#1d2226"
-          stroke="#e2544a"
-          stroke-width="1.5"
-          stroke-dasharray="6 5"
-        />
-        <text x="600" y="678" text-anchor="middle" fill="#edeae2" font-size="14" font-weight="700">
-          E · 比賽結束（未實作）
-        </text>
-        <text
-          x="600"
-          y="698"
-          text-anchor="middle"
-          fill="#98a29a"
-          font-family="Consolas,monospace"
-          font-size="11"
-        >
-          無按鈕、無賽後統計畫面
-        </text>
-      </g>
-    </svg>
+    [*] --> A
+    A --> B: hasLineup 變 true ⚠S7
+    B --> C0: startSet(我方/對手先發)
+    C0 --> C1a: 拖曳畫線→鬆開觸球員/區域
+    C1a --> C0: 取消（點背景）
+    C1a --> C1b: 選動作
+    C1b --> C0: 選得分/失分 → scorePoint()
+    C0 --> C0: 復原上一球（history≠0）⚠S1
+    C0 --> C3: 點板凳球員
+    C3 --> C0: 取消／點場上球員 → handleRegularSub() ⚠S2 ⚠S3
+    C0 --> C4: 拖曳自由球員
+    C4 --> C0: 放開（合法後排 → setLiberoSubstitution ⚠S4／無效目標）
+    C0 --> C0: 輪轉變動 → 自動判斷自由球員歸位
+    C0 --> B: 下一局（永遠可按）⚠S8
+    C0 --> E: （不存在的事件，只能靠導覽離開）⚠S6
+    </pre>
   </div>
 
   <div class="table-shell">
@@ -2193,3 +1465,29 @@
     #27
   </footer>
 </div>
+
+<script type="module">
+  // mermaid.js 從 CDN 載入：找到頁面上所有 <pre class="mermaid"> / <div class="mermaid">，
+  // 把裡面的文字（狀態機/流程圖的描述語法）解析、自動排版，換成一張 SVG。
+  // 這樣就不用像舊版一樣手動計算每個框/箭頭/文字的 x,y 座標 —— 改內容不會再讓圖跑掉。
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: "base",
+    themeVariables: {
+      darkMode: true,
+      background: "#1d2226",
+      primaryColor: "#242a2e",
+      primaryTextColor: "#edeae2",
+      primaryBorderColor: "#98a29a",
+      lineColor: "#98a29a",
+      secondaryColor: "#242a2e",
+      tertiaryColor: "#1d2226",
+      noteBkgColor: "#242a2e",
+      noteTextColor: "#98a29a",
+      noteBorderColor: "#98a29a",
+      fontFamily: "Segoe UI, system-ui, sans-serif",
+    },
+  });
+</script>
