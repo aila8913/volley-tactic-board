@@ -9,5 +9,6 @@ import type { PlayerRole } from './playerRole';
 
 export interface NewPlayer {
   name: string;
+  number: number;
   role: PlayerRole;
 }

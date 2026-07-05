@@ -22,6 +22,7 @@ export const HealthCheckResponse = zod.object({
  */
 export const ListMatchesResponseItem = zod.object({
   "id": zod.number(),
+  "name": zod.string().nullish(),
   "date": zod.coerce.date(),
   "opponent": zod.string(),
   "location": zod.string().nullish(),
@@ -35,6 +36,7 @@ export const ListMatchesResponse = zod.array(ListMatchesResponseItem)
  * @summary Create a match
  */
 export const CreateMatchBody = zod.object({
+  "name": zod.string().nullish(),
   "date": zod.coerce.date(),
   "opponent": zod.string(),
   "location": zod.string().nullish(),
@@ -51,6 +53,7 @@ export const GetMatchParams = zod.object({
 
 export const GetMatchResponse = zod.object({
   "id": zod.number(),
+  "name": zod.string().nullish(),
   "date": zod.coerce.date(),
   "opponent": zod.string(),
   "location": zod.string().nullish(),
@@ -74,6 +77,7 @@ export const UpdateMatchBody = zod.object({
 
 export const UpdateMatchResponse = zod.object({
   "id": zod.number(),
+  "name": zod.string().nullish(),
   "date": zod.coerce.date(),
   "opponent": zod.string(),
   "location": zod.string().nullish(),
@@ -93,6 +97,7 @@ export const ListPlayersResponseItem = zod.object({
   "id": zod.number(),
   "matchId": zod.number(),
   "name": zod.string(),
+  "number": zod.number(),
   "role": zod.enum(['S', 'OH', 'MB', 'OPP', 'L'])
 })
 export const ListPlayersResponse = zod.array(ListPlayersResponseItem)
@@ -107,6 +112,7 @@ export const CreatePlayerParams = zod.object({
 
 export const CreatePlayerBody = zod.object({
   "name": zod.string(),
+  "number": zod.number(),
   "role": zod.enum(['S', 'OH', 'MB', 'OPP', 'L'])
 })
 
@@ -182,14 +188,15 @@ export const ListEventsResponseItem = zod.object({
   "id": zod.number(),
   "rallyId": zod.number(),
   "sequence": zod.number(),
-  "playerId": zod.number(),
+  "side": zod.enum(['home', 'away']),
+  "playerId": zod.number().nullish(),
   "action": zod.enum(['serve', 'receive', 'set', 'attack', 'block', 'dig']),
   "ballType": zod.enum(['serve', 'spike', 'tip', 'chance']).optional(),
   "quality": zod.number().nullish(),
-  "fromX": zod.number(),
-  "fromY": zod.number(),
-  "toX": zod.number(),
-  "toY": zod.number(),
+  "fromX": zod.number().nullish(),
+  "fromY": zod.number().nullish(),
+  "toX": zod.number().nullish(),
+  "toY": zod.number().nullish(),
   "tags": zod.array(zod.string()),
   "note": zod.string().nullish(),
   "videoTimestamp": zod.number().nullish(),
@@ -207,14 +214,15 @@ export const CreateEventParams = zod.object({
 
 export const CreateEventBody = zod.object({
   "sequence": zod.number(),
-  "playerId": zod.number(),
+  "side": zod.enum(['home', 'away']),
+  "playerId": zod.number().nullish(),
   "action": zod.enum(['serve', 'receive', 'set', 'attack', 'block', 'dig']),
   "ballType": zod.enum(['serve', 'spike', 'tip', 'chance']).optional(),
   "quality": zod.number().nullish(),
-  "fromX": zod.number(),
-  "fromY": zod.number(),
-  "toX": zod.number(),
-  "toY": zod.number(),
+  "fromX": zod.number().nullish(),
+  "fromY": zod.number().nullish(),
+  "toX": zod.number().nullish(),
+  "toY": zod.number().nullish(),
   "tags": zod.array(zod.string()).optional(),
   "note": zod.string().nullish(),
   "videoTimestamp": zod.number().nullish(),
@@ -297,6 +305,7 @@ export const UpdateEventParams = zod.object({
 })
 
 export const UpdateEventBody = zod.object({
+  "side": zod.enum(['home', 'away']).optional(),
   "action": zod.enum(['serve', 'receive', 'set', 'attack', 'block', 'dig']).optional(),
   "ballType": zod.enum(['serve', 'spike', 'tip', 'chance']).optional(),
   "quality": zod.number().nullish(),
@@ -313,14 +322,15 @@ export const UpdateEventResponse = zod.object({
   "id": zod.number(),
   "rallyId": zod.number(),
   "sequence": zod.number(),
-  "playerId": zod.number(),
+  "side": zod.enum(['home', 'away']),
+  "playerId": zod.number().nullish(),
   "action": zod.enum(['serve', 'receive', 'set', 'attack', 'block', 'dig']),
   "ballType": zod.enum(['serve', 'spike', 'tip', 'chance']).optional(),
   "quality": zod.number().nullish(),
-  "fromX": zod.number(),
-  "fromY": zod.number(),
-  "toX": zod.number(),
-  "toY": zod.number(),
+  "fromX": zod.number().nullish(),
+  "fromY": zod.number().nullish(),
+  "toX": zod.number().nullish(),
+  "toY": zod.number().nullish(),
   "tags": zod.array(zod.string()),
   "note": zod.string().nullish(),
   "videoTimestamp": zod.number().nullish(),

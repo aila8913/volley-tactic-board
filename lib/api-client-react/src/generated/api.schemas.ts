@@ -24,16 +24,19 @@ export interface Player {
   id: number;
   matchId: number;
   name: string;
+  number: number;
   role: PlayerRole;
 }
 
 export interface NewPlayer {
   name: string;
+  number: number;
   role: PlayerRole;
 }
 
 export interface Match {
   id: number;
+  name?: string | null;
   date: string;
   opponent: string;
   location?: string | null;
@@ -42,6 +45,7 @@ export interface Match {
 }
 
 export interface NewMatch {
+  name?: string | null;
   date: string;
   opponent: string;
   location?: string | null;
@@ -118,18 +122,27 @@ export const EventSource = {
   review: 'review',
 } as const;
 
+export type EventSide = typeof EventSide[keyof typeof EventSide];
+
+
+export const EventSide = {
+  home: 'home',
+  away: 'away',
+} as const;
+
 export interface MatchEvent {
   id: number;
   rallyId: number;
   sequence: number;
-  playerId: number;
+  side: EventSide;
+  playerId?: number | null;
   action: EventAction;
   ballType?: BallType;
   quality?: number | null;
-  fromX: number;
-  fromY: number;
-  toX: number;
-  toY: number;
+  fromX?: number | null;
+  fromY?: number | null;
+  toX?: number | null;
+  toY?: number | null;
   tags: string[];
   note?: string | null;
   videoTimestamp?: number | null;
@@ -138,14 +151,15 @@ export interface MatchEvent {
 
 export interface NewEvent {
   sequence: number;
-  playerId: number;
+  side: EventSide;
+  playerId?: number | null;
   action: EventAction;
   ballType?: BallType;
   quality?: number | null;
-  fromX: number;
-  fromY: number;
-  toX: number;
-  toY: number;
+  fromX?: number | null;
+  fromY?: number | null;
+  toX?: number | null;
+  toY?: number | null;
   tags?: string[];
   note?: string | null;
   videoTimestamp?: number | null;
@@ -177,6 +191,7 @@ export interface UpdateTactic {
 }
 
 export interface UpdateEvent {
+  side?: EventSide;
   action?: EventAction;
   ballType?: BallType;
   quality?: number | null;

@@ -386,24 +386,34 @@ components:
           type: integer
         name:
           type: string
+        # 背號；DB schema (lib/db/src/schema/players.ts) 是 notNull，前端名單本來就有這欄位。
+        number:
+          type: integer
         role:
           $ref: "#/components/schemas/PlayerRole"
-      required: [id, matchId, name, role]
+      required: [id, matchId, name, number, role]
 
     NewPlayer:
       type: object
       properties:
         name:
           type: string
+        number:
+          type: integer
         role:
           $ref: "#/components/schemas/PlayerRole"
-      required: [name, role]
+      required: [name, number, role]
 
     Match:
       type: object
       properties:
         id:
           type: integer
+        # 自訂比賽標題；nullable，因為前端目前用 opponent 當標題、不一定會填 name
+        # （見 lib/db/src/schema/matches.ts 的 name 改 nullable 說明）。
+        name:
+          type: string
+          nullable: true
         date:
           type: string
           format: date-time
@@ -424,6 +434,9 @@ components:
     NewMatch:
       type: object
       properties:
+        name:
+          type: string
+          nullable: true
         date:
           type: string
           format: date-time
@@ -515,6 +528,12 @@ components:
       type: string
       enum: [live, review]
 
+    # 這一球由哪一方執行（home = 我方、away = 對方），跟 RallyWinner（誰得分）是不同概念。
+    # 見 lib/db/src/schema/events.ts 的 eventSideEnum。
+    EventSide:
+      type: string
+      enum: [home, away]
+
     MatchEvent:
       type: object
       properties:
@@ -524,8 +543,13 @@ components:
           type: integer
         sequence:
           type: integer
+        # 哪一方執行這球，見 EventSide。
+        side:
+          $ref: "#/components/schemas/EventSide"
+        # nullable：只有我方 (side = home) 動作對得到名單球員；對方動作與簡易版「對手(全體)」留空。
         playerId:
           type: integer
+          nullable: true
         action:
           $ref: "#/components/schemas/EventAction"
         ballType:
@@ -535,14 +559,19 @@ components:
           type: integer
           nullable: true
         # 跟前端球場 SVG 同一個座標系：viewBox 0~100 (寬) x 0~200 (長)。
+        # nullable：只有進階版（賽後精確記落點）才填；簡易版只記動作、不點座標。
         fromX:
           type: number
+          nullable: true
         fromY:
           type: number
+          nullable: true
         toX:
           type: number
+          nullable: true
         toY:
           type: number
+          nullable: true
         tags:
           type: array
           items:
@@ -556,15 +585,18 @@ components:
           nullable: true
         source:
           $ref: "#/components/schemas/EventSource"
-      required: [id, rallyId, sequence, playerId, action, fromX, fromY, toX, toY, tags, source]
+      required: [id, rallyId, sequence, side, action, tags, source]
 
     NewEvent:
       type: object
       properties:
         sequence:
           type: integer
+        side:
+          $ref: "#/components/schemas/EventSide"
         playerId:
           type: integer
+          nullable: true
         action:
           $ref: "#/components/schemas/EventAction"
         ballType:
@@ -574,12 +606,16 @@ components:
           nullable: true
         fromX:
           type: number
+          nullable: true
         fromY:
           type: number
+          nullable: true
         toX:
           type: number
+          nullable: true
         toY:
           type: number
+          nullable: true
         tags:
           type: array
           items:
@@ -592,7 +628,7 @@ components:
           nullable: true
         source:
           $ref: "#/components/schemas/EventSource"
-      required: [sequence, playerId, action, fromX, fromY, toX, toY, source]
+      required: [sequence, side, action, source]
 
     Tactic:
       type: object
@@ -636,6 +672,8 @@ components:
     UpdateEvent:
       type: object
       properties:
+        side:
+          $ref: "#/components/schemas/EventSide"
         action:
           $ref: "#/components/schemas/EventAction"
         ballType:

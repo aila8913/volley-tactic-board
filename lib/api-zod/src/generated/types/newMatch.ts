@@ -7,6 +7,7 @@
  */
 
 export interface NewMatch {
+  name?: string | null;
   date: Date;
   opponent: string;
   location?: string | null;
