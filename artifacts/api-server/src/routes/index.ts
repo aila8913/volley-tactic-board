@@ -4,6 +4,8 @@ import tacticsRouter from "./tactics";
 import matchesRouter from "./matches";
 import playersRouter from "./players";
 import setsRouter from "./sets";
+import ralliesRouter from "./rallies";
+import eventsRouter from "./events";
 
 const router: IRouter = Router();
 
@@ -14,5 +16,7 @@ router.use(tacticsRouter);
 router.use(matchesRouter);
 router.use(playersRouter);
 router.use(setsRouter);
+router.use(ralliesRouter);
+router.use(eventsRouter);
 
 export default router;

@@ -77,11 +77,26 @@
   掛在所有路由之後（app.ts）。這是原本 `tactics.ts` 就缺的隱性缺口。
 - 已對真實 dev DB 端對端驗證 happy path 與錯誤情境（400/404）通過。
 
-### Phase 2 — 巢狀 + 事務（`rallies` / `events`）
+### Phase 2 — 巢狀 CRUD（`rallies` / `events`）✅ 已完成
 
-- `POST /rallies/{rallyId}/events` 依 openapi，`source: 'live' | 'review'` 一個 endpoint 兩用。
-- 開始需要**事務**：一分結束時要同時寫 rally + 多個 events，包 `db.transaction()` 保證全成或全 rollback。
-- `PATCH` / `DELETE /events/{eventId}` 收尾。
+落地內容（六個 endpoint，完全照 openapi 合約）：
+
+- `routes/rallies.ts`：`GET`/`POST /sets/:setId/rallies`（依 `rallyNumber` 排序）。
+- `routes/events.ts`：`GET`/`POST /rallies/:rallyId/events`（依 `sequence` 排序）、
+  `PATCH`/`DELETE /events/:eventId`。
+- `POST /rallies/:rallyId/events` 依 openapi，`source: 'live' | 'review'` 一個 endpoint 兩用
+  （即時記 vs 賽後補影片座標），路由邏輯相同，差別只在 body 帶不帶座標／videoTimestamp。
+- 擁有權：巢狀越深就多 join 一層往上追 `match.userId`。`lib/ownership.ts` 補了
+  `setBelongsToUser`（sets→matches）、`rallyBelongsToUser`（rallies→sets→matches）、
+  `eventBelongsToUser`（events→rallies→sets→matches，因為 `/events/:eventId` 路徑上只有 event id）。
+- 已對真實 dev DB 端對端驗證：match→set→rally→event 建立鏈、list/patch/delete、
+  FK cascade（刪 match 連帶清掉 rally/event），以及 404（擁有權）/400（body 與 path param 驗證）情境。
+
+**關於「事務（transaction）」的修正：** 原本設想「一分結束時同時寫 rally + 多個 events，用
+`db.transaction()` 保證全成或全 rollback」。但**現行 openapi 合約沒有這種 bulk endpoint** —— rally
+跟 event 是分開的單筆 `POST`，每筆本身就是原子操作，`db.transaction()` 沒有東西可以包。若之後前端要
+「一次送整個 rally（含多球）」，得先在 `openapi.yaml` 加一個 bulk endpoint、重新 codegen，那時才會
+真正需要事務。現階段不預先實作規格裡不存在的 endpoint。
 
 ### Phase 3 — 前端切換（localStorage → API）
 
