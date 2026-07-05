@@ -9,22 +9,25 @@
 > Read this file, plus `gh issue list --state open` and recent `git log`, at the start
 > of a new session instead of re-exploring the whole codebase from scratch.
 
-_Last updated: 2026-07-05 (session: shipped **Phase 2** — nested `rallies`/`events` CRUD
-routes with multi-level ownership joins (PR #59, closes #57) — then **Phase 3a** —
-backend gap-fill (`matches.tournamentId`, `DELETE /matches`, player `PATCH`/`DELETE`,
-`UpdateMatch.date`) plus the frontend `matches`/`players` migrated off localStorage onto
-the API via a new `hooks/useMatches.ts` adapter layer + `lib/matchMapping.ts` (PR #60).
-Phase 3b (scoresheet: `sets`/`rallies`/`events`) remains, tracked under #58 — see the
-Phase 3a/3b split note below. Also corrected a stale `CLAUDE.md` claim ("no test
-framework") — `vitest` is actually configured and has real tests.)_
+_Last updated: 2026-07-05 (session: fixed #49 (tactics-view whiteboard didn't fill the
+middle panel) and #18 (libero waiting slot had no dedicated frame) together in
+`Court.tsx` — root cause of #49 was a missing background rect for the whiteboard's true
+letterboxed extent, not a broken CSS cascade. Opened PR #61; **not merged yet** — #49/#18
+should be closed in a future wrap-up once it lands, not now.)_
 
 ## Current state
 
-- On `main`, latest commit `7c18743` (PR #60), plus this session's own shipped work:
-  `Court.tsx` reworked so the tactics-view whiteboard fills the whole middle panel
-  instead of tracking the court's own size (#49), and the libero waiting slot moved
-  from an HTML row below the court into an in-canvas red box behind zone 1 on both
-  baselines (#18) — see the PR that carries this commit for the exact scope.
+- On `main`, latest commit `7c18743` (PR #60). This session's work sits on branch
+  `fix/whiteboard-libero-zone`, PR [#61](https://github.com/aila8913/volley-tatic-board/pull/61)
+  (open, not yet merged): `Court.tsx` reworked so the tactics-view whiteboard fills the
+  whole middle panel with a fixed 0px panel↔whiteboard gap and a 5px/10px
+  whiteboard↔court-element gap instead of tracking the court's own size (#49); the
+  libero waiting slot moved from an HTML row below the court into an in-canvas
+  dashed-red box behind zone 1 on both baselines, with an empty mirrored placeholder on
+  the opponent's baseline for visual symmetry (#18). Also fixed a real bug found during
+  testing: dropping a player into that red box was snapping onto court zone 1 via
+  `findNearestZone` instead of registering as "set starting libero" — `handleDrop` now
+  branches on `rawY > COURT_H` to call `setStartingLiberoId` instead.
 - **Match-recording backend is now fully implemented server-side, and the frontend has
   started migrating off localStorage onto it.** See `docs/backend-architecture.md` for
   the full design + phased plan:
@@ -118,16 +121,18 @@ events.ts`'s `eventActionEnum` — `types/scoresheet.ts`.
   "重置站位" now has a `window.confirm` guard; "← 比賽列表" extracted into a shared
   `BackToMatchListButton.tsx` and added to `TacticsBoard`/`ScoreSheet`/
   `TournamentDetail`/`not-found` (previously missing on some of those screens entirely).
-- **Two new bugs/ideas filed this session**, not yet worked on:
-  - [#49](https://github.com/aila8913/volley-tatic-board/issues/49) — tactics-board
-    whiteboard height should fill the whole middle panel, not match the court's own
-    size. Note: `Court.tsx` already has comments claiming this is the intended design
-    (`h-full w-full`, no `aspectRatio`) — worth checking why actual behavior doesn't
-    match the stated intent before assuming it needs new code.
+- **Of the two bugs/ideas filed in the session that opened them, #49 is now fixed**
+  (see "Current state" bullet above — PR #61, pending merge); #50 is still open:
+  - [#49](https://github.com/aila8913/volley-tatic-board/issues/49) — root cause turned
+    out to be neither of the two hypotheses in the issue: the tactics-view whiteboard
+    had no background rect of its own, so its true (letterboxed) extent visually
+    blended into the court's white and the page's white. Fixed by giving the
+    court-canvas its own bounds and reworking the panel→whiteboard→court-element
+    padding chain (PR #61).
   - [#50](https://github.com/aila8913/volley-tatic-board/issues/50) — ScoreSheet action
     options should be context-aware based on who's currently serving (serve/receive
     should be mutually exclusive depending on `currentSet.serving`); user noted more
-    context rules may follow but hasn't defined them yet.
+    context rules may follow but hasn't defined them yet. Not started.
 - **A pre-existing, unrelated-to-this-session problem was found and fixed while
   shipping**: local `main` had a commit (`a28749f`, the Mermaid.js flow-diagrams
   rewrite) that had never been pushed to `origin/main`. This caused a divergence when
@@ -231,10 +236,6 @@ status — the list below is a snapshot, not guaranteed up to date):
   "重置站位"/"清除畫筆" buttons that #17 wanted removed, and `RotationThumbnails.tsx`
   still shows visual dot-thumbnails rather than plain numbers. Not a deliberate rejection
   of #17, just unrelated work — worth reconciling before implementing #17.
-- [#18](https://github.com/aila8913/volley-tatic-board/issues/18) — 備位自由球員在球場
-  上要有明確的淺紅色外框標示區。Still just a plain orange circle, no dedicated frame.
-  Also now only ever shown in rotation view (tactics view dropped it entirely as part of
-  the snapshot decoupling, since it's a rotation-table-only concept).
 - [#19](https://github.com/aila8913/volley-tatic-board/issues/19) — 計分表（
   `pages/ScoreSheet.tsx`, issue body still says `MatchRecording.tsx`) UI 簡化與調整,
   placeholder issue depending on #20/#21.
@@ -249,8 +250,6 @@ status — the list below is a snapshot, not guaranteed up to date):
 - [#24](https://github.com/aila8913/volley-tatic-board/issues/24) — 複製比賽。
 - [#25](https://github.com/aila8913/volley-tatic-board/issues/25) — 先發/先接切換。
 - [#26](https://github.com/aila8913/volley-tatic-board/issues/26) — 部署準備。
-- [#49](https://github.com/aila8913/volley-tatic-board/issues/49) — 戰術板白板高度應
-  撐滿中間 panel，而非跟著球場大小。
 - [#50](https://github.com/aila8913/volley-tatic-board/issues/50) — 計分表動作選項應
   依發球方做情境限制（發球/接發互斥）。
 - [#51](https://github.com/aila8913/volley-tatic-board/issues/51) — 進階版：動作子分

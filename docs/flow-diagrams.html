@@ -628,11 +628,20 @@ flowchart LR
         <div class="lane">
           <div class="lane-label"><span class="dot muted"></span>C6 · 備位區操作</div>
           <div class="step-row">
-            <div class="step">先發 L 本輪不在場上時顯示備位圈（畫在 Court.tsx）</div>
+            <div class="step">
+              先發 L 本輪不在場上時顯示備位圈（畫在球場 1 號位後方的紅框內，見 issue #18）
+            </div>
             <div class="arrow">→</div>
             <div class="step">拖到後排上場 / 右鍵取消先發</div>
             <div class="arrow">→</div>
             <div class="step commit">placePlayerOnCourt() / setStartingLiberoId(null)</div>
+          </div>
+          <div class="step-row">
+            <div class="step">從左側名單把 L 拖到球場外紅框（baseline 之外留白帶）</div>
+            <div class="arrow">→</div>
+            <div class="step commit">
+              setStartingLiberoId(playerId)（只標記先發，不佔用場上位置）
+            </div>
           </div>
         </div>
       </div>
