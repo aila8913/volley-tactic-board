@@ -9,33 +9,39 @@
 > Read this file, plus `gh issue list --state open` and recent `git log`, at the start
 > of a new session instead of re-exploring the whole codebase from scratch.
 
-_Last updated: 2026-07-05 (session: designed the match-recording backend architecture
-(the three-layer front/DB/openapi drift audit is in `docs/backend-architecture.md`), then
-shipped **Phase 0** — schema/openapi alignment, `events` gains `side` + nullable
-playerId/coords, `matches` gains `userId` (PR #53, closes #55) — **Phase 1** —
-`matches`/`players`/`sets` CRUD routes + an error-handler middleware (PR #54, closes #56)
-— and **Phase 2** — nested `rallies`/`events` CRUD routes with multi-level ownership
-joins, verified end-to-end against the real dev DB (#57). Only Phase 3 (#58, frontend
-onto the API) remains.)_
+_Last updated: 2026-07-05 (session: shipped **Phase 2** — nested `rallies`/`events` CRUD
+routes with multi-level ownership joins (PR #59, closes #57) — then **Phase 3a** —
+backend gap-fill (`matches.tournamentId`, `DELETE /matches`, player `PATCH`/`DELETE`,
+`UpdateMatch.date`) plus the frontend `matches`/`players` migrated off localStorage onto
+the API via a new `hooks/useMatches.ts` adapter layer + `lib/matchMapping.ts` (PR #60).
+Phase 3b (scoresheet: `sets`/`rallies`/`events`) remains, tracked under #58 — see the
+Phase 3a/3b split note below. Also corrected a stale `CLAUDE.md` claim ("no test
+framework") — `vitest` is actually configured and has real tests.)_
 
 ## Current state
 
-- On `main`, latest commit `07a48c6` (PR #54). Working tree clean.
-- **Match-recording backend is now partially implemented** (was previously fully
-  unimplemented — this is the biggest single change this session). See
-  `docs/backend-architecture.md` for the full design + phased plan:
+- On `main`, latest commit `7c18743` (PR #60), plus this session's own shipped work:
+  `Court.tsx` reworked so the tactics-view whiteboard fills the whole middle panel
+  instead of tracking the court's own size (#49), and the libero waiting slot moved
+  from an HTML row below the court into an in-canvas red box behind zone 1 on both
+  baselines (#18) — see the PR that carries this commit for the exact scope.
+- **Match-recording backend is now fully implemented server-side, and the frontend has
+  started migrating off localStorage onto it.** See `docs/backend-architecture.md` for
+  the full design + phased plan:
   - **Phase 0 (#55, PR #53) — schema/spec alignment, done.** Fixed two openapi↔DB drifts
     that would have made inserts fail (`Match.name`, `Player.number`), added `events.side`
     (home/away, notNull) + made `events.playerId`/coords nullable so simple-tier
     "對手(全體)"/"沒看到" data fits (per `match-recording-erd.html`), made `matches.name`
     nullable + added `matches.userId` for future real auth. Ran codegen + `db push`.
   - **Phase 1 (#56, PR #54) — flat-resource CRUD, done.** `routes/matches.ts` (GET/POST/
-    GET:id/PATCH, `userId`-scoped ownership, no DELETE by design), `routes/players.ts` +
-    `routes/sets.ts` (nested under a match, ownership checked via `lib/ownership.ts`'s
+    GET:id/PATCH, `userId`-scoped ownership), `routes/players.ts` + `routes/sets.ts`
+    (nested under a match, ownership checked via `lib/ownership.ts`'s
     `matchBelongsToUser()`), plus `middleware/errorHandler.ts` (ZodError→400, FK→404/409,
     else→500 — a gap even `tactics.ts` had). Verified end-to-end against the real dev DB
-    (happy path + 400/404), then cleaned up the test rows.
-  - **Phase 2 (#57) — nested rallies + events routes, done.** `routes/rallies.ts`
+    (happy path + 400/404), then cleaned up the test rows. (Phase 1 originally shipped
+    with no `DELETE /matches` "by design" — that gap was closed in Phase 3a below, once
+    the frontend turned out to actually need it.)
+  - **Phase 2 (#57, PR #59) — nested rallies + events routes, done.** `routes/rallies.ts`
     (GET/POST `/sets/:setId/rallies`) + `routes/events.ts` (GET/POST
     `/rallies/:rallyId/events`, PATCH/DELETE `/events/:eventId`). Ownership now walks up
     the nesting chain via new `lib/ownership.ts` helpers (`setBelongsToUser` →
@@ -45,9 +51,38 @@ onto the API) remains.)_
     single atomic insert with nothing to wrap. A transaction would only be needed if a
     bulk endpoint is later added to `openapi.yaml`. Verified end-to-end against the real
     dev DB (create chain, list/patch/delete, FK cascade, 404/400 paths), test rows cleaned up.
-  - **Phase 3 (#58, needs-plan) — wire the frontend off localStorage onto the API.**
-    Biggest piece; has to bridge frontend string ids/`dateTime` ↔ DB serial/`date`, and
-    is the real prerequisite for persisting #42/#43.
+  - **Phase 3a (part of #58, PR #60) — matches + roster off localStorage, done.**
+    Backend gap-fill first (frontend UI already had operations Phase 1 skipped): added
+    nullable `matches.tournamentId` (frontend folder grouping — backend just stores it as
+    an opaque string, no `tournaments` table), `DELETE /matches/:id` (FK cascade),
+    `PATCH`/`DELETE /matches/:id/players/:id`, and added `date` to `UpdateMatch` (editing
+    a match's date previously silently didn't persist — a real gap). Then rewrote
+    `hooks/useMatches.ts` from a Zustand+persist store into an API adapter layer (React
+    Query hooks, same pattern as `TacticsBoardPanel.tsx`'s tactics save/load), with all
+    the model-mismatch mapping (id integer↔string, `dateTime` local-string↔ISO, roster
+    create/patch/delete diffing) centralized in new `lib/matchMapping.ts` (unit-tested).
+    Roster edits use a granular diff (not delete-and-recreate) specifically to keep player
+    ids stable for Phase 3b's `events.playerId`. Verified end-to-end: dev-DB curl checks
+    plus an actual browser session (create/list/edit/delete a match, roster round-trip,
+    tactics board loading the roster from the API).
+  - **Phase 3b (part of #58, not started) — scoresheet (`sets`/`rallies`/`events`) off
+    localStorage.** Still needs a plan: mapping `PointRecord` (`hooks/useScoreSheet.ts`)
+    to rally/event writes, `us`/`opponent` ↔ `home`/`away`, and deciding whether
+    `ourRotation`/`opponentRotation` need to be stored or stay a derived value. Real
+    prerequisite for persisting #42/#43.
+- **Process note: #58 got auto-closed by accident, then reopened.** A PR #60 body edit
+  said "本 PR 不 close #58" (intending to _not_ trigger GitHub's auto-close), but GitHub's
+  closing-keyword detection is a dumb substring match on "close #58" — it doesn't parse
+  Chinese negation, so it closed #58 anyway on merge. Reopened with an explanatory
+  comment and rewrote #58's body to reflect the real Phase 3a/3b split. **Lesson for
+  future PR bodies:** to reference an issue without closing it, avoid putting
+  close/closes/fix/fixes/resolve/resolves directly before a `#number` in any language —
+  write "relates to #58" instead, never "not close #58".
+- **`CLAUDE.md` had a stale claim, now fixed**: it said "no test framework is
+  configured" and to not invent `pnpm test`, but `vitest` has actually been configured
+  for a while (`artifacts/volleyball-tactics/vitest.config.ts`, jsdom) with real test
+  files, and root `pnpm run test` does work (fans out via `-r --if-present`). Corrected
+  the "Current gaps" section to state this accurately.
 - **ScoreSheet(計分表)簡易版 recording flow redesigned** (PR #47, closes #22 for the
   simple-tier scope):
   - Action categories expanded from 4 (`serve`/`defense`/`attack`/`block`) to 6
@@ -104,11 +139,12 @@ events.ts`'s `eventActionEnum` — `types/scoresheet.ts`.
   the three-way 輪轉表/戰術板/計分表 split (PR #28), tactics-board snapshot decoupling
   (PR #30), offline `docs/flow-diagrams.html` (PR #31, now also carries issue-number
   cross-references added this session for #35–#45 via issue #34's fix).
-- Backend match-recording API is **now fully implemented server-side** (Phases 0–2: all
-  of matches/players/sets/rallies/events CRUD is live and dev-DB-verified). The only
-  remaining piece before #51's advanced-tier work or a real stats page is the frontend
-  actually calling any of these APIs (Phase 3, #58) — the frontend still reads/writes
-  localStorage only and touches none of the backend yet.
+- Backend match-recording API is **fully implemented server-side** (Phases 0–2 + the
+  Phase 3a gap-fill: all of matches/players/sets/rallies/events CRUD is live and
+  dev-DB-verified). The frontend now calls the matches/players portion of it (Phase 3a,
+  see above); the scoresheet still reads/writes localStorage only (Phase 3b, #58,
+  not started) — that's the remaining piece before #51's advanced-tier work or a real
+  stats page.
 - **New human-facing onboarding docs exist** (PR #33), written for a teammate who is new
   to programming/Git/GitHub/AI-agent collaboration (design/PM background):
   - Root [`README.md`](../README.md) — project one-liner, points first to
@@ -219,14 +255,11 @@ status — the list below is a snapshot, not guaranteed up to date):
   依發球方做情境限制（發球/接發互斥）。
 - [#51](https://github.com/aila8913/volley-tatic-board/issues/51) — 進階版：動作子分
   類、犯規類型與 Outcome 細節擴充（#22 的後續，見上方 Current state）。Backend 地基
-  (Phase 0/1) 已完成，但仍需 Phase 2（#57，events 路由）+ Phase 3（#58，前端接線）才能真正落地。
-- [#57](https://github.com/aila8913/volley-tatic-board/issues/57) — 後端 Phase 2：
-  rallies + events 路由。**已實作完成**（見上方 Current state）；待這個 PR 合併後於
-  下次 `wrap-up` 正式 close。實作時捨棄了原 issue 描述的 `db.transaction()`（合約無
-  bulk endpoint，單筆寫入本就原子）。
-- [#58](https://github.com/aila8913/volley-tatic-board/issues/58) — 後端 Phase 3：前端
-  計分/名單從 localStorage 切到 API（needs-plan；也是 #42/#43 真正持久化的前提）。
-  完整設計見 `docs/backend-architecture.md`。
+  已完全就緒（Phase 0/1/2/3a），仍需 Phase 3b（#58，計分表接線）才能真正落地。
+- [#58](https://github.com/aila8913/volley-tatic-board/issues/58) — 後端 Phase 3b：
+  計分表（sets/rallies/events）從 localStorage 切到 API。Phase 3a（matches + 名單）
+  已在 PR #60 完成，這個 issue 內容已改為只描述剩下的計分表這半（needs-plan；也是
+  #42/#43 真正持久化的前提）。完整設計見 `docs/backend-architecture.md`。
 
 ## Recently closed
 
@@ -234,6 +267,9 @@ status — the list below is a snapshot, not guaranteed up to date):
   userId，已在 PR #53 完成（retro issue，開完即關以留 ledger 軌跡）。
 - #56 — 後端 Phase 1：matches/players/sets CRUD 路由 + errorHandler middleware，已在
   PR #54 完成並對真實 dev DB 端對端驗證（retro issue，開完即關）。
+- #57 — 後端 Phase 2：rallies + events 巢狀路由，已在 PR #59 完成並對真實 dev DB
+  端對端驗證（放棄原描述的 `db.transaction()`：合約無 bulk endpoint，單筆寫入本就
+  原子）。
 - #22 — 簡易版所需的動作分類擴充（4→6 大類，對齊 events 表）與 RadialMenu 選項數量
   限制已在 PR #47 完成；子分類/犯規類型/Outcome 細節拆到 #51 繼續追蹤。
 - #29 — 戰術布置測試發現的邊框、確認彈窗、返回按鈕問題，已在 PR #46 修正。

@@ -45,6 +45,7 @@ scripts/     one-off TS scripts run via tsx
   `openapi.yaml`, then re-typechecks libs. Run this any time `openapi.yaml` changes.
 - `pnpm --filter @workspace/db run push` — push Drizzle schema changes straight to the DB (dev only, no
   migration files are generated)
+- `pnpm run test` — runs `vitest` for `@workspace/volleyball-tactics` (the only package with tests so far)
 
 ## Required env vars
 
@@ -57,19 +58,24 @@ and in `replit.md`.
 
 ## Current gaps (don't assume otherwise)
 
-- No test framework is configured (no vitest/jest, no `*.test.ts` files anywhere).
+- `vitest` **is** configured for `@workspace/volleyball-tactics` (`vitest.config.ts`, jsdom environment) —
+  run via root `pnpm run test` (fans out to every package with a `test` script) or scoped with
+  `pnpm --filter @workspace/volleyball-tactics run test`. Test files exist (e.g. `src/lib/
+matchMapping.test.ts`, `src/types/match.test.ts`). No test framework exists for the other packages
+  (api-server, db, etc.) yet, so root `pnpm run test` currently only actually runs volleyball-tactics's
+  suite.
 - ESLint (`eslint.config.mjs`) and Prettier (`.prettierrc.json`) are now configured at the root — run via
   `pnpm run lint` / `pnpm run format`.
 - `lib/db/src/schema/index.ts` defines `matches` / `players` / `sets` / `rallies` / `events` (see
-  `docs/db-schema-spec.md`) plus a `tactics` table backing the tactics-board save/load feature, which is
-  pushed and live (dev DB) — `artifacts/api-server/src/routes/tactics.ts` reads/writes it via Drizzle.
-- `lib/api-spec/openapi.yaml` covers the match-recording feature (see `docs/api-spec.md`); backend routes
-  for match-recording specifically aren't implemented yet (`artifacts/api-server/src/routes/` currently
-  has `/healthz` and `tactics.ts`, not match-recording routes), and the frontend doesn't call the
-  match-recording API yet either.
+  `docs/db-schema-spec.md`) plus a `tactics` table backing the tactics-board save/load feature. All of
+  these are pushed and live (dev DB), and the backend REST API for all of them is fully implemented
+  (`artifacts/api-server/src/routes/` — matches/players/sets/rallies/events, plus tactics/health). The
+  frontend now calls the matches/players API (`hooks/useMatches.ts`); the scoresheet (sets/rallies/events)
+  still reads/writes localStorage only (`hooks/useScoreSheet.ts`) — see `docs/backend-architecture.md` and
+  issue #58 for the remaining migration piece.
 
-Don't invent commands like `pnpm test` or `pnpm lint` — they don't exist. If asked to verify changes,
-typecheck (`pnpm run typecheck`) is currently the only automated check available.
+`pnpm run typecheck` remains the main automated check across the whole monorepo; `pnpm run test` currently
+only exercises volleyball-tactics (the only package with a `test` script so far).
 
 ## Workflow notes
 
