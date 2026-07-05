@@ -7,11 +7,11 @@ import {
   GetMatchParams,
   UpdateMatchParams,
   UpdateMatchBody,
+  DeleteMatchParams,
 } from "@workspace/api-zod";
 
 // 比賽本體的 CRUD。跟 tactics 一樣用 mockAuth 把 userId 注入到 req.userId，
 // 每個查詢都額外比對 userId，確保使用者只能碰到自己的比賽（擁有權隔離）。
-// 沒有 DELETE /matches：目前產品沒有「整場刪除」的需求，先不做（見 docs/api-spec.md）。
 const router: IRouter = Router();
 router.use(mockAuth);
 
@@ -42,6 +42,8 @@ router.post("/matches", async (req, res) => {
       opponent: body.opponent,
       location: body.location ?? null,
       videoUrl: body.videoUrl ?? null,
+      // 前端資料夾 id（可為 null＝放最上層）。後端只是原封不動存起來。
+      tournamentId: body.tournamentId ?? null,
     })
     .returning();
 
@@ -80,8 +82,11 @@ router.patch("/matches/:matchId", async (req, res) => {
       // Drizzle 就不會去動那一欄。注意要判斷 !== undefined 而不是 truthy，
       // 否則像 videoUrl: null（想清空影片連結）這種合法值會被誤判成「沒帶」。
       ...(body.opponent !== undefined && { opponent: body.opponent }),
+      // UpdateMatchBody 的 date 是 zod.coerce.date()，parse 後已是 Date 物件，timestamp 欄位直接吃。
+      ...(body.date !== undefined && { date: body.date }),
       ...(body.location !== undefined && { location: body.location }),
       ...(body.videoUrl !== undefined && { videoUrl: body.videoUrl }),
+      ...(body.tournamentId !== undefined && { tournamentId: body.tournamentId }),
     })
     .where(and(eq(matchesTable.id, matchId), eq(matchesTable.userId, req.userId)))
     .returning();
@@ -92,6 +97,25 @@ router.patch("/matches/:matchId", async (req, res) => {
   }
 
   res.json(updated);
+});
+
+// DELETE /matches/:matchId — 刪整場比賽。DB 的外鍵是 onDelete: "cascade"，
+// 所以刪掉 match 會連帶清掉它底下的 players/sets/rallies/events，不會留孤兒。
+// where 一樣綁 userId：別人的比賽刪不到，回傳 0 列 → 當成 404。
+router.delete("/matches/:matchId", async (req, res) => {
+  const { matchId } = DeleteMatchParams.parse(req.params);
+
+  const deleted = await db
+    .delete(matchesTable)
+    .where(and(eq(matchesTable.id, matchId), eq(matchesTable.userId, req.userId)))
+    .returning({ id: matchesTable.id });
+
+  if (deleted.length === 0) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+
+  res.status(204).end();
 });
 
 export default router;

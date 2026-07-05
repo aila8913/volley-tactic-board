@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useParams } from "wouter";
 import { useRotationTable } from "../hooks/useRotationTable";
 import { useTacticsBoard } from "../hooks/useTacticsBoard";
-import { useMatches } from "../hooks/useMatches";
+import { useRoster, useSaveRoster } from "../hooks/useMatches";
 import { MatchPlayer } from "../types/match";
 import RotationThumbnails from "./RotationThumbnails";
 import RosterEditDialog from "./RosterEditDialog";
@@ -15,15 +15,17 @@ export default function RotationTable() {
   const resetCurrentRotationTactics = useTacticsBoard((state) => state.resetCurrentRotationTactics);
   const clearMarkers = useTacticsBoard((state) => state.clearMarkers);
   const { id: matchId } = useParams<{ id: string }>();
-  const updateMatchPlayers = useMatches((state) => state.updateMatchPlayers);
+  // 伺服器目前的名單，當作「儲存名單」時算差異（新增/修改/刪除哪些球員）的基準。
+  const { players: serverRoster } = useRoster(Number(matchId));
+  const saveRoster = useSaveRoster();
   const [isRosterDialogOpen, setIsRosterDialogOpen] = useState(false);
 
-  // 球員名單同時要存進輪轉表自己的 roster，也要回寫到比賽列表那邊的 match.players，
-  // 這樣下次重新進這個畫面時兩邊才不會兜不起來。
+  // 球員名單同時要存進輪轉表自己的 roster（本地即時反映），也要回寫到後端。
+  // 回寫用 diff：把新名單對伺服器現有名單比對，只送有變動的 create/patch/delete。
   const handleRosterSave = (players: MatchPlayer[]) => {
     setRoster(players);
     if (matchId) {
-      updateMatchPlayers(matchId, players);
+      void saveRoster(Number(matchId), serverRoster, players);
     }
   };
 

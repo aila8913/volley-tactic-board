@@ -29,5 +29,6 @@ export * from './tactic';
 export * from './tacticData';
 export * from './updateEvent';
 export * from './updateMatch';
+export * from './updatePlayer';
 export * from './updateTactic';
 export * from './updateTacticData';

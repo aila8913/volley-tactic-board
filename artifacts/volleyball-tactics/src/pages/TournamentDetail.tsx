@@ -3,7 +3,7 @@ import { useParams } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import BackToMatchListButton from "@/components/BackToMatchListButton";
-import { useMatches } from "@/hooks/useMatches";
+import { useMatchList, useDeleteMatch } from "@/hooks/useMatches";
 import { useTournaments } from "@/hooks/useTournaments";
 import MatchFormDialog from "@/components/MatchFormDialog";
 import MatchCard from "@/components/MatchCard";
@@ -13,14 +13,10 @@ import { Match } from "@/types/match";
 export default function TournamentDetail() {
   const { id } = useParams<{ id: string }>();
   const tournament = useTournaments((state) => state.tournaments.find((t) => t.id === id));
-  // 不要在 selector 裡面用 .filter()：.filter() 每次都會回傳新的陣列參考，
-  // zustand 的 React 18 整合 (useSyncExternalStore) 會把「參考不同」當成「store 變了」，
-  // 觸發重新 render → 重新跑 selector → 又拿到新陣列 → 無限迴圈
-  // (就是雙擊資料夾時跳出的 "Maximum update depth exceeded")。
-  // 改成先選出穩定的 state.matches 參考，filter 當成一般變數在 render 裡算就沒事。
-  const allMatches = useMatches((state) => state.matches);
+  // 比賽列表現在來自 API（useMatchList），這裡在 render 裡 filter 出屬於這個資料夾的比賽。
+  const { matches: allMatches } = useMatchList();
   const matches = allMatches.filter((m) => m.tournamentId === id);
-  const deleteMatch = useMatches((state) => state.deleteMatch);
+  const deleteMatch = useDeleteMatch();
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingMatch, setEditingMatch] = useState<Match | null>(null);
@@ -37,7 +33,7 @@ export default function TournamentDetail() {
 
   const handleDelete = (matchId: string) => {
     if (window.confirm("確定要刪除這場比賽嗎？")) {
-      deleteMatch(matchId);
+      void deleteMatch(Number(matchId));
     }
   };
 

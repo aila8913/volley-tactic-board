@@ -8,6 +8,8 @@
 
 export interface UpdateMatch {
   opponent?: string;
+  date?: Date;
   location?: string | null;
   videoUrl?: string | null;
+  tournamentId?: string | null;
 }

@@ -3,7 +3,7 @@ import type { PointerEvent as ReactPointerEvent } from "react";
 import { useParams, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import BackToMatchListButton from "@/components/BackToMatchListButton";
-import { useMatches } from "@/hooks/useMatches";
+import { useMatchWithRoster, useMatchList } from "@/hooks/useMatches";
 import { useRotationTable } from "@/hooks/useRotationTable";
 import { useScoreSheet } from "@/hooks/useScoreSheet";
 import ScoreSheetCourt, { TouchedTarget, RegularSub } from "@/components/ScoreSheetCourt";
@@ -44,10 +44,13 @@ type Gesture =
 
 export default function ScoreSheet() {
   const { id } = useParams<{ id: string }>();
-  const match = useMatches((state) => state.matches.find((m) => m.id === id));
+  const { match } = useMatchWithRoster(Number(id));
 
-  // 全部比賽清單 + 全部紀錄，用來組右側統計欄的多場列表
-  const allMatches = useMatches((state) => state.matches);
+  // 全部比賽清單 + 全部紀錄，用來組右側統計欄的多場列表。
+  // 注意：列表來的 match 不含名單（players 為空），只有「本場」（上面 useMatchWithRoster）
+  // 才有完整名單。其他場的逐球員統計要等 Phase 3b（計分紀錄也搬上 API）才會完整；目前
+  // 其他場的球員矩陣會是空的（buildPlayerMatrix 找不到球員就略過，不會壞）。
+  const { matches: allMatches } = useMatchList();
   const recordingsByMatch = useScoreSheet((state) => state.recordingsByMatch);
 
   const setRoster = useRotationTable((state) => state.setRoster);

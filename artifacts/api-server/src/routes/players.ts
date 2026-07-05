@@ -1,9 +1,16 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { db, playersTable } from "@workspace/db";
 import { mockAuth } from "../middleware/mockAuth";
-import { matchBelongsToUser } from "../lib/ownership";
-import { ListPlayersParams, CreatePlayerParams, CreatePlayerBody } from "@workspace/api-zod";
+import { matchBelongsToUser, playerBelongsToMatch } from "../lib/ownership";
+import {
+  ListPlayersParams,
+  CreatePlayerParams,
+  CreatePlayerBody,
+  UpdatePlayerParams,
+  UpdatePlayerBody,
+  DeletePlayerParams,
+} from "@workspace/api-zod";
 
 // 一場比賽的球員名單。名單掛在 match 底下（不是獨立球隊），路徑本身就反映這個從屬關係。
 // 每個 endpoint 都先驗 parent match 屬於這個使用者，才繼續往下做（見 lib/ownership.ts）。
@@ -43,6 +50,56 @@ router.post("/matches/:matchId/players", async (req, res) => {
     .returning();
 
   res.status(201).json(created);
+});
+
+// PATCH /matches/:matchId/players/:playerId — 改名單裡某名球員（改名/背號/位置）。
+// 兩層擁有權：先確認這場 match 是你的，再確認這個 player 真的在這場 match 底下。
+router.patch("/matches/:matchId/players/:playerId", async (req, res) => {
+  const { matchId, playerId } = UpdatePlayerParams.parse(req.params);
+  const body = UpdatePlayerBody.parse(req.body);
+
+  if (!(await matchBelongsToUser(matchId, req.userId))) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+  if (!(await playerBelongsToMatch(playerId, matchId))) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+
+  const [updated] = await db
+    .update(playersTable)
+    .set({
+      // 一樣「有帶才寫」，沒帶的欄位保持原值。
+      ...(body.name !== undefined && { name: body.name }),
+      ...(body.number !== undefined && { number: body.number }),
+      ...(body.role !== undefined && { role: body.role }),
+    })
+    // where 綁 playerId 也綁 matchId，雙重保險（前面已驗過，這裡再多一層界線）。
+    .where(and(eq(playersTable.id, playerId), eq(playersTable.matchId, matchId)))
+    .returning();
+
+  res.json(updated);
+});
+
+// DELETE /matches/:matchId/players/:playerId — 從名單移除一名球員。
+router.delete("/matches/:matchId/players/:playerId", async (req, res) => {
+  const { matchId, playerId } = DeletePlayerParams.parse(req.params);
+
+  if (!(await matchBelongsToUser(matchId, req.userId))) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+  if (!(await playerBelongsToMatch(playerId, matchId))) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+
+  await db
+    .delete(playersTable)
+    .where(and(eq(playersTable.id, playerId), eq(playersTable.matchId, matchId)));
+
+  res.status(204).end();
 });
 
 export default router;

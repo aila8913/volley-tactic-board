@@ -1,14 +1,14 @@
-import { useEffect } from 'react';
-import { useForm, useFieldArray } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { Trash2 } from 'lucide-react';
+import { useEffect, useState } from "react";
+import { useForm, useFieldArray } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Trash2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogFooter,
-} from '@/components/ui/dialog';
+} from "@/components/ui/dialog";
 import {
   Form,
   FormField,
@@ -16,24 +16,31 @@ import {
   FormLabel,
   FormControl,
   FormMessage,
-} from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Button } from '@/components/ui/button';
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectTrigger,
   SelectValue,
   SelectContent,
   SelectItem,
-} from '@/components/ui/select';
-import { useMatches } from '@/hooks/useMatches';
-import { Match, matchFormSchema, MatchFormValues, matchToFormValues, PLAYER_ROLES } from '@/types/match';
+} from "@/components/ui/select";
+import { useCreateMatch, useUpdateMatch, useMatchWithRoster } from "@/hooks/useMatches";
+import {
+  Match,
+  matchFormSchema,
+  MatchFormValues,
+  matchToFormValues,
+  PLAYER_ROLES,
+} from "@/types/match";
+import { useToast } from "@/hooks/use-toast";
 
 const emptyDefaults: MatchFormValues = {
-  opponent: '',
-  dateTime: '',
-  players: [{ name: '', number: 0, role: 'S' }],
+  opponent: "",
+  dateTime: "",
+  players: [{ name: "", number: 0, role: "S" }],
 };
 
 interface MatchFormDialogProps {
@@ -46,10 +53,23 @@ interface MatchFormDialogProps {
   tournamentId?: string | null;
 }
 
-export default function MatchFormDialog({ open, onOpenChange, match, tournamentId = null }: MatchFormDialogProps) {
-  const addMatch = useMatches((state) => state.addMatch);
-  const updateMatch = useMatches((state) => state.updateMatch);
+export default function MatchFormDialog({
+  open,
+  onOpenChange,
+  match,
+  tournamentId = null,
+}: MatchFormDialogProps) {
   const isEditing = !!match;
+  const { toast } = useToast();
+  const [submitting, setSubmitting] = useState(false);
+
+  const createMatch = useCreateMatch();
+  const updateMatch = useUpdateMatch();
+
+  // 編輯模式才需要抓「伺服器目前的完整名單」——用來預填表單、也用來讓儲存時算出名單差異
+  // （新增/修改/刪除哪些球員）。列表傳進來的 match 只有身份、沒有名單（避免列表 N+1）。
+  const { match: fetchedMatch } = useMatchWithRoster(match ? Number(match.id) : 0, isEditing);
+  const existingPlayers = fetchedMatch?.players ?? [];
 
   const form = useForm<MatchFormValues>({
     resolver: zodResolver(matchFormSchema),
@@ -58,31 +78,41 @@ export default function MatchFormDialog({ open, onOpenChange, match, tournamentI
 
   const { fields, append, remove } = useFieldArray({
     control: form.control,
-    name: 'players',
+    name: "players",
   });
 
   // 這個 dialog 元件在新增/編輯之間共用、不會每次開啟都重新 mount，
   // 所以每次打開時要自己用 reset 把表單填成對應的初始值（新增 -> 空白，編輯 -> 帶入既有比賽）。
+  // 編輯時等 fetchedMatch（含名單）抓回來再填，才不會只填到對手/時間卻沒有球員列。
   useEffect(() => {
     if (open) {
-      form.reset(match ? matchToFormValues(match) : emptyDefaults);
+      const source = fetchedMatch ?? match;
+      form.reset(source ? matchToFormValues(source) : emptyDefaults);
     }
-  }, [open, match, form]);
+  }, [open, match, fetchedMatch, form]);
 
-  const onSubmit = (values: MatchFormValues) => {
-    if (match) {
-      updateMatch(match.id, values);
-    } else {
-      addMatch(values, tournamentId);
+  const onSubmit = async (values: MatchFormValues) => {
+    setSubmitting(true);
+    try {
+      if (match) {
+        await updateMatch(Number(match.id), values, existingPlayers);
+      } else {
+        await createMatch(values, tournamentId);
+      }
+      onOpenChange(false);
+    } catch {
+      // 後端寫入失敗（網路、驗證等）時不關閉彈窗，讓使用者可以重試。
+      toast({ title: "儲存失敗", description: "請稍後再試一次", variant: "destructive" });
+    } finally {
+      setSubmitting(false);
     }
-    onOpenChange(false);
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{isEditing ? '編輯比賽' : '新增比賽'}</DialogTitle>
+          <DialogTitle>{isEditing ? "編輯比賽" : "新增比賽"}</DialogTitle>
         </DialogHeader>
 
         <Form {...form}>
@@ -180,17 +210,24 @@ export default function MatchFormDialog({ open, onOpenChange, match, tournamentI
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => append({ name: '', number: 0, role: 'S' })}
+                onClick={() => append({ name: "", number: 0, role: "S" })}
               >
                 新增球員
               </Button>
             </div>
 
             <DialogFooter>
-              <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => onOpenChange(false)}
+                disabled={submitting}
+              >
                 取消
               </Button>
-              <Button type="submit">{isEditing ? '儲存變更' : '建立比賽'}</Button>
+              <Button type="submit" disabled={submitting}>
+                {submitting ? "儲存中…" : isEditing ? "儲存變更" : "建立比賽"}
+              </Button>
             </DialogFooter>
           </form>
         </Form>

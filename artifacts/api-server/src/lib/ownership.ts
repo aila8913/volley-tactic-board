@@ -1,5 +1,12 @@
 import { eq, and } from "drizzle-orm";
-import { db, matchesTable, setsTable, ralliesTable, eventsTable } from "@workspace/db";
+import {
+  db,
+  matchesTable,
+  playersTable,
+  setsTable,
+  ralliesTable,
+  eventsTable,
+} from "@workspace/db";
 
 // 巢狀資源（players/sets/rallies/events）自己沒有存 userId，它們的擁有權是「繼承」自所屬的 match。
 // 所以在對這些資源做讀寫之前，要先確認 parent match 真的屬於這個使用者，
@@ -12,6 +19,18 @@ export async function matchBelongsToUser(matchId: number, userId: string): Promi
     .where(and(eq(matchesTable.id, matchId), eq(matchesTable.userId, userId)));
 
   return match !== undefined;
+}
+
+// player 的擁有權分兩步：先用上面的 matchBelongsToUser 確認 match 是這個 user 的，
+// 再用這支確認這個 player 真的屬於那場 match（擋掉 /matches/1/players/999 這種 playerId
+// 存在、但其實掛在別場比賽底下的情況）。比對的是 player.matchId，不需要再 join 到 userId。
+export async function playerBelongsToMatch(playerId: number, matchId: number): Promise<boolean> {
+  const [player] = await db
+    .select({ id: playersTable.id })
+    .from(playersTable)
+    .where(and(eq(playersTable.id, playerId), eq(playersTable.matchId, matchId)));
+
+  return player !== undefined;
 }
 
 // 越往下的巢狀層，擁有權檢查就要多 join 一層往上追到 match.userId。

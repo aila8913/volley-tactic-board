@@ -41,6 +41,7 @@ export interface Match {
   opponent: string;
   location?: string | null;
   videoUrl?: string | null;
+  tournamentId?: string | null;
   createdAt: string;
 }
 
@@ -50,12 +51,21 @@ export interface NewMatch {
   opponent: string;
   location?: string | null;
   videoUrl?: string | null;
+  tournamentId?: string | null;
 }
 
 export interface UpdateMatch {
   opponent?: string;
+  date?: string;
   location?: string | null;
   videoUrl?: string | null;
+  tournamentId?: string | null;
+}
+
+export interface UpdatePlayer {
+  name?: string;
+  number?: number;
+  role?: PlayerRole;
 }
 
 export interface MatchSet {
