@@ -5,12 +5,13 @@ import BackToMatchListButton from "../components/BackToMatchListButton";
 import RotationTable from "../components/RotationTable";
 import TacticsBoardPanel from "../components/TacticsBoardPanel";
 import Court from "../components/Court";
-import { useMatches } from "../hooks/useMatches";
+import { useMatchWithRoster } from "../hooks/useMatches";
 import { useRotationTable } from "../hooks/useRotationTable";
 
 export default function TacticsBoard() {
   const { id } = useParams<{ id: string }>();
-  const match = useMatches((state) => state.matches.find((m) => m.id === id));
+  // URL 的 id 是字串，後端 match id 是整數，取用前轉成 number。
+  const { match } = useMatchWithRoster(Number(id));
   const setRoster = useRotationTable((state) => state.setRoster);
 
   // 進入戰術板時，把這場比賽名單帶進來，這樣球員設定才會跟外面比賽列表輸入的資訊一致。

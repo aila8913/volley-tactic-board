@@ -13,5 +13,6 @@ export interface Match {
   opponent: string;
   location?: string | null;
   videoUrl?: string | null;
+  tournamentId?: string | null;
   createdAt: Date;
 }

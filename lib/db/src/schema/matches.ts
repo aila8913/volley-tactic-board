@@ -17,6 +17,11 @@ export const matchesTable = pgTable("matches", {
   opponent: text("opponent").notNull(),
   location: text("location"),
   videoUrl: text("video_url"),
+  // 前端把比賽歸類到「資料夾（Tournament）」，但資料夾本身還是前端 localStorage 的概念，
+  // 後端沒有 tournaments 表。這裡只存資料夾的 id（前端產生的 uuid 字串），當成不透明字串
+  // 存放/回傳即可 —— 後端不需要知道資料夾叫什麼、有哪些。nullable：null 代表這場比賽放在
+  // 最上層、沒歸到任何資料夾。
+  tournamentId: text("tournament_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 

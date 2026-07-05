@@ -27,6 +27,7 @@ export const ListMatchesResponseItem = zod.object({
   "opponent": zod.string(),
   "location": zod.string().nullish(),
   "videoUrl": zod.string().nullish(),
+  "tournamentId": zod.string().nullish(),
   "createdAt": zod.coerce.date()
 })
 export const ListMatchesResponse = zod.array(ListMatchesResponseItem)
@@ -40,7 +41,8 @@ export const CreateMatchBody = zod.object({
   "date": zod.coerce.date(),
   "opponent": zod.string(),
   "location": zod.string().nullish(),
-  "videoUrl": zod.string().nullish()
+  "videoUrl": zod.string().nullish(),
+  "tournamentId": zod.string().nullish()
 })
 
 
@@ -58,6 +60,7 @@ export const GetMatchResponse = zod.object({
   "opponent": zod.string(),
   "location": zod.string().nullish(),
   "videoUrl": zod.string().nullish(),
+  "tournamentId": zod.string().nullish(),
   "createdAt": zod.coerce.date()
 })
 
@@ -71,8 +74,10 @@ export const UpdateMatchParams = zod.object({
 
 export const UpdateMatchBody = zod.object({
   "opponent": zod.string().optional(),
+  "date": zod.coerce.date().optional(),
   "location": zod.string().nullish(),
-  "videoUrl": zod.string().nullish()
+  "videoUrl": zod.string().nullish(),
+  "tournamentId": zod.string().nullish()
 })
 
 export const UpdateMatchResponse = zod.object({
@@ -82,7 +87,16 @@ export const UpdateMatchResponse = zod.object({
   "opponent": zod.string(),
   "location": zod.string().nullish(),
   "videoUrl": zod.string().nullish(),
+  "tournamentId": zod.string().nullish(),
   "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete a match (cascades to its players/sets/rallies/events)
+ */
+export const DeleteMatchParams = zod.object({
+  "matchId": zod.coerce.number()
 })
 
 
@@ -114,6 +128,38 @@ export const CreatePlayerBody = zod.object({
   "name": zod.string(),
   "number": zod.number(),
   "role": zod.enum(['S', 'OH', 'MB', 'OPP', 'L'])
+})
+
+
+/**
+ * @summary Update a player on a match's roster
+ */
+export const UpdatePlayerParams = zod.object({
+  "matchId": zod.coerce.number(),
+  "playerId": zod.coerce.number()
+})
+
+export const UpdatePlayerBody = zod.object({
+  "name": zod.string().optional(),
+  "number": zod.number().optional(),
+  "role": zod.enum(['S', 'OH', 'MB', 'OPP', 'L']).optional()
+})
+
+export const UpdatePlayerResponse = zod.object({
+  "id": zod.number(),
+  "matchId": zod.number(),
+  "name": zod.string(),
+  "number": zod.number(),
+  "role": zod.enum(['S', 'OH', 'MB', 'OPP', 'L'])
+})
+
+
+/**
+ * @summary Remove a player from a match's roster
+ */
+export const DeletePlayerParams = zod.object({
+  "matchId": zod.coerce.number(),
+  "playerId": zod.coerce.number()
 })
 
 

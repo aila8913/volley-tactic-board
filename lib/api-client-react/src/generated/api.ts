@@ -35,6 +35,7 @@ import type {
   Tactic,
   UpdateEvent,
   UpdateMatch,
+  UpdatePlayer,
   UpdateTactic
 } from './api.schemas';
 
@@ -425,6 +426,76 @@ export const useUpdateMatch = <TError = ErrorType<unknown>,
       return useMutation(getUpdateMatchMutationOptions(options));
     }
 
+export const getDeleteMatchUrl = (matchId: number,) => {
+
+
+
+
+  return `/api/matches/${matchId}`
+}
+
+/**
+ * @summary Delete a match (cascades to its players/sets/rallies/events)
+ */
+export const deleteMatch = async (matchId: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteMatchUrl(matchId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteMatchMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteMatch>>, TError,{matchId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteMatch>>, TError,{matchId: number}, TContext> => {
+
+const mutationKey = ['deleteMatch'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteMatch>>, {matchId: number}> = (props) => {
+          const {matchId} = props ?? {};
+
+          return  deleteMatch(matchId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteMatchMutationResult = NonNullable<Awaited<ReturnType<typeof deleteMatch>>>
+
+    export type DeleteMatchMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Delete a match (cascades to its players/sets/rallies/events)
+ */
+export const useDeleteMatch = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteMatch>>, TError,{matchId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteMatch>>,
+        TError,
+        {matchId: number},
+        TContext
+      > => {
+      return useMutation(getDeleteMatchMutationOptions(options));
+    }
+
 export const getListPlayersUrl = (matchId: number,) => {
 
 
@@ -572,6 +643,152 @@ export const useCreatePlayer = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getCreatePlayerMutationOptions(options));
+    }
+
+export const getUpdatePlayerUrl = (matchId: number,
+    playerId: number,) => {
+
+
+
+
+  return `/api/matches/${matchId}/players/${playerId}`
+}
+
+/**
+ * @summary Update a player on a match's roster
+ */
+export const updatePlayer = async (matchId: number,
+    playerId: number,
+    updatePlayer: UpdatePlayer, options?: RequestInit): Promise<Player> => {
+
+  return customFetch<Player>(getUpdatePlayerUrl(matchId,playerId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updatePlayer,)
+  }
+);}
+
+
+
+
+export const getUpdatePlayerMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updatePlayer>>, TError,{matchId: number;playerId: number;data: BodyType<UpdatePlayer>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updatePlayer>>, TError,{matchId: number;playerId: number;data: BodyType<UpdatePlayer>}, TContext> => {
+
+const mutationKey = ['updatePlayer'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updatePlayer>>, {matchId: number;playerId: number;data: BodyType<UpdatePlayer>}> = (props) => {
+          const {matchId,playerId,data} = props ?? {};
+
+          return  updatePlayer(matchId,playerId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdatePlayerMutationResult = NonNullable<Awaited<ReturnType<typeof updatePlayer>>>
+    export type UpdatePlayerMutationBody = BodyType<UpdatePlayer>
+    export type UpdatePlayerMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Update a player on a match's roster
+ */
+export const useUpdatePlayer = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updatePlayer>>, TError,{matchId: number;playerId: number;data: BodyType<UpdatePlayer>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updatePlayer>>,
+        TError,
+        {matchId: number;playerId: number;data: BodyType<UpdatePlayer>},
+        TContext
+      > => {
+      return useMutation(getUpdatePlayerMutationOptions(options));
+    }
+
+export const getDeletePlayerUrl = (matchId: number,
+    playerId: number,) => {
+
+
+
+
+  return `/api/matches/${matchId}/players/${playerId}`
+}
+
+/**
+ * @summary Remove a player from a match's roster
+ */
+export const deletePlayer = async (matchId: number,
+    playerId: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeletePlayerUrl(matchId,playerId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeletePlayerMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deletePlayer>>, TError,{matchId: number;playerId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deletePlayer>>, TError,{matchId: number;playerId: number}, TContext> => {
+
+const mutationKey = ['deletePlayer'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deletePlayer>>, {matchId: number;playerId: number}> = (props) => {
+          const {matchId,playerId} = props ?? {};
+
+          return  deletePlayer(matchId,playerId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeletePlayerMutationResult = NonNullable<Awaited<ReturnType<typeof deletePlayer>>>
+
+    export type DeletePlayerMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Remove a player from a match's roster
+ */
+export const useDeletePlayer = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deletePlayer>>, TError,{matchId: number;playerId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deletePlayer>>,
+        TError,
+        {matchId: number;playerId: number},
+        TContext
+      > => {
+      return useMutation(getDeletePlayerMutationOptions(options));
     }
 
 export const getListSetsUrl = (matchId: number,) => {

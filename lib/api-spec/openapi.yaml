@@ -92,6 +92,13 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Match"
+    delete:
+      operationId: deleteMatch
+      tags: [matches]
+      summary: Delete a match (cascades to its players/sets/rallies/events)
+      responses:
+        "204":
+          description: Deleted
 
   /matches/{matchId}/players:
     parameters:
@@ -126,6 +133,35 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Player"
+
+  /matches/{matchId}/players/{playerId}:
+    parameters:
+      - $ref: "#/components/parameters/MatchId"
+      - $ref: "#/components/parameters/PlayerId"
+    patch:
+      operationId: updatePlayer
+      tags: [matches]
+      summary: Update a player on a match's roster
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePlayer"
+      responses:
+        "200":
+          description: Updated player
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Player"
+    delete:
+      operationId: deletePlayer
+      tags: [matches]
+      summary: Remove a player from a match's roster
+      responses:
+        "204":
+          description: Deleted
 
   /matches/{matchId}/sets:
     parameters:
@@ -336,6 +372,12 @@ components:
       required: true
       schema:
         type: integer
+    PlayerId:
+      name: playerId
+      in: path
+      required: true
+      schema:
+        type: integer
     SetId:
       name: setId
       in: path
@@ -426,6 +468,11 @@ components:
         videoUrl:
           type: string
           nullable: true
+        # 前端資料夾（Tournament）的 id；資料夾本身仍是前端 localStorage 概念，後端只當
+        # 不透明字串存放/回傳。null 代表放在最上層、沒歸到任何資料夾。
+        tournamentId:
+          type: string
+          nullable: true
         createdAt:
           type: string
           format: date-time
@@ -448,6 +495,9 @@ components:
         videoUrl:
           type: string
           nullable: true
+        tournamentId:
+          type: string
+          nullable: true
       required: [date, opponent]
 
     UpdateMatch:
@@ -455,12 +505,30 @@ components:
       properties:
         opponent:
           type: string
+        # 編輯比賽時可改日期時間（前端編輯表單有 datetime-local 欄位）。
+        date:
+          type: string
+          format: date-time
         location:
           type: string
           nullable: true
         videoUrl:
           type: string
           nullable: true
+        tournamentId:
+          type: string
+          nullable: true
+
+    UpdatePlayer:
+      type: object
+      # 部分更新一名球員：三個欄位都是 optional，只帶想改的。
+      properties:
+        name:
+          type: string
+        number:
+          type: integer
+        role:
+          $ref: "#/components/schemas/PlayerRole"
 
     MatchSet:
       type: object
