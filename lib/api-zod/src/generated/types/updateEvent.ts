@@ -7,8 +7,10 @@
  */
 import type { BallType } from './ballType';
 import type { EventAction } from './eventAction';
+import type { EventSide } from './eventSide';
 
 export interface UpdateEvent {
+  side?: EventSide;
   action?: EventAction;
   ballType?: BallType;
   quality?: number | null;

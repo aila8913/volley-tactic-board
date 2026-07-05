@@ -7,20 +7,22 @@
  */
 import type { BallType } from './ballType';
 import type { EventAction } from './eventAction';
+import type { EventSide } from './eventSide';
 import type { EventSource } from './eventSource';
 
 export interface MatchEvent {
   id: number;
   rallyId: number;
   sequence: number;
-  playerId: number;
+  side: EventSide;
+  playerId?: number | null;
   action: EventAction;
   ballType?: BallType;
   quality?: number | null;
-  fromX: number;
-  fromY: number;
-  toX: number;
-  toY: number;
+  fromX?: number | null;
+  fromY?: number | null;
+  toX?: number | null;
+  toY?: number | null;
   tags: string[];
   note?: string | null;
   videoTimestamp?: number | null;

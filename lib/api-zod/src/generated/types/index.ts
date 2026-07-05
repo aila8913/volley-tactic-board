@@ -8,6 +8,7 @@
 
 export * from './ballType';
 export * from './eventAction';
+export * from './eventSide';
 export * from './eventSource';
 export * from './healthStatus';
 export * from './match';

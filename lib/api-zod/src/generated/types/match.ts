@@ -8,6 +8,7 @@
 
 export interface Match {
   id: number;
+  name?: string | null;
   date: Date;
   opponent: string;
   location?: string | null;

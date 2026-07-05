@@ -11,5 +11,6 @@ export interface Player {
   id: number;
   matchId: number;
   name: string;
+  number: number;
   role: PlayerRole;
 }
