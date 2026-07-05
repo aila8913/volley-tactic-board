@@ -52,22 +52,30 @@
 
 核心判斷：這不是「刻 12 條路由」的工作，而是**先把三層模型對齊，再由簡到繁接線**。
 
-### Phase 0 — 對齊 schema 與規格（地基，不寫路由）✅ 進行中
+### Phase 0 — 對齊 schema 與規格（地基，不寫路由）✅ 已完成（PR #53）
 
 1. 修 `openapi.yaml`：`Match`/`NewMatch` 對 name 的處理、`Player`/`NewPlayer` 補 `number`、
    `MatchEvent`/`NewEvent` 補 `side` 並把 playerId/座標改 optional。
 2. 改 `schema/matches.ts`：`name` 改 nullable、加 `userId`（為未來真 auth 鋪路）。
 3. 改 `schema/events.ts`：加 `side` enum、`playerId` 與座標改 nullable。
-4. 跑 `pnpm --filter @workspace/api-spec run codegen` 重新生成 api-zod / api-client-react。
+4. 跑 `pnpm --filter @workspace/api-spec run codegen` 重新生成 api-zod / api-client-react。 //從 openapi.yaml 的手寫檔案轉成真的 api 程式
 5. 跑 `pnpm --filter @workspace/db run push` 把所有表建到 dev DB。
    - 驗證：`pnpm run typecheck` 過。
 
-### Phase 1 — 扁平資源 CRUD（`matches` / `players` / `sets`）
+### Phase 1 — 扁平資源 CRUD（`matches` / `players` / `sets`）✅ 已完成
 
 沒有深層巢狀依賴，先拿它們把 Drizzle 讀寫 pattern 跑順。每個資源一個路由檔
 （`routes/matches.ts` 等），**沿用 `tactics.ts` 的風格：檔案內定義完整路徑**（如
 `router.get("/matches/:matchId/players")`），在 `routes/index.ts` 掛載——跟現有 tactics 一致，
 不玩 Express 的 `mergeParams`。驗證：實際打一輪 create → list → get。
+
+落地內容：
+
+- `routes/matches.ts`（GET/POST/GET:id/PATCH，userId 擁有權隔離）、`routes/players.ts`、
+  `routes/sets.ts`（後兩者靠 `lib/ownership.ts` 的 `matchBelongsToUser()` 先驗 parent match 擁有權）。
+- 補上 `middleware/errorHandler.ts`：ZodError → 400、外鍵違反 → 404/409、其餘 → 500，
+  掛在所有路由之後（app.ts）。這是原本 `tactics.ts` 就缺的隱性缺口。
+- 已對真實 dev DB 端對端驗證 happy path 與錯誤情境（400/404）通過。
 
 ### Phase 2 — 巢狀 + 事務（`rallies` / `events`）
 

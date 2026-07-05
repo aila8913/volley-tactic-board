@@ -3,6 +3,7 @@ import cors from "cors";
 import pinoHttp from "pino-http";
 import path from "path";
 import router from "./routes";
+import { errorHandler } from "./middleware/errorHandler";
 import { logger } from "./lib/logger";
 
 // import.meta.dirname は Node 21.2+ の ESM 専用のグローバル。
@@ -55,5 +56,9 @@ app.get("/{*path}", (req: Request, res: Response) => {
     }
   });
 });
+
+// 錯誤處理中介層一定要掛在最後（所有路由之後）：Express 靠「4 個參數 + 註冊在最後」
+// 來認出這是收尾的錯誤處理器，路由裡冒泡上來的錯誤（含 zod 驗證失敗）都會轉交給它。
+app.use(errorHandler);
 
 export default app;
