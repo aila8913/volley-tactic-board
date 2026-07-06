@@ -6,6 +6,7 @@ import {
   pointRecordToEvent,
   eventToMeta,
   reconstructSetFromRallies,
+  isSetComplete,
 } from "./scoreSheetMapping";
 import type { PointRecord } from "../types/scoresheet";
 import type { MatchSet, Rally, MatchEvent } from "@workspace/api-client-react";
@@ -20,6 +21,23 @@ describe("side mapping", () => {
     expect(sideToApi("opponent")).toBe("away");
     expect(apiToSide("home")).toBe("us");
     expect(apiToSide("away")).toBe("opponent");
+  });
+});
+
+describe("isSetComplete", () => {
+  it("needs 25 with a 2-point lead in a normal set", () => {
+    expect(isSetComplete(1, 0, 0)).toBe(false);
+    expect(isSetComplete(1, 25, 24)).toBe(false); // 到 25 但只領先 1，deuce
+    expect(isSetComplete(1, 25, 23)).toBe(true);
+    expect(isSetComplete(1, 24, 22)).toBe(false); // 領先 2 但還沒到 25
+    expect(isSetComplete(1, 27, 25)).toBe(true); // deuce 後淨勝 2
+  });
+
+  it("only needs 15 in the deciding 5th set", () => {
+    expect(isSetComplete(5, 15, 13)).toBe(true);
+    expect(isSetComplete(5, 15, 14)).toBe(false); // 領先 1，要 deuce
+    expect(isSetComplete(5, 14, 12)).toBe(false); // 領先 2 但還沒到 15
+    expect(isSetComplete(4, 15, 13)).toBe(false); // 第 4 局仍是 25 分制
   });
 });
 
