@@ -4,10 +4,11 @@ import {
   apiToSide,
   pointRecordToRally,
   pointRecordToEvent,
+  eventToMeta,
   reconstructSetFromRallies,
 } from "./scoreSheetMapping";
 import type { PointRecord } from "../types/scoresheet";
-import type { MatchSet, Rally } from "@workspace/api-client-react";
+import type { MatchSet, Rally, MatchEvent } from "@workspace/api-client-react";
 
 // 純函式，最適合單元測試。重點是 us/opponent↔home/away 的翻譯，以及最容易出錯的
 // 「從 rally 序列 replay 回比分/發球方/輪轉」——輪轉規則（只有 side-out 才轉）很細，
@@ -73,6 +74,53 @@ describe("pointRecordToEvent", () => {
       action: "serve",
       source: "live",
     });
+  });
+});
+
+// 造一個後端 event（只填重建會用到的欄位，其他 nullable 給預設）。
+const makeEvent = (over: Partial<MatchEvent> & Pick<MatchEvent, "rallyId">): MatchEvent => ({
+  id: 1,
+  sequence: 1,
+  side: "home",
+  playerId: null,
+  action: "attack",
+  ballType: null,
+  quality: null,
+  fromX: null,
+  fromY: null,
+  toX: null,
+  toY: null,
+  tags: [],
+  note: null,
+  videoTimestamp: null,
+  source: "live",
+  ...over,
+});
+
+describe("eventToMeta", () => {
+  it("maps our player's event back to touchedBy (int id → string)", () => {
+    expect(
+      eventToMeta(makeEvent({ rallyId: 1, side: "home", playerId: 12, action: "attack" })),
+    ).toEqual({ action: "attack", touchedBy: { side: "us", playerId: "12" } });
+  });
+
+  it("maps an opponent-side event with null player to undefined playerId", () => {
+    expect(
+      eventToMeta(makeEvent({ rallyId: 1, side: "away", playerId: null, action: "serve" })),
+    ).toEqual({ action: "serve", touchedBy: { side: "opponent", playerId: undefined } });
+  });
+
+  it("round-trips with pointRecordToEvent for our player", () => {
+    const point: PointRecord = {
+      side: "us",
+      wasSideOut: false,
+      action: "block",
+      touchedBy: { side: "us", playerId: "7" },
+    };
+    const ev = pointRecordToEvent(point, 1)!;
+    const meta = eventToMeta(makeEvent({ ...ev, rallyId: 1 }));
+    expect(meta.action).toBe("block");
+    expect(meta.touchedBy).toEqual({ side: "us", playerId: "7" });
   });
 });
 
@@ -147,5 +195,53 @@ describe("reconstructSetFromRallies", () => {
     expect(state.ourScore).toBe(1);
     expect(state.opponentScore).toBe(1);
     expect(state.serving).toBe("us");
+  });
+
+  it("attaches action/touchedBy from events when the map is provided (3b-ii)", () => {
+    const rallies = [rally(1, "home", 100), rally(2, "away", 200)];
+    const eventsByRallyId = new Map<number, MatchEvent[]>([
+      [100, [makeEvent({ rallyId: 100, side: "home", playerId: 12, action: "attack" })]],
+      [200, [makeEvent({ rallyId: 200, side: "away", playerId: null, action: "serve" })]],
+    ]);
+    const state = reconstructSetFromRallies(set, rallies, eventsByRallyId);
+    expect(state.history[0]).toMatchObject({
+      side: "us",
+      serverId: 100,
+      action: "attack",
+      touchedBy: { side: "us", playerId: "12" },
+    });
+    expect(state.history[1]).toMatchObject({
+      side: "opponent",
+      serverId: 200,
+      action: "serve",
+      touchedBy: { side: "opponent", playerId: undefined },
+    });
+  });
+
+  it("leaves a rally with no event as a 沒看到 point (no action/touchedBy)", () => {
+    const rallies = [rally(1, "home", 100), rally(2, "home", 200)];
+    // 只有 rally 100 有 event；rally 200 是「沒看到」，map 裡沒有它。
+    const eventsByRallyId = new Map<number, MatchEvent[]>([
+      [100, [makeEvent({ rallyId: 100, side: "home", playerId: 5, action: "dig" })]],
+    ]);
+    const state = reconstructSetFromRallies(set, rallies, eventsByRallyId);
+    expect(state.history[0].action).toBe("dig");
+    expect(state.history[1].action).toBeUndefined();
+    expect(state.history[1].touchedBy).toBeUndefined();
+  });
+
+  it("picks the first event (lowest sequence) when a rally has several", () => {
+    const rallies = [rally(1, "home", 100)];
+    const eventsByRallyId = new Map<number, MatchEvent[]>([
+      [
+        100,
+        [
+          makeEvent({ rallyId: 100, sequence: 1, side: "home", playerId: 3, action: "receive" }),
+          makeEvent({ rallyId: 100, sequence: 2, side: "home", playerId: 9, action: "attack" }),
+        ],
+      ],
+    ]);
+    const state = reconstructSetFromRallies(set, rallies, eventsByRallyId);
+    expect(state.history[0]).toMatchObject({ action: "receive", touchedBy: { playerId: "3" } });
   });
 });

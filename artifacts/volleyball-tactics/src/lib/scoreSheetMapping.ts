@@ -8,8 +8,8 @@
 //      一個 rally（誰得這分）＋ 最多一個 event（那一球的動作／球員）。「沒看到」只有 rally、沒 event。
 //   3. 輪轉/發球方不存在後端：sets 只多存一個「誰先發（firstServer）」的種子，其餘（比分、
 //      發球方、輪轉、每球的 side-out 旗標）都由這裡 replay rally 序列重算回來。
-import type { MatchSet, Rally, NewRally, NewEvent } from "@workspace/api-client-react";
-import type { Side, PointRecord, SetRecordingState } from "../types/scoresheet";
+import type { MatchSet, Rally, MatchEvent, NewRally, NewEvent } from "@workspace/api-client-react";
+import type { Side, PointRecord, PlayAction, SetRecordingState } from "../types/scoresheet";
 
 // ── us/opponent ↔ home/away ──
 // 後端所有計分相關的表（rallies.winner、events.side、sets.firstServer）都用 home/away，
@@ -55,14 +55,35 @@ export function pointRecordToEvent(point: PointRecord, sequence: number): NewEve
   };
 }
 
+// ── event → PointRecord 的動作資訊（pointRecordToEvent 的反向）──
+// 重建時把後端 event 還原成 PointRecord 的 action/touchedBy。是 pointRecordToEvent 的逆：
+//   - side：event.side（home/away）→ touchedBy.side（us/opponent）。
+//   - playerId：後端 int（可為 null，代表對手(全體)沒有球員）→ 前端字串 / undefined。
+//   - zone 不還原：events 沒存 zone（它是可由輪轉+球員衍生的顯示值，統計也用不到）。
+// event.action 型別上是後端 EventAction，跟前端 PlayAction 是同一組字面值，斷言成 PlayAction。
+export function eventToMeta(event: MatchEvent): Pick<PointRecord, "action" | "touchedBy"> {
+  return {
+    action: event.action as PlayAction,
+    touchedBy: {
+      side: apiToSide(event.side),
+      playerId: event.playerId != null ? String(event.playerId) : undefined,
+    },
+  };
+}
+
 // ── 從後端重建一局的完整前端狀態 ──
 // sets 表只存 setNumber + firstServer（誰先發）。比分、發球方、輪轉、每球的 wasSideOut
 // 全部靠「從先發方開始、按 rallyNumber 依序 replay 每個 rally 的 winner」重算：
 //   - 排球規則：只有原本沒發球的一方贏球（side-out，奪回發球權）才輪轉一個位置；
 //     發球方自己續分只加分不輪轉。我方、對手各自獨立輪轉。（跟 useScoreSheet.scorePoint 同一套規則。）
-//   - 這一階段（3b-i）history 只重建 { side, wasSideOut, serverId }，不含 action/touchedBy——
-//     那些要讀 events 才有，留到 3b-ii 再補；所以 reload 後球員動作統計會暫時是空的。
-export function reconstructSetFromRallies(apiSet: MatchSet, rallies: Rally[]): SetRecordingState {
+//   - eventsByRallyId 帶進來時（3b-ii），每個 rally 若有 event 就把 action/touchedBy 補回 PointRecord，
+//     reload / 跨場後球員統計才正確；不帶（或某 rally 沒 event，例如「沒看到」）就只重建
+//     { side, wasSideOut, serverId }。簡易版一分最多一球，取 sequence 最小的那顆（呼叫端已排序）。
+export function reconstructSetFromRallies(
+  apiSet: MatchSet,
+  rallies: Rally[],
+  eventsByRallyId?: Map<number, MatchEvent[]>,
+): SetRecordingState {
   const sorted = [...rallies].sort((a, b) => a.rallyNumber - b.rallyNumber);
 
   // server 一路追「目前發球方」：從先發方起算，每分結束後由這分的贏家發下一球。
@@ -79,7 +100,9 @@ export function reconstructSetFromRallies(apiSet: MatchSet, rallies: Rally[]): S
     if (wasSideOut && winnerSide === "us") ourRotation = (ourRotation + 1) % 6;
     if (wasSideOut && winnerSide === "opponent") opponentRotation = (opponentRotation + 1) % 6;
 
-    history.push({ side: winnerSide, wasSideOut, serverId: rally.id });
+    const events = eventsByRallyId?.get(rally.id);
+    const meta = events && events.length > 0 ? eventToMeta(events[0]) : undefined;
+    history.push({ side: winnerSide, wasSideOut, serverId: rally.id, ...meta });
 
     if (winnerSide === "us") ourScore++;
     else opponentScore++;

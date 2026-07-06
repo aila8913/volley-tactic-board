@@ -197,6 +197,26 @@ paths:
               schema:
                 $ref: "#/components/schemas/MatchSet"
 
+  # 一次拿整場比賽的所有 event（跨 set/rally）。前端進頁重建計分表時，靠這一支避免對
+  # 每個 rally 各發一次 /rallies/:id/events（一場可能有幾百個 rally = 幾百個請求）。
+  # 回傳仍是扁平的 MatchEvent[]，每筆自帶 rallyId，前端再依 rallyId 分組。
+  /matches/{matchId}/events:
+    parameters:
+      - $ref: "#/components/parameters/MatchId"
+    get:
+      operationId: listMatchEvents
+      tags: [matches]
+      summary: List all events for a match (across all its sets/rallies), for rebuilding the scoresheet
+      responses:
+        "200":
+          description: List of events, ordered by rally then sequence
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MatchEvent"
+
   /sets/{setId}/rallies:
     parameters:
       - $ref: "#/components/parameters/SetId"
