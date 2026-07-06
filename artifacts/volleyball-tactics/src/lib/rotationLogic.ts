@@ -17,6 +17,17 @@ const shiftSequence = [1, 6, 5, 4, 3, 2];
 // 對方的實作細節，所以共用的規則常數抽到大家都會 import 的 rotationLogic.ts。
 export const BACK_ROW_ZONES = new Set([1, 5, 6]);
 
+// 給定一個場上座標（0~1 normalized），判斷它算不算「後排」＝自由球員的合法上場位置。
+// 先用 findNearestZone 把座標吸附到最近的號位，再看那個號位在不在 BACK_ROW_ZONES 裡。
+//
+// 為什麼要有這一支：輪轉表（格子吸附）手上直接有號位，可以 BACK_ROW_ZONES.has(zone)；
+// 但計分表（拖曳替換）手上只有 x/y 座標，以前是自己寫一條 `y <= 0.75` 的門檻各判各的——
+// 「後排」的定義因此有兩份、日後改了會失同步（issue #43）。把座標版判定收斂到這裡、
+// 一樣從 BACK_ROW_ZONES 導出，兩邊就共用同一個真實來源，不會再各寫各的。
+export function isBackRowPosition(x: number, y: number): boolean {
+  return BACK_ROW_ZONES.has(findNearestZone(x, y));
+}
+
 // 給定「輪轉了幾次」，回傳某個起始號位現在實際落在哪個號位。
 export function rotateZone(startZone: number, rotation: number): number {
   const currentIndex = shiftSequence.indexOf(startZone);
