@@ -9,19 +9,23 @@
 > Read this file, plus `gh issue list --state open` and recent `git log`, at the start
 > of a new session instead of re-exploring the whole codebase from scratch.
 
-_Last updated: 2026-07-06 (session: shipped **Phase 3b-i** (PR #62) — moved the
-scoresheet's scores/rotation off localStorage onto the backend `sets`/`rallies`/`events`
-API. Added `sets.firstServer` (the one non-derivable seed) + `DELETE /rallies/:id`, new
-`lib/scoreSheetMapping.ts` (rally-replay reconstruction, unit-tested), and rewrote
-`useScoreSheet` into a local-first store + `useScoreSheetController` (serialized
-write-queue + hydrate-on-mount). Verified end-to-end against the dev DB in the browser.
-Filed #63/#64 for two known limitations surfaced. #58 stays open for Phase 3b-ii.)_
+_Last updated: 2026-07-06 (session: shipped **Phase 3b-ii** (PR #66) — events read-back so
+per-player stats survive a reload, via a bulk `GET /matches/:id/events` endpoint (avoids
+~250-request N+1) + `eventToMeta`/events-aware `reconstructSetFromRallies`; fixed a real
+`DELETE /matches` 500 (events→players FK needed `onDelete: "set null"`). **This closed
+#58 — all of Phase 3 (3a + 3b-i + 3b-ii) is done.** Then shipped **#43** (PR #67):
+unified the libero "back-row only" rule — the scoresheet had its own `y <= 0.75` while the
+rotation table used the shared `BACK_ROW_ZONES`; extracted `isBackRowPosition(x,y)` into
+`rotationLogic.ts` (unit-tested) so both derive from one source. Also refreshed #42's stale
+body (+`needs-plan`). Note: the 3b-ii ship never got its own wrap-up, so this update folds
+in both 3b-ii and #43. New follow-up #65 (dedicated cross-match analytics page) filed last
+session.)_
 
 ## Current state
 
-- On `main`, latest commit `7be823a` (PR #62). Both prior sessions' PRs (#61 tactics
-  whiteboard/libero, #60 Phase 3a) are merged. This session shipped Phase 3b-i (see the
-  match-recording bullet below for detail).
+- On `main`, latest commit `2ec8cce` (PR #67, libero rule unification). Recent PRs #66
+  (Phase 3b-ii), #62 (3b-i), #61 (tactics whiteboard/libero), #60 (Phase 3a) all merged.
+  **Phase 3 is fully done and #58 is closed** (see the match-recording bullet below).
 - **Match-recording backend is now fully implemented server-side, and the frontend has
   started migrating off localStorage onto it.** See `docs/backend-architecture.md` for
   the full design + phased plan:
@@ -75,13 +79,25 @@ Filed #63/#64 for two known limitations surfaced. #58 stays open for Phase 3b-ii
     from `useListSets` + per-set `listRallies`. Verified end-to-end in the browser
     against the dev DB (score→persist→undo→delete→reload rebuild). **Events are written
     but not yet read back** — per-player stats are empty after reload until 3b-ii.
-  - **Phase 3b-ii (part of #58, not started) — events read-back → player stats.** Extend
-    `reconstructSetFromRallies` to also fetch each rally's events and restore
-    `action`/`touchedBy` on `PointRecord` so `ScoreSheetStats`'s player matrix survives a
-    reload; restore the multi-match stats panel (needs a "list my matches with
-    recordings" strategy — 3b-i shows current match only). Real prerequisite for
-    persisting #42/#43. Two known 3b-i limitations filed: #63 (empty next-set reload
-    quirk), #64 (background-write failures aren't reconciled).
+  - **Phase 3b-ii (part of #58, PR #66) — events read-back → player stats, done.** Added
+    a bulk `GET /matches/:matchId/events` endpoint (joins events→rallies→sets, filters by
+    `sets.matchId`) so hydration is one request instead of a per-rally N+1 (~250 requests).
+    `reconstructSetFromRallies` now also takes an `eventsByRallyId` map and restores
+    `action`/`touchedBy` on each `PointRecord` via new `eventToMeta` (int playerId→string,
+    home/away→us/opponent), so `ScoreSheetStats`'s player matrix survives a reload.
+    **Cross-match stats deferred:** the multi-match panel now shows current match only; a
+    dedicated cross-match analytics page is tracked separately as #65 (not a fan-out over
+    every match). **Fixed a real bug found here:** `DELETE /matches/:id` 500'd when events
+    referenced real players — `events.playerId → players.id` lacked `onDelete`, so the
+    match→players cascade hit an FK violation; fixed with `onDelete: "set null"` + db push.
+    **This closed #58** (all of Phase 3 done). Two known 3b-i limitations remain filed:
+    #63 (empty next-set reload quirk), #64 (background-write failures aren't reconciled).
+  - **Libero back-row rule unified (#43, PR #67).** The "自由球員只能上後排" rule existed
+    twice: the rotation table used the shared `BACK_ROW_ZONES` set, but the scoresheet's
+    `isValidLiberoTarget` hand-rolled a `y <= 0.75` threshold — change the definition and
+    they'd drift. Extracted `isBackRowPosition(x, y)` into `lib/rotationLogic.ts` (derived
+    from the same `BACK_ROW_ZONES`, unit-tested in new `rotationLogic.test.ts`); the
+    scoresheet now calls it. Pure refactor, behavior-equivalent for on-zone coordinates.
 - **Process note: #58 got auto-closed by accident, then reopened.** A PR #60 body edit
   said "本 PR 不 close #58" (intending to _not_ trigger GitHub's auto-close), but GitHub's
   closing-keyword detection is a dumb substring match on "close #58" — it doesn't parse
@@ -155,10 +171,11 @@ events.ts`'s `eventActionEnum` — `types/scoresheet.ts`.
   cross-references added this session for #35–#45 via issue #34's fix).
 - Backend match-recording API is **fully implemented server-side** (Phases 0–2 + the
   3a/3b-i gap-fills: matches/players/sets/rallies/events CRUD, plus `sets.firstServer`
-  and `DELETE /rallies/:id`, all live and dev-DB-verified). The frontend now calls the
-  matches/players portion (Phase 3a) **and the scoresheet's scores/rotation (Phase 3b-i,
-  PR #62)**. What's left: Phase 3b-ii reads `events` back so per-player stats survive a
-  reload (#58) — the remaining piece before #51's advanced-tier work or a real stats page.
+  and `DELETE /rallies/:id`, plus the bulk `GET /matches/:id/events`, all live and
+  dev-DB-verified). **The frontend scoresheet is now fully off localStorage: matches/players
+  (3a), scores/rotation (3b-i), and events read-back → per-player stats (3b-ii, PR #66).
+  #58 is closed.** Next big pieces build on this: #51's advanced-tier recording and #65's
+  dedicated cross-match analytics page.
 - **New human-facing onboarding docs exist** (PR #33), written for a teammate who is new
   to programming/Git/GitHub/AI-agent collaboration (design/PM background):
   - Root [`README.md`](../README.md) — project one-liner, points first to
@@ -263,11 +280,13 @@ status — the list below is a snapshot, not guaranteed up to date):
   依發球方做情境限制（發球/接發互斥）。
 - [#51](https://github.com/aila8913/volley-tatic-board/issues/51) — 進階版：動作子分
   類、犯規類型與 Outcome 細節擴充（#22 的後續，見上方 Current state）。Backend 地基
-  已完全就緒（Phase 0/1/2/3a/3b-i），仍需 Phase 3b-ii（#58，events 讀回）才能真正落地。
-- [#58](https://github.com/aila8913/volley-tatic-board/issues/58) — 後端 Phase 3b：
-  計分表切到 API。Phase 3a（matches + 名單，PR #60）與 **Phase 3b-i（比分/輪轉，PR #62）
-  已完成**，issue 現在只剩 **Phase 3b-ii**（events 讀回 → 球員統計 + 跨場統計面板；也是
-  #42/#43 真正持久化的前提）。完整設計見 `docs/backend-architecture.md`。
+  已完全就緒且 #58（Phase 3）已全數完成，這塊現在可以直接開工。
+- [#65](https://github.com/aila8913/volley-tatic-board/issues/65) — 專門的數據分析頁面
+  （跨場/彙總統計）。3b-ii 把跨場統計面板從計分表頁抽掉，改到這個獨立頁面做，避免對每場
+  fan-out 請求。`needs-plan`、`priority:essential`。
+- [#42](https://github.com/aila8913/volley-tatic-board/issues/42) — 換人紀錄仍是元件內
+  `useState`，reload 消失。#58 補齊了 API 持久化地基後，卡點變成「換人要怎麼進 schema
+  （專用表 or 擴充 events）」的設計判斷，已標 `needs-plan`。
 - [#63](https://github.com/aila8913/volley-tatic-board/issues/63) — 3b-i 已知限制：剛按
   「下一局」但未開球的空局還沒寫進後端，reload 後會退回顯示上一局（低優先 edge case）。
 - [#64](https://github.com/aila8913/volley-tatic-board/issues/64) — 3b-i 取捨：背景寫入
@@ -275,6 +294,11 @@ status — the list below is a snapshot, not guaranteed up to date):
 
 ## Recently closed
 
+- #58 — 後端 Phase 3：計分表從 localStorage 切到 API。Phase 3a（matches+名單，PR #60）、
+  3b-i（比分/輪轉，PR #62）、3b-ii（events 讀回 → 球員統計，PR #66）三段全部完成，計分表
+  已完全脫離 localStorage。跨場統計拆到獨立的 #65。
+- #43 — 自由球員「後排才能上」規則原本計分表(`y<=0.75`)與輪轉表(`BACK_ROW_ZONES`)各判各的，
+  已抽出共用的 `isBackRowPosition` 收斂到單一來源（PR #67，附 `rotationLogic.test.ts`）。
 - #55 — 後端 Phase 0：schema/openapi 三層對齊、events 加 side+nullable、matches 加
   userId，已在 PR #53 完成（retro issue，開完即關以留 ledger 軌跡）。
 - #56 — 後端 Phase 1：matches/players/sets CRUD 路由 + errorHandler middleware，已在
