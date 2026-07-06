@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState } from "react";
 import { useRotationTable } from "../hooks/useRotationTable";
-import { findNearestZone, getZoneLayout } from "../lib/rotationLogic";
+import { findNearestZone, getZoneLayout, isBackRowPosition } from "../lib/rotationLogic";
 import { Side } from "../types/scoresheet";
 
 export interface TouchedTarget {
@@ -223,7 +223,9 @@ export default function ScoreSheetCourt({
   // ── 自由球員拖曳 ──
   const isValidLiberoTarget = (t: (typeof hitTargets)[number]): boolean => {
     if (t.side !== "us" || !t.playerId) return false;
-    if (t.yNorm <= 0.75) return false; // 前排不合法
+    // 後排才合法。用共用的 isBackRowPosition（＝輪轉表也在用的 BACK_ROW_ZONES 判定）而不是
+    // 自己寫死 y 門檻，這樣「後排」的定義只有一份，輪轉表改規則計分表會跟著改（issue #43）。
+    if (!isBackRowPosition(t.xNorm, t.yNorm)) return false;
     if (liberoPlayer && t.playerId === liberoPlayer.id) return false;
     if (t.playerId === effectiveLiberoSub) return false; // 已在替換中
     // 一般換人後，這個位置的「有效球員」也不能是自由球員
