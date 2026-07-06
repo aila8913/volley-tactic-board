@@ -113,7 +113,15 @@ export const useRotationTable = create<RotationTableStore>()(
           // 站位（rotations[].positions）或自由球員替補紀錄（liberoReplacement）裡，
           // Court.tsx 找不到球員就不渲染，畫面看起來正常，但那格其實還被佔著、
           // 既看不到也選不到。所以存檔名單時要順手把指向「已不存在球員」的站位掃掉。
+          //
+          // 關鍵：只有「真的清掉了東西」時才換 rotations 的參照，沒清到就沿用舊陣列。
+          // 為什麼重要——計分表進頁的 effect 會用 match.players 呼叫 setRoster，而 match
+          // 每次 render 都是新物件，所以 setRoster 會被反覆呼叫。若這裡每次都用 .map 產生
+          // 新的 rotations 陣列，訂閱 rotations 的 ScoreSheet 就會重繪 → effect 又跑
+          // setRoster → 無限迴圈（Maximum update depth exceeded）。用「沒變就回原參照」
+          // 讓 Zustand 對 rotations 這個 slice 視為沒變、不觸發重繪，迴圈才不會發生。
           const validIds = new Set(roster.map((p) => p.id));
+          let rotationsChanged = false;
           const rotations = state.rotations.map((rot) => {
             const positions = rot.positions.filter((pos) => validIds.has(pos.playerId));
             // liberoReplacement 記錄「被 L 換下場的人」，若這個 L 本人或被換下的人
@@ -124,12 +132,21 @@ export const useRotationTable = create<RotationTableStore>()(
               validIds.has(rot.liberoReplacement.replacedPosition.playerId)
                 ? rot.liberoReplacement
                 : null;
+            // filter 只會刪不會加，所以長度沒變＝沒有殘留被清掉；replacement 也還是同一個
+            // 參照＝沒被清。兩者都沒動就回傳原本的 rot 物件（保留參照）。
+            if (
+              positions.length === rot.positions.length &&
+              replacement === rot.liberoReplacement
+            ) {
+              return rot;
+            }
+            rotationsChanged = true;
             return { ...rot, positions, liberoReplacement: replacement };
           });
 
           return {
             roster,
-            rotations,
+            rotations: rotationsChanged ? rotations : state.rotations,
             startingLiberoId: currentStillExists
               ? state.startingLiberoId
               : (liberos[0]?.id ?? null),
