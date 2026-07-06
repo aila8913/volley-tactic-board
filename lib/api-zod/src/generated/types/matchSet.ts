@@ -5,9 +5,11 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { ServingSide } from './servingSide';
 
 export interface MatchSet {
   id: number;
   matchId: number;
   setNumber: number;
+  firstServer: ServingSide;
 }

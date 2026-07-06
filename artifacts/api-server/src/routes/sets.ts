@@ -39,7 +39,8 @@ router.post("/matches/:matchId/sets", async (req, res) => {
 
   const [created] = await db
     .insert(setsTable)
-    .values({ matchId, setNumber: body.setNumber })
+    // firstServer 從 body 帶進來（開局時前端已知道誰先發）；matchId 從路徑取（已驗擁有權）。
+    .values({ matchId, setNumber: body.setNumber, firstServer: body.firstServer })
     .returning();
 
   res.status(201).json(created);

@@ -1238,6 +1238,76 @@ export const useCreateEvent = <TError = ErrorType<unknown>,
       return useMutation(getCreateEventMutationOptions(options));
     }
 
+export const getDeleteRallyUrl = (rallyId: number,) => {
+
+
+
+
+  return `/api/rallies/${rallyId}`
+}
+
+/**
+ * @summary Delete a rally (e.g. undo the last point; cascades to its events)
+ */
+export const deleteRally = async (rallyId: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteRallyUrl(rallyId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteRallyMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteRally>>, TError,{rallyId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteRally>>, TError,{rallyId: number}, TContext> => {
+
+const mutationKey = ['deleteRally'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteRally>>, {rallyId: number}> = (props) => {
+          const {rallyId} = props ?? {};
+
+          return  deleteRally(rallyId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteRallyMutationResult = NonNullable<Awaited<ReturnType<typeof deleteRally>>>
+
+    export type DeleteRallyMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Delete a rally (e.g. undo the last point; cascades to its events)
+ */
+export const useDeleteRally = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteRally>>, TError,{rallyId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteRally>>,
+        TError,
+        {rallyId: number},
+        TContext
+      > => {
+      return useMutation(getDeleteRallyMutationOptions(options));
+    }
+
 export const getListTacticsUrl = () => {
 
 

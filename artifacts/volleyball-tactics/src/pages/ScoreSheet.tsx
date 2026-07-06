@@ -3,9 +3,9 @@ import type { PointerEvent as ReactPointerEvent } from "react";
 import { useParams, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import BackToMatchListButton from "@/components/BackToMatchListButton";
-import { useMatchWithRoster, useMatchList } from "@/hooks/useMatches";
+import { useMatchWithRoster } from "@/hooks/useMatches";
 import { useRotationTable } from "@/hooks/useRotationTable";
-import { useScoreSheet } from "@/hooks/useScoreSheet";
+import { useScoreSheet, useScoreSheetController } from "@/hooks/useScoreSheet";
 import ScoreSheetCourt, { TouchedTarget, RegularSub } from "@/components/ScoreSheetCourt";
 import RadialMenu, { RadialMenuOption } from "@/components/RadialMenu";
 import ScoreSheetStats from "@/components/ScoreSheetStats";
@@ -44,24 +44,17 @@ type Gesture =
 
 export default function ScoreSheet() {
   const { id } = useParams<{ id: string }>();
-  const { match } = useMatchWithRoster(Number(id));
-
-  // 全部比賽清單 + 全部紀錄，用來組右側統計欄的多場列表。
-  // 注意：列表來的 match 不含名單（players 為空），只有「本場」（上面 useMatchWithRoster）
-  // 才有完整名單。其他場的逐球員統計要等 Phase 3b（計分紀錄也搬上 API）才會完整；目前
-  // 其他場的球員矩陣會是空的（buildPlayerMatrix 找不到球員就略過，不會壞）。
-  const { matches: allMatches } = useMatchList();
-  const recordingsByMatch = useScoreSheet((state) => state.recordingsByMatch);
+  const { match, isLoading: isMatchLoading } = useMatchWithRoster(Number(id));
 
   const setRoster = useRotationTable((state) => state.setRoster);
   const rotations = useRotationTable((state) => state.rotations);
 
   const record = useScoreSheet((state) => (id ? state.recordingsByMatch[id] : undefined));
-  const startSet = useScoreSheet((state) => state.startSet);
-  const scorePoint = useScoreSheet((state) => state.scorePoint);
-  const undoLastPoint = useScoreSheet((state) => state.undoLastPoint);
-  const nextSet = useScoreSheet((state) => state.nextSet);
   const setLiberoSubstitution = useScoreSheet((state) => state.setLiberoSubstitution);
+  // 記分/開局/復原/下一局改走 controller：本地即時更新畫面，同時在背景寫進後端
+  // sets/rallies/events；進頁時也由它從 API 重建這場的記錄。setLiberoSubstitution 仍留在
+  // store（純前端、不進 API，reload 後歸零——真正的自由球員持久化是 #43 的範圍）。
+  const { isHydrating, start, score, undo, goNextSet } = useScoreSheetController(id ?? "");
   // 這場比賽目前的自由球員替補狀態——現在跟著 matchId 存在 useScoreSheet 裡（見
   // types/scoresheet.ts 的說明），不會再跟別場比賽的計分表互相污染。
   const liberoSubstitution = record?.liberoSubstitution ?? null;
@@ -113,6 +106,15 @@ export default function ScoreSheet() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentSet?.ourRotation]);
 
+  // 比賽本體或計分記錄還在載入/重建時，先顯示載入狀態，避免在資料到位前閃現「誰先發球？」。
+  if (id && (isMatchLoading || isHydrating)) {
+    return (
+      <div className="flex min-h-screen w-full flex-col items-center justify-center gap-4 bg-white px-4 text-center">
+        <p className="text-muted-foreground">載入計分記錄中…</p>
+      </div>
+    );
+  }
+
   if (!match || !id) {
     return (
       <div className="flex min-h-screen w-full flex-col items-center justify-center gap-4 bg-white px-4 text-center">
@@ -129,13 +131,9 @@ export default function ScoreSheet() {
   const ourSetsWon = completedSets.filter((s) => s.ourScore > s.opponentScore).length;
   const opponentSetsWon = completedSets.filter((s) => s.opponentScore > s.ourScore).length;
 
-  // 統計欄的場次列表：本場第一，其他有紀錄的場次依日期由新到舊
-  const statsMatches = [
-    match,
-    ...allMatches
-      .filter((m) => m.id !== id && !!recordingsByMatch[m.id])
-      .sort((a, b) => new Date(b.dateTime).getTime() - new Date(a.dateTime).getTime()),
-  ];
+  // 統計欄目前只顯示「本場」。跨場統計需要「列出本使用者所有有記錄的場」的 API 策略，
+  // 留到 Phase 3b-ii（連同 events 讀回、球員矩陣重建）一起做。
+  const statsMatches = [match];
 
   const handlePlayerTouch = (target: TouchedTarget) => {
     if (selectedBenchPlayer && target.side === "us" && target.playerId) {
@@ -159,7 +157,7 @@ export default function ScoreSheet() {
       // 時邏輯相反過來，一樣是「這個動作方自己得分還是失分」。
       const actorSide = gesture.target.side;
       const side = outcome === "win" ? actorSide : actorSide === "us" ? "opponent" : "us";
-      scorePoint(id, side, {
+      score(side, {
         action: gesture.action,
         touchedBy: {
           side: gesture.target.side,
@@ -169,10 +167,10 @@ export default function ScoreSheet() {
       });
     } else if (gesture.step === "outcome-only") {
       // 「沒看到」沒有動作方可以參照，固定用我方視角（得分=我方加分）。
-      // 不帶 meta，scorePoint 本來就支援（見 useScoreSheet.ts 的
+      // 不帶 meta，score 本來就支援（見 useScoreSheet.ts 的
       // meta?: Pick<PointRecord, "action" | "touchedBy">），只更新比分/輪轉，
       // 不會生出任何動作/球員的紀錄。
-      scorePoint(id, outcome === "win" ? "us" : "opponent");
+      score(outcome === "win" ? "us" : "opponent");
     }
     setGesture(null);
   };
@@ -204,9 +202,9 @@ export default function ScoreSheet() {
 
   const handleNextSet = () => {
     setSubCountsHistory((prev) => [...prev, regularSubs.length]);
-    // nextSet 本身現在就會把 liberoSubstitution 歸零（見 hooks/useScoreSheet.ts），
+    // goNextSet 底層的 nextSet 現在就會把 liberoSubstitution 歸零（見 hooks/useScoreSheet.ts），
     // 這裡不用再另外呼叫一次。
-    nextSet(id);
+    goNextSet();
     setPreviousLiberoTarget(null);
     setRegularSubs([]);
     setSelectedBenchPlayer(null);
@@ -276,8 +274,8 @@ export default function ScoreSheet() {
                 <div className="flex flex-1 flex-col items-center justify-center gap-3">
                   <p className="text-sm font-bold">這局由誰先發球？</p>
                   <div className="flex gap-3">
-                    <Button onClick={() => startSet(id, "us")}>我方先發</Button>
-                    <Button variant="outline" onClick={() => startSet(id, "opponent")}>
+                    <Button onClick={() => start("us")}>我方先發</Button>
+                    <Button variant="outline" onClick={() => start("opponent")}>
                       對手先發
                     </Button>
                   </div>
@@ -319,7 +317,7 @@ export default function ScoreSheet() {
                     <Button
                       variant="ghost"
                       disabled={currentSet.history.length === 0}
-                      onClick={() => undoLastPoint(id)}
+                      onClick={() => undo()}
                     >
                       復原上一球
                     </Button>
@@ -363,7 +361,7 @@ export default function ScoreSheet() {
                 <div className="flex-1 overflow-y-auto">
                   <ScoreSheetStats
                     players={m.players}
-                    record={recordingsByMatch[m.id]}
+                    record={m.id === id ? record : undefined}
                     currentSetSubCount={m.id === id ? currentSubCount : undefined}
                     totalSubCount={m.id === id ? totalSubCount : undefined}
                   />

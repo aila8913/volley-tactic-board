@@ -25,6 +25,7 @@ export * from './player';
 export * from './playerRole';
 export * from './rally';
 export * from './rallyWinner';
+export * from './servingSide';
 export * from './tactic';
 export * from './tacticData';
 export * from './updateEvent';
