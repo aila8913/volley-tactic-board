@@ -9,25 +9,19 @@
 > Read this file, plus `gh issue list --state open` and recent `git log`, at the start
 > of a new session instead of re-exploring the whole codebase from scratch.
 
-_Last updated: 2026-07-05 (session: fixed #49 (tactics-view whiteboard didn't fill the
-middle panel) and #18 (libero waiting slot had no dedicated frame) together in
-`Court.tsx` — root cause of #49 was a missing background rect for the whiteboard's true
-letterboxed extent, not a broken CSS cascade. Opened PR #61; **not merged yet** — #49/#18
-should be closed in a future wrap-up once it lands, not now.)_
+_Last updated: 2026-07-06 (session: shipped **Phase 3b-i** (PR #62) — moved the
+scoresheet's scores/rotation off localStorage onto the backend `sets`/`rallies`/`events`
+API. Added `sets.firstServer` (the one non-derivable seed) + `DELETE /rallies/:id`, new
+`lib/scoreSheetMapping.ts` (rally-replay reconstruction, unit-tested), and rewrote
+`useScoreSheet` into a local-first store + `useScoreSheetController` (serialized
+write-queue + hydrate-on-mount). Verified end-to-end against the dev DB in the browser.
+Filed #63/#64 for two known limitations surfaced. #58 stays open for Phase 3b-ii.)_
 
 ## Current state
 
-- On `main`, latest commit `7c18743` (PR #60). This session's work sits on branch
-  `fix/whiteboard-libero-zone`, PR [#61](https://github.com/aila8913/volley-tatic-board/pull/61)
-  (open, not yet merged): `Court.tsx` reworked so the tactics-view whiteboard fills the
-  whole middle panel with a fixed 0px panel↔whiteboard gap and a 5px/10px
-  whiteboard↔court-element gap instead of tracking the court's own size (#49); the
-  libero waiting slot moved from an HTML row below the court into an in-canvas
-  dashed-red box behind zone 1 on both baselines, with an empty mirrored placeholder on
-  the opponent's baseline for visual symmetry (#18). Also fixed a real bug found during
-  testing: dropping a player into that red box was snapping onto court zone 1 via
-  `findNearestZone` instead of registering as "set starting libero" — `handleDrop` now
-  branches on `rawY > COURT_H` to call `setStartingLiberoId` instead.
+- On `main`, latest commit `7be823a` (PR #62). Both prior sessions' PRs (#61 tactics
+  whiteboard/libero, #60 Phase 3a) are merged. This session shipped Phase 3b-i (see the
+  match-recording bullet below for detail).
 - **Match-recording backend is now fully implemented server-side, and the frontend has
   started migrating off localStorage onto it.** See `docs/backend-architecture.md` for
   the full design + phased plan:
@@ -68,11 +62,26 @@ should be closed in a future wrap-up once it lands, not now.)_
     ids stable for Phase 3b's `events.playerId`. Verified end-to-end: dev-DB curl checks
     plus an actual browser session (create/list/edit/delete a match, roster round-trip,
     tactics board loading the roster from the API).
-  - **Phase 3b (part of #58, not started) — scoresheet (`sets`/`rallies`/`events`) off
-    localStorage.** Still needs a plan: mapping `PointRecord` (`hooks/useScoreSheet.ts`)
-    to rally/event writes, `us`/`opponent` ↔ `home`/`away`, and deciding whether
-    `ourRotation`/`opponentRotation` need to be stored or stay a derived value. Real
-    prerequisite for persisting #42/#43.
+  - **Phase 3b-i (part of #58, PR #62) — scoresheet scores/rotation off localStorage,
+    done.** Decided `ourRotation`/`opponentRotation`/`serving`/per-point `wasSideOut` are
+    all **derived** by replaying the rally-winner sequence — the only non-derivable seed
+    is "who served first", so `sets` gained a `firstServer` (home/away) column (+ a new
+    `DELETE /rallies/:id` for undo; events FK-cascade). New `lib/scoreSheetMapping.ts`
+    (unit-tested) holds `us↔home`, `PointRecord→rally(+event)`, and
+    `reconstructSetFromRallies`. `useScoreSheet` rewritten **local-first + background
+    write**: pure Zustand reducers still update the UI instantly, but `persist` is gone
+    and a new `useScoreSheetController` owns (a) a serialized write-queue that POSTs each
+    rally/event and DELETEs on undo, and (b) hydrate-on-mount that rebuilds the store
+    from `useListSets` + per-set `listRallies`. Verified end-to-end in the browser
+    against the dev DB (score→persist→undo→delete→reload rebuild). **Events are written
+    but not yet read back** — per-player stats are empty after reload until 3b-ii.
+  - **Phase 3b-ii (part of #58, not started) — events read-back → player stats.** Extend
+    `reconstructSetFromRallies` to also fetch each rally's events and restore
+    `action`/`touchedBy` on `PointRecord` so `ScoreSheetStats`'s player matrix survives a
+    reload; restore the multi-match stats panel (needs a "list my matches with
+    recordings" strategy — 3b-i shows current match only). Real prerequisite for
+    persisting #42/#43. Two known 3b-i limitations filed: #63 (empty next-set reload
+    quirk), #64 (background-write failures aren't reconciled).
 - **Process note: #58 got auto-closed by accident, then reopened.** A PR #60 body edit
   said "本 PR 不 close #58" (intending to _not_ trigger GitHub's auto-close), but GitHub's
   closing-keyword detection is a dumb substring match on "close #58" — it doesn't parse
@@ -145,11 +154,11 @@ events.ts`'s `eventActionEnum` — `types/scoresheet.ts`.
   (PR #30), offline `docs/flow-diagrams.html` (PR #31, now also carries issue-number
   cross-references added this session for #35–#45 via issue #34's fix).
 - Backend match-recording API is **fully implemented server-side** (Phases 0–2 + the
-  Phase 3a gap-fill: all of matches/players/sets/rallies/events CRUD is live and
-  dev-DB-verified). The frontend now calls the matches/players portion of it (Phase 3a,
-  see above); the scoresheet still reads/writes localStorage only (Phase 3b, #58,
-  not started) — that's the remaining piece before #51's advanced-tier work or a real
-  stats page.
+  3a/3b-i gap-fills: matches/players/sets/rallies/events CRUD, plus `sets.firstServer`
+  and `DELETE /rallies/:id`, all live and dev-DB-verified). The frontend now calls the
+  matches/players portion (Phase 3a) **and the scoresheet's scores/rotation (Phase 3b-i,
+  PR #62)**. What's left: Phase 3b-ii reads `events` back so per-player stats survive a
+  reload (#58) — the remaining piece before #51's advanced-tier work or a real stats page.
 - **New human-facing onboarding docs exist** (PR #33), written for a teammate who is new
   to programming/Git/GitHub/AI-agent collaboration (design/PM background):
   - Root [`README.md`](../README.md) — project one-liner, points first to
@@ -254,11 +263,15 @@ status — the list below is a snapshot, not guaranteed up to date):
   依發球方做情境限制（發球/接發互斥）。
 - [#51](https://github.com/aila8913/volley-tatic-board/issues/51) — 進階版：動作子分
   類、犯規類型與 Outcome 細節擴充（#22 的後續，見上方 Current state）。Backend 地基
-  已完全就緒（Phase 0/1/2/3a），仍需 Phase 3b（#58，計分表接線）才能真正落地。
+  已完全就緒（Phase 0/1/2/3a/3b-i），仍需 Phase 3b-ii（#58，events 讀回）才能真正落地。
 - [#58](https://github.com/aila8913/volley-tatic-board/issues/58) — 後端 Phase 3b：
-  計分表（sets/rallies/events）從 localStorage 切到 API。Phase 3a（matches + 名單）
-  已在 PR #60 完成，這個 issue 內容已改為只描述剩下的計分表這半（needs-plan；也是
+  計分表切到 API。Phase 3a（matches + 名單，PR #60）與 **Phase 3b-i（比分/輪轉，PR #62）
+  已完成**，issue 現在只剩 **Phase 3b-ii**（events 讀回 → 球員統計 + 跨場統計面板；也是
   #42/#43 真正持久化的前提）。完整設計見 `docs/backend-architecture.md`。
+- [#63](https://github.com/aila8913/volley-tatic-board/issues/63) — 3b-i 已知限制：剛按
+  「下一局」但未開球的空局還沒寫進後端，reload 後會退回顯示上一局（低優先 edge case）。
+- [#64](https://github.com/aila8913/volley-tatic-board/issues/64) — 3b-i 取捨：背景寫入
+  API 失敗只記 log、不回滾/reconcile（dev/單人堪用；部署前要處理，關聯 #26）。
 
 ## Recently closed
 
