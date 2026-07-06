@@ -1,9 +1,10 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
-import { db, eventsTable } from "@workspace/db";
+import { eq, getTableColumns } from "drizzle-orm";
+import { db, eventsTable, ralliesTable, setsTable } from "@workspace/db";
 import { mockAuth } from "../middleware/mockAuth";
-import { rallyBelongsToUser, eventBelongsToUser } from "../lib/ownership";
+import { rallyBelongsToUser, eventBelongsToUser, matchBelongsToUser } from "../lib/ownership";
 import {
+  ListMatchEventsParams,
   ListEventsParams,
   CreateEventParams,
   CreateEventBody,
@@ -18,6 +19,32 @@ import {
 // 所以改用 eventBelongsToUser 一路 join 回 match 驗擁有權）。
 const router: IRouter = Router();
 router.use(mockAuth);
+
+// GET /matches/:matchId/events — 一次拿整場比賽的所有 event（跨 set/rally）。
+// 前端進頁重建計分表時用這一支，取代「對每個 rally 各發一次請求」的 N+1。
+// events 自己沒存 matchId，所以 join events→rallies→sets，用 sets.matchId 過濾；
+// 先驗 match 屬於這個 user（跟 sets/players 一樣的擁有權檢查）。
+// 依 rallyId、sequence 排序，前端拿到後就能直接依 rallyId 分組、每組取 sequence 最小的那球。
+router.get("/matches/:matchId/events", async (req, res) => {
+  const { matchId } = ListMatchEventsParams.parse(req.params);
+
+  if (!(await matchBelongsToUser(matchId, req.userId))) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+
+  // getTableColumns(eventsTable) 讓 select 只回傳 events 的欄位（扁平的 MatchEvent 形狀），
+  // 不會因為 join 而變成 { events: {...}, rallies: {...} } 的巢狀結構。
+  const events = await db
+    .select(getTableColumns(eventsTable))
+    .from(eventsTable)
+    .innerJoin(ralliesTable, eq(eventsTable.rallyId, ralliesTable.id))
+    .innerJoin(setsTable, eq(ralliesTable.setId, setsTable.id))
+    .where(eq(setsTable.matchId, matchId))
+    .orderBy(eventsTable.rallyId, eventsTable.sequence);
+
+  res.json(events);
+});
 
 // GET /rallies/:rallyId/events — 列出這一分的所有球，依 sequence 排序（第 1 球、第 2 球…）
 router.get("/rallies/:rallyId/events", async (req, res) => {

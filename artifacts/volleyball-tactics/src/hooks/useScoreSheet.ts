@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { useQueries } from "@tanstack/react-query";
 import {
   useListSets,
+  useListMatchEvents,
   useCreateSet,
   useCreateRally,
   useCreateEvent,
@@ -10,6 +11,7 @@ import {
   listRallies,
   getListRalliesQueryKey,
 } from "@workspace/api-client-react";
+import type { MatchEvent } from "@workspace/api-client-react";
 import {
   ScoreSheetState,
   PointRecord,
@@ -251,18 +253,31 @@ export function useScoreSheetController(matchId: string) {
       queryFn: () => listRallies(s.id),
     })),
   });
+  // 整場所有 event 一次抓（bulk endpoint），避免對每個 rally 各發一次請求。3b-ii 靠它把
+  // 球員動作補回重建的 PointRecord，reload 後球員統計才不會空。
+  const eventsQuery = useListMatchEvents(numericMatchId);
 
   const setsReady = setsQuery.isSuccess;
   const ralliesReady = ralliesQueries.every((q) => q.isSuccess);
-  const isHydrating = !setsReady || (sets.length > 0 && !ralliesReady);
+  const eventsReady = eventsQuery.isSuccess;
+  const isHydrating = !setsReady || !eventsReady || (sets.length > 0 && !ralliesReady);
 
   // 只在資料第一次備妥時重建一次，之後不再覆蓋（避免把使用者當下的即時編輯洗掉）。
   // matchId 變了就允許再重建一次。
   const hydratedMatchRef = useRef<string | null>(null);
   useEffect(() => {
     if (hydratedMatchRef.current === matchId) return;
-    if (!setsReady) return;
+    if (!setsReady || !eventsReady) return;
     if (sets.length > 0 && !ralliesReady) return;
+
+    // 把整場的 event 依 rallyId 分組，餵給 reconstruct 還原每一分的動作/球員。
+    // endpoint 已依 rallyId、sequence 排序，所以同一組內是照 sequence 排好的。
+    const eventsByRallyId = new Map<number, MatchEvent[]>();
+    for (const ev of eventsQuery.data ?? []) {
+      const list = eventsByRallyId.get(ev.rallyId);
+      if (list) list.push(ev);
+      else eventsByRallyId.set(ev.rallyId, [ev]);
+    }
 
     let state: ScoreSheetState;
     if (sets.length === 0) {
@@ -271,9 +286,9 @@ export function useScoreSheetController(matchId: string) {
     } else {
       // 慣例：最後一局（setNumber 最大）當「進行中」，前面的都當「已結束」。schema 沒有
       // 「這局結束了嗎」的旗標，所以無法區分「剛按下一局但還沒開球」的空局——那個未開球的
-      // 新局還沒寫進後端（要選完先發方才建 set row），reload 後會退回顯示上一局，屬已知限制。
+      // 新局還沒寫進後端（要選完先發方才建 set row），reload 後會退回顯示上一局，屬已知限制（#63）。
       const completedSets: CompletedSet[] = sets.slice(0, -1).map((s, i) => {
-        const st = reconstructSetFromRallies(s, ralliesQueries[i].data ?? []);
+        const st = reconstructSetFromRallies(s, ralliesQueries[i].data ?? [], eventsByRallyId);
         return {
           setNumber: st.setNumber,
           ourScore: st.ourScore,
@@ -285,6 +300,7 @@ export function useScoreSheetController(matchId: string) {
       const currentSet = reconstructSetFromRallies(
         sets[lastIdx],
         ralliesQueries[lastIdx].data ?? [],
+        eventsByRallyId,
       );
       state = { currentSet, completedSets, liberoSubstitution: null };
     }
@@ -297,9 +313,9 @@ export function useScoreSheetController(matchId: string) {
 
     hydrate(matchId, state);
     hydratedMatchRef.current = matchId;
-    // ralliesQueries 是每次 render 重建的陣列，放進依賴會抖動；用 ralliesReady 當旗標即可。
+    // ralliesQueries / eventsQuery.data 每次 render 重建，放進依賴會抖動；用 *Ready 旗標即可。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [matchId, setsReady, ralliesReady, sets.length]);
+  }, [matchId, setsReady, ralliesReady, eventsReady, sets.length]);
 
   // ── 動作（本地即時 + 背景持久化）──
 

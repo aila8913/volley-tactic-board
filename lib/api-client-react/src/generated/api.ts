@@ -940,6 +940,83 @@ export const useCreateSet = <TError = ErrorType<unknown>,
       return useMutation(getCreateSetMutationOptions(options));
     }
 
+export const getListMatchEventsUrl = (matchId: number,) => {
+
+
+
+
+  return `/api/matches/${matchId}/events`
+}
+
+/**
+ * @summary List all events for a match (across all its sets/rallies), for rebuilding the scoresheet
+ */
+export const listMatchEvents = async (matchId: number, options?: RequestInit): Promise<MatchEvent[]> => {
+
+  return customFetch<MatchEvent[]>(getListMatchEventsUrl(matchId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListMatchEventsQueryKey = (matchId: number,) => {
+    return [
+    `/api/matches/${matchId}/events`
+    ] as const;
+    }
+
+
+export const getListMatchEventsQueryOptions = <TData = Awaited<ReturnType<typeof listMatchEvents>>, TError = ErrorType<unknown>>(matchId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMatchEvents>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListMatchEventsQueryKey(matchId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listMatchEvents>>> = ({ signal }) => listMatchEvents(matchId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(matchId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listMatchEvents>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListMatchEventsQueryResult = NonNullable<Awaited<ReturnType<typeof listMatchEvents>>>
+export type ListMatchEventsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List all events for a match (across all its sets/rallies), for rebuilding the scoresheet
+ */
+
+export function useListMatchEvents<TData = Awaited<ReturnType<typeof listMatchEvents>>, TError = ErrorType<unknown>>(
+ matchId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMatchEvents>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListMatchEventsQueryOptions(matchId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
 export const getListRalliesUrl = (setId: number,) => {
 
 

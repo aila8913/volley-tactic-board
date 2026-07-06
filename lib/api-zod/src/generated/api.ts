@@ -193,6 +193,34 @@ export const CreateSetBody = zod.object({
 
 
 /**
+ * @summary List all events for a match (across all its sets/rallies), for rebuilding the scoresheet
+ */
+export const ListMatchEventsParams = zod.object({
+  "matchId": zod.coerce.number()
+})
+
+export const ListMatchEventsResponseItem = zod.object({
+  "id": zod.number(),
+  "rallyId": zod.number(),
+  "sequence": zod.number(),
+  "side": zod.enum(['home', 'away']),
+  "playerId": zod.number().nullish(),
+  "action": zod.enum(['serve', 'receive', 'set', 'attack', 'block', 'dig']),
+  "ballType": zod.enum(['serve', 'spike', 'tip', 'chance']).optional(),
+  "quality": zod.number().nullish(),
+  "fromX": zod.number().nullish(),
+  "fromY": zod.number().nullish(),
+  "toX": zod.number().nullish(),
+  "toY": zod.number().nullish(),
+  "tags": zod.array(zod.string()),
+  "note": zod.string().nullish(),
+  "videoTimestamp": zod.number().nullish(),
+  "source": zod.enum(['live', 'review'])
+})
+export const ListMatchEventsResponse = zod.array(ListMatchEventsResponseItem)
+
+
+/**
  * @summary List rallies for a set
  */
 export const ListRalliesParams = zod.object({
