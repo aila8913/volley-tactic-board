@@ -173,7 +173,8 @@ export const ListSetsParams = zod.object({
 export const ListSetsResponseItem = zod.object({
   "id": zod.number(),
   "matchId": zod.number(),
-  "setNumber": zod.number()
+  "setNumber": zod.number(),
+  "firstServer": zod.enum(['home', 'away'])
 })
 export const ListSetsResponse = zod.array(ListSetsResponseItem)
 
@@ -186,7 +187,8 @@ export const CreateSetParams = zod.object({
 })
 
 export const CreateSetBody = zod.object({
-  "setNumber": zod.number()
+  "setNumber": zod.number(),
+  "firstServer": zod.enum(['home', 'away'])
 })
 
 
@@ -273,6 +275,14 @@ export const CreateEventBody = zod.object({
   "note": zod.string().nullish(),
   "videoTimestamp": zod.number().nullish(),
   "source": zod.enum(['live', 'review'])
+})
+
+
+/**
+ * @summary Delete a rally (e.g. undo the last point; cascades to its events)
+ */
+export const DeleteRallyParams = zod.object({
+  "rallyId": zod.coerce.number()
 })
 
 

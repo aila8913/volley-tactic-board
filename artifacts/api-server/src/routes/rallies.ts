@@ -2,8 +2,13 @@ import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
 import { db, ralliesTable } from "@workspace/db";
 import { mockAuth } from "../middleware/mockAuth";
-import { setBelongsToUser } from "../lib/ownership";
-import { ListRalliesParams, CreateRallyParams, CreateRallyBody } from "@workspace/api-zod";
+import { setBelongsToUser, rallyBelongsToUser } from "../lib/ownership";
+import {
+  ListRalliesParams,
+  CreateRallyParams,
+  CreateRallyBody,
+  DeleteRallyParams,
+} from "@workspace/api-zod";
 
 // 一局（set）裡的各個 rally（一分）。掛在 set 底下，操作前先驗這個 set 屬於這個使用者，
 // 驗的方式是往上追到 set 所屬 match 的 userId（見 lib/ownership.ts 的 setBelongsToUser）。
@@ -54,6 +59,23 @@ router.post("/sets/:setId/rallies", async (req, res) => {
     .returning();
 
   res.status(201).json(created);
+});
+
+// DELETE /rallies/:rallyId — 刪掉一整分（前端「復原上一球」用）。
+// 路徑上只有 rallyId，所以擁有權要靠 rallyBelongsToUser 往上 join 兩層追到 match.userId。
+// events.rallyId 是 onDelete: cascade（見 lib/db/src/schema/events.ts），所以刪 rally 會連帶
+// 清掉它底下記的每一球，不用自己先刪 events。
+router.delete("/rallies/:rallyId", async (req, res) => {
+  const { rallyId } = DeleteRallyParams.parse(req.params);
+
+  if (!(await rallyBelongsToUser(rallyId, req.userId))) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+
+  await db.delete(ralliesTable).where(eq(ralliesTable.id, rallyId));
+
+  res.status(204).end();
 });
 
 export default router;

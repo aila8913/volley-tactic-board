@@ -265,6 +265,17 @@ paths:
               schema:
                 $ref: "#/components/schemas/MatchEvent"
 
+  /rallies/{rallyId}:
+    parameters:
+      - $ref: "#/components/parameters/RallyId"
+    delete:
+      operationId: deleteRally
+      tags: [matches]
+      summary: Delete a rally (e.g. undo the last point; cascades to its events)
+      responses:
+        "204":
+          description: Deleted
+
   /tactics:
     get:
       operationId: listTactics
@@ -530,6 +541,12 @@ components:
         role:
           $ref: "#/components/schemas/PlayerRole"
 
+    # 這一局由哪一方先發球（home = 我方、away = 對方）。前端計分表的比分/輪轉/發球方
+    # 都能從「先發方 + 各 rally 的 winner」重算，唯獨先發方推不出來，所以存在 set 上。
+    ServingSide:
+      type: string
+      enum: [home, away]
+
     MatchSet:
       type: object
       properties:
@@ -539,14 +556,18 @@ components:
           type: integer
         setNumber:
           type: integer
-      required: [id, matchId, setNumber]
+        firstServer:
+          $ref: "#/components/schemas/ServingSide"
+      required: [id, matchId, setNumber, firstServer]
 
     NewSet:
       type: object
       properties:
         setNumber:
           type: integer
-      required: [setNumber]
+        firstServer:
+          $ref: "#/components/schemas/ServingSide"
+      required: [setNumber, firstServer]
 
     RallyWinner:
       type: string

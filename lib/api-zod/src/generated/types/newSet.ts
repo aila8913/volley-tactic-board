@@ -5,7 +5,9 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { ServingSide } from './servingSide';
 
 export interface NewSet {
   setNumber: number;
+  firstServer: ServingSide;
 }

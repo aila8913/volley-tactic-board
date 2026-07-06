@@ -68,14 +68,24 @@ export interface UpdatePlayer {
   role?: PlayerRole;
 }
 
+export type ServingSide = typeof ServingSide[keyof typeof ServingSide];
+
+
+export const ServingSide = {
+  home: 'home',
+  away: 'away',
+} as const;
+
 export interface MatchSet {
   id: number;
   matchId: number;
   setNumber: number;
+  firstServer: ServingSide;
 }
 
 export interface NewSet {
   setNumber: number;
+  firstServer: ServingSide;
 }
 
 export type RallyWinner = typeof RallyWinner[keyof typeof RallyWinner];
