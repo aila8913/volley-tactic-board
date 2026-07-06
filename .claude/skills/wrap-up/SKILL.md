@@ -40,6 +40,17 @@ numbers.
      whether they're still valid.
    - New gaps/ideas surfaced this session that aren't already tracked → candidate to
      create as new issues.
+   - **Stale but still-valid issues → candidate to _update_ (not close).** An issue can
+     stay open and correct in intent while its _body_ goes out of date because this
+     session changed the surrounding reality. Check every open issue this session touched
+     the neighbourhood of: does its problem statement, "相關程式碼" line refs, or
+     assumptions still match the code? Typical triggers: a prerequisite got built (so the
+     blocker described in the body is gone), a referenced file/function was renamed or
+     moved, or the body explains the mechanism using something that no longer exists.
+     Don't rewrite issues wholesale for style — only when a future reader would be
+     _misled_ by the current text. (This session: #58 shipping made #42's body claim
+     "比分/輪轉靠 Zustand persist 所以會留著" false — persist was removed for API
+     hydration — so #42 was still valid but its body needed correcting.)
    - If `docs/tactics-board-todo.md` (or any other legacy TODO doc) still has unmigrated
      items relevant to this session's work, flag that migrating them to issues is still
      pending — don't silently let them rot.
@@ -58,15 +69,23 @@ numbers.
    ```
    Close:
      #12 "..." — looks finished by commit abc123 (does X)
+   Update:
+     #42 "..." — body now stale: <what changed> → <what to fix>
    Create:
      "..." — surfaced this session: <one-line reason>
    ```
 
    Wait for explicit confirmation (or edits) before running any `gh issue close` /
-   `gh issue create` command. Don't ask about read-only commands like `gh issue list`.
+   `gh issue edit` / `gh issue create` command. Don't ask about read-only commands like
+   `gh issue list`.
 
 4. **Execute the confirmed changes.**
    - Close: `gh issue close <n> --comment "Resolved by <commit-hash-or-summary>"`
+   - Update a stale body: `gh issue edit <n> --body-file <file>` (write the corrected body
+     to a temp file first — multi-line bodies are error-prone inline). Fix only the parts
+     that went stale; keep the rest. Add/adjust labels in the same call when the update
+     changes scope (e.g. `--add-label needs-plan` once a prerequisite turns it into a
+     design decision).
    - Create: `gh issue create --title "..." --body "..."` — write bodies with enough
      context that a future session (or future you) understands _why_, not just _what_.
      Apply labels per the taxonomy in [CONTRIBUTING.md](../../../CONTRIBUTING.md) — type
