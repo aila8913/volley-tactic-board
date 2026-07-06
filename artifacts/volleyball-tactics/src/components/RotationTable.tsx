@@ -4,7 +4,8 @@ import { useRotationTable } from "../hooks/useRotationTable";
 import { useTacticsBoard } from "../hooks/useTacticsBoard";
 import { useRoster, useSaveRoster } from "../hooks/useMatches";
 import { MatchPlayer } from "../types/match";
-import RotationThumbnails from "./RotationThumbnails";
+import { isLineupComplete } from "../lib/rotationLogic";
+import RotationSwitcher from "./RotationSwitcher";
 import RosterEditDialog from "./RosterEditDialog";
 
 export default function RotationTable() {
@@ -29,7 +30,8 @@ export default function RotationTable() {
     }
   };
 
-  const hasRotations = rotations.some((r) => r.positions.length > 0);
+  // 「排好」= 至少一輪站滿 6 人（共用判定，跟計分表 hasLineup 同一條規則，見 issue #37）。
+  const hasRotations = isLineupComplete(rotations);
 
   // 目前輪次場上的球員 id，用來在名單上標示「已上場」。
   const onCourtIds = new Set(rotations[currentRotation].positions.map((p) => p.playerId));
@@ -107,7 +109,7 @@ export default function RotationTable() {
         {hasRotations && (
           <section>
             <h2 className="font-display mb-1 text-[15px] font-bold">輪次選擇</h2>
-            <RotationThumbnails />
+            <RotationSwitcher />
             <div className="flex gap-2 mt-1">
               <button
                 onClick={handleResetRotation}

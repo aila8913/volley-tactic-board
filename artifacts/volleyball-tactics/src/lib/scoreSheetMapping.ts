@@ -22,6 +22,19 @@ export function apiToSide(value: "home" | "away"): Side {
   return value === "home" ? "us" : "opponent";
 }
 
+// ── 局末勝負判定（issue #45）──
+// 排球規則：一般局先得 25 分、決勝局（第 5 局）先得 15 分，且都必須「淨勝 2 分以上」才算
+// 贏下這一局（24:24 之後進入 deuce，要打到領先 2 分為止，理論上沒有上限）。
+// 注意：這個 app 不會自動判定局末——「下一局」是教練手動按的按鈕——所以這裡不是用來
+// 自動封局，只是給 UI 判斷「現在按下一局，比分到底達標了沒」，沒達標就跳出確認提醒，
+// 避免 0:0 之類的空局被誤封存成一局。
+export function isSetComplete(setNumber: number, ourScore: number, opponentScore: number): boolean {
+  const target = setNumber >= 5 ? 15 : 25;
+  const leader = Math.max(ourScore, opponentScore);
+  const diff = Math.abs(ourScore - opponentScore);
+  return leader >= target && diff >= 2;
+}
+
 // ── PointRecord → rally ──
 // 一個 PointRecord 就是一分 = 一個 rally。homeScore/awayScore 存的是「這分開始前」的比分
 // （後端設計，見 lib/db/src/schema/rallies.ts），所以呼叫端要把記這分之前的比分傳進來。

@@ -108,8 +108,28 @@ export const useRotationTable = create<RotationTableStore>()(
         set((state) => {
           const liberos = roster.filter((p) => p.role === "L");
           const currentStillExists = liberos.some((p) => p.id === state.startingLiberoId);
+
+          // 幽靈站位清理（issue #35）：名單裡被刪掉的球員，如果還卡在某個輪次的
+          // 站位（rotations[].positions）或自由球員替補紀錄（liberoReplacement）裡，
+          // Court.tsx 找不到球員就不渲染，畫面看起來正常，但那格其實還被佔著、
+          // 既看不到也選不到。所以存檔名單時要順手把指向「已不存在球員」的站位掃掉。
+          const validIds = new Set(roster.map((p) => p.id));
+          const rotations = state.rotations.map((rot) => {
+            const positions = rot.positions.filter((pos) => validIds.has(pos.playerId));
+            // liberoReplacement 記錄「被 L 換下場的人」，若這個 L 本人或被換下的人
+            // 已從名單移除，這筆替補紀錄就沒意義了，一併清掉避免殘留。
+            const replacement =
+              rot.liberoReplacement &&
+              validIds.has(rot.liberoReplacement.liberoId) &&
+              validIds.has(rot.liberoReplacement.replacedPosition.playerId)
+                ? rot.liberoReplacement
+                : null;
+            return { ...rot, positions, liberoReplacement: replacement };
+          });
+
           return {
             roster,
+            rotations,
             startingLiberoId: currentStillExists
               ? state.startingLiberoId
               : (liberos[0]?.id ?? null),

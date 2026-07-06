@@ -1,3 +1,18 @@
+import type { RotationPositions } from "../types/rotationTable";
+
+// 「先發是否已排好」的共用判定（issue #37）。
+// 輪轉表的 hasRotations 與計分表的 hasLineup 原本各自寫一份
+// `rotations.some((r) => r.positions.length > 0)`——只要「任何一輪有任何一個人」就放行，
+// 連 1~5 人的半套陣容也算排好，而且兩處還各判各的、改一邊會漏另一邊（同一根因、兩份實作）。
+// 這裡收斂成單一定義：至少要有一輪站滿 6 個人才算排好。
+// 為什麼是 positions.length >= 6 就等於「滿員」、而且不必特別檢查自由球員：
+// 自由球員上場是「頂替掉某個人」（被頂替者存到 liberoReplacement，不留在 positions），
+// 所以 positions 存的一直是「場上實際幾個人」——滿員永遠是 6，跟有沒有派 L 無關。
+// （產品決策：門檻是「至少 6 人」，不強制一定要指定自由球員。）
+export function isLineupComplete(rotations: RotationPositions[]): boolean {
+  return rotations.some((r) => r.positions.length >= 6);
+}
+
 // 6 個球場格子的座標基準（0~1 normalized，跟戰術板球場 SVG 的 viewBox 對齊）。
 // 編號照排球規則：1 號位是發球輪到的右後場，逆時針 1→6→5→4→3→2→1 依序輪轉。
 const zoneCoords = {

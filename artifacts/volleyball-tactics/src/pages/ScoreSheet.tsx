@@ -10,6 +10,8 @@ import ScoreSheetCourt, { TouchedTarget, RegularSub } from "@/components/ScoreSh
 import RadialMenu, { RadialMenuOption } from "@/components/RadialMenu";
 import ScoreSheetStats from "@/components/ScoreSheetStats";
 import { PlayAction } from "@/types/scoresheet";
+import { isSetComplete } from "@/lib/scoreSheetMapping";
+import { isLineupComplete } from "@/lib/rotationLogic";
 
 // 6 大類跟 lib/db/src/schema/events.ts 的 eventActionEnum 對齊（見
 // types/scoresheet.ts 的說明）。陣列順序就是 RadialMenu 從正上方順時針排列的順序，
@@ -124,7 +126,9 @@ export default function ScoreSheet() {
     );
   }
 
-  const hasLineup = rotations.some((r) => r.positions.length > 0);
+  // 開始記錄前要求先發已排好 = 至少一輪站滿 6 人（共用判定，跟輪轉表 hasRotations
+  // 同一條規則，避免半套陣容就放行；見 issue #37）。
+  const hasLineup = isLineupComplete(rotations);
   const completedSets = record?.completedSets ?? [];
   const currentSubCount = regularSubs.length;
   const totalSubCount = subCountsHistory.reduce((a, b) => a + b, 0) + currentSubCount;
@@ -201,6 +205,19 @@ export default function ScoreSheet() {
   };
 
   const handleNextSet = () => {
+    // 勝局條件檢查（issue #45）：一般局 25 分、決勝局 15 分，且都要領先 2 分以上才算贏。
+    // 這裡不強制擋下（教練可能有特殊情況想提早結束），但比分沒達標就先跳確認，
+    // 避免 0:0 之類的空局被誤按成一局封存。
+    if (
+      currentSet &&
+      !isSetComplete(currentSet.setNumber, currentSet.ourScore, currentSet.opponentScore)
+    ) {
+      const target = currentSet.setNumber >= 5 ? 15 : 25;
+      const ok = window.confirm(
+        `目前比分 ${currentSet.ourScore}:${currentSet.opponentScore}，還沒達到勝局條件（${target} 分且領先 2 分以上）。\n確定要結束這一局、進入下一局嗎？`,
+      );
+      if (!ok) return;
+    }
     setSubCountsHistory((prev) => [...prev, regularSubs.length]);
     // goNextSet 底層的 nextSet 現在就會把 liberoSubstitution 歸零（見 hooks/useScoreSheet.ts），
     // 這裡不用再另外呼叫一次。
