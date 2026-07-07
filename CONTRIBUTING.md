@@ -31,13 +31,14 @@ label。看到陌生的 label 可以回來查這張表。
 
 ### 範疇 Area（屬於技術棧哪一塊）
 
-| label           | 說明                        |
-| --------------- | --------------------------- |
-| `area:frontend` | React 前端元件與互動邏輯    |
-| `area:design`   | 視覺設計、UX 流程           |
-| `area:backend`  | Express API 與後端邏輯      |
-| `area:db`       | 資料庫 schema、Drizzle 相關 |
-| `area:infra`    | 部署、build、環境變數設定   |
+| label           | 說明                                                                           |
+| --------------- | ------------------------------------------------------------------------------ |
+| `area:frontend` | React 前端元件與互動邏輯                                                       |
+| `area:design`   | 視覺設計、UX 流程                                                              |
+| `area:backend`  | Express API 與後端邏輯                                                         |
+| `area:db`       | 資料庫 schema、Drizzle 相關                                                    |
+| `area:infra`    | 部署、build、環境變數設定                                                      |
+| `area:product`  | 產品層次：定位、使用者場景、功能分層等概念設計（動程式碼之前的「想清楚」工作） |
 
 ### 流程 Workflow（目前卡在哪個階段）
 
