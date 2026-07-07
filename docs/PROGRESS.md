@@ -9,51 +9,41 @@
 > Read this file, plus `gh issue list --state open` and recent `git log`, at the start
 > of a new session instead of re-exploring the whole codebase from scratch.
 
-_Last updated: 2026-07-07 (session: this update folds in **two sessions' worth of changes**
-that never got their own wrap-up. First, PR #69/#70 (2026-07-06, prior session): fixed
-ghost rotation leftovers when deleting a roster player (#35), added a win-condition guard
-before archiving a set as complete (#45), converged the rotation table's and scoresheet's
-lineup-completeness checks into one shared `isLineupComplete` (#37), replaced the 6-thumbnail
-rotation picker with a prev/next `RotationSwitcher` (part of #17), decided **not** to build
-first-serve/first-receive toggling (#25, closed as won't-do). PR #70 immediately followed to
-fix an infinite-render bug #69 introduced: `setRoster` rebuilt the `rotations` array on every
-call even when nothing needed cleaning, so a `useEffect` that called `setRoster` on every
-render kept getting a fresh array reference back, looped forever — fixed by only replacing
-the `rotations` reference when a ghost position was actually removed.
-Then, this session: went issue-hunting for quick wins, found **#36 was already resolved**
-by the earlier tactics/rotation-table snapshot decoupling (PR #30) — closed with no code
-change needed. For **#38** (匯出6輪PNG has no interaction lock during export), decided the
-lock-mechanism complexity wasn't worth it for a minor convenience feature and **deleted the
-feature entirely** instead (PR #71) — removed `handleExportAllPNG` + its button, and the
-stale T1 known-issue entry in `docs/flow-diagrams.html`. While wrapping up, corrected #17's
-body: it referenced `handleExportAllPNG` (now gone) and files that no longer exist
-(`LeftPanel.tsx`/`RightPanel.tsx`/`RotationThumbnails.tsx` — all merged/replaced), and had
-overstated its rotation-picker section as fully done when the button-removal and
-gating-condition parts of that section are still outstanding.)_
+_Last updated: 2026-07-07 (session: **product-level session, no feature code.**
+產品定位正式定案並文件化（PR #78）：原型 TA＝系隊裡用 Excel＋慢速回放算數據的夥伴、
+擴散 TA＝球經/業餘教練、差異化＝「新增」防守維度（非 defense-only）、wow 點＝球線分布圖、分享刻意最小化
+（v1 單帳號）、裝置形態 PWA 優先（App 上架費是 US$99/年不是數萬，真門檻是第二
+codebase 維護）。新增 `area:product` 標籤與五個產品設計 issues **#73–#77**（事件
+文法／記錄成本預算／離線契約+PWA／生命週期閉環／定位落地與帳號模型），新文件
+`docs/product-vision.md`（定位本文）與 `docs/marketing-page-draft.md`（募資頁草稿，
+產品命名提案「球跡 BallTrace」），並修正 `docs/spec-index.md` 嚴重過時的進度清單。
+Housekeeping：GitHub repo 已改名 `volley-tatic-board` → `volley-tactic-board`（拼字
+修正，舊網址自動轉址，本地 remote 已更新）；清掉 12 條已合併的本地舊分支＋失效
+worktree（其中 5 條因權限設定需使用者手動 `git branch -D`）；`ship` skill 的
+co-author 行從寫死的 "Claude Sonnet 4.6" 改為「用當前模型名」。發現本地有一個
+`gitsafe-backup` remote（`git://gitsafe:5418/backup.git`），已向使用者確認來源中。)_
 
 ## Current state
 
-- On `main`, latest commit `966174a` (PR #71). Recent PRs #71 (removed 匯出6輪PNG), #70
-  (fixed an infinite-render regression from #69), #69 (ghost rotations #35, set-completion
-  guard #45, `isLineupComplete` convergence #37, rotation-switcher part of #17), #67
-  (libero rule unification), #66 (Phase 3b-ii), #62 (3b-i), #61 (tactics whiteboard/libero),
-  #60 (Phase 3a) all merged. **Phase 3 is fully done and #58 is closed** (see the
-  match-recording bullet below).
-- **This session: closed #36 and #38, corrected #17.** #36 ("removeFromCourt 移除球員邏輯
-  分散在兩個 store") turned out to already be resolved — the tactics/rotation-table
-  snapshot-decoupling refactor (PR #30) had already made `PlayerNode.tsx`'s
-  `removeFromCourt()` branch if/else by `courtView` instead of calling both stores'
-  remove-functions together; the issue's premise no longer matched the code, closed with
-  no change. #38 (匯出6輪PNG 匯出過程沒鎖住其他操作) — decided the interaction-lock fix
-  wasn't worth the complexity for this minor convenience button, so the feature
-  (`handleExportAllPNG` + its button) was deleted outright instead of patched; also
-  removed the now-stale T1 known-issue entry from `docs/flow-diagrams.html`. #17's body
-  was corrected to match current reality: the `handleExportAllPNG` reference in its
-  hamburger-menu draft is gone, file paths updated (`LeftPanel.tsx`/`RightPanel.tsx` →
-  `TacticsBoardPanel.tsx`, `RotationThumbnails.tsx` → `RotationSwitcher.tsx`), and its
-  rotation-picker section downgraded from "done" to "partially done" — the thumbnail→
-  switcher swap happened (PR #69) but the "remove 重置站位/清除畫筆 buttons" and "remove
-  the `isLineupComplete` gating" parts of that section are still outstanding.
+- On `main`, latest commit `cb7ed29` (PR #78, docs-only). Before that: #72 (PROGRESS
+  update), #71 (removed 匯出6輪PNG), #70/#69 (scoresheet/rotation fixes), #67 (libero
+  rule unification), #66/#62/#60 (Phase 3). **Phase 3 is fully done and #58 is closed**
+  (see the match-recording bullet below).
+- **This session: product positioning + the `area:product` issue series (#73–#77).**
+  Product direction is now written down, not just in heads:
+  - `docs/product-vision.md` — 定位本文：一句話定位、TA（原型＝Excel 慢放算數據的
+    系隊夥伴；擴散＝球經）、防守導向差異化、球線分布 wow 點、分享最小化（v1 單帳號、
+    無多人）、PWA 優先與理由、影片畫質風險與緩解。是功能取捨的上位判斷依據。
+  - `docs/marketing-page-draft.md` — 依募資課程模板填的行銷頁架構草稿；產品命名提案
+    **「球跡 BallTrace」**（與「球技」諧音）；盲測/直覺/偏見調查等未執行項目誠實標
+    【從缺】，商業/智財標【未驗證】。
+  - 新 label **`area:product`**（青綠色，CONTRIBUTING.md 的 Area 表已補）＋五個
+    產品設計 issues：**#73** 事件文法領域模型（最不可逆，統計⇐events 純函數推導）、
+    **#74** 記錄成本預算（依賴 #73；單人賽中操作上限，簡易/進階分界）、**#75** 離線
+    可靠性契約＋PWA（收斂 #63/#64、擋 #26）、**#76** 生命週期閉環（餵 #65/#17）、
+    **#77** 定位落地與 v1 帳號模型（餵 #26）。建議順序 #73→#74 最優先。
+  - `docs/spec-index.md` 的進度清單修正（原本還寫「後端 routes 尚未實作」，實際
+    Phase 0–3 全完成）；導覽表加入 product-vision。
 - **Match-recording backend is now fully implemented server-side, and the frontend has
   started migrating off localStorage onto it.** See `docs/backend-architecture.md` for
   the full design + phased plan:
@@ -284,6 +274,18 @@ events.ts`'s `eventActionEnum` — `types/scoresheet.ts`.
 Tracked in GitHub Issues (open backlog, check `gh issue list --state open` for current
 status — the list below is a snapshot, not guaranteed up to date):
 
+- **`area:product` 系列（#73–#77，2026-07-07 新開）**——動程式碼前的概念設計層，
+  上位依據是 `docs/product-vision.md`：
+  [#73](https://github.com/aila8913/volley-tactic-board/issues/73) 事件文法領域模型
+  （最優先、最不可逆）→
+  [#74](https://github.com/aila8913/volley-tactic-board/issues/74) 記錄成本預算
+  （依賴 #73，決定 #50/#51/#21 的分層）、
+  [#75](https://github.com/aila8913/volley-tactic-board/issues/75) 離線可靠性契約＋PWA
+  （收斂 #63/#64、擋 #26）、
+  [#76](https://github.com/aila8913/volley-tactic-board/issues/76) 生命週期閉環
+  （餵 #65/#17）、
+  [#77](https://github.com/aila8913/volley-tactic-board/issues/77) 定位落地與 v1 帳號
+  模型（餵 #26）。
 - [#17](https://github.com/aila8913/volley-tatic-board/issues/17) — UX 重整：視圖控制
   流程、輪次選擇簡化、頁首漢堡選單. **Status per part:** part 1 (Sheet-based saved-tactics
   list) and part 3 (hamburger menu) not started. Part 2 (rotation picker) partially done
@@ -305,8 +307,8 @@ status — the list below is a snapshot, not guaranteed up to date):
   towards resolving #21's open "落點要精確座標還是號位" question in favor of precise
   coordinates (zone becomes a derived display value, not an input field).
 - [#24](https://github.com/aila8913/volley-tatic-board/issues/24) — 複製比賽。
-- [#25](https://github.com/aila8913/volley-tatic-board/issues/25) — 先發/先接切換。
-- [#26](https://github.com/aila8913/volley-tatic-board/issues/26) — 部署準備。
+- [#26](https://github.com/aila8913/volley-tatic-board/issues/26) — 部署準備。上游的
+  設計決定在 #75（離線契約）與 #77（auth 形態）。
 - [#50](https://github.com/aila8913/volley-tatic-board/issues/50) — 計分表動作選項應
   依發球方做情境限制（發球/接發互斥）。
 - [#51](https://github.com/aila8913/volley-tatic-board/issues/51) — 進階版：動作子分

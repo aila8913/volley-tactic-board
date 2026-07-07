@@ -66,7 +66,9 @@ Commit message rules for this repo:
 
 - **Title**: concise, in **Traditional Chinese** (繁體中文), starts with a verb
   (實作、修正、新增、重構…).
-- **Trailer** (required): `Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>`
+- **Trailer** (required): `Co-Authored-By: Claude <目前的模型名> <noreply@anthropic.com>`
+  — 用實際跑這個 session 的模型（例如 `Claude Fable 5`），不要寫死版本號，
+  不然模型換代後這行就過時了。
 
 Before committing, show the proposed message and ask the user to confirm or edit it.
 
@@ -80,7 +82,7 @@ Use a heredoc so multi-line messages are passed correctly:
 git commit -m "$(cat <<'EOF'
 <message title>
 
-Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+Co-Authored-By: Claude <目前的模型名> <noreply@anthropic.com>
 EOF
 )"
 ```
