@@ -2,21 +2,26 @@
 
 這份文件是「比賽記錄與分析」這組新功能的規格入口，串接下面三份文件：
 
-| 文件 | 內容 | 真正的規格來源 |
-| --- | --- | --- |
-| [product-spec.md](./product-spec.md) | 要做什麼、為什麼（賽中記錄、賽後補填、防守數據分析） | 這份文件本身 |
-| [db-schema-spec.md](./db-schema-spec.md) | 資料表關係總覽 | `lib/db/src/schema/*.ts`（程式碼） |
-| [api-spec.md](./api-spec.md) | API endpoint 總覽 | `lib/api-spec/openapi.yaml`（程式碼） |
+| 文件                                     | 內容                                                           | 真正的規格來源                        |
+| ---------------------------------------- | -------------------------------------------------------------- | ------------------------------------- |
+| [product-vision.md](./product-vision.md) | 產品定位：給誰用、差異化、亮點、裝置形態（比下面三份更上一層） | 這份文件本身                          |
+| [product-spec.md](./product-spec.md)     | 要做什麼、為什麼（賽中記錄、賽後補填、防守數據分析）           | 這份文件本身                          |
+| [db-schema-spec.md](./db-schema-spec.md) | 資料表關係總覽                                                 | `lib/db/src/schema/*.ts`（程式碼）    |
+| [api-spec.md](./api-spec.md)             | API endpoint 總覽                                              | `lib/api-spec/openapi.yaml`（程式碼） |
 
 ## 目前進度
 
-- [x] 產品規格寫完
+- [x] 產品規格寫完；產品定位補寫於 [product-vision.md](./product-vision.md)（2026-07-07）
 - [x] DB schema 寫完並通過 typecheck（`matches` / `players` / `sets` / `rallies` / `events`）
 - [x] OpenAPI 規格寫完，已跑過 `codegen` 重新產生 `lib/api-client-react` / `lib/api-zod`
-- [ ] 後端 routes 尚未實作（`artifacts/api-server/src/routes/` 目前只有 `/healthz`）
-- [ ] 前端頁面尚未串接（`/matches` 相關頁面還沒開始寫）
-- [ ] DB schema 尚未 push 到真正的資料庫（需要先有 `DATABASE_URL`）
-- [ ] 「嗆司」的精確定義還沒跟使用者確認（影響防守數據分析怎麼分類）
+- [x] 後端 routes 全部實作完成（matches/players/sets/rallies/events + tactics/health，
+      Phase 0–2，見 `docs/backend-architecture.md`）
+- [x] 前端已串接並脫離 localStorage（matches/名單/比分/輪轉/events 讀回，Phase 3a/3b，#58 已關）
+- [x] DB schema 已 push 到 dev 資料庫並實測
+- [ ] 「嗆司」的精確定義還沒跟使用者確認（影響防守數據分析怎麼分類）——現在追蹤於 #73
+      （事件文法領域模型）
+- [ ] 進階版記錄（動作子分類/座標/品質分）尚未實作——上位設計見 `area:product` 系列
+      issues（#73–#77）
 
 ## 為什麼分成三份文件而不是一份
 
