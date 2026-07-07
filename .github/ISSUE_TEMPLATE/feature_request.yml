@@ -1,0 +1,27 @@
+name: 功能提案
+description: 新功能或功能改進的需求
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 想解決什麼問題
+      description: 先寫 why —— 未來回頭看這張 issue 時才知道需求的動機
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 提案內容
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: 範圍備註（選填）
+      description: 範圍很大、動手前要先討論設計的話，送出後補上 `needs-plan` label
+  - type: markdown
+    attributes:
+      value: >
+        送出後記得補上一個 `area:*` label（frontend / design / backend / db /
+        infra / product）——分類表見 CONTRIBUTING.md 的「Issue Label 說明」。

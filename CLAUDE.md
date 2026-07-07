@@ -75,7 +75,11 @@ matchMapping.test.ts`, `src/types/match.test.ts`). No test framework exists for 
   issue #58 for the remaining migration piece.
 
 `pnpm run typecheck` remains the main automated check across the whole monorepo; `pnpm run test` currently
-only exercises volleyball-tactics (the only package with a `test` script so far).
+only exercises volleyball-tactics (the only package with a `test` script so far). Both run automatically on
+every PR via GitHub Actions (`.github/workflows/ci.yml`) — prefer `gh pr checks` over re-running locally
+when shipping. `pnpm run lint` and `prettier --check .` are NOT in CI yet: the existing codebase doesn't
+fully pass them (15 eslint errors, ~200 unformatted files as of 2026-07-07) — clean those up before adding
+the steps, don't add them first.
 
 ## Workflow notes
 

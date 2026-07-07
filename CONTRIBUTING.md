@@ -19,6 +19,10 @@
 一個 issue 通常會貼「1 個類型 + 1 個範疇 + 0~1 個流程 + 0~1 個優先程度」，最多 4 個
 label。看到陌生的 label 可以回來查這張表。
 
+開新 issue 時優先用 [issue 表單](../../issues/new/choose)（Bug 回報／功能提案）——表單會
+強制填必要欄位並自動貼上對應的 type label，你只需要再補一個 `area:*`。chore／question
+這類不適合表單的，仍可開空白 issue 手動貼 label。
+
 ### 類型 Type（這是什麼性質的工作）
 
 | label           | 說明                                          |
@@ -62,8 +66,12 @@ label。看到陌生的 label 可以回來查這張表。
 - 開新工作前先開 feature branch，不要直接在 `main` 上 commit——細節跟原因見
   `.claude/skills/ship/SKILL.md` 的「Why branch before commit」章節，簡單說是為了避免
   squash merge 之後 local `main` 跟 `origin/main` 分歧。
+- PR 描述照 `.github/PULL_REQUEST_TEMPLATE.md` 的結構填（開 PR 時 GitHub 會自動帶入）。
 - PR 用 squash merge 合併進 `main`，合併後會自動刪除來源分支。
-- 目前唯一的自動化檢查是 `pnpm run typecheck`，合併前建議跑一次。
+- PR 開啟後 CI（GitHub Actions，見 `.github/workflows/ci.yml`）會自動跑
+  `pnpm run typecheck` + `pnpm run test`，等綠燈再合併即可，不用在本地重跑。
+  （`pnpm run lint` 和 `prettier --check` 還沒進 CI——存量程式碼尚未全數通過，
+  清完之後才會加進去。）
 
 ## 標籤/流程之後要調整怎麼辦
 

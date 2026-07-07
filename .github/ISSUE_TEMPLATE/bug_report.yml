@@ -1,0 +1,37 @@
+name: Bug 回報
+description: 程式運作不如預期、壞掉的東西
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: 發生了什麼事
+      description: 實際看到的行為，有截圖更好
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: 重現步驟
+      placeholder: |
+        1. 開啟 ...
+        2. 點擊 ...
+        3. 看到 ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 預期行為
+    validations:
+      required: true
+  - type: textarea
+    id: code-refs
+    attributes:
+      label: 相關程式碼（選填）
+      description: 檔案路徑或 function 名稱，知道多少寫多少
+  - type: markdown
+    attributes:
+      value: >
+        送出後記得補上一個 `area:*` label（frontend / design / backend / db /
+        infra / product）——分類表見 CONTRIBUTING.md 的「Issue Label 說明」。
