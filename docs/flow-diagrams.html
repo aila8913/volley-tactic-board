@@ -933,11 +933,10 @@ stateDiagram-v2
           <h3>分享匯出（兩種模式都看得到）</h3>
         </div>
         <div class="step-row">
-          <div class="step">匯出 PNG / 匯出 6 輪 PNG</div>
+          <div class="step">匯出 PNG</div>
           <div class="step">匯出 JSON（buildSnapshot 直接輸出）</div>
           <div class="step">匯入 JSON（importState 分派給兩個 store）</div>
         </div>
-        <span class="warn">⚠ T1</span>
       </div>
     </div>
   </section>
@@ -1029,18 +1028,6 @@ stateDiagram-v2
     <p class="eyebrow">Part 2 · 已知問題</p>
     <h2>戰術板 — 已知問題與缺口</h2>
     <div class="bug-list">
-      <div class="bug">
-        <div class="bug-num">T1</div>
-        <div class="bug-body">
-          <b>匯出 6 輪 PNG 會暫時搶走 currentRotation</b
-          ><span
-            >依序切 6 次輪次、每次等 300ms
-            再匯出，過程中沒有鎖住其他操作，使用者手動切輪次可能跟自動匯出的切換打架。</span
-          ><br /><span class="ref"
-            >components/TacticsBoardPanel.tsx · handleExportAllPNG() · issue #38</span
-          >
-        </div>
-      </div>
       <div class="bug">
         <div class="bug-num">T2</div>
         <div class="bug-body">

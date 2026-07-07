@@ -135,17 +135,6 @@ export default function TacticsBoardPanel() {
     toast({ title: "匯出成功", description: "PNG 下載中..." });
   };
 
-  const handleExportAllPNG = async () => {
-    toast({ title: "匯出中", description: "即將下載多個檔案..." });
-    const originalRotation = currentRotation;
-    for (let i = 0; i < 6; i++) {
-      setCurrentRotation(i);
-      await new Promise((resolve) => setTimeout(resolve, 300));
-      exportCourtAsPng("court-wrapper", `${situationLabel}_輪次${i + 1}`);
-    }
-    setCurrentRotation(originalRotation);
-  };
-
   // 匯出 JSON：直接用 buildSnapshot() 組出完整資料，不再直接讀 localStorage 的原始字串——
   // 拆成兩個 store 之後，「目前狀態」分散在 volleyboard_rotationtable 跟
   // volleyboard_tacticsboard 兩把 localStorage key 裡，靠字串組合會很脆弱，
@@ -649,13 +638,6 @@ export default function TacticsBoardPanel() {
             data-testid="button-export-png"
           >
             匯出 PNG
-          </button>
-          <button
-            onClick={handleExportAllPNG}
-            className="wobbly-border py-1.5 bg-white text-xs hover:bg-[#CCFF00] font-bold"
-            data-testid="button-export-all-png"
-          >
-            匯出6輪PNG
           </button>
           <button
             onClick={handleExportJSON}
