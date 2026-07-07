@@ -48,19 +48,15 @@ numbers.
      blocker described in the body is gone), a referenced file/function was renamed or
      moved, or the body explains the mechanism using something that no longer exists.
      Don't rewrite issues wholesale for style — only when a future reader would be
-     _misled_ by the current text. (This session: #58 shipping made #42's body claim
-     "比分/輪轉靠 Zustand persist 所以會留著" false — persist was removed for API
-     hydration — so #42 was still valid but its body needed correcting.)
+     _misled_ by the current text.
    - If `docs/tactics-board-todo.md` (or any other legacy TODO doc) still has unmigrated
      items relevant to this session's work, flag that migrating them to issues is still
      pending — don't silently let them rot.
    - **Before writing an issue body from a legacy doc, verify its claims against the
      actual current code** — grep for the function/field the doc says doesn't exist yet.
      Docs describing "not implemented" work can go stale the moment a later commit
-     implements it without updating the doc. (This bit us once: issues #10/#11 were
-     created straight from `docs/tactics-board-todo.md` without checking that a later
-     commit — the Postgres storage migration — had already implemented most of #10 and
-     fully fixed #11. Don't repeat that; read the code, not just the doc, before filing.)
+     implements it without updating the doc. Read the code, not just the doc, before
+     filing.
 
 3. **Propose, don't execute blindly.** Creating/closing GitHub issues is a visible,
    shared-state action (per this project's general safety rules) — always show the user

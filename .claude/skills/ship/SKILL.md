@@ -110,19 +110,9 @@ retrying — don't just re-run blindly.
 Use `gh pr create` to open the PR. Draft the title and body first, show them to the
 user, and ask for any edits before submitting.
 
-PR body template:
-
-```
-## Summary
-- <bullet 1>
-- <bullet 2>
-
-## Test plan
-- [ ] <what to manually verify>
-- [ ] typecheck passes (`pnpm run typecheck`)
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
-```
+The PR body structure lives in `.github/PULL_REQUEST_TEMPLATE.md` — follow it
+(Summary bullets + Test plan checklist), and end the body with
+`🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
 
 Explain: "gh pr create 透過 GitHub CLI 直接開 Pull Request。PR 是讓程式碼在合併進
 main 之前被看過、討論的機會，也留下修改記錄。"
@@ -146,8 +136,10 @@ Print the returned PR URL so the user can click through to GitHub.
 
 Before merging:
 
-1. Run `pnpm run typecheck` (the only automated check in this repo) and show the result.
-2. Tell the user: "typecheck 通過才代表型別沒有問題，但功能正不正確還是要自己測過。"
+1. Wait for CI to go green: `gh pr checks <PR-number> --watch`. The CI workflow
+   (`.github/workflows/ci.yml`) runs `pnpm run typecheck` + `pnpm run test` on every
+   PR — don't re-run them locally, that's what CI is for.
+2. Tell the user: "CI 綠燈代表型別和現有測試都過了，但功能正不正確還是要自己測過。"
 
 If the user confirms, proceed:
 
