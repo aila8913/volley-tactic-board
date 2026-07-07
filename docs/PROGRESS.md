@@ -9,23 +9,51 @@
 > Read this file, plus `gh issue list --state open` and recent `git log`, at the start
 > of a new session instead of re-exploring the whole codebase from scratch.
 
-_Last updated: 2026-07-06 (session: shipped **Phase 3b-ii** (PR #66) — events read-back so
-per-player stats survive a reload, via a bulk `GET /matches/:id/events` endpoint (avoids
-~250-request N+1) + `eventToMeta`/events-aware `reconstructSetFromRallies`; fixed a real
-`DELETE /matches` 500 (events→players FK needed `onDelete: "set null"`). **This closed
-#58 — all of Phase 3 (3a + 3b-i + 3b-ii) is done.** Then shipped **#43** (PR #67):
-unified the libero "back-row only" rule — the scoresheet had its own `y <= 0.75` while the
-rotation table used the shared `BACK_ROW_ZONES`; extracted `isBackRowPosition(x,y)` into
-`rotationLogic.ts` (unit-tested) so both derive from one source. Also refreshed #42's stale
-body (+`needs-plan`). Note: the 3b-ii ship never got its own wrap-up, so this update folds
-in both 3b-ii and #43. New follow-up #65 (dedicated cross-match analytics page) filed last
-session.)_
+_Last updated: 2026-07-07 (session: this update folds in **two sessions' worth of changes**
+that never got their own wrap-up. First, PR #69/#70 (2026-07-06, prior session): fixed
+ghost rotation leftovers when deleting a roster player (#35), added a win-condition guard
+before archiving a set as complete (#45), converged the rotation table's and scoresheet's
+lineup-completeness checks into one shared `isLineupComplete` (#37), replaced the 6-thumbnail
+rotation picker with a prev/next `RotationSwitcher` (part of #17), decided **not** to build
+first-serve/first-receive toggling (#25, closed as won't-do). PR #70 immediately followed to
+fix an infinite-render bug #69 introduced: `setRoster` rebuilt the `rotations` array on every
+call even when nothing needed cleaning, so a `useEffect` that called `setRoster` on every
+render kept getting a fresh array reference back, looped forever — fixed by only replacing
+the `rotations` reference when a ghost position was actually removed.
+Then, this session: went issue-hunting for quick wins, found **#36 was already resolved**
+by the earlier tactics/rotation-table snapshot decoupling (PR #30) — closed with no code
+change needed. For **#38** (匯出6輪PNG has no interaction lock during export), decided the
+lock-mechanism complexity wasn't worth it for a minor convenience feature and **deleted the
+feature entirely** instead (PR #71) — removed `handleExportAllPNG` + its button, and the
+stale T1 known-issue entry in `docs/flow-diagrams.html`. While wrapping up, corrected #17's
+body: it referenced `handleExportAllPNG` (now gone) and files that no longer exist
+(`LeftPanel.tsx`/`RightPanel.tsx`/`RotationThumbnails.tsx` — all merged/replaced), and had
+overstated its rotation-picker section as fully done when the button-removal and
+gating-condition parts of that section are still outstanding.)_
 
 ## Current state
 
-- On `main`, latest commit `2ec8cce` (PR #67, libero rule unification). Recent PRs #66
-  (Phase 3b-ii), #62 (3b-i), #61 (tactics whiteboard/libero), #60 (Phase 3a) all merged.
-  **Phase 3 is fully done and #58 is closed** (see the match-recording bullet below).
+- On `main`, latest commit `966174a` (PR #71). Recent PRs #71 (removed 匯出6輪PNG), #70
+  (fixed an infinite-render regression from #69), #69 (ghost rotations #35, set-completion
+  guard #45, `isLineupComplete` convergence #37, rotation-switcher part of #17), #67
+  (libero rule unification), #66 (Phase 3b-ii), #62 (3b-i), #61 (tactics whiteboard/libero),
+  #60 (Phase 3a) all merged. **Phase 3 is fully done and #58 is closed** (see the
+  match-recording bullet below).
+- **This session: closed #36 and #38, corrected #17.** #36 ("removeFromCourt 移除球員邏輯
+  分散在兩個 store") turned out to already be resolved — the tactics/rotation-table
+  snapshot-decoupling refactor (PR #30) had already made `PlayerNode.tsx`'s
+  `removeFromCourt()` branch if/else by `courtView` instead of calling both stores'
+  remove-functions together; the issue's premise no longer matched the code, closed with
+  no change. #38 (匯出6輪PNG 匯出過程沒鎖住其他操作) — decided the interaction-lock fix
+  wasn't worth the complexity for this minor convenience button, so the feature
+  (`handleExportAllPNG` + its button) was deleted outright instead of patched; also
+  removed the now-stale T1 known-issue entry from `docs/flow-diagrams.html`. #17's body
+  was corrected to match current reality: the `handleExportAllPNG` reference in its
+  hamburger-menu draft is gone, file paths updated (`LeftPanel.tsx`/`RightPanel.tsx` →
+  `TacticsBoardPanel.tsx`, `RotationThumbnails.tsx` → `RotationSwitcher.tsx`), and its
+  rotation-picker section downgraded from "done" to "partially done" — the thumbnail→
+  switcher swap happened (PR #69) but the "remove 重置站位/清除畫筆 buttons" and "remove
+  the `isLineupComplete` gating" parts of that section are still outstanding.
 - **Match-recording backend is now fully implemented server-side, and the frontend has
   started migrating off localStorage onto it.** See `docs/backend-architecture.md` for
   the full design + phased plan:
@@ -257,11 +285,14 @@ Tracked in GitHub Issues (open backlog, check `gh issue list --state open` for c
 status — the list below is a snapshot, not guaranteed up to date):
 
 - [#17](https://github.com/aila8913/volley-tatic-board/issues/17) — UX 重整：視圖控制
-  流程、輪次選擇改成純數字按鈕、頁首漢堡選單。**Note:** this session's work went the
-  opposite direction on part of this — it kept (and even cross-store-wired) the
-  "重置站位"/"清除畫筆" buttons that #17 wanted removed, and `RotationThumbnails.tsx`
-  still shows visual dot-thumbnails rather than plain numbers. Not a deliberate rejection
-  of #17, just unrelated work — worth reconciling before implementing #17.
+  流程、輪次選擇簡化、頁首漢堡選單. **Status per part:** part 1 (Sheet-based saved-tactics
+  list) and part 3 (hamburger menu) not started. Part 2 (rotation picker) partially done
+  by PR #69 — thumbnails replaced by a prev/next `RotationSwitcher` (different design than
+  spec'd, but the same "remove visual clutter" goal), but the "重置站位"/"清除畫筆" buttons
+  it wanted removed are still in `RotationTable.tsx`, and the picker is still gated behind
+  `isLineupComplete` rather than always showing. Issue body corrected this session to
+  reflect current file layout and drop the reference to the now-deleted
+  `handleExportAllPNG` (#38).
 - [#19](https://github.com/aila8913/volley-tatic-board/issues/19) — 計分表（
   `pages/ScoreSheet.tsx`, issue body still says `MatchRecording.tsx`) UI 簡化與調整,
   placeholder issue depending on #20/#21.
@@ -294,6 +325,13 @@ status — the list below is a snapshot, not guaranteed up to date):
 
 ## Recently closed
 
+- #38 — 匯出6輪PNG 過程沒鎖住其他操作。決定不補鎖機制，直接砍掉整個功能（PR #71）。
+- #36 — 輪轉表/戰術板移除球員邏輯分散兩個 store。複查發現 PR #30 的快照解耦重構已經
+  解決，`removeFromCourt()` 現在 if/else 二選一，不需額外重構。
+- #35 — 輪轉表刪除球員留下幽靈站位，PR #69 修正（`setRoster` 一併清殘留站位）。
+- #45 — 計分表「下一局」沒有勝負判斷，PR #69 加上 `isSetComplete` 勝局條件檢查。
+- #37 — 先發/排陣完整度檢查太寬鬆，PR #69 收斂到共用 `isLineupComplete`。
+- #25 — 先發/先接切換，討論後決定不做（使用者自行溝通即可），非技術限制。
 - #58 — 後端 Phase 3：計分表從 localStorage 切到 API。Phase 3a（matches+名單，PR #60）、
   3b-i（比分/輪轉，PR #62）、3b-ii（events 讀回 → 球員統計，PR #66）三段全部完成，計分表
   已完全脫離 localStorage。跨場統計拆到獨立的 #65。
