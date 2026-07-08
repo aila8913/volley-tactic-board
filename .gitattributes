@@ -1,0 +1,15 @@
+# 行尾字元（line ending）統一規則 —— 為什麼需要這個檔案：
+#
+# Windows 的換行是 CRLF（\r\n），Linux/macOS 是 LF（\n）。git 在 Windows 上預設
+# core.autocrlf=true：commit 時轉成 LF 存進 repo、checkout 時轉回 CRLF 給工作目錄。
+# 問題是 Prettier 要求 LF，於是「repo 裡明明是乾淨的 LF，本機 prettier --check
+# 卻整片紅」（CI 在 Linux 上 checkout 出來是 LF，所以 CI 反而會過）——兩邊結果
+# 不一致，檢查就失去意義。
+#
+# 這裡宣告：所有文字檔在「repo 裡」和「工作目錄裡」都一律用 LF。
+# .gitattributes 的優先權高於每個人本機的 core.autocrlf 設定，所以團隊每台機器
+# 行為一致。現代編輯器（VS Code 等）處理 LF 完全沒問題。
+#
+# text=auto：讓 git 自動判斷哪些是文字檔（二進位檔如圖片不會被動到）。
+# eol=lf   ：文字檔 checkout 到工作目錄時也保持 LF（不轉 CRLF）。
+* text=auto eol=lf
