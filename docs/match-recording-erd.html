@@ -315,16 +315,12 @@
 
 <div class="wrap">
   <header class="page">
-    <p class="eyebrow">
-      Volley Tactics Board · docs/db-schema-spec.md 討論草稿
-    </p>
+    <p class="eyebrow">Volley Tactics Board · docs/db-schema-spec.md 討論草稿</p>
     <h1>比賽記錄 ERD — 簡易版／進階版共用同一張 events 表</h1>
     <p>
-      Match → Players / Sets → Rallies → Events
-      的巢狀關係維持原樣；今天討論的結論反映在
+      Match → Players / Sets → Rallies → Events 的巢狀關係維持原樣；今天討論的結論反映在
       <code class="mono">events</code>
-      的欄位標記上——簡易版（賽中快速記分）點選目標（我方球員／對手(全體)／沒看到）
-      → 選動作 →
+      的欄位標記上——簡易版（賽中快速記分）點選目標（我方球員／對手(全體)／沒看到） → 選動作 →
       選得失分，只填綠點與圈選欄位；進階版（賽後補填）才會用到藍點欄位。
       「沒看到」這條路徑完全不建立 event，只直接記在
       <code class="mono">rallies</code> 上。
@@ -333,18 +329,10 @@
 
   <div class="legend">
     <div class="item"><span class="badge pk">PK</span> 主鍵</div>
-    <div class="item">
-      <span class="badge fk">FK</span> 外鍵（指向上層實體）
-    </div>
-    <div class="item">
-      <span class="pip both"></span> 兩版都會填（簡易版即可）
-    </div>
-    <div class="item">
-      <span class="pip advanced"></span> 僅進階版填寫（nullable）
-    </div>
-    <div class="item">
-      <span class="pip opp"></span> 對手(全體)時留空（nullable）
-    </div>
+    <div class="item"><span class="badge fk">FK</span> 外鍵（指向上層實體）</div>
+    <div class="item"><span class="pip both"></span> 兩版都會填（簡易版即可）</div>
+    <div class="item"><span class="pip advanced"></span> 僅進階版填寫（nullable）</div>
+    <div class="item"><span class="pip opp"></span> 對手(全體)時留空（nullable）</div>
     <div class="item" style="color: var(--muted)">灰字＝可為 null</div>
   </div>
 
@@ -379,33 +367,26 @@
 
       <!-- Match -->
       <div class="entity" id="ent-match">
-        <header>
-          <span class="name">matches</span><span class="table-tag">比賽</span>
-        </header>
+        <header><span class="name">matches</span><span class="table-tag">比賽</span></header>
         <div class="fields">
           <div class="field">
             <span class="badge pk">PK</span><span class="col-name">id</span
             ><span class="col-type">serial</span>
           </div>
           <div class="field">
-            <span></span><span class="col-name">name</span
-            ><span class="col-type">text</span>
+            <span></span><span class="col-name">name</span><span class="col-type">text</span>
           </div>
           <div class="field">
-            <span></span><span class="col-name">date</span
-            ><span class="col-type">timestamptz</span>
+            <span></span><span class="col-name">date</span><span class="col-type">timestamptz</span>
           </div>
           <div class="field">
-            <span></span><span class="col-name">opponent</span
-            ><span class="col-type">text</span>
+            <span></span><span class="col-name">opponent</span><span class="col-type">text</span>
           </div>
           <div class="field nullable">
-            <span></span><span class="col-name">location</span
-            ><span class="col-type">text?</span>
+            <span></span><span class="col-name">location</span><span class="col-type">text?</span>
           </div>
           <div class="field nullable">
-            <span></span><span class="col-name">videoUrl</span
-            ><span class="col-type">text?</span>
+            <span></span><span class="col-name">videoUrl</span><span class="col-type">text?</span>
           </div>
           <div class="field">
             <span></span><span class="col-name">createdAt</span
@@ -416,10 +397,7 @@
 
       <!-- Players -->
       <div class="entity" id="ent-players">
-        <header>
-          <span class="name">players</span
-          ><span class="table-tag">球員名單</span>
-        </header>
+        <header><span class="name">players</span><span class="table-tag">球員名單</span></header>
         <div class="fields">
           <div class="field">
             <span class="badge pk">PK</span><span class="col-name">id</span
@@ -430,16 +408,13 @@
             ><span class="col-type">→ matches</span>
           </div>
           <div class="field">
-            <span></span><span class="col-name">name</span
-            ><span class="col-type">text</span>
+            <span></span><span class="col-name">name</span><span class="col-type">text</span>
           </div>
           <div class="field">
-            <span></span><span class="col-name">number</span
-            ><span class="col-type">int</span>
+            <span></span><span class="col-name">number</span><span class="col-type">int</span>
           </div>
           <div class="field">
-            <span></span><span class="col-name">role</span
-            ><span class="col-type">enum(5)</span>
+            <span></span><span class="col-name">role</span><span class="col-type">enum(5)</span>
           </div>
         </div>
         <div class="footnote">名單掛在比賽底下，不是獨立球隊實體。</div>
@@ -447,9 +422,7 @@
 
       <!-- Sets -->
       <div class="entity" id="ent-sets">
-        <header>
-          <span class="name">sets</span><span class="table-tag">局</span>
-        </header>
+        <header><span class="name">sets</span><span class="table-tag">局</span></header>
         <div class="fields">
           <div class="field">
             <span class="badge pk">PK</span><span class="col-name">id</span
@@ -460,8 +433,7 @@
             ><span class="col-type">→ matches</span>
           </div>
           <div class="field">
-            <span></span><span class="col-name">setNumber</span
-            ><span class="col-type">int</span>
+            <span></span><span class="col-name">setNumber</span><span class="col-type">int</span>
           </div>
         </div>
       </div>
@@ -469,8 +441,7 @@
       <!-- Rallies -->
       <div class="entity" id="ent-rallies">
         <header>
-          <span class="name">rallies</span
-          ><span class="table-tag">一分（一個來回）</span>
+          <span class="name">rallies</span><span class="table-tag">一分（一個來回）</span>
         </header>
         <div class="fields">
           <div class="field">
@@ -482,16 +453,13 @@
             ><span class="col-type">→ sets</span>
           </div>
           <div class="field">
-            <span></span><span class="col-name">rallyNumber</span
-            ><span class="col-type">int</span>
+            <span></span><span class="col-name">rallyNumber</span><span class="col-type">int</span>
           </div>
           <div class="field">
-            <span></span><span class="col-name">homeScore</span
-            ><span class="col-type">int</span>
+            <span></span><span class="col-name">homeScore</span><span class="col-type">int</span>
           </div>
           <div class="field">
-            <span></span><span class="col-name">awayScore</span
-            ><span class="col-type">int</span>
+            <span></span><span class="col-name">awayScore</span><span class="col-type">int</span>
           </div>
           <div class="field">
             <span></span><span class="col-name">winner</span
@@ -499,17 +467,15 @@
           </div>
         </div>
         <div class="footnote">
-          得失分依據就是 <code style="color: var(--text)">winner</code>，不會在
-          event 上重複記一次。「我方球員」「對手(全體)」都會建立 1 個
-          event；「沒看到」則完全不建立 event，直接記在這張表上。
+          得失分依據就是 <code style="color: var(--text)">winner</code>，不會在 event
+          上重複記一次。「我方球員」「對手(全體)」都會建立 1 個 event；「沒看到」則完全不建立
+          event，直接記在這張表上。
         </div>
       </div>
 
       <!-- Events -->
       <div class="entity" id="ent-events">
-        <header>
-          <span class="name">events</span><span class="table-tag">一球</span>
-        </header>
+        <header><span class="name">events</span><span class="table-tag">一球</span></header>
         <div class="fields">
           <div class="field">
             <span class="badge pk">PK</span><span class="col-name">id</span
@@ -520,8 +486,7 @@
             ><span class="col-type">→ rallies</span>
           </div>
           <div class="field">
-            <span class="tier-pip both"></span
-            ><span class="col-name">sequence</span
+            <span class="tier-pip both"></span><span class="col-name">sequence</span
             ><span class="col-type">int</span>
           </div>
           <div class="field">
@@ -530,60 +495,47 @@
           </div>
           <div class="field nullable">
             <span class="tier-pip opp"></span>
-            <span class="col-name"
-              >playerId <span class="badge fk">FK</span></span
+            <span class="col-name">playerId <span class="badge fk">FK</span></span
             ><span class="col-type">→ players?</span>
           </div>
           <div class="field">
-            <span class="tier-pip both"></span
-            ><span class="col-name">action</span
+            <span class="tier-pip both"></span><span class="col-name">action</span
             ><span class="col-type">enum(6)</span>
           </div>
           <div class="field">
-            <span class="tier-pip both"></span
-            ><span class="col-name">source</span
+            <span class="tier-pip both"></span><span class="col-name">source</span
             ><span class="col-type">live / review</span>
           </div>
           <div class="field nullable">
-            <span class="tier-pip advanced"></span
-            ><span class="col-name">ballType</span
+            <span class="tier-pip advanced"></span><span class="col-name">ballType</span
             ><span class="col-type">enum(4)?</span>
           </div>
           <div class="field nullable">
-            <span class="tier-pip advanced"></span
-            ><span class="col-name">quality</span
+            <span class="tier-pip advanced"></span><span class="col-name">quality</span
             ><span class="col-type">0–3?</span>
           </div>
           <div class="field nullable">
-            <span class="tier-pip advanced"></span
-            ><span class="col-name">fromX / fromY</span
+            <span class="tier-pip advanced"></span><span class="col-name">fromX / fromY</span
             ><span class="col-type">real?</span>
           </div>
           <div class="field nullable">
-            <span class="tier-pip advanced"></span
-            ><span class="col-name">toX / toY</span
+            <span class="tier-pip advanced"></span><span class="col-name">toX / toY</span
             ><span class="col-type">real?</span>
           </div>
           <div class="field nullable">
-            <span class="tier-pip advanced"></span
-            ><span class="col-name">videoTimestamp</span
+            <span class="tier-pip advanced"></span><span class="col-name">videoTimestamp</span
             ><span class="col-type">int?</span>
           </div>
           <div class="field nullable">
-            <span></span><span class="col-name">tags</span
-            ><span class="col-type">text[]</span>
+            <span></span><span class="col-name">tags</span><span class="col-type">text[]</span>
           </div>
           <div class="field nullable">
-            <span></span><span class="col-name">note</span
-            ><span class="col-type">text?</span>
+            <span></span><span class="col-name">note</span><span class="col-type">text?</span>
           </div>
         </div>
         <div class="footnote">
-          今天的異動：<code style="color: var(--text)"
-            >fromX/fromY/toX/toY</code
-          >
-          要從現有的 <code style="color: var(--text)">.notNull()</code> 改成可為
-          null， 簡易版才填得進這張表。
+          今天的異動：<code style="color: var(--text)">fromX/fromY/toX/toY</code> 要從現有的
+          <code style="color: var(--text)">.notNull()</code> 改成可為 null， 簡易版才填得進這張表。
         </div>
       </div>
     </div>
@@ -597,13 +549,12 @@
         <code>rallies</code> 維持現狀，沒有異動。
       </li>
       <li>
-        <code>events.action</code> 沿用現有 6 大類（serve / receive / set /
-        attack / block / dig），簡易版跟進階版共用同一組分類，不再各自一套。
+        <code>events.action</code> 沿用現有 6 大類（serve / receive / set / attack / block /
+        dig），簡易版跟進階版共用同一組分類，不再各自一套。
       </li>
       <li>
-        <code>events.fromX</code> / <code>fromY</code> / <code>toX</code> /
-        <code>toY</code> 需要從 <code>.notNull()</code> 改成可為 null——支援
-        簡易版不記座標的情況。
+        <code>events.fromX</code> / <code>fromY</code> / <code>toX</code> / <code>toY</code> 需要從
+        <code>.notNull()</code> 改成可為 null——支援 簡易版不記座標的情況。
       </li>
       <li>
         新增 <code>events.side</code>（home / away，必填）：對手自己失誤
@@ -611,15 +562,16 @@
         <code>rallies.winner</code>（得分方）之外記錄「誰做了這個動作」。
       </li>
       <li>
-        <code>events.playerId</code> 改成可為 null：點選「對手(全體)」時，
-        因為沒有存對手名單，<code>playerId</code> 留空，只靠新的
-        <code>side = away</code> 標示這是對方的動作。<code>action</code>
-        本身維持 <code>.notNull()</code>——「對手(全體)」一樣要選動作大類。
+        <code>events.playerId</code> 改成可為 null：點選「對手(全體)」時， 因為沒有存對手名單，<code
+          >playerId</code
+        >
+        留空，只靠新的 <code>side = away</code> 標示這是對方的動作。<code>action</code> 本身維持
+        <code>.notNull()</code>——「對手(全體)」一樣要選動作大類。
       </li>
       <li>
-        「沒看到」路徑（連是哪一方動作都判斷不出來）不建立 event，直接把
-        得失分記在 <code>rallies.homeScore</code> / <code>awayScore</code> /
-        <code>winner</code> 上，event 表不用因此 再新增任何 nullable 欄位。
+        「沒看到」路徑（連是哪一方動作都判斷不出來）不建立 event，直接把 得失分記在
+        <code>rallies.homeScore</code> / <code>awayScore</code> / <code>winner</code> 上，event
+        表不用因此 再新增任何 nullable 欄位。
       </li>
       <li>
         <code>tactics</code>

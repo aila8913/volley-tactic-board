@@ -1,13 +1,13 @@
-import { useEffect } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { useEffect } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogFooter,
-} from '@/components/ui/dialog';
+} from "@/components/ui/dialog";
 import {
   Form,
   FormField,
@@ -15,13 +15,13 @@ import {
   FormLabel,
   FormControl,
   FormMessage,
-} from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { useTournaments } from '@/hooks/useTournaments';
-import { Tournament, TournamentFormValues, tournamentFormSchema } from '@/types/tournament';
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { useTournaments } from "@/hooks/useTournaments";
+import { Tournament, TournamentFormValues, tournamentFormSchema } from "@/types/tournament";
 
-const emptyDefaults: TournamentFormValues = { name: '' };
+const emptyDefaults: TournamentFormValues = { name: "" };
 
 interface TournamentFormDialogProps {
   open: boolean;
@@ -30,7 +30,11 @@ interface TournamentFormDialogProps {
   tournament?: Tournament | null;
 }
 
-export default function TournamentFormDialog({ open, onOpenChange, tournament }: TournamentFormDialogProps) {
+export default function TournamentFormDialog({
+  open,
+  onOpenChange,
+  tournament,
+}: TournamentFormDialogProps) {
   const addTournament = useTournaments((state) => state.addTournament);
   const updateTournament = useTournaments((state) => state.updateTournament);
   const isEditing = !!tournament;
@@ -61,7 +65,7 @@ export default function TournamentFormDialog({ open, onOpenChange, tournament }:
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>{isEditing ? '編輯資料夾' : '新增資料夾'}</DialogTitle>
+          <DialogTitle>{isEditing ? "編輯資料夾" : "新增資料夾"}</DialogTitle>
         </DialogHeader>
 
         <Form {...form}>
@@ -84,7 +88,7 @@ export default function TournamentFormDialog({ open, onOpenChange, tournament }:
               <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
                 取消
               </Button>
-              <Button type="submit">{isEditing ? '儲存變更' : '建立資料夾'}</Button>
+              <Button type="submit">{isEditing ? "儲存變更" : "建立資料夾"}</Button>
             </DialogFooter>
           </form>
         </Form>
