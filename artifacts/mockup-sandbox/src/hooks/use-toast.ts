@@ -12,13 +12,6 @@ type ToasterToast = ToastProps & {
   action?: ToastActionElement;
 };
 
-const actionTypes = {
-  ADD_TOAST: "ADD_TOAST",
-  UPDATE_TOAST: "UPDATE_TOAST",
-  DISMISS_TOAST: "DISMISS_TOAST",
-  REMOVE_TOAST: "REMOVE_TOAST",
-} as const;
-
 let count = 0;
 
 function genId() {
@@ -26,7 +19,15 @@ function genId() {
   return count.toString();
 }
 
-type ActionType = typeof actionTypes;
+// 原本這裡是一個 runtime 的 actionTypes 常數物件 + `typeof actionTypes` 取型別，
+// 但整份檔案只用到「型別」那一面（下面 Action 的 type 欄位都是直接寫字串字面量），
+// 所以改成純型別宣告——編譯後不會留下任何 JS 程式碼，eslint 也不再誤判成未使用變數。
+type ActionType = {
+  ADD_TOAST: "ADD_TOAST";
+  UPDATE_TOAST: "UPDATE_TOAST";
+  DISMISS_TOAST: "DISMISS_TOAST";
+  REMOVE_TOAST: "REMOVE_TOAST";
+};
 
 type Action =
   | {

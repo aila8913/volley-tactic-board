@@ -52,7 +52,6 @@ export default function TacticsBoardPanel() {
     enterTacticsLayout,
   } = useTacticsBoard();
   const currentRotation = useRotationTable((state) => state.currentRotation);
-  const setCurrentRotation = useRotationTable((state) => state.setCurrentRotation);
 
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -149,7 +148,10 @@ export default function TacticsBoardPanel() {
     if (!file) return;
     try {
       const data = await importStateFromJson(file);
-      importState(data);
+      // importStateFromJson 現在誠實回傳 unknown（JSON 檔內容沒有驗證），這裡先用
+      // 斷言相信它是 SavedTacticData——格式錯誤時 importState 內部讀不到欄位會拋錯，
+      // 落到下面的 catch 顯示「匯入失敗」。之後若要更嚴謹，可以用 zod 在這裡驗證。
+      importState(data as SavedTacticData);
       toast({ title: "匯入成功", description: "戰術板已更新" });
     } catch {
       toast({ title: "匯入失敗", description: "檔案格式錯誤", variant: "destructive" });
