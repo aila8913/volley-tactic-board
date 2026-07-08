@@ -9,27 +9,40 @@
 > Read this file, plus `gh issue list --state open` and recent `git log`, at the start
 > of a new session instead of re-exploring the whole codebase from scratch.
 
-_Last updated: 2026-07-07 (session: **product-level session, no feature code.**
-產品定位正式定案並文件化（PR #78）：原型 TA＝系隊裡用 Excel＋慢速回放算數據的夥伴、
-擴散 TA＝球經/業餘教練、差異化＝「新增」防守維度（非 defense-only）、wow 點＝球線分布圖、分享刻意最小化
-（v1 單帳號）、裝置形態 PWA 優先（App 上架費是 US$99/年不是數萬，真門檻是第二
-codebase 維護）。新增 `area:product` 標籤與五個產品設計 issues **#73–#77**（事件
-文法／記錄成本預算／離線契約+PWA／生命週期閉環／定位落地與帳號模型），新文件
-`docs/product-vision.md`（定位本文）與 `docs/marketing-page-draft.md`（募資頁草稿，
-產品命名提案「球跡 BallTrace」），並修正 `docs/spec-index.md` 嚴重過時的進度清單。
-Housekeeping：GitHub repo 已改名 `volley-tatic-board` → `volley-tactic-board`（拼字
-修正，舊網址自動轉址，本地 remote 已更新）；清掉 12 條已合併的本地舊分支＋失效
-worktree（其中 5 條因權限設定需使用者手動 `git branch -D`）；`ship` skill 的
-co-author 行從寫死的 "Claude Sonnet 4.6" 改為「用當前模型名」。發現本地有一個
-`gitsafe-backup` remote（`git://gitsafe:5418/backup.git`），已向使用者確認來源中。)_
+_Last updated: 2026-07-08 (session: **infra chores #81 + #82, no feature code.**
+三個 PR 清完 lint/format 存量並納入 CI：#83 全 repo Prettier 格式化（獨立純格式
+commit `7573272`，可供 `git blame --ignore-rev`）、#84 修全部 15 個 eslint 錯誤
+（唯一真 bug：Court.tsx 鍵盤 undo/redo 的 useEffect 排在 early return 之後違反
+hooks 規則）、#85 CI 加 `pnpm run lint` + `prettier --check .` 並新增
+`.gitattributes`（`* text=auto eol=lf`——實測發現 Windows `core.autocrlf` 會讓
+prettier 檢查本機恆紅/CI 恆綠，統一 LF 才一致）。#82 branch protection 用 gh api
+設定完成：`test` check 必須綠燈、`enforce_admins: true`、只允許 squash merge、
+合併後自動刪分支。**工作流程影響：main 現在連 admin 都無法直接 push，所有變更
+一律走 PR**；緊急狀況需先到 Settings 暫時解除保護。)_
 
 ## Current state
 
-- On `main`, latest commit `cb7ed29` (PR #78, docs-only). Before that: #72 (PROGRESS
-  update), #71 (removed 匯出6輪PNG), #70/#69 (scoresheet/rotation fixes), #67 (libero
-  rule unification), #66/#62/#60 (Phase 3). **Phase 3 is fully done and #58 is closed**
-  (see the match-recording bullet below).
-- **This session: product positioning + the `area:product` issue series (#73–#77).**
+- On `main`, latest commit `01fad80` (PR #85). Recent chain: #85/#84/#83 (this
+  session's lint/format/CI chores), #80 (PR/issue templates + Prettier hook fix), #79
+  (PROGRESS update), #78 (product positioning docs), #72/#71/#70/#69/#67/#66/#62/#60
+  (earlier feature work). **Phase 3 is fully done and #58 is closed** (see the
+  match-recording bullet below).
+- **This session (2026-07-08): infra quality gates, issues #81 + #82 both closed.**
+  - CI (`.github/workflows/ci.yml`) now runs **lint → prettier --check → typecheck →
+    test** on every PR. The pre-existing debt (15 eslint errors, unformatted repo) was
+    cleared first in PRs #83/#84 — commit `7573272` is the pure-format commit for
+    `git blame --ignore-rev`.
+  - **Branch protection is live on `main`**: the `test` check is required,
+    `enforce_admins: true`（單人 repo 不對 admin 強制＝形同虛設）, squash-merge only,
+    auto-delete head branches. Direct pushes to `main` are blocked for everyone —
+    every change must go through a PR now. The `ship` skill's flow already matches
+    this; its `--delete-branch` flag is now redundant (platform does it) but harmless.
+  - **`.gitattributes` (`* text=auto eol=lf`) exists now** — without it, Windows
+    `core.autocrlf=true` checked files out as CRLF and `prettier --check` failed
+    locally while passing in CI. If a future session sees hundreds of phantom-modified
+    files after touching attributes, it's the stat-cache effect: `git add -u` (blobs
+    identical → nothing actually staged) clears it.
+- **2026-07-07 session: product positioning + the `area:product` issue series (#73–#77).**
   Product direction is now written down, not just in heads:
   - `docs/product-vision.md` — 定位本文：一句話定位、TA（原型＝Excel 慢放算數據的
     系隊夥伴；擴散＝球經）、防守導向差異化、球線分布 wow 點、分享最小化（v1 單帳號、
@@ -327,6 +340,11 @@ status — the list below is a snapshot, not guaranteed up to date):
 
 ## Recently closed
 
+- #81 — lint/format 存量清理＋納入 CI。三個 PR：#83（全 repo 格式化）、#84（15 個
+  eslint 錯誤，含 Court.tsx hooks 規則真 bug）、#85（CI 步驟＋`.gitattributes` 統一
+  LF）。
+- #82 — branch protection：`test` check 必須綠燈才能合併 main（含 admin）、squash
+  merge only、合併後自動刪分支。用 `gh api` 設定，細節見 issue 關閉留言。
 - #38 — 匯出6輪PNG 過程沒鎖住其他操作。決定不補鎖機制，直接砍掉整個功能（PR #71）。
 - #36 — 輪轉表/戰術板移除球員邏輯分散兩個 store。複查發現 PR #30 的快照解耦重構已經
   解決，`removeFromCourt()` 現在 if/else 二選一，不需額外重構。
