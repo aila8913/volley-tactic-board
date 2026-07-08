@@ -1,7 +1,7 @@
-import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
-import { v4 as uuidv4 } from 'uuid';
-import { Tournament, TournamentFormValues } from '../types/tournament';
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
+import { v4 as uuidv4 } from "uuid";
+import { Tournament, TournamentFormValues } from "../types/tournament";
 
 interface TournamentsStore {
   tournaments: Tournament[];
@@ -29,17 +29,21 @@ export const useTournaments = create<TournamentsStore>()(
         return id;
       },
 
-      updateTournament: (id, values) => set((state) => ({
-        tournaments: state.tournaments.map((t) => t.id === id ? { ...t, name: values.name } : t),
-      })),
+      updateTournament: (id, values) =>
+        set((state) => ({
+          tournaments: state.tournaments.map((t) =>
+            t.id === id ? { ...t, name: values.name } : t,
+          ),
+        })),
 
-      deleteTournament: (id) => set((state) => ({
-        tournaments: state.tournaments.filter((t) => t.id !== id),
-      })),
+      deleteTournament: (id) =>
+        set((state) => ({
+          tournaments: state.tournaments.filter((t) => t.id !== id),
+        })),
     }),
     {
-      name: 'volleyboard_tournaments',
+      name: "volleyboard_tournaments",
       partialize: (state) => ({ tournaments: state.tournaments }),
-    }
-  )
+    },
+  ),
 );
