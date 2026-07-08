@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect } from "react";
 import { useRotationTable } from "../hooks/useRotationTable";
-import { useTacticsBoard, ToolType } from "../hooks/useTacticsBoard";
+import { useTacticsBoard } from "../hooks/useTacticsBoard";
 import { findNearestZone } from "../lib/rotationLogic";
 import PlayerNode from "./PlayerNode";
 import Markers from "./Markers";
@@ -64,10 +64,8 @@ export default function Court() {
     setActiveTool,
     addMarker,
     updateMarker,
-    selectedObjectId,
     setSelectedObjectId,
     addDefenseRange,
-    updateDefenseRange,
     undo,
     redo,
     isLayoutMode,
@@ -95,6 +93,26 @@ export default function Court() {
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
+
+  // Ctrl/Cmd+Z 復原、Ctrl/Cmd+Shift+Z 或 Ctrl/Cmd+Y 重做。
+  // 這個 effect 一定要放在下面那行 early return「之前」——React 的 hooks 規則要求
+  // 每次 render 呼叫的 hook 數量與順序都相同，如果 hook 排在條件 return 後面，
+  // 某次 render 提早離開時 hook 數量就對不上，React 內部的 hook 對應表會整個錯位
+  //（這正是 eslint react-hooks/rules-of-hooks 抓到的錯誤）。
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "z") {
+        e.preventDefault();
+        if (e.shiftKey) redo();
+        else undo();
+      } else if ((e.ctrlKey || e.metaKey) && e.key === "y") {
+        e.preventDefault();
+        redo();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [undo, redo]);
 
   const rotationPositions = rotations[currentRotation];
   const rotationTactics = tacticsByRotation[currentRotation];
@@ -128,7 +146,10 @@ export default function Court() {
         // we'll just set a drawing mode and update the *last* marker.
         // Actually, we can just dispatch addMarker, then in pointerMove we update the last marker.
         addMarker({
-          type: activeTool as any,
+          // Array.includes() 不會幫 TS 自動收窄型別（TS 只看得懂 === 比較），
+          // 上面的 includes 已經保證只剩這三種，這裡用明確的字面量聯集斷言取代 any——
+          // 好處是若未來 Marker 的 type 聯集改了，這行會直接編譯錯誤，any 則會默默放行。
+          type: activeTool as "arrow" | "dashed" | "attack",
           points: [
             { x: pt.x, y: pt.y },
             { x: pt.x, y: pt.y },
@@ -138,7 +159,9 @@ export default function Court() {
         setDrawingMarkerId("drawing");
       } else if (isLayoutMode && (activeTool === "text" || activeTool === "volleyball")) {
         addMarker({
-          type: activeTool as any,
+          // 這裡不用斷言：上面的條件是直接的 === 比較，TS 已把 activeTool
+          // 自動收窄成 "text" | "volleyball"。
+          type: activeTool,
           x: pt.x,
           y: pt.y,
           text: activeTool === "text" ? "請輸入文字" : undefined,
@@ -147,7 +170,8 @@ export default function Court() {
       } else if (isLayoutMode && ["circle", "ellipse", "fan"].includes(activeTool)) {
         addDefenseRange({
           playerId: "",
-          type: activeTool as any,
+          // 同上：includes 保證了範圍，用字面量聯集斷言（對應 DefenseRange 的 type）取代 any。
+          type: activeTool as "circle" | "ellipse" | "fan",
           x: pt.x,
           y: pt.y,
           radius: 15,
@@ -224,21 +248,6 @@ export default function Court() {
     }
     // 戰術視圖 + 非布置模式：不接受拖曳（唯讀）
   };
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "z") {
-        e.preventDefault();
-        if (e.shiftKey) redo();
-        else undo();
-      } else if ((e.ctrlKey || e.metaKey) && e.key === "y") {
-        e.preventDefault();
-        redo();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [undo, redo]);
 
   // 輪轉視圖中，指定先發的 L 球員不在場上時顯示在備位區。
   // startingLiberoId === null 代表目前沒指定先發 L（備位區空白）。

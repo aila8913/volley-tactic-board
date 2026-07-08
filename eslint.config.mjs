@@ -39,6 +39,18 @@ export default tseslint.config(
     languageOptions: {
       globals: globals.node,
     },
+    rules: {
+      // 底線開頭的參數（_next、_res）代表「這個位置的參數刻意不用」——例如 Express
+      // 的錯誤處理 middleware 必須是 4 參數簽章 (err, req, res, next)，Express 靠
+      // 參數數量認出它是錯誤處理器，就算用不到 next 也不能拿掉。這是社群通用慣例，
+      // 讓規則放行底線開頭的參數，而不是逐處寫 eslint-disable。
+      "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
+      // no-namespace 預設連 `declare namespace` 都禁止，但「declare global +
+      // namespace Express」是幫第三方套件擴充型別（module augmentation）的標準寫法
+      // （見 api-server 的 mockAuth.ts 幫 Request 加 userId）。allowDeclarations
+      // 只放行這種純型別宣告，真正的 runtime namespace 依然會報錯。
+      "@typescript-eslint/no-namespace": ["error", { allowDeclarations: true }],
+    },
   },
   {
     // Frontend packages: React components run in the browser, not Node —
