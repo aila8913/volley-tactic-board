@@ -9,23 +9,47 @@
 > Read this file, plus `gh issue list --state open` and recent `git log`, at the start
 > of a new session instead of re-exploring the whole codebase from scratch.
 
-_Last updated: 2026-07-09 (session: **實作 `lineups` 起始先發表（#93，PR #94，已合併並關閉）——
-T1 挖出的第一個硬缺口落地，schema 地基層。** 新增 `lib/db/src/schema/lineups.ts`：一局一 row、
-`setId` unique FK、六個 `zone{1..6}PlayerId`（皆 notNull、FK 到 players、`onDelete: cascade` 維持
-「陣容完整六人或不存在」不變量）＋ drizzle-zod `insertLineupSchema`；barrel export 接上；已
-`drizzle-kit push` 到 dev DB。「六人不得重複」DB 表達不了，留給下游 Zod／應用層。CI 綠燈、squash
-merge。實作委派 sonnet-engineer、結構決策沿用 T1（#73）已拍板設計，未再重新設計。前一段同 session
-產出 T1 事件文法 spec（`docs/event-grammar-spec.md`，PR #92），見下方。)_
+_Last updated: 2026-07-09 (session: **產品設計 T2 記錄成本預算（#74），設計文件層，未動 schema／
+程式碼。** 產出 `docs/recording-cost-budget.md`：把「單人賽中記得完幾多」量化成兩個預算池（死球
+空檔 15–30s／可用 5–10s vs live rally 視線離場≈0），得出**硬分界＝簡易版恰好記一筆決定球（死球
+空檔）、進階版所有 per-touch/座標/判斷全丟賽後影片**。關鍵洞見：界線是懸崖不是斜坡——想多記一觸
+就被迫進 live（6 觸無法憑記憶重建），而 live 視線預算≈0。順帶答出下游分層：**#50 情境過濾＝零點擊
+成本**（發球方可推導）、#51/#21 進階、#20 簡易；補填模型＝同 rally additive `source='review'`、待補
+清單天生可由「沒看到」rally 推導，皆不動 schema。PO 拍板：**嚴守 T1、不開 simple+**（serveType 雖是
+唯一夠便宜的候選，仍留進階）、「沒看到」維持唯一 escape valve。本次採「PROGRESS 折進功能分支、merge
+前寫」實驗，doc＋本更新同一 PR。前一段同日產出 T1 spec（PR #92）＋ lineups 表（PR #94），見下方。)_
 
 ## Current state
 
-- On `main`, latest commit `dd72a45` (PR #94). Recent chain: #94 (this session's
-  `lineups` table), #92 (T1 event-grammar spec), #91/#90/#89/#88 (subagent unification),
-  #87 (product deep-dive execution plan), #86 (PROGRESS update), #85/#84/#83
-  (lint/format/CI chores), #80 (PR/issue templates + Prettier hook fix), #78 (product
+- On `main`, latest commit `903b431` (PR #95, the previous session's PROGRESS wrap-up).
+  Recent chain: #95 (PROGRESS update), #94 (`lineups` table), #92 (T1 event-grammar spec),
+  #91/#90/#89/#88 (subagent unification), #87 (product deep-dive execution plan), #85/#84/
+  #83 (lint/format/CI chores), #80 (PR/issue templates + Prettier hook fix), #78 (product
   positioning docs). **Phase 3 is fully done and #58 is closed** (see the match-recording
   bullet below).
-- **This session (2026-07-09): 實作 `lineups` 起始先發表（#93 → PR #94，已合併）。**
+- **This session (2026-07-09, latest): 產品設計 T2 記錄成本預算（#74），設計文件層，未動
+  schema／程式碼。** 產出 `docs/recording-cost-budget.md`。
+  - **量化模型**：兩個預算池——死球空檔（15–30s，可用 ⅓≈5–10s，視線可離場）vs live rally
+    （5–15s，視線離場預算≈0，必須盯球）。成本量兩件事：點擊數＋**視線離場秒數**（真正的瓶頸）。
+    成本估計已對照真實 recording code（`ScoreSheetCourt` 手勢 → `RadialMenu` 動作/得失分）grounding，
+    非憑空。
+  - **硬分界（主結論）**：簡易版＝一分打完後、在死球空檔記**恰好一筆決定球**（誰・動作・得失分）
+    ＋開局排先發＋死球期換人/暫停＋「沒看到」escape valve；進階版＝任何 per-touch／座標／每觸到位分
+    ／子分類（全 live×0 預算 → 賽後影片補填）。**界線是懸崖不是斜坡**：想多記一觸就被迫進 live
+    （6 觸無法事後憑記憶重建位置順序），live 視線預算≈0，中間沒有「記 3 觸」的折衷可站。獨立驗證
+    了 T1 從「不可逆性」畫的同一條線（兩個不同論證、同一結論）。
+  - **答出下游分層**：**#50 情境過濾（依發球方）＝零點擊成本**（發球方可由 `firstServer`+`winner`
+    推導，T1 B1，屬顯示層過濾不佔記錄預算）；#51/#21 進階；#20（換人/暫停持久化）簡易（死球期事件）。
+  - **補填資料模型**（答 #74 三問，皆不動 schema，`events` 已 advanced-ready）：升級同一 rally 的
+    additive events 標 `source='review'`（非另存複本，winner 是單一真相種子）；「已補填」＝
+    `EXISTS(event WHERE rallyId=R AND source='review')`；待補清單＝「沒看到」產生的無 action-event
+    rally，天生可推導。
+  - **PO 拍板**：**嚴守 T1、不開 simple+**——`serveType` 雖是唯一夠便宜的候選（per-rally singleton
+    ＋零判斷），但簡易版只記決定球、發球通常不是決定球，記它得每 rally 多一筆，破壞「一筆＝一節拍」
+    純度，故留進階；「沒看到」維持唯一降級 escape valve。
+  - **流程實驗**：本次採「PROGRESS 折進功能分支、merge 前寫」——本更新與 doc 同一個 PR，省一次
+    #95 那樣的獨立 PROGRESS PR（見 [[feedback_fold_progress_into_work_pr]]）。
+- **前一段（2026-07-09）：實作 `lineups` 起始先發表（#93 → PR #94，已合併）。**
   - 新增 `lib/db/src/schema/lineups.ts` + barrel export（`schema/index.ts`）。表結構：一局一
     row、`setId` unique FK（`onDelete: cascade`）、六個 `zone{1..6}PlayerId` 皆 notNull FK 到
     `players`（`onDelete: cascade`——因 notNull 不能像 `events.playerId` 用 `set null`，選整筆
@@ -340,13 +364,16 @@ status — the list below is a snapshot, not guaranteed up to date):
   （最優先、最不可逆）——**T1 設計已完成（PR #92，見 `docs/event-grammar-spec.md`）**，issue
   仍開著：剩 2 個待決定（到位門檻、嗆司定義）＋ schema 實作在下游（#93 已完成、#42/#44/#51 待做）→
   [#74](https://github.com/aila8913/volley-tactic-board/issues/74) 記錄成本預算
-  （依賴 #73，決定 #50/#51/#21 的分層；T1 給了「記錄體感＝節奏遊戲」的設計目標）、
+  ——**T2 設計已完成（見 `docs/recording-cost-budget.md`）**，畫出簡易/進階硬分界＋答出
+  #50（零成本）/#51/#21/#20 的分層；PO 拍板嚴守 T1、不開 simple+。落地待回灌各下游 issue、
+
   [#75](https://github.com/aila8913/volley-tactic-board/issues/75) 離線可靠性契約＋PWA
   （收斂 #63/#64、擋 #26）、
   [#76](https://github.com/aila8913/volley-tactic-board/issues/76) 生命週期閉環
   （餵 #65/#17）、
   [#77](https://github.com/aila8913/volley-tactic-board/issues/77) 定位落地與 v1 帳號
   模型（餵 #26）。
+
 - ~~[#93] `lineups` 起始先發表~~ — **已完成並關閉（PR #94）**。`lib/db/src/schema/lineups.ts`
   已 live（dev DB），一局一 row、`setId` unique、六 zone notNull FK。#42 換人重播現在有基態陣容
   可依賴。「六人不得重複」驗證留給下游應用層。
