@@ -9,25 +9,45 @@
 > Read this file, plus `gh issue list --state open` and recent `git log`, at the start
 > of a new session instead of re-exploring the whole codebase from scratch.
 
-_Last updated: 2026-07-08 (session: **infra chores #81 + #82, no feature code.**
-三個 PR 清完 lint/format 存量並納入 CI：#83 全 repo Prettier 格式化（獨立純格式
-commit `7573272`，可供 `git blame --ignore-rev`）、#84 修全部 15 個 eslint 錯誤
-（唯一真 bug：Court.tsx 鍵盤 undo/redo 的 useEffect 排在 early return 之後違反
-hooks 規則）、#85 CI 加 `pnpm run lint` + `prettier --check .` 並新增
-`.gitattributes`（`* text=auto eol=lf`——實測發現 Windows `core.autocrlf` 會讓
-prettier 檢查本機恆紅/CI 恆綠，統一 LF 才一致）。#82 branch protection 用 gh api
-設定完成：`test` check 必須綠燈、`enforce_admins: true`、只允許 squash merge、
-合併後自動刪分支。**工作流程影響：main 現在連 admin 都無法直接 push，所有變更
-一律走 PR**；緊急狀況需先到 Settings 暫時解除保護。)_
+_Last updated: 2026-07-09 (session: **harness／協作結構治理，無功能程式碼。**
+subagent 從專案層統一到使用者層：#88 新增的 `.claude/agents/` 兩個排球客製版在
+#89 移除，改為 project-agnostic 通用版放 `~/.claude/agents/`（repo 外）供所有專案
+共用——agent 開工先讀當前專案 CLAUDE.md 拿 stack/規則，避免兩份定義 drift；
+「advisor 唯讀只建議、engineer 執行已核准工作」的分工設計不變。角色釐清：使用者
+= Product Owner（目標/取捨/最終核准），主 session = 代理 PM（拆解、委派、把決策
+上呈）——跨專案部分寫進全域 `~/.claude/CLAUDE.md`，本 repo 的 CLAUDE.md 補
+「委派不可跳過教學步驟」一條（#90）。repo 外順手修復：全域
+`~/.claude/settings.json` 原為無效 JSON（整份被靜默忽略，deny/ask 權限規則從未
+生效），已修復並驗證。)_
 
 ## Current state
 
-- On `main`, latest commit `01fad80` (PR #85). Recent chain: #85/#84/#83 (this
-  session's lint/format/CI chores), #80 (PR/issue templates + Prettier hook fix), #79
-  (PROGRESS update), #78 (product positioning docs), #72/#71/#70/#69/#67/#66/#62/#60
-  (earlier feature work). **Phase 3 is fully done and #58 is closed** (see the
-  match-recording bullet below).
-- **This session (2026-07-08): infra quality gates, issues #81 + #82 both closed.**
+- On `main`, latest commit `f4290ad` (PR #90). Recent chain: #90/#89/#88 (this
+  session's subagent unification, see below), #87 (product deep-dive execution plan),
+  #86 (PROGRESS update), #85/#84/#83 (lint/format/CI chores), #80 (PR/issue templates
+  - Prettier hook fix), #78 (product positioning docs). **Phase 3 is fully done and
+    #58 is closed** (see the match-recording bullet below).
+- **This session (2026-07-09): harness／協作結構治理，無功能程式碼。**
+  - **Subagents unified to the user level.** #88 first added volleyball-customized
+    `fable-advisor` / `sonnet-engineer` under `.claude/agents/`; #89 then removed them
+    in favor of project-agnostic versions at `~/.claude/agents/` (outside the repo,
+    shared by all projects). The generic versions read the current project's CLAUDE.md
+    at start instead of hardcoding pnpm/codegen/React-pin details — single source, no
+    drift. Design principles unchanged: advisor is read-only (Read/Glob/Grep + fable,
+    advises only), engineer executes approved work (Read/Write/Edit/Bash + sonnet).
+    Note for future sessions: don't recreate project-level copies in `.claude/agents/`.
+  - **Role structure clarified and written down**: the user is the Product Owner
+    (goals, value trade-offs, final approval); the main session is an executing/proxy
+    PM (break down, delegate, surface decisions up). Cross-project part lives in the
+    global `~/.claude/CLAUDE.md`; this repo's CLAUDE.md gained a Collaboration style
+    rule — delegation must not skip the teaching step (#90).
+  - **Global (outside-repo) config fixes**: `~/.claude/settings.json` had been invalid
+    JSON the whole time (a `.` instead of `,`), so its entire deny/ask permission list
+    was silently ignored — fixed and validated. The project's Prettier PostToolUse
+    hook was pipe-tested and confirmed working.
+- **2026-07-08 session (via another session, PR #87): `docs/product-deep-dive-plan.md`**
+  — T1–T5 execution plan mapping onto the `area:product` issue series #73–#77.
+- **2026-07-08 session: infra quality gates, issues #81 + #82 both closed.**
   - CI (`.github/workflows/ci.yml`) now runs **lint → prettier --check → typecheck →
     test** on every PR. The pre-existing debt (15 eslint errors, unformatted repo) was
     cleared first in PRs #83/#84 — commit `7573272` is the pure-format commit for
