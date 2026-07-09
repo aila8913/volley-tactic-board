@@ -9,27 +9,34 @@
 > Read this file, plus `gh issue list --state open` and recent `git log`, at the start
 > of a new session instead of re-exploring the whole codebase from scratch.
 
-_Last updated: 2026-07-09 (session: **產品設計 T1 事件文法領域模型（#73），設計文件層、
-未動 schema/功能程式碼。** 產出 `docs/event-grammar-spec.md`（PR #92）：把產品承諾的每個
-統計寫成 events/rallies/sets 的純函數推導式（群組 A–G）、標出缺口。經 fable-advisor 複審定
-三個非擊球事件結構決策——換人(#42)/暫停(#44) 各開專用表 `substitutions`/`timeouts`＋時機存
-「當下比分快照」（不進 events：會破壞「一 row=一觸球」不變量、逼 `rallyId` 改 nullable、PG
-enum 加值不可逆）；#51 子分類「可聚合的走 typed 欄位(`serveType`/`outcome`)、開放長尾的走
-`tags[]`」；**起始先發是硬缺口 → 新開 `lineups` 表 #93**（一局一 row、六 zone 欄位，是輪次
-統計/換人重播的種子，資料補不回來所以要早補）。使用者拍板：lineups 早補、到位率(quality)/
-座標歸進階版、到位率分舉球/防守＋新增 `cover`(攔網後防守)、**`outcome` 基礎版也存以維持跨層
-不變量**（null⟺球續 in_play，避免「球續」與「未填」撞名）、**記錄體感＝節奏遊戲**（把
-quality/座標/serveType 推進階版的理由，餵 T2 #74）。仍待決定：到位門檻(暫定 `quality>=2`)、
-嗆司定義。#42 已移除 needs-plan（設計障礙排除）、#44 形狀已定實作延後。)_
+_Last updated: 2026-07-09 (session: **實作 `lineups` 起始先發表（#93，PR #94，已合併並關閉）——
+T1 挖出的第一個硬缺口落地，schema 地基層。** 新增 `lib/db/src/schema/lineups.ts`：一局一 row、
+`setId` unique FK、六個 `zone{1..6}PlayerId`（皆 notNull、FK 到 players、`onDelete: cascade` 維持
+「陣容完整六人或不存在」不變量）＋ drizzle-zod `insertLineupSchema`；barrel export 接上；已
+`drizzle-kit push` 到 dev DB。「六人不得重複」DB 表達不了，留給下游 Zod／應用層。CI 綠燈、squash
+merge。實作委派 sonnet-engineer、結構決策沿用 T1（#73）已拍板設計，未再重新設計。前一段同 session
+產出 T1 事件文法 spec（`docs/event-grammar-spec.md`，PR #92），見下方。)_
 
 ## Current state
 
-- On `main`, latest commit `a6da0d6` (PR #92). Recent chain: #92 (this session's T1
-  event-grammar spec), #91/#90/#89/#88 (subagent unification), #87 (product deep-dive
-  execution plan), #86 (PROGRESS update), #85/#84/#83 (lint/format/CI chores), #80
-  (PR/issue templates + Prettier hook fix), #78 (product positioning docs). **Phase 3
-  is fully done and #58 is closed** (see the match-recording bullet below).
-- **This session (2026-07-09): 產品設計 T1 事件文法領域模型（#73），設計文件層，未動 schema。**
+- On `main`, latest commit `dd72a45` (PR #94). Recent chain: #94 (this session's
+  `lineups` table), #92 (T1 event-grammar spec), #91/#90/#89/#88 (subagent unification),
+  #87 (product deep-dive execution plan), #86 (PROGRESS update), #85/#84/#83
+  (lint/format/CI chores), #80 (PR/issue templates + Prettier hook fix), #78 (product
+  positioning docs). **Phase 3 is fully done and #58 is closed** (see the match-recording
+  bullet below).
+- **This session (2026-07-09): 實作 `lineups` 起始先發表（#93 → PR #94，已合併）。**
+  - 新增 `lib/db/src/schema/lineups.ts` + barrel export（`schema/index.ts`）。表結構：一局一
+    row、`setId` unique FK（`onDelete: cascade`）、六個 `zone{1..6}PlayerId` 皆 notNull FK 到
+    `players`（`onDelete: cascade`——因 notNull 不能像 `events.playerId` 用 `set null`，選整筆
+    cascade 維持「陣容完整或不存在」不變量）＋ drizzle-zod `insertLineupSchema` / 型別。
+  - schema-first，已 `pnpm --filter @workspace/db run push` 到 dev DB（純新增表、無 drift）。
+    **「六人不得重複」DB 表達不了，留給下游 Zod／應用層**（前端寫入 lineup 時）。
+  - 實作委派 sonnet-engineer；結構沿用 T1（#73）已拍板設計，未重新設計。CI（lint+prettier+
+    typecheck+test）綠燈、squash merge、#93 隨 merge 自動關閉。
+  - **意義**：這是 T1 挖出的第一個硬缺口落地。#42（換人重播）現在有了 DB 基態陣容可依賴；
+    輪次統計的種子就位。下一個 T1 下游是 #42（`substitutions` 表）或 #44（`timeouts` 表）。
+- **前一段（2026-07-09 稍早）：產品設計 T1 事件文法領域模型（#73），設計文件層，未動 schema。**
   - 產出 `docs/event-grammar-spec.md`（PR #92）：統計反推對照表（群組 A–G，每個統計 =
     events/rallies/sets 欄位的純函數）＋ schema 缺口/決策清單 ＋ 使用者拍板清單。
   - **三個非擊球事件結構決策（fable-advisor 複審）**：換人 #42／暫停 #44 各開專用表
@@ -331,7 +338,7 @@ status — the list below is a snapshot, not guaranteed up to date):
   上位依據是 `docs/product-vision.md`：
   [#73](https://github.com/aila8913/volley-tactic-board/issues/73) 事件文法領域模型
   （最優先、最不可逆）——**T1 設計已完成（PR #92，見 `docs/event-grammar-spec.md`）**，issue
-  仍開著：剩 2 個待決定（到位門檻、嗆司定義）＋ schema 實作在下游（#93/#42/#44/#51）→
+  仍開著：剩 2 個待決定（到位門檻、嗆司定義）＋ schema 實作在下游（#93 已完成、#42/#44/#51 待做）→
   [#74](https://github.com/aila8913/volley-tactic-board/issues/74) 記錄成本預算
   （依賴 #73，決定 #50/#51/#21 的分層；T1 給了「記錄體感＝節奏遊戲」的設計目標）、
   [#75](https://github.com/aila8913/volley-tactic-board/issues/75) 離線可靠性契約＋PWA
@@ -340,10 +347,9 @@ status — the list below is a snapshot, not guaranteed up to date):
   （餵 #65/#17）、
   [#77](https://github.com/aila8913/volley-tactic-board/issues/77) 定位落地與 v1 帳號
   模型（餵 #26）。
-- [#93](https://github.com/aila8913/volley-tactic-board/issues/93) — **新開（T1 挖出的硬缺口）**：
-  `lineups` 起始先發表。DB 沒存「這局哪六人站哪」，是輪次統計/換人重播的種子，資料補不回來，
-  使用者拍板早補。設計已定（一局一 row、`setId` unique、六 zone 欄位），可直接實作。
-  `enhancement`/`area:db`/`priority:essential`。#42 換人重播依賴它當基態。
+- ~~[#93] `lineups` 起始先發表~~ — **已完成並關閉（PR #94）**。`lib/db/src/schema/lineups.ts`
+  已 live（dev DB），一局一 row、`setId` unique、六 zone notNull FK。#42 換人重播現在有基態陣容
+  可依賴。「六人不得重複」驗證留給下游應用層。
 - [#17](https://github.com/aila8913/volley-tatic-board/issues/17) — UX 重整：視圖控制
   流程、輪次選擇簡化、頁首漢堡選單. **Status per part:** part 1 (Sheet-based saved-tactics
   list) and part 3 (hamburger menu) not started. Part 2 (rotation picker) partially done
