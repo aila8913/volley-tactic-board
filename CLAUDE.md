@@ -107,3 +107,5 @@ changes default behavior for this repo specifically:
 - Don't skip past architectural decisions silently — when a non-obvious choice gets made (why Drizzle over
   raw SQL, why OpenAPI codegen instead of hand-written types, etc.), say so briefly so it reinforces the
   learning.
+- Delegation must not skip the teaching step: after subagent work completes, walk the user through what
+  was decided and why — a bare "done" defeats the purpose of this repo.
