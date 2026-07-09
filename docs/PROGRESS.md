@@ -9,25 +9,45 @@
 > Read this file, plus `gh issue list --state open` and recent `git log`, at the start
 > of a new session instead of re-exploring the whole codebase from scratch.
 
-_Last updated: 2026-07-09 (session: **harness／協作結構治理，無功能程式碼。**
-subagent 從專案層統一到使用者層：#88 新增的 `.claude/agents/` 兩個排球客製版在
-#89 移除，改為 project-agnostic 通用版放 `~/.claude/agents/`（repo 外）供所有專案
-共用——agent 開工先讀當前專案 CLAUDE.md 拿 stack/規則，避免兩份定義 drift；
-「advisor 唯讀只建議、engineer 執行已核准工作」的分工設計不變。角色釐清：使用者
-= Product Owner（目標/取捨/最終核准），主 session = 代理 PM（拆解、委派、把決策
-上呈）——跨專案部分寫進全域 `~/.claude/CLAUDE.md`，本 repo 的 CLAUDE.md 補
-「委派不可跳過教學步驟」一條（#90）。repo 外順手修復：全域
-`~/.claude/settings.json` 原為無效 JSON（整份被靜默忽略，deny/ask 權限規則從未
-生效），已修復並驗證。)_
+_Last updated: 2026-07-09 (session: **產品設計 T1 事件文法領域模型（#73），設計文件層、
+未動 schema/功能程式碼。** 產出 `docs/event-grammar-spec.md`（PR #92）：把產品承諾的每個
+統計寫成 events/rallies/sets 的純函數推導式（群組 A–G）、標出缺口。經 fable-advisor 複審定
+三個非擊球事件結構決策——換人(#42)/暫停(#44) 各開專用表 `substitutions`/`timeouts`＋時機存
+「當下比分快照」（不進 events：會破壞「一 row=一觸球」不變量、逼 `rallyId` 改 nullable、PG
+enum 加值不可逆）；#51 子分類「可聚合的走 typed 欄位(`serveType`/`outcome`)、開放長尾的走
+`tags[]`」；**起始先發是硬缺口 → 新開 `lineups` 表 #93**（一局一 row、六 zone 欄位，是輪次
+統計/換人重播的種子，資料補不回來所以要早補）。使用者拍板：lineups 早補、到位率(quality)/
+座標歸進階版、到位率分舉球/防守＋新增 `cover`(攔網後防守)、**`outcome` 基礎版也存以維持跨層
+不變量**（null⟺球續 in_play，避免「球續」與「未填」撞名）、**記錄體感＝節奏遊戲**（把
+quality/座標/serveType 推進階版的理由，餵 T2 #74）。仍待決定：到位門檻(暫定 `quality>=2`)、
+嗆司定義。#42 已移除 needs-plan（設計障礙排除）、#44 形狀已定實作延後。)_
 
 ## Current state
 
-- On `main`, latest commit `f4290ad` (PR #90). Recent chain: #90/#89/#88 (this
-  session's subagent unification, see below), #87 (product deep-dive execution plan),
-  #86 (PROGRESS update), #85/#84/#83 (lint/format/CI chores), #80 (PR/issue templates
-  - Prettier hook fix), #78 (product positioning docs). **Phase 3 is fully done and
-    #58 is closed** (see the match-recording bullet below).
-- **This session (2026-07-09): harness／協作結構治理，無功能程式碼。**
+- On `main`, latest commit `a6da0d6` (PR #92). Recent chain: #92 (this session's T1
+  event-grammar spec), #91/#90/#89/#88 (subagent unification), #87 (product deep-dive
+  execution plan), #86 (PROGRESS update), #85/#84/#83 (lint/format/CI chores), #80
+  (PR/issue templates + Prettier hook fix), #78 (product positioning docs). **Phase 3
+  is fully done and #58 is closed** (see the match-recording bullet below).
+- **This session (2026-07-09): 產品設計 T1 事件文法領域模型（#73），設計文件層，未動 schema。**
+  - 產出 `docs/event-grammar-spec.md`（PR #92）：統計反推對照表（群組 A–G，每個統計 =
+    events/rallies/sets 欄位的純函數）＋ schema 缺口/決策清單 ＋ 使用者拍板清單。
+  - **三個非擊球事件結構決策（fable-advisor 複審）**：換人 #42／暫停 #44 各開專用表
+    （`substitutions`/`timeouts`），時機存**當下比分快照**而非 rallyId（契合 local-first 單筆
+    atomic insert；塞進 events 會破壞「一 row=一觸球」不變量、逼 `rallyId` nullable、PG enum
+    加值不可逆）。#51 子分類：可聚合的走 typed 欄位（`serveType`/`outcome`）、開放長尾的走
+    `tags[]`（UI 用預設清單餵）。
+  - **新硬缺口 → 開 issue #93 `lineups` 起始先發表**：DB 沒存「這局哪六人站哪」，是輪次統計/
+    換人重播的種子（推不出來、資料補不回來）；使用者拍板早補。一局一 row、`setId` unique、
+    六個 zone 欄位。
+  - **使用者（PO）拍板**：lineups 早補；到位率(quality)/座標歸**進階版**（簡易版維持點人→選
+    動作→得失分）；到位率分「舉球(set)/防守」＋防守新增第四類 `cover`（攔網後防守）；
+    **`outcome` 基礎版也存**（維持 null⟺球續 in_play 的跨層不變量，避免「球續」與「未填」撞名）；
+    **記錄體感＝節奏遊戲**（快/打擊感/即時回饋/視線不離場，是把 quality/座標/serveType 推進階版
+    的理由）。仍待決定：到位門檻（暫定 `quality>=2`）、嗆司定義——先預設、與教練確認再鎖。
+  - Ledger：#42 加註設計已定＋移除 `needs-plan`；#44 加註 timeouts 形狀已定、實作延後；#73
+    保持開啟（2 個待決定 + schema 實作在下游）。**未動 `lib/db/src/schema/`。**
+- **前一段（2026-07-09 稍早）：harness／協作結構治理，無功能程式碼。**
   - **Subagents unified to the user level.** #88 first added volleyball-customized
     `fable-advisor` / `sonnet-engineer` under `.claude/agents/`; #89 then removed them
     in favor of project-agnostic versions at `~/.claude/agents/` (outside the repo,
@@ -310,15 +330,20 @@ status — the list below is a snapshot, not guaranteed up to date):
 - **`area:product` 系列（#73–#77，2026-07-07 新開）**——動程式碼前的概念設計層，
   上位依據是 `docs/product-vision.md`：
   [#73](https://github.com/aila8913/volley-tactic-board/issues/73) 事件文法領域模型
-  （最優先、最不可逆）→
+  （最優先、最不可逆）——**T1 設計已完成（PR #92，見 `docs/event-grammar-spec.md`）**，issue
+  仍開著：剩 2 個待決定（到位門檻、嗆司定義）＋ schema 實作在下游（#93/#42/#44/#51）→
   [#74](https://github.com/aila8913/volley-tactic-board/issues/74) 記錄成本預算
-  （依賴 #73，決定 #50/#51/#21 的分層）、
+  （依賴 #73，決定 #50/#51/#21 的分層；T1 給了「記錄體感＝節奏遊戲」的設計目標）、
   [#75](https://github.com/aila8913/volley-tactic-board/issues/75) 離線可靠性契約＋PWA
   （收斂 #63/#64、擋 #26）、
   [#76](https://github.com/aila8913/volley-tactic-board/issues/76) 生命週期閉環
   （餵 #65/#17）、
   [#77](https://github.com/aila8913/volley-tactic-board/issues/77) 定位落地與 v1 帳號
   模型（餵 #26）。
+- [#93](https://github.com/aila8913/volley-tactic-board/issues/93) — **新開（T1 挖出的硬缺口）**：
+  `lineups` 起始先發表。DB 沒存「這局哪六人站哪」，是輪次統計/換人重播的種子，資料補不回來，
+  使用者拍板早補。設計已定（一局一 row、`setId` unique、六 zone 欄位），可直接實作。
+  `enhancement`/`area:db`/`priority:essential`。#42 換人重播依賴它當基態。
 - [#17](https://github.com/aila8913/volley-tatic-board/issues/17) — UX 重整：視圖控制
   流程、輪次選擇簡化、頁首漢堡選單. **Status per part:** part 1 (Sheet-based saved-tactics
   list) and part 3 (hamburger menu) not started. Part 2 (rotation picker) partially done
@@ -351,8 +376,9 @@ status — the list below is a snapshot, not guaranteed up to date):
   （跨場/彙總統計）。3b-ii 把跨場統計面板從計分表頁抽掉，改到這個獨立頁面做，避免對每場
   fan-out 請求。`needs-plan`、`priority:essential`。
 - [#42](https://github.com/aila8913/volley-tatic-board/issues/42) — 換人紀錄仍是元件內
-  `useState`，reload 消失。#58 補齊了 API 持久化地基後，卡點變成「換人要怎麼進 schema
-  （專用表 or 擴充 events）」的設計判斷，已標 `needs-plan`。
+  `useState`，reload 消失。**T1（#73）已定案設計**：開專用 `substitutions` 表、時機存比分快照
+  （不編碼進 events）；`needs-plan` 已移除。⚠️ 依賴 #93 `lineups`（換人 delta 需要基態陣容才能
+  重播）。
 - [#63](https://github.com/aila8913/volley-tatic-board/issues/63) — 3b-i 已知限制：剛按
   「下一局」但未開球的空局還沒寫進後端，reload 後會退回顯示上一局（低優先 edge case）。
 - [#64](https://github.com/aila8913/volley-tatic-board/issues/64) — 3b-i 取捨：背景寫入
