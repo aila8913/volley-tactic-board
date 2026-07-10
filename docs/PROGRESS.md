@@ -21,8 +21,8 @@ _Last updated: 2026-07-09 (session: **產品設計 T2 記錄成本預算（#74�
 
 ## Current state
 
-- On `main`, latest commit `903b431` (PR #95, the previous session's PROGRESS wrap-up).
-  Recent chain: #95 (PROGRESS update), #94 (`lineups` table), #92 (T1 event-grammar spec),
+- On `main`, latest commit `c40f4ea` (PR #96, the T2 record-cost-budget spec + folded-in
+  PROGRESS). Recent chain: #96 (T2 spec), #95 (PROGRESS update), #94 (`lineups` table), #92 (T1 event-grammar spec),
   #91/#90/#89/#88 (subagent unification), #87 (product deep-dive execution plan), #85/#84/
   #83 (lint/format/CI chores), #80 (PR/issue templates + Prettier hook fix), #78 (product
   positioning docs). **Phase 3 is fully done and #58 is closed** (see the match-recording
