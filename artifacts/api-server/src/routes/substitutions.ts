@@ -33,12 +33,21 @@ router.get("/matches/:matchId/substitutions", async (req, res) => {
   // 依 setId、(homeScore+awayScore) 排序：換人是按「這局內比分快照」記錄時機的（見
   // substitutions.ts 的設計說明），比分嚴格遞增，所以這樣排序就能還原「換人發生的先後順序」，
   // 讓前端可以照順序重放（replay）出每個時間點的上場名單。
+  // 最後再加 id 當 tiebreak：同一分（homeScore/awayScore 完全相同）可能連續換好幾次人
+  // （例如同一球剛結束、教練一次換兩個位置），這時候比分排不出先後，改用 insert 順序
+  // （自增主鍵 id 遞增）當第二層依據，讓「同分內誰先換」永遠是決定性的（deterministic），
+  // 前端 replay 出來的結果每次都一樣，不會因為資料庫排序不穩定而長出不同的重建結果。
   const rows = await db
     .select(getTableColumns(substitutionsTable))
     .from(substitutionsTable)
     .innerJoin(setsTable, eq(substitutionsTable.setId, setsTable.id))
     .where(eq(setsTable.matchId, matchId))
-    .orderBy(substitutionsTable.setId, substitutionsTable.homeScore, substitutionsTable.awayScore);
+    .orderBy(
+      substitutionsTable.setId,
+      substitutionsTable.homeScore,
+      substitutionsTable.awayScore,
+      substitutionsTable.id,
+    );
 
   res.json(rows);
 });

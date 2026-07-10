@@ -4,14 +4,16 @@ import { useQueries } from "@tanstack/react-query";
 import {
   useListSets,
   useListMatchEvents,
+  useListMatchSubstitutions,
   useCreateSet,
   useCreateRally,
   useCreateEvent,
   useDeleteRally,
+  useCreateSubstitution,
   listRallies,
   getListRalliesQueryKey,
 } from "@workspace/api-client-react";
-import type { MatchEvent } from "@workspace/api-client-react";
+import type { MatchEvent, Substitution } from "@workspace/api-client-react";
 import {
   ScoreSheetState,
   PointRecord,
@@ -24,6 +26,8 @@ import {
   pointRecordToRally,
   pointRecordToEvent,
   reconstructSetFromRallies,
+  regularSubToApi,
+  reconstructRegularSubs,
 } from "../lib/scoreSheetMapping";
 
 // 計分表的狀態層。以前這裡是 Zustand + persist（localStorage）；Phase 3b 把真相來源搬到後端
@@ -50,6 +54,9 @@ interface ScoreSheetStore {
   undoLastPoint: (matchId: string) => void;
   nextSet: (matchId: string) => void;
   setLiberoSubstitution: (matchId: string, playerId: string | null) => void;
+  // 一般換人（issue #42 Phase B）：跟 setLiberoSubstitution 一樣是純 reducer，瞬間更新畫面；
+  // 真正寫進後端由 controller 的 substitute() 在背景做（跟 scorePoint/score() 是同一套分工）。
+  recordRegularSub: (matchId: string, outPlayerId: string, inPlayerId: string) => void;
 }
 
 const makeEmptySet = (setNumber: number): SetRecordingState => ({
@@ -66,6 +73,8 @@ const emptyRecord = (): ScoreSheetState => ({
   currentSet: makeEmptySet(1),
   completedSets: [],
   liberoSubstitution: null,
+  regularSubs: [],
+  subCountsHistory: [],
 });
 
 const getOrInitRecord = (
@@ -191,6 +200,12 @@ export const useScoreSheet = create<ScoreSheetStore>()((set) => ({
             // 換新的一局，自由球員替補狀態歸零（跟原本 handleNextSet 手動呼叫
             // setLiberoSubstitution(null) 是同一件事，現在收進 store 自己的動作裡）。
             liberoSubstitution: null,
+            // 這一局的換人次數（淨疊加清單的長度）先存進歷史，新的一局換人清單歸零。
+            // 以前這兩行是 ScoreSheet.tsx 手動呼叫 setSubCountsHistory/setRegularSubs 做的，
+            // 現在既然 regularSubs 搬進 store，順手把「跨局怎麼交接」的邏輯也收進來，
+            // 讓 store 自己對這兩個欄位的一致性負責，不用 UI 元件記得同步做兩件事。
+            subCountsHistory: [...record.subCountsHistory, record.regularSubs.length],
+            regularSubs: [],
           },
         },
       };
@@ -203,6 +218,24 @@ export const useScoreSheet = create<ScoreSheetStore>()((set) => ({
         recordingsByMatch: {
           ...state.recordingsByMatch,
           [matchId]: { ...record, liberoSubstitution: playerId },
+        },
+      };
+    }),
+
+  recordRegularSub: (matchId, outPlayerId, inPlayerId) =>
+    set((state) => {
+      const record = getOrInitRecord(state.recordingsByMatch, matchId);
+      // 淨疊加 dedup：如果剛好有一筆舊紀錄的「換上場的人」正好等於這次「換下場的人」
+      // （代表這個位置正在被連續操作），先把那筆舊紀錄濾掉，只保留最新結果——
+      // 跟 lib/scoreSheetMapping.ts 的 reconstructRegularSubs 是同一套邏輯，重建時才能對得上。
+      const cleaned = record.regularSubs.filter((s) => s.inPlayerId !== outPlayerId);
+      return {
+        recordingsByMatch: {
+          ...state.recordingsByMatch,
+          [matchId]: {
+            ...record,
+            regularSubs: [...cleaned, { outPlayerId, inPlayerId }],
+          },
         },
       };
     }),
@@ -228,6 +261,7 @@ export function useScoreSheetController(matchId: string) {
   const createRally = useCreateRally();
   const createEvent = useCreateEvent();
   const deleteRally = useDeleteRally();
+  const createSubstitution = useCreateSubstitution();
 
   // 持久化記帳（見上方說明）。用 ref 因為它們只影響背景寫入、不該觸發重繪。
   const currentSetIdRef = useRef<number | undefined>(undefined);
@@ -256,18 +290,23 @@ export function useScoreSheetController(matchId: string) {
   // 整場所有 event 一次抓（bulk endpoint），避免對每個 rally 各發一次請求。3b-ii 靠它把
   // 球員動作補回重建的 PointRecord，reload 後球員統計才不會空。
   const eventsQuery = useListMatchEvents(numericMatchId);
+  // 整場所有一般換人紀錄一次抓（跟 events 同一種 bulk endpoint 理由：避免對每個 set
+  // 各發一次請求）。issue #42 Phase B：重建 regularSubs/subCountsHistory 靠它。
+  const subsQuery = useListMatchSubstitutions(numericMatchId);
 
   const setsReady = setsQuery.isSuccess;
   const ralliesReady = ralliesQueries.every((q) => q.isSuccess);
   const eventsReady = eventsQuery.isSuccess;
-  const isHydrating = !setsReady || !eventsReady || (sets.length > 0 && !ralliesReady);
+  const subsReady = subsQuery.isSuccess;
+  const isHydrating =
+    !setsReady || !eventsReady || !subsReady || (sets.length > 0 && !ralliesReady);
 
   // 只在資料第一次備妥時重建一次，之後不再覆蓋（避免把使用者當下的即時編輯洗掉）。
   // matchId 變了就允許再重建一次。
   const hydratedMatchRef = useRef<string | null>(null);
   useEffect(() => {
     if (hydratedMatchRef.current === matchId) return;
-    if (!setsReady || !eventsReady) return;
+    if (!setsReady || !eventsReady || !subsReady) return;
     if (sets.length > 0 && !ralliesReady) return;
 
     // 把整場的 event 依 rallyId 分組，餵給 reconstruct 還原每一分的動作/球員。
@@ -277,6 +316,16 @@ export function useScoreSheetController(matchId: string) {
       const list = eventsByRallyId.get(ev.rallyId);
       if (list) list.push(ev);
       else eventsByRallyId.set(ev.rallyId, [ev]);
+    }
+
+    // 把整場的一般換人紀錄依 setId 分組，重建各局的 regularSubs（見下方使用處）。
+    // 後端 GET 已依 (setId, homeScore, awayScore, id) 排序，同一組內就是發生的先後順序，
+    // 可以直接丟給 reconstructRegularSubs 照順序 replay。
+    const subsBySetId = new Map<number, Substitution[]>();
+    for (const sub of subsQuery.data ?? []) {
+      const list = subsBySetId.get(sub.setId);
+      if (list) list.push(sub);
+      else subsBySetId.set(sub.setId, [sub]);
     }
 
     let state: ScoreSheetState;
@@ -296,13 +345,27 @@ export function useScoreSheetController(matchId: string) {
           history: st.history,
         };
       });
+      // 已結束各局的換人次數：對每個已結束的 set，重放它的換人紀錄、取淨疊加清單的長度
+      // （跟 nextSet 動作把 record.regularSubs.length 推進 subCountsHistory 是同一個數字，
+      // 只是這裡是從後端資料重算，而不是延續 store 裡當下的值）。陣列順序對齊 completedSets。
+      const subCountsHistory: number[] = sets
+        .slice(0, -1)
+        .map((s) => reconstructRegularSubs(subsBySetId.get(s.id) ?? []).length);
       const lastIdx = sets.length - 1;
       const currentSet = reconstructSetFromRallies(
         sets[lastIdx],
         ralliesQueries[lastIdx].data ?? [],
         eventsByRallyId,
       );
-      state = { currentSet, completedSets, liberoSubstitution: null };
+      // 進行中這一局的換人淨疊加清單，直接重放這一局的換人紀錄即可。
+      const regularSubs = reconstructRegularSubs(subsBySetId.get(sets[lastIdx].id) ?? []);
+      state = {
+        currentSet,
+        completedSets,
+        liberoSubstitution: null,
+        regularSubs,
+        subCountsHistory,
+      };
     }
 
     // seed 記帳 ref，讓重建後接著記分/復原能對得上後端 id。
@@ -315,7 +378,7 @@ export function useScoreSheetController(matchId: string) {
     hydratedMatchRef.current = matchId;
     // ralliesQueries / eventsQuery.data 每次 render 重建，放進依賴會抖動；用 *Ready 旗標即可。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [matchId, setsReady, ralliesReady, eventsReady, sets.length]);
+  }, [matchId, setsReady, ralliesReady, eventsReady, subsReady, sets.length]);
 
   // ── 動作（本地即時 + 背景持久化）──
 
@@ -393,5 +456,34 @@ export function useScoreSheetController(matchId: string) {
     });
   }, [matchId, enqueue]);
 
-  return { isHydrating, start, score, undo, goNextSet };
+  // 一般換人（issue #42 Phase B）。跟 score() 是同一套結構：
+  //   1) 先同步擷取「這次換人當下」的比分快照（换人不是掛在某個 rally 底下，
+  //      而是記錄「發生時的比分」，見 scoreSheetMapping.ts 的 regularSubToApi 註解）。
+  //   2) 本地 reducer 立刻更新畫面（recordRegularSub，零延遲）。
+  //   3) 背景把這筆換人 POST 到後端、掛在目前這一局的 setId 底下。
+  const substitute = useCallback(
+    (outPlayerId: string, inPlayerId: string) => {
+      const pre = useScoreSheet.getState().recordingsByMatch[matchId]?.currentSet;
+      if (!pre || pre.serving === null) return;
+
+      const homeScore = pre.ourScore;
+      const awayScore = pre.opponentScore;
+
+      // 1) 本地即時更新（畫面零延遲）
+      useScoreSheet.getState().recordRegularSub(matchId, outPlayerId, inPlayerId);
+
+      // 2) 背景持久化：POST 到目前這一局底下。
+      enqueue(async () => {
+        const setId = currentSetIdRef.current;
+        if (setId === undefined) return; // 理論上 start 一定先跑過；防呆
+        await createSubstitution.mutateAsync({
+          setId,
+          data: regularSubToApi({ outPlayerId, inPlayerId }, homeScore, awayScore),
+        });
+      });
+    },
+    [matchId, enqueue, createSubstitution],
+  );
+
+  return { isHydrating, start, score, undo, goNextSet, substitute };
 }

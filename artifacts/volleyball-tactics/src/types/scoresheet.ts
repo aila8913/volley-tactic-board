@@ -58,6 +58,15 @@ export interface CompletedSet {
   history: PointRecord[];
 }
 
+// 一般換人（跟自由球員即時替補是兩回事，見下方 liberoSubstitution 註解）：
+// outPlayerId 是原本在場上、被換下去的球員；inPlayerId 是從場邊被換上場的球員。
+// 型別定義放在這裡（而不是 ScoreSheetCourt.tsx）是因為 store（useScoreSheet.ts）也要用它
+// ——store 不該反過來 import 元件，會變成元件依賴 store、store 又依賴元件的循環 import。
+export interface RegularSub {
+  outPlayerId: string;
+  inPlayerId: string;
+}
+
 export interface ScoreSheetState {
   currentSet: SetRecordingState;
   completedSets: CompletedSet[];
@@ -66,4 +75,13 @@ export interface ScoreSheetState {
   // 放在全域會導致切換不同比賽的計分表時互相污染彼此的替補狀態——所以搬來這裡，
   // 跟著 recordingsByMatch 用 matchId 分開存，才是它真正該待的地方。
   liberoSubstitution: string | null;
+  // 「當前這一局」的一般換人清單，是「淨疊加」而非逐筆歷史：同一個場上位置被連續換過
+  // 好幾次，這裡只留最後結果（例如 A 被換成 B、B 又被換成 C，這裡只會有一筆 {out:A, in:C}
+  // ——場上實際站的人是 C，教練畫面只需要看到最終誰在場上）。逐筆歷史留在後端
+  // substitutions 表（append-only），reload 重建時會 replay 那些歷史、重新收斂成這份淨清單
+  // （見 lib/scoreSheetMapping.ts 的 reconstructRegularSubs）。
+  regularSubs: RegularSub[];
+  // 已結束各局的換人「次數」（每局淨值，即該局 regularSubs 陣列最終的長度），依局數順序排列。
+  // 只存數字不存明細，因為賽後只需要「這局換了幾次人」這個統計數字（見 ScoreSheetStats）。
+  subCountsHistory: number[];
 }
