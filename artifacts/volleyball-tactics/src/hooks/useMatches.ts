@@ -6,7 +6,7 @@
 // 為什麼用 React Query 而不是自己 fetch：它幫我們處理快取、載入/錯誤狀態、以及「寫入後
 // 讓相關查詢自動重抓」（invalidateQueries）。戰術板存讀（TacticsBoardPanel.tsx）已經是這個
 // 模式，這裡照抄。
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useListMatches,
@@ -59,10 +59,19 @@ export function useMatchWithRoster(matchId: number, enabled = true) {
   const playersQuery = useListPlayers(matchId, {
     query: { enabled, queryKey: getListPlayersQueryKey(matchId) },
   });
-  const match =
-    matchQuery.data !== undefined
-      ? serverMatchToDomain(matchQuery.data, playersQuery.data ?? [])
-      : undefined;
+  // 為什麼要 useMemo：serverMatchToDomain 每次呼叫都會 new 一個新的 domain 物件，
+  // 即使底層資料沒變，參照也是全新的。編輯彈窗（MatchFormDialog）的 useEffect 把這個
+  // match 放進依賴陣列，effect 內又呼叫 form.reset() 觸發重繪；若每次 render 都給新參照，
+  // 就會「render → 新 match → effect 重跑 → reset → 再 render」無限迴圈
+  // （Maximum update depth exceeded）。用 useMemo 綁在兩個 query 的 data 參照上，
+  // 只有資料真的變（React Query 換了新的 data 物件）時才重算，參照才穩定。
+  const match = useMemo(
+    () =>
+      matchQuery.data !== undefined
+        ? serverMatchToDomain(matchQuery.data, playersQuery.data ?? [])
+        : undefined,
+    [matchQuery.data, playersQuery.data],
+  );
   return {
     match,
     isLoading: matchQuery.isLoading || playersQuery.isLoading,
