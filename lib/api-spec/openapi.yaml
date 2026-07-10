@@ -296,6 +296,47 @@ paths:
         "204":
           description: Deleted
 
+  # 一次拿整場比賽的所有換人紀錄（跨 set），道理跟 /matches/{matchId}/events 一樣：
+  # 前端進頁重建計分表/上場名單時，一支請求就夠，不用對每個 set 各發一次。
+  # substitutions 自己沒存 matchId，所以 join substitutions→sets，用 sets.matchId 過濾。
+  /matches/{matchId}/substitutions:
+    parameters:
+      - $ref: "#/components/parameters/MatchId"
+    get:
+      operationId: listMatchSubstitutions
+      tags: [matches]
+      summary: List all substitutions for a match (across all its sets), for rebuilding lineups
+      responses:
+        "200":
+          description: List of substitutions, ordered by set then score
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Substitution"
+
+  /sets/{setId}/substitutions:
+    parameters:
+      - $ref: "#/components/parameters/SetId"
+    post:
+      operationId: createSubstitution
+      tags: [matches]
+      summary: Record one substitution (regular sub or libero in/out) within a set
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewSubstitution"
+      responses:
+        "201":
+          description: Created substitution
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Substitution"
+
   /tactics:
     get:
       operationId: listTactics
@@ -623,6 +664,54 @@ components:
         winner:
           $ref: "#/components/schemas/RallyWinner"
       required: [rallyNumber, homeScore, awayScore, winner]
+
+    # 換人的種類，見 lib/db/src/schema/substitutions.ts 的 substitutionKindEnum 註解：
+    # regular = 一般換人；libero = 自由球員上/下（規則上不算正式換人次數，但記錄結構相同）。
+    SubstitutionKind:
+      type: string
+      enum: [regular, libero]
+
+    Substitution:
+      type: object
+      properties:
+        id:
+          type: integer
+        setId:
+          type: integer
+        # 換人發生的「時機」，存的是這一局當下的比分快照（而非 rallyId）——
+        # 理由跟 Rally 的 homeScore/awayScore 一樣，見 lib/db/src/schema/substitutions.ts。
+        homeScore:
+          type: integer
+        awayScore:
+          type: integer
+        # 上場、下場的球員；nullable，理由見 substitutions.ts：即使不知道是「誰」，
+        # 「這一局發生過一次換人」本身仍有統計意義，球員被刪除時不該連帶刪掉這筆紀錄。
+        playerInId:
+          type: integer
+          nullable: true
+        playerOutId:
+          type: integer
+          nullable: true
+        kind:
+          $ref: "#/components/schemas/SubstitutionKind"
+      required: [id, setId, homeScore, awayScore, playerInId, playerOutId, kind]
+
+    NewSubstitution:
+      type: object
+      properties:
+        homeScore:
+          type: integer
+        awayScore:
+          type: integer
+        playerInId:
+          type: integer
+          nullable: true
+        playerOutId:
+          type: integer
+          nullable: true
+        kind:
+          $ref: "#/components/schemas/SubstitutionKind"
+      required: [homeScore, awayScore, kind]
 
     EventAction:
       type: string

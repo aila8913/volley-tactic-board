@@ -112,6 +112,32 @@ export interface NewRally {
   winner: RallyWinner;
 }
 
+export type SubstitutionKind = typeof SubstitutionKind[keyof typeof SubstitutionKind];
+
+
+export const SubstitutionKind = {
+  regular: 'regular',
+  libero: 'libero',
+} as const;
+
+export interface Substitution {
+  id: number;
+  setId: number;
+  homeScore: number;
+  awayScore: number;
+  playerInId: number | null;
+  playerOutId: number | null;
+  kind: SubstitutionKind;
+}
+
+export interface NewSubstitution {
+  homeScore: number;
+  awayScore: number;
+  playerInId?: number | null;
+  playerOutId?: number | null;
+  kind: SubstitutionKind;
+}
+
 export type EventAction = typeof EventAction[keyof typeof EventAction];
 
 

@@ -1,7 +1,7 @@
 import React, { useMemo, useRef, useState } from "react";
 import { useRotationTable } from "../hooks/useRotationTable";
 import { findNearestZone, getZoneLayout, isBackRowPosition } from "../lib/rotationLogic";
-import { Side } from "../types/scoresheet";
+import { Side, RegularSub } from "../types/scoresheet";
 
 export interface TouchedTarget {
   side: Side;
@@ -11,10 +11,10 @@ export interface TouchedTarget {
   screenY: number;
 }
 
-export interface RegularSub {
-  outPlayerId: string;
-  inPlayerId: string;
-}
+// RegularSub 的定義現在搬到 types/scoresheet.ts（store 那邊的 ScoreSheetState 也要用它，
+// 不能讓 store 反過來 import 這個元件）。這裡重新 export 一次，讓原本
+// `import { RegularSub } from "./ScoreSheetCourt"` 的地方不用跟著改 import 來源。
+export type { RegularSub };
 
 interface ScoreSheetCourtProps {
   ourRotation: number;

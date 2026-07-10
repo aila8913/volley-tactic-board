@@ -7,9 +7,11 @@ import {
   eventToMeta,
   reconstructSetFromRallies,
   isSetComplete,
+  regularSubToApi,
+  reconstructRegularSubs,
 } from "./scoreSheetMapping";
-import type { PointRecord } from "../types/scoresheet";
-import type { MatchSet, Rally, MatchEvent } from "@workspace/api-client-react";
+import type { PointRecord, RegularSub } from "../types/scoresheet";
+import type { MatchSet, Rally, MatchEvent, Substitution } from "@workspace/api-client-react";
 
 // 純函式，最適合單元測試。重點是 us/opponent↔home/away 的翻譯，以及最容易出錯的
 // 「從 rally 序列 replay 回比分/發球方/輪轉」——輪轉規則（只有 side-out 才轉）很細，
@@ -261,5 +263,71 @@ describe("reconstructSetFromRallies", () => {
     ]);
     const state = reconstructSetFromRallies(set, rallies, eventsByRallyId);
     expect(state.history[0]).toMatchObject({ action: "receive", touchedBy: { playerId: "3" } });
+  });
+});
+
+describe("regularSubToApi", () => {
+  it("stringifies player ids to ints and tags kind='regular'", () => {
+    const sub: RegularSub = { outPlayerId: "7", inPlayerId: "12" };
+    expect(regularSubToApi(sub, 10, 8)).toEqual({
+      homeScore: 10,
+      awayScore: 8,
+      playerInId: 12,
+      playerOutId: 7,
+      kind: "regular",
+    });
+  });
+});
+
+// 造一個後端 substitution row（只填重建會用到的欄位）。
+const makeSub = (
+  over: Partial<Substitution> & Pick<Substitution, "playerInId" | "playerOutId">,
+): Substitution => ({
+  id: 1,
+  setId: 9,
+  homeScore: 0,
+  awayScore: 0,
+  kind: "regular",
+  ...over,
+});
+
+describe("reconstructRegularSubs", () => {
+  it("keeps two independent subs at different positions", () => {
+    // 位置 1 換成 2，位置 4 換成 5，兩筆彼此不相干，都保留。
+    const subs = [
+      makeSub({ playerOutId: 1, playerInId: 2, homeScore: 3, awayScore: 1 }),
+      makeSub({ playerOutId: 4, playerInId: 5, homeScore: 6, awayScore: 2 }),
+    ];
+    expect(reconstructRegularSubs(subs)).toEqual([
+      { outPlayerId: "1", inPlayerId: "2" },
+      { outPlayerId: "4", inPlayerId: "5" },
+    ]);
+  });
+
+  it("collapses a chained re-substitution the same way the live store's dedup does", () => {
+    // 先 {out:1,in:2}，之後 {out:2,in:3}：後者的 outPlayerId="2" 剛好等於前一筆的
+    // inPlayerId，dedup 會把前一筆濾掉，只留下最後這筆——跟 useScoreSheet.ts 的
+    // recordRegularSub 是同一套邏輯（見 scoreSheetMapping.ts 的函式註解）。
+    const subs = [
+      makeSub({ playerOutId: 1, playerInId: 2, homeScore: 3, awayScore: 1 }),
+      makeSub({ playerOutId: 2, playerInId: 3, homeScore: 5, awayScore: 2 }),
+    ];
+    expect(reconstructRegularSubs(subs)).toEqual([{ outPlayerId: "2", inPlayerId: "3" }]);
+  });
+
+  it("ignores libero rows (issue #43 territory, not regular subs)", () => {
+    const subs = [
+      makeSub({ playerOutId: 1, playerInId: 2, homeScore: 3, awayScore: 1 }),
+      makeSub({ playerOutId: 6, playerInId: null, kind: "libero", homeScore: 4, awayScore: 1 }),
+    ];
+    expect(reconstructRegularSubs(subs)).toEqual([{ outPlayerId: "1", inPlayerId: "2" }]);
+  });
+
+  it("skips regular rows with a null player id (shouldn't happen, but defends against it)", () => {
+    const subs = [
+      makeSub({ playerOutId: 1, playerInId: null, homeScore: 3, awayScore: 1 }),
+      makeSub({ playerOutId: null, playerInId: 2, homeScore: 4, awayScore: 1 }),
+    ];
+    expect(reconstructRegularSubs(subs)).toEqual([]);
   });
 });

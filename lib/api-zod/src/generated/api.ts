@@ -315,6 +315,41 @@ export const DeleteRallyParams = zod.object({
 
 
 /**
+ * @summary List all substitutions for a match (across all its sets), for rebuilding lineups
+ */
+export const ListMatchSubstitutionsParams = zod.object({
+  "matchId": zod.coerce.number()
+})
+
+export const ListMatchSubstitutionsResponseItem = zod.object({
+  "id": zod.number(),
+  "setId": zod.number(),
+  "homeScore": zod.number(),
+  "awayScore": zod.number(),
+  "playerInId": zod.number().nullable(),
+  "playerOutId": zod.number().nullable(),
+  "kind": zod.enum(['regular', 'libero'])
+})
+export const ListMatchSubstitutionsResponse = zod.array(ListMatchSubstitutionsResponseItem)
+
+
+/**
+ * @summary Record one substitution (regular sub or libero in/out) within a set
+ */
+export const CreateSubstitutionParams = zod.object({
+  "setId": zod.coerce.number()
+})
+
+export const CreateSubstitutionBody = zod.object({
+  "homeScore": zod.number(),
+  "awayScore": zod.number(),
+  "playerInId": zod.number().nullish(),
+  "playerOutId": zod.number().nullish(),
+  "kind": zod.enum(['regular', 'libero'])
+})
+
+
+/**
  * @summary List all saved tactics for the current user
  */
 export const ListTacticsResponseItem = zod.object({

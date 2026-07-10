@@ -6,7 +6,7 @@ import BackToMatchListButton from "@/components/BackToMatchListButton";
 import { useMatchWithRoster } from "@/hooks/useMatches";
 import { useRotationTable } from "@/hooks/useRotationTable";
 import { useScoreSheet, useScoreSheetController } from "@/hooks/useScoreSheet";
-import ScoreSheetCourt, { TouchedTarget, RegularSub } from "@/components/ScoreSheetCourt";
+import ScoreSheetCourt, { TouchedTarget } from "@/components/ScoreSheetCourt";
 import RadialMenu, { RadialMenuOption } from "@/components/RadialMenu";
 import ScoreSheetStats from "@/components/ScoreSheetStats";
 import { PlayAction } from "@/types/scoresheet";
@@ -56,10 +56,17 @@ export default function ScoreSheet() {
   // 記分/開局/復原/下一局改走 controller：本地即時更新畫面，同時在背景寫進後端
   // sets/rallies/events；進頁時也由它從 API 重建這場的記錄。setLiberoSubstitution 仍留在
   // store（純前端、不進 API，reload 後歸零——真正的自由球員持久化是 #43 的範圍）。
-  const { isHydrating, start, score, undo, goNextSet } = useScoreSheetController(id ?? "");
+  const { isHydrating, start, score, undo, goNextSet, substitute } = useScoreSheetController(
+    id ?? "",
+  );
   // 這場比賽目前的自由球員替補狀態——現在跟著 matchId 存在 useScoreSheet 裡（見
   // types/scoresheet.ts 的說明），不會再跟別場比賽的計分表互相污染。
   const liberoSubstitution = record?.liberoSubstitution ?? null;
+  // 一般換人（issue #42 Phase B）：以前是這個元件自己的 useState，reload 就整包歸零；
+  // 現在跟 liberoSubstitution 一樣搬進 useScoreSheet store，跟著 matchId 走、由
+  // useScoreSheetController 從後端 /sets/:setId/substitutions 重建，reload 後不會消失。
+  const regularSubs = record?.regularSubs ?? [];
+  const subCountsHistory = record?.subCountsHistory ?? [];
 
   const [gesture, setGesture] = useState<Gesture | null>(null);
 
@@ -72,8 +79,8 @@ export default function ScoreSheet() {
   prevLiberoRef.current = previousLiberoTarget;
 
   // ── 一般換人 ──
-  const [regularSubs, setRegularSubs] = useState<RegularSub[]>([]);
-  const [subCountsHistory, setSubCountsHistory] = useState<number[]>([]);
+  // regularSubs/subCountsHistory 已搬到上面從 record 衍生；這裡只留「換人模式選中哪個場邊
+  // 球員」這個純 UI 互動狀態（跟後端無關，不用持久化）。
   const [selectedBenchPlayer, setSelectedBenchPlayer] = useState<string | null>(null);
 
   useEffect(() => {
@@ -194,10 +201,10 @@ export default function ScoreSheet() {
   };
 
   const handleRegularSub = (inPlayerId: string, outPlayerId: string) => {
-    setRegularSubs((prev) => {
-      const cleaned = prev.filter((s) => s.inPlayerId !== outPlayerId);
-      return [...cleaned, { outPlayerId, inPlayerId }];
-    });
+    // 換人動作（本地即時更新 + 背景寫進後端）現在都收在 controller 的 substitute() 裡，
+    // 跟 score() 是同一套「本地優先、背景持久化」的分工，這裡只管畫面互動（清掉自由球員
+    // 替補殘留狀態、關掉換人模式）。
+    substitute(outPlayerId, inPlayerId);
     if (outPlayerId === liberoSubstitution) {
       setLiberoSubstitution(id, null);
     }
@@ -218,12 +225,11 @@ export default function ScoreSheet() {
       );
       if (!ok) return;
     }
-    setSubCountsHistory((prev) => [...prev, regularSubs.length]);
-    // goNextSet 底層的 nextSet 現在就會把 liberoSubstitution 歸零（見 hooks/useScoreSheet.ts），
-    // 這裡不用再另外呼叫一次。
+    // goNextSet 底層的 nextSet 現在就會把 liberoSubstitution 歸零、把 regularSubs 的次數
+    // 收進 subCountsHistory 再清空（見 hooks/useScoreSheet.ts 的 nextSet 動作），
+    // 這裡不用再手動同步這兩件事。
     goNextSet();
     setPreviousLiberoTarget(null);
-    setRegularSubs([]);
     setSelectedBenchPlayer(null);
   };
 

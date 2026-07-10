@@ -29,9 +29,11 @@ import type {
   NewPlayer,
   NewRally,
   NewSet,
+  NewSubstitution,
   NewTactic,
   Player,
   Rally,
+  Substitution,
   Tactic,
   UpdateEvent,
   UpdateMatch,
@@ -1383,6 +1385,155 @@ export const useDeleteRally = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getDeleteRallyMutationOptions(options));
+    }
+
+export const getListMatchSubstitutionsUrl = (matchId: number,) => {
+
+
+
+
+  return `/api/matches/${matchId}/substitutions`
+}
+
+/**
+ * @summary List all substitutions for a match (across all its sets), for rebuilding lineups
+ */
+export const listMatchSubstitutions = async (matchId: number, options?: RequestInit): Promise<Substitution[]> => {
+
+  return customFetch<Substitution[]>(getListMatchSubstitutionsUrl(matchId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListMatchSubstitutionsQueryKey = (matchId: number,) => {
+    return [
+    `/api/matches/${matchId}/substitutions`
+    ] as const;
+    }
+
+
+export const getListMatchSubstitutionsQueryOptions = <TData = Awaited<ReturnType<typeof listMatchSubstitutions>>, TError = ErrorType<unknown>>(matchId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMatchSubstitutions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListMatchSubstitutionsQueryKey(matchId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listMatchSubstitutions>>> = ({ signal }) => listMatchSubstitutions(matchId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(matchId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listMatchSubstitutions>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListMatchSubstitutionsQueryResult = NonNullable<Awaited<ReturnType<typeof listMatchSubstitutions>>>
+export type ListMatchSubstitutionsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List all substitutions for a match (across all its sets), for rebuilding lineups
+ */
+
+export function useListMatchSubstitutions<TData = Awaited<ReturnType<typeof listMatchSubstitutions>>, TError = ErrorType<unknown>>(
+ matchId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMatchSubstitutions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListMatchSubstitutionsQueryOptions(matchId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getCreateSubstitutionUrl = (setId: number,) => {
+
+
+
+
+  return `/api/sets/${setId}/substitutions`
+}
+
+/**
+ * @summary Record one substitution (regular sub or libero in/out) within a set
+ */
+export const createSubstitution = async (setId: number,
+    newSubstitution: NewSubstitution, options?: RequestInit): Promise<Substitution> => {
+
+  return customFetch<Substitution>(getCreateSubstitutionUrl(setId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      newSubstitution,)
+  }
+);}
+
+
+
+
+export const getCreateSubstitutionMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createSubstitution>>, TError,{setId: number;data: BodyType<NewSubstitution>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createSubstitution>>, TError,{setId: number;data: BodyType<NewSubstitution>}, TContext> => {
+
+const mutationKey = ['createSubstitution'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createSubstitution>>, {setId: number;data: BodyType<NewSubstitution>}> = (props) => {
+          const {setId,data} = props ?? {};
+
+          return  createSubstitution(setId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateSubstitutionMutationResult = NonNullable<Awaited<ReturnType<typeof createSubstitution>>>
+    export type CreateSubstitutionMutationBody = BodyType<NewSubstitution>
+    export type CreateSubstitutionMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Record one substitution (regular sub or libero in/out) within a set
+ */
+export const useCreateSubstitution = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createSubstitution>>, TError,{setId: number;data: BodyType<NewSubstitution>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createSubstitution>>,
+        TError,
+        {setId: number;data: BodyType<NewSubstitution>},
+        TContext
+      > => {
+      return useMutation(getCreateSubstitutionMutationOptions(options));
     }
 
 export const getListTacticsUrl = () => {

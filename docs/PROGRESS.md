@@ -9,26 +9,45 @@
 > Read this file, plus `gh issue list --state open` and recent `git log`, at the start
 > of a new session instead of re-exploring the whole codebase from scratch.
 
-_Last updated: 2026-07-09 (session: **產品設計 T2 記錄成本預算（#74），設計文件層，未動 schema／
-程式碼。** 產出 `docs/recording-cost-budget.md`：把「單人賽中記得完幾多」量化成兩個預算池（死球
-空檔 15–30s／可用 5–10s vs live rally 視線離場≈0），得出**硬分界＝簡易版恰好記一筆決定球（死球
-空檔）、進階版所有 per-touch/座標/判斷全丟賽後影片**。關鍵洞見：界線是懸崖不是斜坡——想多記一觸
-就被迫進 live（6 觸無法憑記憶重建），而 live 視線預算≈0。順帶答出下游分層：**#50 情境過濾＝零點擊
-成本**（發球方可推導）、#51/#21 進階、#20 簡易；補填模型＝同 rally additive `source='review'`、待補
-清單天生可由「沒看到」rally 推導，皆不動 schema。PO 拍板：**嚴守 T1、不開 simple+**（serveType 雖是
-唯一夠便宜的候選，仍留進階）、「沒看到」維持唯一 escape valve。本次採「PROGRESS 折進功能分支、merge
-前寫」實驗，doc＋本更新同一 PR。前一段同日產出 T1 spec（PR #92）＋ lineups 表（PR #94），見下方。)_
+_Last updated: 2026-07-10 (session: **修完 #42 一般換人持久化 bug。** 一般換人（regularSubs）
+以前是 ScoreSheet.tsx 的本地 useState，reload 就整包歸零。分兩階段：Phase A 補後端 REST
+（`substitutions` 表已於 #97 落地）——`GET /matches/:id/substitutions`＋`POST /sets/:id/substitutions`
+＋openapi＋codegen；Phase B 把 regularSubs/subCountsHistory 搬進 useScoreSheet store（比照
+liberoSubstitution），controller 背景 POST、進頁從 GET 重建。時機存**比分快照**非 rallyId（換人發生在
+兩 rally 之間、下一 rally id 還不存在，鏡射 rallies 設計）；後端是 append-only log，前端重建時重放
+handleRegularSub 的**淨疊加 dedup**（A→B→C 收斂成單筆）。驗證：typecheck 綠、44 測試全過，並以 API
+round-trip（POST→GET→hard reload）確認統計側欄換人數 0/0→2/2 正確重建、reload 後不消失。仍在
+`main` 上以 squash + 折入 PROGRESS 的方式出貨。libero 換人持久化（#43）、換人 undo（#41）不在範圍。)_
 
 ## Current state
 
-- On `main`, latest commit `c40f4ea` (PR #96, the T2 record-cost-budget spec + folded-in
-  PROGRESS). Recent chain: #96 (T2 spec), #95 (PROGRESS update), #94 (`lineups` table), #92 (T1 event-grammar spec),
-  #91/#90/#89/#88 (subagent unification), #87 (product deep-dive execution plan), #85/#84/
-  #83 (lint/format/CI chores), #80 (PR/issue templates + Prettier hook fix), #78 (product
-  positioning docs). **Phase 3 is fully done and #58 is closed** (see the match-recording
-  bullet below).
-- **This session (2026-07-09, latest): 產品設計 T2 記錄成本預算（#74），設計文件層，未動
-  schema／程式碼。** 產出 `docs/recording-cost-budget.md`。
+- On `main`, latest commit is the #42 substitutions fix (PR TBD). Recent chain: #97
+  (`substitutions` table), #96 (T2 record-cost-budget spec), #95 (PROGRESS update), #94
+  (`lineups` table), #92 (T1 event-grammar spec), #91/#90/#89/#88 (subagent unification),
+  #87 (product deep-dive execution plan), #85/#84/#83 (lint/format/CI chores), #80 (PR/issue
+  templates + Prettier hook fix), #78 (product positioning docs). **Phase 3 is fully done and
+  #58 is closed** (see the match-recording bullet below).
+- **This session (2026-07-10, latest): 修完 #42 一般換人持久化 bug（Phase A 後端 REST +
+  Phase B 前端持久化）。**
+  - **Bug**：一般換人 `regularSubs`/`subCountsHistory` 是 `ScoreSheet.tsx` 本地 `useState`，
+    reload 就歸零——場上比分/輪轉早就跨 reload 存活（走後端），唯獨換人沒有。
+  - **Phase A（後端 REST）**：`substitutions` 表 #97 已落地（`kind` regular/libero、時機存比分快照、
+    playerIn/Out 皆 nullable + `set null`）。本階段補 `GET /matches/:id/substitutions`（join sets
+    過濾、依 setId+比分排序）＋`POST /sets/:id/substitutions`（setId 取自路徑、驗擁有權）＋
+    openapi 兩條路徑/schema ＋ codegen 出 `useListMatchSubstitutions`/`useCreateSubstitution`。
+  - **Phase B（前端持久化）**：`regularSubs`/`subCountsHistory` 搬進 `useScoreSheet` store（比照
+    `liberoSubstitution`，單一 hydrate 路徑）；`substitute()` controller 走跟 `score()` 同一套
+    「本地即時 + 背景 POST」；進頁時 `GET` 回來依 `setId` 分組、`reconstructRegularSubs` 重放
+    **淨疊加 dedup**（append-only log → 「現在場上是誰」，A→B→C 收斂成單筆）重建每局。後端
+    `orderBy` 加 `id` 尾破同分保重放穩定。
+  - **驗證**：`typecheck` 綠、44 測試全過（新增 `regularSubToApi`/`reconstructRegularSubs` 測試，
+    含手動 trace 過的連鎖 re-sub）；並跑起整套 stack 做 API round-trip（POST 兩筆 → GET 回來 →
+    硬 reload record 頁），統計側欄換人數 **0/0 → 2/2** 正確重建，reload 後不消失，事後清掉測試列。
+  - **範圍外**：libero 換人持久化留 #43、換人 undo 留 #41。
+  - **流程**：延續「PROGRESS 折進功能分支、merge 前寫」（見 [[feedback_fold_progress_into_work_pr]]），
+    本更新與程式碼同一個 PR。
+- **前一段（2026-07-09）：產品設計 T2 記錄成本預算（#74），設計文件層，未動 schema／程式碼。**
+  產出 `docs/recording-cost-budget.md`。
   - **量化模型**：兩個預算池——死球空檔（15–30s，可用 ⅓≈5–10s，視線可離場）vs live rally
     （5–15s，視線離場預算≈0，必須盯球）。成本量兩件事：點擊數＋**視線離場秒數**（真正的瓶頸）。
     成本估計已對照真實 recording code（`ScoreSheetCourt` 手勢 → `RadialMenu` 動作/得失分）grounding，

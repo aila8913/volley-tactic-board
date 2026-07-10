@@ -8,8 +8,22 @@
 //      一個 rally（誰得這分）＋ 最多一個 event（那一球的動作／球員）。「沒看到」只有 rally、沒 event。
 //   3. 輪轉/發球方不存在後端：sets 只多存一個「誰先發（firstServer）」的種子，其餘（比分、
 //      發球方、輪轉、每球的 side-out 旗標）都由這裡 replay rally 序列重算回來。
-import type { MatchSet, Rally, MatchEvent, NewRally, NewEvent } from "@workspace/api-client-react";
-import type { Side, PointRecord, PlayAction, SetRecordingState } from "../types/scoresheet";
+import type {
+  MatchSet,
+  Rally,
+  MatchEvent,
+  NewRally,
+  NewEvent,
+  Substitution,
+  NewSubstitution,
+} from "@workspace/api-client-react";
+import type {
+  Side,
+  PointRecord,
+  PlayAction,
+  SetRecordingState,
+  RegularSub,
+} from "../types/scoresheet";
 
 // ── us/opponent ↔ home/away ──
 // 後端所有計分相關的表（rallies.winner、events.side、sets.firstServer）都用 home/away，
@@ -133,4 +147,50 @@ export function reconstructSetFromRallies(
     history,
     serverId: apiSet.id,
   };
+}
+
+// ── RegularSub → 換人 API body ──
+// 一般換人（issue #42 Phase B）跟 rally 一樣，時機記的是「這次操作當下的比分快照」
+// （homeScore/awayScore），不是掛在某個 rally 底下——理由跟 substitutions.ts 的後端註解
+// 一樣：換人可能發生在兩個 rally 之間（下一球都還沒開始），那時下一個 rally 的 id 還不存在，
+// 沒辦法拿來當外鍵，只能記「發生時的比分」當時間戳記。
+// 前端球員 id 是字串（跟輪轉表共用的 roster 型別一致），後端是整數主鍵，這裡做轉換。
+export function regularSubToApi(
+  sub: RegularSub,
+  homeScore: number,
+  awayScore: number,
+): NewSubstitution {
+  return {
+    homeScore,
+    awayScore,
+    playerInId: Number(sub.inPlayerId),
+    playerOutId: Number(sub.outPlayerId),
+    kind: "regular",
+  };
+}
+
+// ── 後端 substitution rows → 前端 regularSubs 淨疊加清單（regularSubToApi 的反向、重建用）──
+// 後端存的是 append-only 全歷史：教練每按一次「換人」，後端就多一筆 row，同一個位置
+// 換過幾次人就有幾筆。但 UI 的 regularSubs 是「淨疊加」（見 types/scoresheet.ts 的註解）：
+// 只關心「現在」場上實際站的是誰，不是完整的換人流水帳。
+// 所以重建時要照發生順序（呼叫端已依 homeScore/awayScore 排序，等同時間順序）「重放」
+// 一次 ScoreSheet.handleRegularSub 當初做的同一套 dedup 邏輯：每次換人都先把「(舊)inPlayerId
+// 剛好等於這次 outPlayerId」的舊紀錄濾掉，再把這筆新紀錄接上去。
+// 這樣 A 被換成 B、B 又被換成 C 時，會先把「out:A,in:B」那筆濾掉（因為它的 in=B=這次的
+// out），只留下「out:A,in:C」——最終結果永遠是「原本場上是誰、現在場上是誰」，
+// 不會纍積出一串中間過程。
+// 只處理 kind==='regular'（libero 上下場的重建是 #43 的範圍，不能混進一般換人清單）；
+// playerInId/playerOutId 為 null 的 regular row 理論上不會出現（一般換人一定知道誰換誰），
+// 保險起見直接跳過、不讓它污染清單。
+export function reconstructRegularSubs(subs: Substitution[]): RegularSub[] {
+  let result: RegularSub[] = [];
+  for (const s of subs) {
+    if (s.kind !== "regular") continue;
+    if (s.playerInId == null || s.playerOutId == null) continue;
+    const inPlayerId = String(s.playerInId);
+    const outPlayerId = String(s.playerOutId);
+    const cleaned = result.filter((r) => r.inPlayerId !== outPlayerId);
+    result = [...cleaned, { outPlayerId, inPlayerId }];
+  }
+  return result;
 }
