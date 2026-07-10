@@ -49,6 +49,9 @@ export default function MatchCard({ match, onEdit, onDelete }: MatchCardProps) {
         <Button asChild variant="outline">
           <Link href={`/matches/${match.id}/record`}>計分表</Link>
         </Button>
+        <Button asChild variant="outline">
+          <Link href={`/matches/${match.id}/analytics`}>數據</Link>
+        </Button>
       </CardFooter>
     </Card>
   );

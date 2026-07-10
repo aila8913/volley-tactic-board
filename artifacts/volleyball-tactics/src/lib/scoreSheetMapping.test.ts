@@ -9,6 +9,7 @@ import {
   isSetComplete,
   regularSubToApi,
   reconstructRegularSubs,
+  reconstructRecording,
 } from "./scoreSheetMapping";
 import type { PointRecord, RegularSub } from "../types/scoresheet";
 import type { MatchSet, Rally, MatchEvent, Substitution } from "@workspace/api-client-react";
@@ -289,6 +290,105 @@ const makeSub = (
   awayScore: 0,
   kind: "regular",
   ...over,
+});
+
+describe("reconstructRecording", () => {
+  it("returns an empty record when the match has no sets yet", () => {
+    const state = reconstructRecording([], [], [], []);
+    expect(state).toEqual({
+      currentSet: {
+        setNumber: 1,
+        ourScore: 0,
+        opponentScore: 0,
+        serving: null,
+        ourRotation: 0,
+        opponentRotation: 0,
+        history: [],
+      },
+      completedSets: [],
+      liberoSubstitution: null,
+      regularSubs: [],
+      subCountsHistory: [],
+    });
+  });
+
+  it("treats the last set (highest setNumber) as in-progress, earlier ones as completed", () => {
+    const set1: MatchSet = { id: 1, matchId: 3, setNumber: 1, firstServer: "home" };
+    const set2: MatchSet = { id: 2, matchId: 3, setNumber: 2, firstServer: "away" };
+    const rally = (
+      setId: number,
+      rallyNumber: number,
+      winner: "home" | "away",
+      id: number,
+    ): Rally => ({
+      id,
+      setId,
+      rallyNumber,
+      homeScore: 0,
+      awayScore: 0,
+      winner,
+    });
+    // 第 1 局：home 先發，home 連得 2 分 → 2:0 已結束。
+    const set1Rallies = [rally(1, 1, "home", 100), rally(1, 2, "home", 101)];
+    // 第 2 局：away 先發，home 得 1 分（side-out）→ 1:0 進行中。
+    const set2Rallies = [rally(2, 1, "home", 200)];
+
+    const state = reconstructRecording([set1, set2], [set1Rallies, set2Rallies], [], []);
+
+    expect(state.completedSets).toEqual([
+      { setNumber: 1, ourScore: 2, opponentScore: 0, history: expect.any(Array) },
+    ]);
+    expect(state.currentSet.setNumber).toBe(2);
+    expect(state.currentSet.ourScore).toBe(1);
+    expect(state.currentSet.opponentScore).toBe(0);
+    expect(state.currentSet.serverId).toBe(2);
+  });
+
+  it("attaches events to the right rallies across multiple sets", () => {
+    const set1: MatchSet = { id: 1, matchId: 3, setNumber: 1, firstServer: "home" };
+    const set2: MatchSet = { id: 2, matchId: 3, setNumber: 2, firstServer: "home" };
+    const set1Rallies: Rally[] = [
+      { id: 100, setId: 1, rallyNumber: 1, homeScore: 0, awayScore: 0, winner: "home" },
+    ];
+    const set2Rallies: Rally[] = [
+      { id: 200, setId: 2, rallyNumber: 1, homeScore: 0, awayScore: 0, winner: "home" },
+    ];
+    const events: MatchEvent[] = [
+      makeEvent({ rallyId: 100, side: "home", playerId: 5, action: "serve" }),
+      makeEvent({ rallyId: 200, side: "home", playerId: 9, action: "attack" }),
+    ];
+
+    const state = reconstructRecording([set1, set2], [set1Rallies, set2Rallies], events, []);
+
+    expect(state.completedSets[0].history[0]).toMatchObject({
+      action: "serve",
+      touchedBy: { playerId: "5" },
+    });
+    expect(state.currentSet.history[0]).toMatchObject({
+      action: "attack",
+      touchedBy: { playerId: "9" },
+    });
+  });
+
+  it("rebuilds subCountsHistory per completed set and regularSubs for the in-progress set", () => {
+    const set1: MatchSet = { id: 1, matchId: 3, setNumber: 1, firstServer: "home" };
+    const set2: MatchSet = { id: 2, matchId: 3, setNumber: 2, firstServer: "home" };
+    const set1Rallies: Rally[] = [
+      { id: 100, setId: 1, rallyNumber: 1, homeScore: 0, awayScore: 0, winner: "home" },
+    ];
+    const set2Rallies: Rally[] = [
+      { id: 200, setId: 2, rallyNumber: 1, homeScore: 0, awayScore: 0, winner: "home" },
+    ];
+    const subs = [
+      makeSub({ setId: 1, playerOutId: 1, playerInId: 2, homeScore: 0, awayScore: 0 }),
+      makeSub({ setId: 2, playerOutId: 3, playerInId: 4, homeScore: 1, awayScore: 0 }),
+    ];
+
+    const state = reconstructRecording([set1, set2], [set1Rallies, set2Rallies], [], subs);
+
+    expect(state.subCountsHistory).toEqual([1]); // 第 1 局（已結束）換了 1 次
+    expect(state.regularSubs).toEqual([{ outPlayerId: "3", inPlayerId: "4" }]); // 第 2 局（進行中）
+  });
 });
 
 describe("reconstructRegularSubs", () => {

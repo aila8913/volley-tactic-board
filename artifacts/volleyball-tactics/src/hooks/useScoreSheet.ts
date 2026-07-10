@@ -13,21 +13,15 @@ import {
   listRallies,
   getListRalliesQueryKey,
 } from "@workspace/api-client-react";
-import type { MatchEvent, Substitution } from "@workspace/api-client-react";
-import {
-  ScoreSheetState,
-  PointRecord,
-  Side,
-  SetRecordingState,
-  CompletedSet,
-} from "../types/scoresheet";
+import { ScoreSheetState, PointRecord, Side } from "../types/scoresheet";
 import {
   sideToApi,
   pointRecordToRally,
   pointRecordToEvent,
-  reconstructSetFromRallies,
+  reconstructRecording,
   regularSubToApi,
-  reconstructRegularSubs,
+  makeEmptySet,
+  emptyRecord,
 } from "../lib/scoreSheetMapping";
 
 // 計分表的狀態層。以前這裡是 Zustand + persist（localStorage）；Phase 3b 把真相來源搬到後端
@@ -58,24 +52,6 @@ interface ScoreSheetStore {
   // 真正寫進後端由 controller 的 substitute() 在背景做（跟 scorePoint/score() 是同一套分工）。
   recordRegularSub: (matchId: string, outPlayerId: string, inPlayerId: string) => void;
 }
-
-const makeEmptySet = (setNumber: number): SetRecordingState => ({
-  setNumber,
-  ourScore: 0,
-  opponentScore: 0,
-  serving: null,
-  ourRotation: 0,
-  opponentRotation: 0,
-  history: [],
-});
-
-const emptyRecord = (): ScoreSheetState => ({
-  currentSet: makeEmptySet(1),
-  completedSets: [],
-  liberoSubstitution: null,
-  regularSubs: [],
-  subCountsHistory: [],
-});
 
 const getOrInitRecord = (
   byMatch: Record<string, ScoreSheetState>,
@@ -309,64 +285,18 @@ export function useScoreSheetController(matchId: string) {
     if (!setsReady || !eventsReady || !subsReady) return;
     if (sets.length > 0 && !ralliesReady) return;
 
-    // 把整場的 event 依 rallyId 分組，餵給 reconstruct 還原每一分的動作/球員。
-    // endpoint 已依 rallyId、sequence 排序，所以同一組內是照 sequence 排好的。
-    const eventsByRallyId = new Map<number, MatchEvent[]>();
-    for (const ev of eventsQuery.data ?? []) {
-      const list = eventsByRallyId.get(ev.rallyId);
-      if (list) list.push(ev);
-      else eventsByRallyId.set(ev.rallyId, [ev]);
-    }
-
-    // 把整場的一般換人紀錄依 setId 分組，重建各局的 regularSubs（見下方使用處）。
-    // 後端 GET 已依 (setId, homeScore, awayScore, id) 排序，同一組內就是發生的先後順序，
-    // 可以直接丟給 reconstructRegularSubs 照順序 replay。
-    const subsBySetId = new Map<number, Substitution[]>();
-    for (const sub of subsQuery.data ?? []) {
-      const list = subsBySetId.get(sub.setId);
-      if (list) list.push(sub);
-      else subsBySetId.set(sub.setId, [sub]);
-    }
-
-    let state: ScoreSheetState;
-    if (sets.length === 0) {
-      // 這場還沒記過任何一局：給一份空白記錄，畫面會顯示「這局由誰先發球？」。
-      state = emptyRecord();
-    } else {
-      // 慣例：最後一局（setNumber 最大）當「進行中」，前面的都當「已結束」。schema 沒有
-      // 「這局結束了嗎」的旗標，所以無法區分「剛按下一局但還沒開球」的空局——那個未開球的
-      // 新局還沒寫進後端（要選完先發方才建 set row），reload 後會退回顯示上一局，屬已知限制（#63）。
-      const completedSets: CompletedSet[] = sets.slice(0, -1).map((s, i) => {
-        const st = reconstructSetFromRallies(s, ralliesQueries[i].data ?? [], eventsByRallyId);
-        return {
-          setNumber: st.setNumber,
-          ourScore: st.ourScore,
-          opponentScore: st.opponentScore,
-          history: st.history,
-        };
-      });
-      // 已結束各局的換人次數：對每個已結束的 set，重放它的換人紀錄、取淨疊加清單的長度
-      // （跟 nextSet 動作把 record.regularSubs.length 推進 subCountsHistory 是同一個數字，
-      // 只是這裡是從後端資料重算，而不是延續 store 裡當下的值）。陣列順序對齊 completedSets。
-      const subCountsHistory: number[] = sets
-        .slice(0, -1)
-        .map((s) => reconstructRegularSubs(subsBySetId.get(s.id) ?? []).length);
-      const lastIdx = sets.length - 1;
-      const currentSet = reconstructSetFromRallies(
-        sets[lastIdx],
-        ralliesQueries[lastIdx].data ?? [],
-        eventsByRallyId,
-      );
-      // 進行中這一局的換人淨疊加清單，直接重放這一局的換人紀錄即可。
-      const regularSubs = reconstructRegularSubs(subsBySetId.get(sets[lastIdx].id) ?? []);
-      state = {
-        currentSet,
-        completedSets,
-        liberoSubstitution: null,
-        regularSubs,
-        subCountsHistory,
-      };
-    }
+    // 「資料到位後怎麼組成 ScoreSheetState」這段純計算已抽到 reconstructRecording
+    // （lib/scoreSheetMapping.ts），這裡只管把三個 query 的資料整理成它要的形狀：
+    // ralliesBySetIndex 要跟 sets 陣列同索引對齊（ralliesQueries 就是照 sets.map(...)
+    // 的順序發的，直接照順序取 .data 即可）。分析頁的 useMatchRecording 也是呼叫
+    // 同一個函式，兩邊重建規則保證一致。
+    const ralliesBySetIndex = ralliesQueries.map((q) => q.data ?? []);
+    const state = reconstructRecording(
+      sets,
+      ralliesBySetIndex,
+      eventsQuery.data ?? [],
+      subsQuery.data ?? [],
+    );
 
     // seed 記帳 ref，讓重建後接著記分/復原能對得上後端 id。
     currentSetIdRef.current = state.currentSet.serverId;

@@ -23,6 +23,8 @@ import type {
   PlayAction,
   SetRecordingState,
   RegularSub,
+  ScoreSheetState,
+  CompletedSet,
 } from "../types/scoresheet";
 
 // ── us/opponent ↔ home/away ──
@@ -193,4 +195,113 @@ export function reconstructRegularSubs(subs: Substitution[]): RegularSub[] {
     result = [...cleaned, { outPlayerId, inPlayerId }];
   }
   return result;
+}
+
+// ── 空白狀態的建構子 ──
+// 一場比賽還沒記過任何一局時的初始狀態。原本 makeEmptySet/emptyRecord 只在
+// useScoreSheet.ts 裡私有定義；reconstructRecording（下方）在「這場還沒有任何 set」
+// 時也需要同一份空白狀態，抽到這裡讓兩處共用同一個定義，不會各自維護一份、
+// 之後改欄位漏改一邊。
+export const makeEmptySet = (setNumber: number): SetRecordingState => ({
+  setNumber,
+  ourScore: 0,
+  opponentScore: 0,
+  serving: null,
+  ourRotation: 0,
+  opponentRotation: 0,
+  history: [],
+});
+
+export const emptyRecord = (): ScoreSheetState => ({
+  currentSet: makeEmptySet(1),
+  completedSets: [],
+  liberoSubstitution: null,
+  regularSubs: [],
+  subCountsHistory: [],
+});
+
+// ── 從後端整場資料重建完整的 ScoreSheetState ──
+// 這是 useScoreSheetController 進頁重建那段 useEffect 的「純計算」核心，抽出來讓
+// useMatchRecording（分析頁的唯讀 hook，#65）能重用同一套規則，不用把重建邏輯
+// 平行寫兩份（寫兩份最怕的就是規則之後改了一邊、另一邊忘記跟著改，兩個畫面顯示的
+// 數字就會兜不起來）。
+//
+// 刻意不含的東西：
+//   - 不碰 React Query／不發任何請求——呼叫端（controller／useMatchRecording）各自
+//     負責用對應的 hook 把資料抓好，這裡只管「資料到位後怎麼組成 ScoreSheetState」。
+//   - 不 seed currentSetIdRef / rallyIdsRef 這種「背景持久化記帳」用的 ref——那是
+//     controller 專屬的動作（記分/復原要用），唯讀重建用不到，seed 這件事留在
+//     controller 的 useEffect 裡自己做。
+//
+// 呼叫端要先把資料整理成這個形狀：
+//   - sets：這場比賽的所有局（GET /matches/:id/sets）。
+//   - ralliesBySetIndex：跟 sets 陣列「同索引」對齊的每局 rally 陣列（呼叫端用
+//     useQueries 對每個 set 各自 GET 它的 rallies，取到的資料要照 sets 的順序排好）。
+//   - events：整場所有 event（bulk endpoint 一次抓回來，不分局）。
+//   - subs：整場所有一般換人紀錄（bulk endpoint，不分局）。
+export function reconstructRecording(
+  sets: MatchSet[],
+  ralliesBySetIndex: Rally[][],
+  events: MatchEvent[],
+  subs: Substitution[],
+): ScoreSheetState {
+  // 把整場的 event 依 rallyId 分組，餵給 reconstruct 還原每一分的動作/球員。
+  // endpoint 已依 rallyId、sequence 排序，所以同一組內是照 sequence 排好的。
+  const eventsByRallyId = new Map<number, MatchEvent[]>();
+  for (const ev of events) {
+    const list = eventsByRallyId.get(ev.rallyId);
+    if (list) list.push(ev);
+    else eventsByRallyId.set(ev.rallyId, [ev]);
+  }
+
+  // 把整場的一般換人紀錄依 setId 分組，重建各局的 regularSubs（見下方使用處）。
+  // 後端 GET 已依 (setId, homeScore, awayScore, id) 排序，同一組內就是發生的先後順序，
+  // 可以直接丟給 reconstructRegularSubs 照順序 replay。
+  const subsBySetId = new Map<number, Substitution[]>();
+  for (const sub of subs) {
+    const list = subsBySetId.get(sub.setId);
+    if (list) list.push(sub);
+    else subsBySetId.set(sub.setId, [sub]);
+  }
+
+  if (sets.length === 0) {
+    // 這場還沒記過任何一局：給一份空白記錄，畫面會顯示「這局由誰先發球？」
+    // （分析頁則是顯示「尚未開始記分」的空狀態）。
+    return emptyRecord();
+  }
+
+  // 慣例：最後一局（setNumber 最大）當「進行中」，前面的都當「已結束」。schema 沒有
+  // 「這局結束了嗎」的旗標，所以無法區分「剛按下一局但還沒開球」的空局——那個未開球的
+  // 新局還沒寫進後端（要選完先發方才建 set row），reload 後會退回顯示上一局，屬已知限制（#63）。
+  const completedSets: CompletedSet[] = sets.slice(0, -1).map((s, i) => {
+    const st = reconstructSetFromRallies(s, ralliesBySetIndex[i] ?? [], eventsByRallyId);
+    return {
+      setNumber: st.setNumber,
+      ourScore: st.ourScore,
+      opponentScore: st.opponentScore,
+      history: st.history,
+    };
+  });
+  // 已結束各局的換人次數：對每個已結束的 set，重放它的換人紀錄、取淨疊加清單的長度
+  // （跟 nextSet 動作把 record.regularSubs.length 推進 subCountsHistory 是同一個數字，
+  // 只是這裡是從後端資料重算，而不是延續 store 裡當下的值）。陣列順序對齊 completedSets。
+  const subCountsHistory: number[] = sets
+    .slice(0, -1)
+    .map((s) => reconstructRegularSubs(subsBySetId.get(s.id) ?? []).length);
+  const lastIdx = sets.length - 1;
+  const currentSet = reconstructSetFromRallies(
+    sets[lastIdx],
+    ralliesBySetIndex[lastIdx] ?? [],
+    eventsByRallyId,
+  );
+  // 進行中這一局的換人淨疊加清單，直接重放這一局的換人紀錄即可。
+  const regularSubs = reconstructRegularSubs(subsBySetId.get(sets[lastIdx].id) ?? []);
+
+  return {
+    currentSet,
+    completedSets,
+    liberoSubstitution: null,
+    regularSubs,
+    subCountsHistory,
+  };
 }
