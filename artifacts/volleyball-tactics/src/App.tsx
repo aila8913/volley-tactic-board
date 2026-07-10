@@ -7,6 +7,7 @@ import NotFound from "@/pages/not-found";
 import TacticsBoard from "@/pages/TacticsBoard";
 import MatchList from "@/pages/MatchList";
 import ScoreSheet from "@/pages/ScoreSheet";
+import MatchAnalytics from "@/pages/MatchAnalytics";
 import TournamentDetail from "@/pages/TournamentDetail";
 
 const queryClient = new QueryClient();
@@ -18,6 +19,7 @@ function Router() {
       <Route path="/tournaments/:id" component={TournamentDetail} />
       <Route path="/matches/:id/board" component={TacticsBoard} />
       <Route path="/matches/:id/record" component={ScoreSheet} />
+      <Route path="/matches/:id/analytics" component={MatchAnalytics} />
       <Route component={NotFound} />
     </Switch>
   );
