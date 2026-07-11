@@ -19,6 +19,16 @@ export const ballTypeEnum = pgEnum("ball_type", ["serve", "spike", "tip", "chanc
 
 export const eventSourceEnum = pgEnum("event_source", ["live", "review"]);
 
+// 這一球的「結果」：point = 我方因這球得分、loss = 我方因這球失分、in_play = 球還在來回中
+// （既不是得分也不是失分的中間過程球，例如一次成功的接發、一次到位的舉球）。
+// 對應 docs/event-grammar-spec.md 決策 7。基礎版錄球手勢第 3 步本來就會問「得分/失分」，
+// 所以基礎版也一起存這個欄位（不是進階版才有）—— 反正使用者已經按過那個按鈕了，
+// 存起來是零額外成本，之後才能直接拿來做「失分結構」（哪一種動作最常造成失分）這類統計。
+// nullable：保留給「還沒補填 / 目前不確定」的中繼狀態；正常情況下，一個完整記錄完的
+// rally，裡面每一球的 outcome 都應該不是 null，且整個 rally 剛好有一球是 point 或 loss
+// （這是資料完整性的不變量，但目前先不用資料庫層的 constraint 去強制，靠應用層檢查）。
+export const eventOutcomeEnum = pgEnum("event_outcome", ["point", "loss", "in_play"]);
+
 // 這一球是哪一方執行的（home = 我方、away = 對方）。跟 rallies.winner（誰得分）是不同概念：
 // 例如對方發球、我方接發，這球的 side 是 home（我方接的），但這分最後可能 away 贏。
 // 簡易版的「對手(全體)」動作會用 away 記錄，且沒有球員可指（見下方 playerId 改 nullable）。
@@ -58,6 +68,8 @@ export const eventsTable = pgTable("events", {
   // 秒數，對應 YouTube 播放時間；只有 source = 'review'（賽後補填）時才會有值。
   videoTimestamp: integer("video_timestamp"),
   source: eventSourceEnum("source").notNull(),
+  // 見上方 eventOutcomeEnum 註解：這一球是得分/失分/還在來回中。nullable。
+  outcome: eventOutcomeEnum("outcome"),
 });
 
 export const insertEventSchema = createInsertSchema(eventsTable).omit({ id: true });
