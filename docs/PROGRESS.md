@@ -9,26 +9,34 @@
 > Read this file, plus `gh issue list --state open` and recent `git log`, at the start
 > of a new session instead of re-exploring the whole codebase from scratch.
 
-_Last updated: 2026-07-11 (session: **落地 #102 people+teams 身分/球隊 schema 地基
-（純 additive、schema-first）。** PO 拍板三個待決事項：建賽時隊**可選**（低門檻隨手記）、
-去重 UX 分階段（先「從既有 people 挑」、相似度提示留後續）、舊比賽**只填新資料不回填**。
-落了兩張新表 `people`（跨場跨隊的唯一「人」身分）/`teams`（分組標籤），加兩條 nullable FK
-`players.personId→people.id`、`matches.teamId→teams.id`（皆 `onDelete: set null`——per-match
-名單列/比賽是歷史事實，不該被刪身分/球隊牽連刪除，同 `events.playerId` 的道理），順手補
-event-grammar-spec 決策 7 缺的 `events.outcome` enum（`point/loss/in_play`，nullable）。
-`typecheck` 綠、`db push` 已套用 dev DB。**刻意未做**（照決策留 #65 後面階段）：openapi/codegen、
-前端讀寫、去重 UX、舊資料回填。委派 sonnet-engineer 實作、主 session 複查 FK 語意。前一段 →)_
+_Last updated: 2026-07-11 (session: **#73 事件文法設計基石對帳收束（PR #105，已合併，`Closes #73`）。**
+發現 #73 的 spec 產出（`docs/event-grammar-spec.md`）與 7 條決策早在 2026-07-09 就交付、issue 卻還
+掛 `needs-plan` open——一開始誤當白紙決策場，讀完 issue 留言/產出物才確認真正工作是「對帳」而非重議
+（教訓：`open + needs-plan ≠ 沒做`）。把 spec 標的每個缺口對到現在 schema：`lineups`/`substitutions`/
+`events.outcome` 三個「必須早補」的結構缺口已於 #42/#97/#98/#102 全數落地，更新 G1/G2 對照表標記
+（❌→✅）＋新增〈落地進度對帳〉一節，剩餘為進階版欄位（#51/#21/#44）與教練待確認項（到位門檻/嗆司
+定義，有預設在跑）。純 docs、prettier/CI 綠。同 session 前半段已落地並關閉 **#102**（見下方 Current state
+＋Recently closed）。前一段 →)_
 
-_Prev: (session: **開工 #65 跨場數據分析頁——完成「視圖一＝單場比賽分析」骨架（PR #101，已合併）
-＋修編輯比賽無限迴圈 bug（PR #103）。** 分析頁走 Option 3：零 schema 變更、純前端重用簡易版
-既有資料；抽出共用純函數 `buildPlayerMatrix`/`reconstructRecording` 讓計分表與分析頁共用同一份、
-統計不漂移；差異化/階段性統計先做誠實空狀態。規劃五個決策（三視圖單場優先、不做 GA4、樣本降飽和、
-schema 解耦、選項 A 身分模型）記在 #65；拆出本 session 落地的 **#102**。編輯比賽 bug 根因是
-`useMatchWithRoster` 每 render 產生新 `match` 參照觸發 `MatchFormDialog` 的 effect 無限迴圈，
-用 `useMemo` 綁 query data 穩定參照修掉。)_
+_Prev: (session: **落地 #102 people+teams 身分/球隊 schema 地基（純 additive、schema-first，PR #104，
+issue 已關）。** PO 拍板三事：建賽時隊**可選**、去重 UX 分階段（先「從既有 people 挑」）、舊比賽
+**只填新資料不回填**。兩張新表 `people`（跨場跨隊唯一「人」身分）/`teams`（分組標籤）＋兩條 nullable
+FK `players.personId`、`matches.teamId`（皆 `onDelete: set null`——per-match 名單列/比賽是歷史事實，
+不該被刪身分/球隊牽連刪，同 `events.playerId`），順手補 `events.outcome` enum（決策 7）。`typecheck` 綠、
+`db push` 已套用。**刻意未做**（留 #65 後面階段）：openapi/codegen、前端讀寫、去重 UX、舊資料回填。)_
 
 ## Current state
 
+- **This session (2026-07-11, latest): #73 事件文法設計基石對帳收束（PR #105，已合併，`Closes #73`）。**
+  - 純 docs：把 `docs/event-grammar-spec.md`（2026-07-09 交付的統計反推對照表＋7 決策）對到現在
+    的 schema。更新 G1/G2 兩條過期標記（換人/先發持久化早已落地，❌→✅）＋新增〈落地進度對帳
+    （2026-07-11）〉一節。
+  - **對帳結論**（#65 之後照這份算統計的權威依據）：必須早補的結構缺口 `lineups`(#42 一帶)／
+    `substitutions`(#42/#97/#98)／`events.outcome`(#102)／`people`+`teams`(#102) **已全數落地**；
+    仍缺的都是故意延到進階版的欄位（`timeouts`#44、`serveType`+`ballType=cover`#51、座標 #21、
+    quality/攻擊 in_play #51）或教練待確認項（到位門檻 `quality>=2`、嗆司定義，皆有預設在跑、不擋實作）。
+  - **流程教訓**：`open + needs-plan` 的 issue 不代表沒做——#73 早交付卻沒關，一開始被誤當白紙
+    決策場，讀 issue 留言/產出物後才校正為對帳。catch-up 時要先讀 issue 的 comment 與 artifact。
 - **This session (2026-07-11): 落地 #102 people+teams 身分/球隊 schema 地基（純 additive、
   schema-first）。**
   - **兩張新表**：`lib/db/src/schema/people.ts`（`id/userId/name`，跨場跨隊的唯一「人」身分——
@@ -47,14 +55,13 @@ schema 解耦、選項 A 身分模型）記在 #65；拆出本 session 落地的
   - **驗證**：`pnpm run typecheck` 綠、`pnpm --filter @workspace/db run push` 已套用 dev DB
     （純新增、無 drift）。委派 sonnet-engineer 實作，主 session 複查 FK 語意。
   - **刻意未做**（照決策留 #65 後面階段）：openapi/codegen、前端讀寫、建名單去重 UX、舊資料回填。
-- On `main`, latest commit `99e2538` — the #65 single-match analytics-page skeleton (PR #101)
-  plus the 編輯比賽 infinite-loop fix (PR #103).
-  Recent chain: #98 (#42 substitutions persistence fix), #97 (`substitutions` table), #96 (T2
-  record-cost-budget spec), #94 (`lineups` table), #92 (T1 event-grammar spec), #91/#90/#89/#88
-  (subagent unification), #87 (product deep-dive execution plan), #85/#84/#83 (lint/format/CI
-  chores), #78 (product positioning docs). **Phase 3 is fully done and #58 is closed** (see the
-  match-recording bullet below). **A `useMatches.ts` 編輯比賽 infinite-loop 修復 was still
-  uncommitted at wrap-up time and is being shipped together with this PROGRESS update.**
+- On `main`, latest commit `a1f66a4` — the #73 event-grammar-spec reconciliation (PR #105).
+  Recent chain: #104 (#102 people/teams schema), #103 (編輯比賽 infinite-loop fix), #101 (#65
+  single-match analytics skeleton), #98 (#42 substitutions persistence fix), #97 (`substitutions`
+  table), #96 (T2 record-cost-budget spec), #94 (`lineups` table), #92 (T1 event-grammar spec),
+  #91/#90/#89/#88 (subagent unification), #87 (product deep-dive execution plan), #85/#84/#83
+  (lint/format/CI chores), #78 (product positioning docs). **Phase 3 is fully done and #58 is
+  closed** (see the match-recording bullet below). Working tree clean at wrap-up.
 - **This session (2026-07-10, latest): 開工 #65 跨場數據分析頁——完成「視圖一＝單場比賽分析」
   骨架（PR #101，已合併）。**
   - **架構走 Option 3**：完全重用簡易版既有資料（sets/rallies/events/substitutions），零 schema
@@ -444,9 +451,7 @@ status — the list below is a snapshot, not guaranteed up to date):
 
 - **`area:product` 系列（#73–#77，2026-07-07 新開）**——動程式碼前的概念設計層，
   上位依據是 `docs/product-vision.md`：
-  [#73](https://github.com/aila8913/volley-tactic-board/issues/73) 事件文法領域模型
-  （最優先、最不可逆）——**T1 設計已完成（PR #92，見 `docs/event-grammar-spec.md`）**，issue
-  仍開著：剩 2 個待決定（到位門檻、嗆司定義）＋ schema 實作在下游（#93 已完成、#42/#44/#51 待做）→
+  ~~[#73] 事件文法領域模型~~——**已完成並關閉（設計 PR #92＋對帳收束 PR #105，見 Recently closed）**→
   [#74](https://github.com/aila8913/volley-tactic-board/issues/74) 記錄成本預算
   ——**T2 設計已完成（見 `docs/recording-cost-budget.md`）**，畫出簡易/進階硬分界＋答出
   #50（零成本）/#51/#21/#20 的分層；PO 拍板嚴守 T1、不開 simple+。落地待回灌各下游 issue、
@@ -495,12 +500,6 @@ status — the list below is a snapshot, not guaranteed up to date):
   schema 解耦、身分模型選項 A——全部記在 #65 留言。剩下：視圖一補齊比率統計（side-out%/輪次得失，
   現為空狀態）、視圖二（隊伍，需 #102 的 `teams`）、視圖三（球員跨場跨隊，需 #102 的 `people`）、
   差異化區塊（到位率/球線熱區，需進階記錄 #51/#21）。`needs-plan`、`priority:essential`。
-- [#102](https://github.com/aila8913/volley-tactic-board/issues/102) — 落地 `people`＋`teams`
-  身分/球隊 schema（#65 階段 1/2 地基）。**本 session schema 核心已落地**（兩張新表＋
-  `players.personId`/`matches.teamId` nullable FK＋`events.outcome`，`db push` 已套用；三個 PO
-  待決事項已拍板記在留言）。身分模型走顧問拍板的選項 A。**剩下**（照決策留 #65 後面階段）：
-  openapi/codegen、前端讀寫、建名單去重 UX（先「從既有 people 挑」）、舊資料回填。`needs-plan`、
-  `area:db`、`priority:essential`。
 - [#99](https://github.com/aila8913/volley-tactic-board/issues/99) — **本 session 新開**：站位快照
   （進階版）。比賽任一時刻擷取雙方站位＋手動畫球線＋匯出 PNG 溝通；獨立新表 `snapshots`
   （match-anchored + 比分快照，復用戰術板 `tacticPositions`/`markers`/`defenseRanges`），比賽卡片
@@ -513,6 +512,16 @@ status — the list below is a snapshot, not guaranteed up to date):
 
 ## Recently closed
 
+- #73 — 事件文法領域模型（統計⇐events 純函數）。設計基石，分兩段：**設計 T1（PR #92，
+  `docs/event-grammar-spec.md`，7 決策 2026-07-09 拍板）＋對帳收束（PR #105，2026-07-11，`Closes #73`）**。
+  對帳把 spec 標的缺口對到現在 schema：`lineups`/`substitutions`/`events.outcome` 三個「必須早補」
+  的結構缺口已於 #42/#97/#98/#102 全落地。剩餘為進階版欄位（#51/#21/#44）與教練待確認項（到位門檻
+  `quality>=2`、嗆司定義，有預設在跑），各自下游追蹤，不需 #73 空掛。
+- #102 — `people`＋`teams` 身分/球隊 schema 地基（#65 階段 1/2）。**本 session 落地並關閉（PR #104）**：
+  兩張新表（`people`＝跨場跨隊唯一「人」身分、`teams`＝分組標籤）＋`players.personId`/`matches.teamId`
+  nullable FK（皆 `onDelete: set null`，保留歷史事實）＋順手補 `events.outcome` enum（決策 7）。`db push`
+  已套用 dev DB。身分模型走顧問拍板的選項 A。PO 拍板三事（建賽隊可選／去重 UX 分階段／舊比賽只填新資料
+  不回填）記在 issue 留言。**刻意留給 #65 後面階段**：openapi/codegen、前端讀寫、建名單去重 UX、舊資料回填。
 - #42 — 計分表換人紀錄不持久化、reload 消失。**本 session 修完（PR #98）**：Phase A 補
   `substitutions` 後端 REST（`GET /matches/:id/substitutions`＋`POST /sets/:id/substitutions`＋
   openapi/codegen；表本身 #97 落地），Phase B 把 `regularSubs`/`subCountsHistory` 搬進
