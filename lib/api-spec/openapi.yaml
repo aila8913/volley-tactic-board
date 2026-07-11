@@ -197,6 +197,29 @@ paths:
               schema:
                 $ref: "#/components/schemas/MatchSet"
 
+  /matches/{matchId}/sets/{setId}:
+    parameters:
+      - $ref: "#/components/parameters/MatchId"
+      - $ref: "#/components/parameters/SetId"
+    patch:
+      operationId: updateSet
+      tags: [matches]
+      # 目前唯一的用途：補上開空局時還沒選的先發方（見 MatchSet.firstServer 註解）。
+      summary: Update a set (currently only used to fill in firstServer once it's chosen)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSet"
+      responses:
+        "200":
+          description: Updated set
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MatchSet"
+
   # 一次拿整場比賽的所有 event（跨 set/rally）。前端進頁重建計分表時，靠這一支避免對
   # 每個 rally 各發一次 /rallies/:id/events（一場可能有幾百個 rally = 幾百個請求）。
   # 回傳仍是扁平的 MatchEvent[]，每筆自帶 rallyId，前端再依 rallyId 分組。
@@ -617,8 +640,11 @@ components:
           type: integer
         setNumber:
           type: integer
+        # nullable：按「下一局」的當下就會先建一筆空 set row（讓 reload 能正確認出「這局還在選
+        # 先發方」），此時還沒人選先發方，firstServer 就是 null；選完先發方後再用 PATCH 補上。
         firstServer:
           $ref: "#/components/schemas/ServingSide"
+          nullable: true
       required: [id, matchId, setNumber, firstServer]
 
     NewSet:
@@ -626,9 +652,20 @@ components:
       properties:
         setNumber:
           type: integer
+        # 開新的一局時：如果先發方還沒選（空局，見 MatchSet.firstServer 註解），送 null；
+        # 已知先發方（例如既有流程「選完先發方才建 set」）就直接帶值。
         firstServer:
           $ref: "#/components/schemas/ServingSide"
+          nullable: true
       required: [setNumber, firstServer]
+
+    UpdateSet:
+      type: object
+      # 補上開空局時還沒選的先發方，等使用者選好之後 PATCH 這支把它填回去。
+      properties:
+        firstServer:
+          $ref: "#/components/schemas/ServingSide"
+      required: [firstServer]
 
     RallyWinner:
       type: string

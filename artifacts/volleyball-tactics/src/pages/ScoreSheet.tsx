@@ -350,6 +350,12 @@ export default function ScoreSheet() {
                     <Button variant="ghost" onClick={handleNextSet}>
                       下一局
                     </Button>
+                    {/* 結束比賽（issue #20）：不是「刪除/封存」動作，只是導去賽後統計頁
+                        （MatchAnalytics，路由已存在），所以用 asChild + Link 而不是 onClick，
+                        跟上面「前往戰術板」是同一種寫法。 */}
+                    <Button asChild variant="ghost">
+                      <Link href={`/matches/${id}/analytics`}>結束比賽</Link>
+                    </Button>
                   </div>
                 </>
               )}

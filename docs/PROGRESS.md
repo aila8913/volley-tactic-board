@@ -17,11 +17,12 @@
 > promote it first, then drop it. Read this file + `gh issue list --state open` + recent
 > `git log` at the start of a session instead of re-exploring the codebase.
 
-_Last updated: 2026-07-11 — 給 Claude 看的 doc 治理：PROGRESS 從 580 行瘦身為近一週 rolling
-snapshot（並在 wrap-up skill step 6 寫死「覆蓋不疊加／砍一週以上／孤兒先升級進 memory」防再膨脹）；
-校正三份對現況說謊的 schema/API doc（`db-schema-spec`/`api-spec`/`backend-architecture` 漏了
-lineups/substitutions/people/teams、且宣稱後端未實作）。純 docs，無程式碼變更。前一段：建立專案
-roadmap（Milestones M1–M5 ＋ Project #4，見下方 Current state）。_
+_Last updated: 2026-07-11 — M1 計分表 bug 收尾：修 #63（reload 剛按「下一局」的未開球空局會退回上一局）
+＋ #20 補最後兩缺口。#63 做法＝`sets.firstServer` 改 nullable、「下一局」即 POST 空 row（firstServer=null）、
+選發球方時 PATCH 補上（openapi→codegen→後端 PATCH route→前端 controller→mapping null 守衛，含單元測試；
+後端 curl round-trip ＋ 52 測試綠）。#20 兩缺口＝「結束比賽」按鈕（導向 analytics）＋換人上限 X/6 提示；
+issue body 原列的 Bug1/2 早已解。此段工作在工作樹中待 PO 視覺驗證＋合併。前一段：doc 治理（PROGRESS 瘦身、
+校正 schema/API doc）＋建立專案 roadmap（Milestones M1–M5 ＋ Project #4，見下方 Current state）。_
 
 ## Current state
 
@@ -63,8 +64,9 @@ gh issue list --milestone "M1 簡易版收尾"   # 當前階段
 gh issue list --state open                   # 全部
 ```
 
-M1 收尾焦點：#20（計分表 Bug＋子分類數上限 UI）、#41（換人 undo）、#50（動作選項依發球方情境限制）、
-#63/#64（3b-i 離線 edge case／背景寫入失敗不 reconcile，關聯部署 #26）、#74 落地回灌。
+M1 收尾焦點：#20（計分表 Bug＋子分類數上限 UI，本 session 已修待驗證＋合併）、#41（換人 undo）、
+#50（動作選項依發球方情境限制）、#64（背景寫入失敗不 reconcile，關聯部署 #26）、#74 落地回灌。
+（#63 空局 reload 退回已於本 session 修掉，待合併關閉。）
 進階版差異化（M4）：#51 動作子分類、#21 球線座標、#99 站位快照——同屬 advanced tier，可一起設計。
 
 ## Recently closed (past ~week)

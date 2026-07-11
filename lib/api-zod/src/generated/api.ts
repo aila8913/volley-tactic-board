@@ -174,7 +174,7 @@ export const ListSetsResponseItem = zod.object({
   "id": zod.number(),
   "matchId": zod.number(),
   "setNumber": zod.number(),
-  "firstServer": zod.enum(['home', 'away'])
+  "firstServer": zod.enum(['home', 'away']).nullable()
 })
 export const ListSetsResponse = zod.array(ListSetsResponseItem)
 
@@ -188,7 +188,27 @@ export const CreateSetParams = zod.object({
 
 export const CreateSetBody = zod.object({
   "setNumber": zod.number(),
+  "firstServer": zod.enum(['home', 'away']).nullable()
+})
+
+
+/**
+ * @summary Update a set (currently only used to fill in firstServer once it's chosen)
+ */
+export const UpdateSetParams = zod.object({
+  "matchId": zod.coerce.number(),
+  "setId": zod.coerce.number()
+})
+
+export const UpdateSetBody = zod.object({
   "firstServer": zod.enum(['home', 'away'])
+})
+
+export const UpdateSetResponse = zod.object({
+  "id": zod.number(),
+  "matchId": zod.number(),
+  "setNumber": zod.number(),
+  "firstServer": zod.enum(['home', 'away']).nullable()
 })
 
 

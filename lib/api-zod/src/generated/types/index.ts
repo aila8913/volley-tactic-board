@@ -34,5 +34,6 @@ export * from './tacticData';
 export * from './updateEvent';
 export * from './updateMatch';
 export * from './updatePlayer';
+export * from './updateSet';
 export * from './updateTactic';
 export * from './updateTacticData';
