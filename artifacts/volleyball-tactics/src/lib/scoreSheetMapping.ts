@@ -113,6 +113,16 @@ export function reconstructSetFromRallies(
   rallies: Rally[],
   eventsByRallyId?: Map<number, MatchEvent[]>,
 ): SetRecordingState {
+  // 空局防呆（#63）：按「下一局」的當下就會先建一筆 firstServer=null 的空 set row
+  // （見 lib/db/src/schema/sets.ts 的註解），此時教練還沒選先發方，這局理應完全沒有
+  // rally。與其硬套下面的 replay 邏輯（apiToSide(null) 會炸），不如直接短路回傳一份
+  // 空白的 SetRecordingState——serving: null 會讓畫面顯示「這局由誰先發球？」，
+  // 跟一場比賽從沒記過任何一局時的空狀態（makeEmptySet）一致，只差 serverId 已經
+  // 有後端 row 可以掛（選好先發方後就 PATCH 這個 id，不用再 POST 新 set）。
+  if (apiSet.firstServer == null) {
+    return { ...makeEmptySet(apiSet.setNumber), serverId: apiSet.id };
+  }
+
   const sorted = [...rallies].sort((a, b) => a.rallyNumber - b.rallyNumber);
 
   // server 一路追「目前發球方」：從先發方起算，每分結束後由這分的贏家發下一球。
@@ -271,8 +281,11 @@ export function reconstructRecording(
   }
 
   // 慣例：最後一局（setNumber 最大）當「進行中」，前面的都當「已結束」。schema 沒有
-  // 「這局結束了嗎」的旗標，所以無法區分「剛按下一局但還沒開球」的空局——那個未開球的
-  // 新局還沒寫進後端（要選完先發方才建 set row），reload 後會退回顯示上一局，屬已知限制（#63）。
+  // 「這局結束了嗎」的旗標，但因為「按下一局」的當下就會建一筆 firstServer=null 的空
+  // set row（#63 修法，見 lib/db/src/schema/sets.ts 與 reconstructSetFromRallies 的
+  // 空局防呆），「使用者已經進到的每一局」都保證有對應的 DB row，所以這裡「最後一局
+  // 當進行中」的假設永遠成立——不會再有「剛按下一局但還沒開球」卻沒寫進後端、
+  // reload 後被誤判成上一局還在進行中的情況。
   const completedSets: CompletedSet[] = sets.slice(0, -1).map((s, i) => {
     const st = reconstructSetFromRallies(s, ralliesBySetIndex[i] ?? [], eventsByRallyId);
     return {

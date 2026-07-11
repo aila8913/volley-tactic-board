@@ -80,11 +80,15 @@ export interface MatchSet {
   id: number;
   matchId: number;
   setNumber: number;
-  firstServer: ServingSide;
+  firstServer: ServingSide | null;
 }
 
 export interface NewSet {
   setNumber: number;
+  firstServer: ServingSide | null;
+}
+
+export interface UpdateSet {
   firstServer: ServingSide;
 }
 

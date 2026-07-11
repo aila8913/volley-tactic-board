@@ -38,6 +38,7 @@ import type {
   UpdateEvent,
   UpdateMatch,
   UpdatePlayer,
+  UpdateSet,
   UpdateTactic
 } from './api.schemas';
 
@@ -940,6 +941,80 @@ export const useCreateSet = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getCreateSetMutationOptions(options));
+    }
+
+export const getUpdateSetUrl = (matchId: number,
+    setId: number,) => {
+
+
+
+
+  return `/api/matches/${matchId}/sets/${setId}`
+}
+
+/**
+ * @summary Update a set (currently only used to fill in firstServer once it's chosen)
+ */
+export const updateSet = async (matchId: number,
+    setId: number,
+    updateSet: UpdateSet, options?: RequestInit): Promise<MatchSet> => {
+
+  return customFetch<MatchSet>(getUpdateSetUrl(matchId,setId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updateSet,)
+  }
+);}
+
+
+
+
+export const getUpdateSetMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateSet>>, TError,{matchId: number;setId: number;data: BodyType<UpdateSet>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateSet>>, TError,{matchId: number;setId: number;data: BodyType<UpdateSet>}, TContext> => {
+
+const mutationKey = ['updateSet'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateSet>>, {matchId: number;setId: number;data: BodyType<UpdateSet>}> = (props) => {
+          const {matchId,setId,data} = props ?? {};
+
+          return  updateSet(matchId,setId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateSetMutationResult = NonNullable<Awaited<ReturnType<typeof updateSet>>>
+    export type UpdateSetMutationBody = BodyType<UpdateSet>
+    export type UpdateSetMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Update a set (currently only used to fill in firstServer once it's chosen)
+ */
+export const useUpdateSet = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateSet>>, TError,{matchId: number;setId: number;data: BodyType<UpdateSet>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateSet>>,
+        TError,
+        {matchId: number;setId: number;data: BodyType<UpdateSet>},
+        TContext
+      > => {
+      return useMutation(getUpdateSetMutationOptions(options));
     }
 
 export const getListMatchEventsUrl = (matchId: number,) => {

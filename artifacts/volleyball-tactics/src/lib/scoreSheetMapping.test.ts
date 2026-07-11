@@ -389,6 +389,34 @@ describe("reconstructRecording", () => {
     expect(state.subCountsHistory).toEqual([1]); // 第 1 局（已結束）換了 1 次
     expect(state.regularSubs).toEqual([{ outPlayerId: "3", inPlayerId: "4" }]); // 第 2 局（進行中）
   });
+
+  // #63 迴歸測試：按「下一局」後那個「還沒選先發方」的空局，現在會先寫進後端成一筆
+  // firstServer=null 的 set row。重建時它是最後一局（進行中），必須還原成「這局由誰先發球？」
+  // 的空狀態——而不是退回顯示上一局（那正是 #63 修好前的錯誤行為）。
+  it("rebuilds a trailing firstServer=null set as an empty in-progress set (issue #63)", () => {
+    const set1: MatchSet = { id: 1, matchId: 3, setNumber: 1, firstServer: "home" };
+    // 剛按下一局建出來的空局：firstServer 還沒選，是 null，底下一定沒有任何 rally。
+    const set2: MatchSet = { id: 2, matchId: 3, setNumber: 2, firstServer: null };
+    const set1Rallies: Rally[] = [
+      { id: 100, setId: 1, rallyNumber: 1, homeScore: 0, awayScore: 0, winner: "home" },
+      { id: 101, setId: 1, rallyNumber: 2, homeScore: 1, awayScore: 0, winner: "home" },
+    ];
+
+    const state = reconstructRecording([set1, set2], [set1Rallies, []], [], []);
+
+    // 第 1 局照常收進 completedSets（2:0）。
+    expect(state.completedSets).toEqual([
+      { setNumber: 1, ourScore: 2, opponentScore: 0, history: expect.any(Array) },
+    ]);
+    // 第 2 局是進行中，但因為 firstServer=null 而重建成空局：serving=null 觸發「誰先發球？」畫面，
+    // 比分/輪轉全 0、沒有任何 history，且已帶著後端 row 的 serverId（選好先發後 PATCH 這個 id）。
+    expect(state.currentSet.setNumber).toBe(2);
+    expect(state.currentSet.serving).toBeNull();
+    expect(state.currentSet.ourScore).toBe(0);
+    expect(state.currentSet.opponentScore).toBe(0);
+    expect(state.currentSet.history).toEqual([]);
+    expect(state.currentSet.serverId).toBe(2);
+  });
 });
 
 describe("reconstructRegularSubs", () => {

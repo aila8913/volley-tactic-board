@@ -2,6 +2,11 @@ import { MatchPlayer } from "@/types/match";
 import { ScoreSheetState, PointRecord } from "@/types/scoresheet";
 import { ACTIONS, ACTION_LABELS, buildPlayerMatrix } from "@/lib/statsMapping";
 
+// 排球規則（issue #20）：一局比賽，每隊最多只能換 6 次「一般換人」（自由球員上下場不算在內，
+// 有獨立的規則、不受這個上限限制）。這裡只是「顯示提醒」用，不會真的擋住教練繼續按換人——
+// 是否要在達到上限時禁用換人按鈕是更大的行為變更，留給 PO 之後再決定。
+const MAX_SUBS_PER_SET = 6;
+
 interface Props {
   players: MatchPlayer[];
   record: ScoreSheetState | undefined;
@@ -112,7 +117,16 @@ export default function ScoreSheetStats({
         <h2 className="mb-1.5 text-sm font-bold text-gray-700">換人紀錄</h2>
         <div className="flex gap-5 text-sm">
           <div className="flex flex-col items-center gap-0.5">
-            <span className="text-xl font-bold tabular-nums">{currentSetSubCount}</span>
+            {/* 本局才有上限（MAX_SUBS_PER_SET），所以顯示成「已用 / 上限」；達到上限時
+                變紅提醒教練——排球規則到這裡就不能再換人了（自由球員例外，不算在這個數字裡）。
+                全場累計是跨局總和，本來就沒有上限對象，維持原本純數字。 */}
+            <span
+              className={`text-xl font-bold tabular-nums ${
+                currentSetSubCount >= MAX_SUBS_PER_SET ? "text-red-600" : ""
+              }`}
+            >
+              {currentSetSubCount} / {MAX_SUBS_PER_SET}
+            </span>
             <span className="text-xs text-muted-foreground">本局</span>
           </div>
           <div className="flex flex-col items-center gap-0.5">

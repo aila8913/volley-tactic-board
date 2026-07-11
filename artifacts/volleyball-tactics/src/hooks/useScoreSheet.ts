@@ -6,6 +6,7 @@ import {
   useListMatchEvents,
   useListMatchSubstitutions,
   useCreateSet,
+  useUpdateSet,
   useCreateRally,
   useCreateEvent,
   useDeleteRally,
@@ -234,6 +235,7 @@ export function useScoreSheetController(matchId: string) {
   const hydrate = useScoreSheet((s) => s.hydrate);
 
   const createSet = useCreateSet();
+  const updateSet = useUpdateSet();
   const createRally = useCreateRally();
   const createEvent = useCreateEvent();
   const deleteRally = useDeleteRally();
@@ -317,16 +319,32 @@ export function useScoreSheetController(matchId: string) {
       const pre = useScoreSheet.getState().recordingsByMatch[matchId]?.currentSet;
       const setNumber = pre?.setNumber ?? 1;
       useScoreSheet.getState().startSet(matchId, servingFirst);
+      // 兩條路（#63 修法）：
+      //   - 第 2 局以後：goNextSet 在按下一局的當下已經 POST 過一筆 firstServer=null 的空
+      //     set row，currentSetIdRef 早就有值——這裡只是教練終於選好先發方，PATCH 補上去。
+      //   - 第 1 局：從頭開始，還沒有任何 set row，照舊直接 POST 一筆帶 firstServer 的。
+      // 判斷放進 enqueue 的 async task 裡（而不是 enqueue 之前）才讀 ref，是因為佇列會把
+      // 這個任務排在 goNextSet 那筆「建空局」任務後面依序執行——true 而已，等到這裡真的
+      // 執行時，前面所有任務都跑完了，ref 保證是最新值，不會有「PATCH 早於 POST 完成」的競態。
       enqueue(async () => {
-        const created = await createSet.mutateAsync({
-          matchId: numericMatchId,
-          data: { setNumber, firstServer: sideToApi(servingFirst) },
-        });
-        currentSetIdRef.current = created.id;
-        rallyIdsRef.current = [];
+        const existingSetId = currentSetIdRef.current;
+        if (existingSetId !== undefined) {
+          await updateSet.mutateAsync({
+            matchId: numericMatchId,
+            setId: existingSetId,
+            data: { firstServer: sideToApi(servingFirst) },
+          });
+        } else {
+          const created = await createSet.mutateAsync({
+            matchId: numericMatchId,
+            data: { setNumber, firstServer: sideToApi(servingFirst) },
+          });
+          currentSetIdRef.current = created.id;
+          rallyIdsRef.current = [];
+        }
       });
     },
-    [matchId, numericMatchId, enqueue, createSet],
+    [matchId, numericMatchId, enqueue, createSet, updateSet],
   );
 
   const score = useCallback(
@@ -377,14 +395,29 @@ export function useScoreSheetController(matchId: string) {
   }, [matchId, enqueue, deleteRally]);
 
   const goNextSet = useCallback(() => {
+    const pre = useScoreSheet.getState().recordingsByMatch[matchId]?.currentSet;
+    const newSetNumber = (pre?.setNumber ?? 1) + 1;
     useScoreSheet.getState().nextSet(matchId);
-    // 新的一局要等下次選完先發方（start）才會建 set row，這裡先把 live 記帳清乾淨。
-    // 排進佇列而非直接清，是為了排在正在結束那局的寫入之後，維持順序。
+    // #63 修法：新的一局不再「留空等 start 才建 row」，而是按下一局的當下就先 POST 一筆
+    // firstServer=null 的空 set row（教練還沒選先發方，先寫 null，選好後 start() 再 PATCH
+    // 補上）。這樣「使用者已經進到的每一局」都保證有對應 DB row，reload 時最後一局就是
+    // 這筆空 row，會正確重建成「這局由誰先發球？」，不會退回顯示上一局。
+    // 排進佇列而非直接發請求，是為了排在剛結束那局最後幾筆記分/換人寫入之後，維持順序。
     enqueue(async () => {
+      // 先把記帳 ref 清乾淨「再」發 POST。順序很重要：如果建空局的 POST 失敗（背景寫入
+      // 失敗目前不 reconcile，屬 #64 範圍），ref 會停在這個 undefined，start() 讀到就會
+      // 退回「POST 開新局」——而不是誤把 ref 停在剛結束那局的 id、害 start() PATCH 到
+      // 錯的一局、後續記分也灌進錯的 set。這保留了舊碼「goNextSet 後 ref 不指向舊局」的
+      // 安全性質（舊碼是同步設 undefined，這裡改成非同步建 row 前先設，效果一致）。
       currentSetIdRef.current = undefined;
       rallyIdsRef.current = [];
+      const created = await createSet.mutateAsync({
+        matchId: numericMatchId,
+        data: { setNumber: newSetNumber, firstServer: null },
+      });
+      currentSetIdRef.current = created.id;
     });
-  }, [matchId, enqueue]);
+  }, [matchId, numericMatchId, enqueue, createSet]);
 
   // 一般換人（issue #42 Phase B）。跟 score() 是同一套結構：
   //   1) 先同步擷取「這次換人當下」的比分快照（换人不是掛在某個 rally 底下，

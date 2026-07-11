@@ -15,8 +15,12 @@ export const setsTable = pgTable("sets", {
     .references(() => matchesTable.id, { onDelete: "cascade" }),
   setNumber: integer("set_number").notNull(), // 第幾局，從 1 開始
   // 誰先發球。前端的比分/輪轉/發球方全都能從「這個種子 + 各 rally 的 winner 序列」重算出來，
-  // 唯獨「誰先發」推不出來，所以是唯一必須存的種子（notNull，開局選好先發方時就寫入）。
-  firstServer: setFirstServerEnum("first_server").notNull(),
+  // 唯獨「誰先發」推不出來，所以是這張表裡最關鍵的種子欄位。
+  // 允許 null（沒加 notNull）：按「下一局」的當下就會先建這筆 row（讓「使用者已經進到的每一
+  // 局」都有對應的 DB row），但那一刻使用者還沒選先發方，所以先寫 null，
+  // 之後選好先發方再用 PATCH 補上。這樣「還沒選先發方的空局」也是 DB 裡最後一筆 set，
+  // reload 時才不會被誤判成「上一局還在進行中」（#63）。
+  firstServer: setFirstServerEnum("first_server"),
 });
 
 export const insertSetSchema = createInsertSchema(setsTable).omit({ id: true });
