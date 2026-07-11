@@ -11,17 +11,11 @@
 
 ## 目前進度
 
-- [x] 產品規格寫完；產品定位補寫於 [product-vision.md](./product-vision.md)（2026-07-07）
-- [x] DB schema 寫完並通過 typecheck（`matches` / `players` / `sets` / `rallies` / `events`）
-- [x] OpenAPI 規格寫完，已跑過 `codegen` 重新產生 `lib/api-client-react` / `lib/api-zod`
-- [x] 後端 routes 全部實作完成（matches/players/sets/rallies/events + tactics/health，
-      Phase 0–2，見 `docs/backend-architecture.md`）
-- [x] 前端已串接並脫離 localStorage（matches/名單/比分/輪轉/events 讀回，Phase 3a/3b，#58 已關）
-- [x] DB schema 已 push 到 dev 資料庫並實測
-- [ ] 「嗆司」的精確定義還沒跟使用者確認（影響防守數據分析怎麼分類）——現在追蹤於 #73
-      （事件文法領域模型）
-- [ ] 進階版記錄（動作子分類/座標/品質分）尚未實作——上位設計見 `area:product` 系列
-      issues（#73–#77）
+這份文件只導覽「規格文件之間的關係」，**不記進度狀態**（狀態會過期、且會與別處漂移）。
+目前做到哪、下一步是什麼，看這兩個會被主動維護的來源，別在這裡重抄：
+
+- `docs/PROGRESS.md` — 近一週快照＋當下狀態。
+- GitHub Issues / Milestones — `gh issue list --state open`（backlog 依 M1–M5 分階段）。
 
 ## 為什麼分成三份文件而不是一份
 

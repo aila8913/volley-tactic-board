@@ -117,10 +117,25 @@ numbers.
      where item-id comes from
      `gh project item-list 4 --owner aila8913 --format json --jq '.items[] | select(.content.number==<n>).id'`.
 
-6. **Refresh `docs/PROGRESS.md`.** Overwrite (don't append to) the "Current state" and
-   "Known gaps / next big pieces" sections to reflect reality after this session,
-   referencing issue numbers instead of re-explaining their full detail. Update the
-   "Recently closed" section with what was just closed. Update the "Last updated" date.
+6. **Refresh `docs/PROGRESS.md` — it is a rolling ~1-week snapshot, not a log.** The
+   single most common failure mode here is letting it grow into an append-only session
+   history (it hit 580 lines that way before being reset on 2026-07-11). Keep it lean:
+   - **Overwrite, don't append.** Rewrite "Current state" to describe where the project
+     _actually stands now_ (durable current facts), not "what I did this session" stacked
+     on top of last session's "what I did". One `_Last updated_` line only — no `_Prev_`
+     chain.
+   - **Prune anything older than roughly a week.** "Recently closed" keeps only the past
+     ~week's closes; drop older ones (their record lives in the closed issues + git log).
+     Same for stale "Current state" bullets that no longer describe the present.
+   - **Before deleting an old entry, confirm it has a durable home** — git log, the
+     issue's comments, a `docs/*-spec.md`, `CLAUDE.md`, or auto-memory. If it's a **major
+     fact/decision/lesson that lives _only_ here** (an orphan), promote it to the right
+     home _first_ (usually an auto-memory file for lessons/product judgments, or the
+     relevant issue/spec for design decisions), _then_ delete it from PROGRESS. Never drop
+     an orphan on the floor.
+   - **Don't duplicate the backlog.** "Known gaps" points at `gh issue list` / Milestones
+     with a one-line current-phase summary — it does not re-list every open issue's detail.
+   - Update the `_Last updated_` date/summary line.
 
 7. **Refresh `docs/flow-diagrams.html` if the interaction flows changed this session.**
    This is the 輪轉表/戰術板/計分表 operation-flow + state-machine reference (originally

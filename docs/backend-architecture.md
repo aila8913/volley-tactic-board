@@ -6,10 +6,15 @@
 > [api-spec.md](./api-spec.md)（endpoint 導覽）、[db-schema-spec.md](./db-schema-spec.md)
 > （資料表關係）、[match-recording-erd.html](./match-recording-erd.html)（events 表共用 schema 的 ERD）。
 
-## 現況：三層模型的落差
+> **狀態（2026-07-11）：本藍圖的 Phase 0–3 已全部完成，#58 已關。** 下面的「現況：三層模型的落差」
+> 描述的是**動工前的起點**（保留下來是為了理解為什麼要分階段），不是現在的狀態。現在三層已打通、
+> schema 已 push、路由全實作、前端計分表已脫離 localStorage。要看現在的 endpoint/表清單，見
+> [api-spec.md](./api-spec.md) 與 [db-schema-spec.md](./db-schema-spec.md)。
 
-比賽紀錄這條資料流有三個層次，目前**只有戰術板 (tactics) 那條線是打通的**（前端 → API → DB
-全通，`routes/tactics.ts` 是可照抄的範本）。比賽紀錄這條線：DB schema 定義好了但（除了 tactics）
+## 現況：三層模型的落差（動工前的起點）
+
+比賽紀錄這條資料流有三個層次，**動工前只有戰術板 (tactics) 那條線是打通的**（前端 → API → DB
+全通，`routes/tactics.ts` 是可照抄的範本）。比賽紀錄這條線當時：DB schema 定義好了但（除了 tactics）
 還沒 push，openapi 規格寫好了但路由沒實作，前端則完全活在瀏覽器的 localStorage 裡、沒碰過 API。
 
 ```
@@ -98,11 +103,13 @@
 「一次送整個 rally（含多球）」，得先在 `openapi.yaml` 加一個 bulk endpoint、重新 codegen，那時才會
 真正需要事務。現階段不預先實作規格裡不存在的 endpoint。
 
-### Phase 3 — 前端切換（localStorage → API）
+### Phase 3 — 前端切換（localStorage → API）✅ 已完成（#58 已關）
 
 用 codegen 出來的 `api-client-react`（React Query hooks）把 ScoreSheet / 比賽名單從 localStorage
-慢慢搬到後端。最大一塊，可獨立排。這階段才會真正碰到前端 `dateTime` 字串 ↔ DB `date` timestamp、
-前端 string id ↔ DB serial 整數的映射問題。
+搬到後端。最大一塊，分三段落地：3a（matches + 名單，PR #60）、3b-i（比分/輪轉，PR #62）、
+3b-ii（events 讀回 → 球員統計，PR #66）。過程中處理了前端 `dateTime` 字串 ↔ DB `date` timestamp、
+前端 string id ↔ DB serial 整數的映射（`lib/matchMapping.ts` / `lib/scoreSheetMapping.ts`，皆有單元測試）。
+換人持久化（#42）與 `lineups`/`substitutions`/`people`/`teams` schema 是這之後補的下游地基。
 
 ## 貫穿全程的架構決策
 
