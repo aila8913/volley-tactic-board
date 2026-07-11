@@ -19,7 +19,14 @@ agent to rebuild a mental model of the codebase from scratch every time.
 
 1. **Read `docs/PROGRESS.md`** — the "Current state" and "Known gaps" sections are the
    starting snapshot.
-2. **Check the backlog:** `gh issue list --state open --limit 100`.
+2. **Check the backlog — it is time-ordered, not flat.** `gh issue list --state open
+--limit 100` for the full list, but the roadmap structure answers "what's next"
+   directly: **Milestones M1–M5** are the phases (current phase = the lowest-numbered
+   milestone that still has open issues; scope with
+   `gh issue list --milestone "M1 簡易版收尾"`), and the GitHub Project board
+   (https://github.com/users/aila8913/projects/4) holds 當下狀態 — its **Todo column
+   is the agreed next-up list**, so don't re-ask the user "接下來做什麼" when Todo
+   already says so.
 3. **Check actual recent history:** `git log --oneline -10` and `git status --short`.
    This is ground truth — trust it over the doc if they disagree.
 4. **Cross-check for drift** before presenting anything as fact:
