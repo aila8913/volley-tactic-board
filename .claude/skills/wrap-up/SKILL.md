@@ -90,12 +90,39 @@ numbers.
        `docs/tactics-board-todo.md` that say "範圍很大，先進 Plan 模式") and `priority:*`
        only when genuinely urgent/essential, not by default.
 
-5. **Refresh `docs/PROGRESS.md`.** Overwrite (don't append to) the "Current state" and
+5. **Sync the roadmap (Milestones + GitHub Project).** The time-ordered roadmap
+   (built 2026-07-11) lives in two GitHub structures with distinct jobs:
+   - **Milestones M1–M5 = 階段（時間序）**：M1 簡易版收尾 → M2 數據分析價值 →
+     M3 部署給真人試用 → M4 進階版差異化 → M5 體驗重整與雜項. Every open issue
+     should carry exactly one — assign new issues from step 4 in the same pass:
+     `gh issue edit <n> --milestone "M1 簡易版收尾"`. Milestones carry **soft due
+     dates**（估自實際 velocity，2026-07-11 起算 M1=7/18 → M5=9/11）— they feed the
+     Roadmap view's timeline, not deadlines. If reality has drifted noticeably,
+     propose adjusted dates (PO confirms) and update via
+     `gh api -X PATCH repos/aila8913/volley-tactic-board/milestones/<n> -f due_on="YYYY-MM-DDT00:00:00Z"`.
+   - **Project "Volley Tactics Board"** (https://github.com/users/aila8913/projects/4)
+     **= 當下狀態**（Status: Backlog/Todo/In Progress/Blocked/Done）。Workflows
+     auto-add new issues and move closed ones to Done; what needs manual care is
+     **Todo** — keep it to the current milestone's next 3–5 items, no more. That
+     discipline is the whole point of the Backlog/Todo split.
+   - Re-scoping the roadmap (moving an issue between milestones, splitting/adding a
+     phase) is a PO decision — put it in step 3's proposal list, don't settle it
+     unilaterally.
+   - Stable CLI ids (recorded so future sessions don't re-derive them): project
+     number `4`, owner `aila8913`, project id `PVT_kwHOBD0rps4BdEuf`, Status field
+     `PVTSSF_lAHOBD0rps4BdEufzhXo8Gs`, option ids Backlog `3c3a173d` / Todo
+     `f077b203` / In Progress `51faacd6` / Blocked `31ceab16` / Done `5095b43f`.
+     Change a card's status:
+     `gh project item-edit --id <item-id> --project-id <project-id> --field-id <field-id> --single-select-option-id <option-id>`
+     where item-id comes from
+     `gh project item-list 4 --owner aila8913 --format json --jq '.items[] | select(.content.number==<n>).id'`.
+
+6. **Refresh `docs/PROGRESS.md`.** Overwrite (don't append to) the "Current state" and
    "Known gaps / next big pieces" sections to reflect reality after this session,
    referencing issue numbers instead of re-explaining their full detail. Update the
    "Recently closed" section with what was just closed. Update the "Last updated" date.
 
-6. **Refresh `docs/flow-diagrams.html` if the interaction flows changed this session.**
+7. **Refresh `docs/flow-diagrams.html` if the interaction flows changed this session.**
    This is the 輪轉表/戰術板/計分表 operation-flow + state-machine reference (originally
    built as a Claude Artifact, copied into the repo on 2026-07-03 so it survives offline
    instead of living only at a claude.ai URL). Same "snapshot, not changelog" rule as
@@ -104,7 +131,7 @@ numbers.
    inside it. If nothing about the flows/screens/state machines changed this session,
    leave the file untouched.
 
-7. **Remind, don't act.** If there are still uncommitted changes after all this, remind
+8. **Remind, don't act.** If there are still uncommitted changes after all this, remind
    the user to commit — don't commit on their behalf unless they ask.
 
 ## What NOT to do
