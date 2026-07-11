@@ -1,6 +1,7 @@
-import { pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, text, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import { teamsTable } from "./teams";
 
 // 一場比賽。videoUrl 留空代表目前還沒有可以做「賽後補填」的影片連結。
 export const matchesTable = pgTable("matches", {
@@ -22,6 +23,11 @@ export const matchesTable = pgTable("matches", {
   // 存放/回傳即可 —— 後端不需要知道資料夾叫什麼、有哪些。nullable：null 代表這場比賽放在
   // 最上層、沒歸到任何資料夾。
   tournamentId: text("tournament_id"),
+  // teamId 指回 teams 表，標記這場比賽是哪支隊伍打的（用來之後按球隊切片統計）。
+  // nullable：PO 決定建立比賽時不強制選球隊 —— 優先求「隨手就能記」，球隊標籤是可選的補充資訊。
+  // onDelete: "set null"：刪掉一個 team 時，只把指著它的 matches.teamId 設回 null
+  // （比賽變成「未分類」），不會連帶刪掉比賽本身 —— 比賽紀錄比球隊標籤更重要，不該被牽連刪除。
+  teamId: integer("team_id").references(() => teamsTable.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 

@@ -9,33 +9,46 @@
 > Read this file, plus `gh issue list --state open` and recent `git log`, at the start
 > of a new session instead of re-exploring the whole codebase from scratch.
 
-_Last updated: 2026-07-10 (session: **開工 #65 跨場數據分析頁——完成「視圖一＝單場比賽分析」
-骨架（PR #101，已合併）＋補齊產品定位「單帳號 ≠ 單隊」。** 分析頁走 Option 3：完全重用簡易版
-既有資料（sets/rallies/events/substitutions）、零 schema 變更、純前端。抽出共用純函數
-`buildPlayerMatrix`（→`lib/statsMapping.ts`）與整場重建 `reconstructRecording`
-（→`lib/scoreSheetMapping.ts`）讓計分表與分析頁**共用同一份**、統計不漂移；新增唯讀 hook
-`useMatchRecording`（讀同一組 API，不寫入、不碰計分表 optimistic 快取）；路由
-`/matches/:id/analytics`＋比賽卡片第 3 顆「數據」入口；差異化區塊（到位率/球線熱區）與階段性統計
-（side-out%/輪次得失）先做**誠實空狀態**、不放假資料。規劃階段與五個決策（三視圖且**單場優先**、
-不做 GA4 客製化、樣本數 n= 標示＋低樣本降飽和、schema 解耦、選項 A 身分模型）記在 #65 留言；
-拆出 **#102**（people+teams 身分/球隊 schema 地基）。定位更正見 `docs/product-vision.md`
-新增的「單帳號、但不是單隊」一節＋#77。**本 wrap-up 併收另一並行 session 的「編輯比賽無限迴圈
-bug」修復**（`useMatches.ts` 用 `useMemo` 穩定 `match` 參照；隨本 PROGRESS 一起 ship）。前一段 →)_
+_Last updated: 2026-07-11 (session: **落地 #102 people+teams 身分/球隊 schema 地基
+（純 additive、schema-first）。** PO 拍板三個待決事項：建賽時隊**可選**（低門檻隨手記）、
+去重 UX 分階段（先「從既有 people 挑」、相似度提示留後續）、舊比賽**只填新資料不回填**。
+落了兩張新表 `people`（跨場跨隊的唯一「人」身分）/`teams`（分組標籤），加兩條 nullable FK
+`players.personId→people.id`、`matches.teamId→teams.id`（皆 `onDelete: set null`——per-match
+名單列/比賽是歷史事實，不該被刪身分/球隊牽連刪除，同 `events.playerId` 的道理），順手補
+event-grammar-spec 決策 7 缺的 `events.outcome` enum（`point/loss/in_play`，nullable）。
+`typecheck` 綠、`db push` 已套用 dev DB。**刻意未做**（照決策留 #65 後面階段）：openapi/codegen、
+前端讀寫、去重 UX、舊資料回填。委派 sonnet-engineer 實作、主 session 複查 FK 語意。前一段 →)_
 
-_Prev: (session: **修完 #42 一般換人持久化 bug。** 一般換人（regularSubs）
-以前是 ScoreSheet.tsx 的本地 useState，reload 就整包歸零。分兩階段：Phase A 補後端 REST
-（`substitutions` 表已於 #97 落地）——`GET /matches/:id/substitutions`＋`POST /sets/:id/substitutions`
-＋openapi＋codegen；Phase B 把 regularSubs/subCountsHistory 搬進 useScoreSheet store（比照
-liberoSubstitution），controller 背景 POST、進頁從 GET 重建。時機存**比分快照**非 rallyId（換人發生在
-兩 rally 之間、下一 rally id 還不存在，鏡射 rallies 設計）；後端是 append-only log，前端重建時重放
-handleRegularSub 的**淨疊加 dedup**（A→B→C 收斂成單筆）。驗證：typecheck 綠、44 測試全過，並以 API
-round-trip（POST→GET→hard reload）確認統計側欄換人數 0/0→2/2 正確重建、reload 後不消失。仍在
-`main` 上以 squash + 折入 PROGRESS 的方式出貨。libero 換人持久化（#43）、換人 undo（#41）不在範圍。
-另同場開了 backlog #99（站位快照，進階版；只記想法不實作，基礎版不加）。)_
+_Prev: (session: **開工 #65 跨場數據分析頁——完成「視圖一＝單場比賽分析」骨架（PR #101，已合併）
+＋修編輯比賽無限迴圈 bug（PR #103）。** 分析頁走 Option 3：零 schema 變更、純前端重用簡易版
+既有資料；抽出共用純函數 `buildPlayerMatrix`/`reconstructRecording` 讓計分表與分析頁共用同一份、
+統計不漂移；差異化/階段性統計先做誠實空狀態。規劃五個決策（三視圖單場優先、不做 GA4、樣本降飽和、
+schema 解耦、選項 A 身分模型）記在 #65；拆出本 session 落地的 **#102**。編輯比賽 bug 根因是
+`useMatchWithRoster` 每 render 產生新 `match` 參照觸發 `MatchFormDialog` 的 effect 無限迴圈，
+用 `useMemo` 綁 query data 穩定參照修掉。)_
 
 ## Current state
 
-- On `main`, latest commit `86f9d91` — the #65 single-match analytics-page skeleton (PR #101).
+- **This session (2026-07-11): 落地 #102 people+teams 身分/球隊 schema 地基（純 additive、
+  schema-first）。**
+  - **兩張新表**：`lib/db/src/schema/people.ts`（`id/userId/name`，跨場跨隊的唯一「人」身分——
+    同一人這場穿 5 號、下場穿 12 號甚至換隊都是不同 `player` row，`people` 才是把散落各場的紀錄
+    串起來的錨點）；`lib/db/src/schema/teams.ts`（`id/userId/name`，分組標籤，讓統計按隊切片）。
+    兩張都用純文字 `userId`（無 users 表，mock auth 階段）。
+  - **兩條 nullable FK 接上舊資料**：`players.personId → people.id`、`matches.teamId → teams.id`，
+    皆 **`onDelete: "set null"`**。關鍵設計點：per-match 名單列/比賽是**歷史事實**（「這人那場穿幾號」），
+    刪掉 canonical 身分/球隊只該斷連結、不該連帶刪掉歷史紀錄（`cascade` 會反過來抹掉那人打過的
+    所有數據）——同 `events.playerId` 早先用 `set null` 的道理，一路延伸到 `personId`。
+  - **順手補 `events.outcome`**：新 enum `eventOutcomeEnum`（`point/loss/in_play`＝得分/失分/球續），
+    nullable（null＝尚未填）。event-grammar-spec 決策 7 缺口，簡易版記錄手勢第三步本就選得失分、
+    寫入成本為零，是「失分結構」統計前置。
+  - **PO 拍板三個待決事項（記在 #102 留言）**：建賽時隊**可選**（低門檻隨手記）、去重 UX 分階段
+    （先「從既有 people 挑」、相似度提示留後續）、舊比賽**只填新資料不回填**。
+  - **驗證**：`pnpm run typecheck` 綠、`pnpm --filter @workspace/db run push` 已套用 dev DB
+    （純新增、無 drift）。委派 sonnet-engineer 實作，主 session 複查 FK 語意。
+  - **刻意未做**（照決策留 #65 後面階段）：openapi/codegen、前端讀寫、建名單去重 UX、舊資料回填。
+- On `main`, latest commit `99e2538` — the #65 single-match analytics-page skeleton (PR #101)
+  plus the 編輯比賽 infinite-loop fix (PR #103).
   Recent chain: #98 (#42 substitutions persistence fix), #97 (`substitutions` table), #96 (T2
   record-cost-budget spec), #94 (`lineups` table), #92 (T1 event-grammar spec), #91/#90/#89/#88
   (subagent unification), #87 (product deep-dive execution plan), #85/#84/#83 (lint/format/CI
@@ -482,11 +495,11 @@ status — the list below is a snapshot, not guaranteed up to date):
   schema 解耦、身分模型選項 A——全部記在 #65 留言。剩下：視圖一補齊比率統計（side-out%/輪次得失，
   現為空狀態）、視圖二（隊伍，需 #102 的 `teams`）、視圖三（球員跨場跨隊，需 #102 的 `people`）、
   差異化區塊（到位率/球線熱區，需進階記錄 #51/#21）。`needs-plan`、`priority:essential`。
-- [#102](https://github.com/aila8913/volley-tactic-board/issues/102) — **本 session 新開**：落地
-  `people`＋`teams` 身分/球隊 schema（#65 階段 1/2 地基）。additive 新表＋`players.personId`/
-  `matches.teamId` nullable FK，**解耦於視圖先落 schema、開始填**，止住 teamId/personId 資料漂移。
-  身分模型走顧問拍板的選項 A（`people` 不綁隊、同人跨隊=同一 person）。待 PO 拍板：建賽時隊必選/
-  可選、建名單去重 UX、舊資料回填力度。順帶記 `events.outcome` 欄缺口（決策 7）。`needs-plan`、
+- [#102](https://github.com/aila8913/volley-tactic-board/issues/102) — 落地 `people`＋`teams`
+  身分/球隊 schema（#65 階段 1/2 地基）。**本 session schema 核心已落地**（兩張新表＋
+  `players.personId`/`matches.teamId` nullable FK＋`events.outcome`，`db push` 已套用；三個 PO
+  待決事項已拍板記在留言）。身分模型走顧問拍板的選項 A。**剩下**（照決策留 #65 後面階段）：
+  openapi/codegen、前端讀寫、建名單去重 UX（先「從既有 people 挑」）、舊資料回填。`needs-plan`、
   `area:db`、`priority:essential`。
 - [#99](https://github.com/aila8913/volley-tactic-board/issues/99) — **本 session 新開**：站位快照
   （進階版）。比賽任一時刻擷取雙方站位＋手動畫球線＋匯出 PNG 溝通；獨立新表 `snapshots`
