@@ -51,6 +51,22 @@ export function isSetComplete(setNumber: number, ourScore: number, opponentScore
   return leader >= target && diff >= 2;
 }
 
+// ── 動作選項的情境過濾（issue #50：發球/接發互斥）──
+// 記一球、選動作時，依「目前誰發球（serving）」跟「這一球的動作方（actorSide）」把當下
+// 不合理的那個動作從選單濾掉。排球規則：一分裡「發球」只可能是正在發球的那一方做的，
+// 「接發」只可能是另一方做的，所以：
+//   - 動作方正在發球（actorSide === serving）→ 它不可能是「接發」，濾掉 receive。
+//   - 動作方在接對方的發球（另一方）→ 它不可能是「發球」，濾掉 serve。
+// 只互斥「發球↔接發」這一對；其餘四個動作（舉球/攻擊/攔網/防守）在一分的來回裡兩邊都
+// 可能做，一律保留——尤其依 #74 的「一筆決定球」模型，決定球常常就是攻擊/攔網/防守，
+// 硬砍掉會記不了「我方發球這分最後靠攻擊贏」這種情況。
+// 回傳「要濾掉的那個動作」，null 代表不濾（serving 還沒選、是 null 時），呼叫端就顯示全部。
+// 這是純顯示層過濾、零記錄成本（見 docs/recording-cost-budget.md 對 #50 的分層結論）。
+export function excludedAction(serving: Side | null, actorSide: Side): PlayAction | null {
+  if (serving === null) return null;
+  return actorSide === serving ? "receive" : "serve";
+}
+
 // ── PointRecord → rally ──
 // 一個 PointRecord 就是一分 = 一個 rally。homeScore/awayScore 存的是「這分開始前」的比分
 // （後端設計，見 lib/db/src/schema/rallies.ts），所以呼叫端要把記這分之前的比分傳進來。
