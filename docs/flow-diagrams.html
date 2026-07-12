@@ -1166,12 +1166,13 @@ stateDiagram-v2
         </div>
 
         <div class="lane">
-          <div class="lane-label"><span class="dot muted"></span>C2 · 復原上一球</div>
+          <div class="lane-label"><span class="dot muted"></span>C2 · 復原（逐動作）</div>
           <div class="step-row">
-            <div class="step">「復原上一球」按鈕（history 為空時鎖住）</div>
+            <div class="step">「復原」按鈕（復原堆疊為空時鎖住）</div>
             <div class="arrow">→</div>
-            <div class="step commit">undoLastPoint() — 還原比分/輪轉/發球方</div>
-            <span class="warn">⚠ S1</span>
+            <div class="step commit">
+              undoLast() — 一次退最近一個動作（得分／一般換人／手動 libero），連按往回
+            </div>
           </div>
         </div>
 
@@ -1276,7 +1277,7 @@ stateDiagram-v2
     C1a --> C1b: 選動作
     C0 --> C1b: 點「沒看到」（跳過選動作）
     C1b --> C0: 選得分/失分 → scorePoint()
-    C0 --> C0: 復原上一球（history≠0）⚠S1
+    C0 --> C0: 復原（逐動作，堆疊≠空）
     C0 --> C3: 點板凳球員
     C3 --> C0: 取消／點場上球員 → handleRegularSub() ⚠S2 ⚠S3
     C0 --> C4: 拖曳自由球員
@@ -1336,9 +1337,9 @@ stateDiagram-v2
         </tr>
         <tr>
           <td>C0 Rally Idle</td>
-          <td class="code">點「復原上一球」（history≠0）</td>
+          <td class="code">點「復原」（復原堆疊≠空）</td>
           <td>C0 Rally Idle</td>
-          <td>只還原比分/輪轉/發球，不還原換人狀態<span class="warn">⚠S1</span></td>
+          <td>一次退最近一個動作（得分／換人／libero），動作快照還原（#41）</td>
         </tr>
         <tr>
           <td>C0 Rally Idle</td>
@@ -1394,15 +1395,6 @@ stateDiagram-v2
     <p class="section-intro">編號對應上面兩張圖裡的 ⚠ 標記。</p>
 
     <div class="bug-list">
-      <div class="bug">
-        <div class="bug-num">S1</div>
-        <div class="bug-body">
-          <b>復原不會還原換人狀態</b
-          ><span
-            >復原上一球只還原比分/輪轉/發球方，不會還原同一時間點發生的一般換人或自由球員替補。</span
-          ><br /><span class="ref">hooks/useScoreSheet.ts · undoLastPoint() · issue #41</span>
-        </div>
-      </div>
       <div class="bug">
         <div class="bug-num">S2</div>
         <div class="bug-body">
