@@ -68,12 +68,16 @@ gh issue list --milestone "M1 簡易版收尾"   # 當前階段
 gh issue list --state open                   # 全部
 ```
 
-M1 收尾焦點：#41（換人 undo，needs-plan）、#64（背景寫入失敗不 reconcile，關聯部署 #26／離線契約 #75）。
-（#50 情境過濾規則面窮舉完畢、本 session 關閉；#20/#63/#74 先前已關閉。）
+M1 收尾焦點：#64（背景寫入失敗不 reconcile，關聯部署 #26／離線契約 #75）——#41 由 PR #113 落地後
+M1 只剩這一項。（#41/#50 本週關閉；#20/#63/#74 先前已關閉。）
 進階版差異化（M4）：#51 動作子分類、#21 球線座標、#99 站位快照——同屬 advanced tier，可一起設計。
 
 ## Recently closed (past ~week)
 
+- **#41** — 計分表復原改**逐動作 undo**（PR #113，commit a21afce，另一 session 完成、wrap-up 對帳關閉）：
+  動作快照堆疊（每動作前存 currentSet/regularSubs/liberoSubstitution 快照，undo pop 還原），得分/換人/
+  libero 各為一步連按往回；後端加 `DELETE /substitutions/:id` hard-delete 撤銷已寫入的換人。堆疊純記憶體
+  不跨 reload（undo 定位＝即時改錯）。64 tests 全綠。
 - **#50** — 計分表動作選單情境過濾（規則面窮舉完畢，commit 33a21c3）：規則#1（發球/接發互斥）改
   「反灰不刪」（六顆固定方位、不合理的灰掉不能點，肌肉記憶/節奏遊戲；RadialMenu 加 disabled 支援，
   `excludedAction`→`disabledActions`）。評估過「多知道得/失分後得分時再多反灰」的 C8 構想，依 Data Volley
