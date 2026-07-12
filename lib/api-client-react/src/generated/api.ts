@@ -1611,6 +1611,76 @@ export const useCreateSubstitution = <TError = ErrorType<unknown>,
       return useMutation(getCreateSubstitutionMutationOptions(options));
     }
 
+export const getDeleteSubstitutionUrl = (substitutionId: number,) => {
+
+
+
+
+  return `/api/substitutions/${substitutionId}`
+}
+
+/**
+ * @summary Delete a substitution (e.g. undo the last substitution action)
+ */
+export const deleteSubstitution = async (substitutionId: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteSubstitutionUrl(substitutionId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteSubstitutionMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteSubstitution>>, TError,{substitutionId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteSubstitution>>, TError,{substitutionId: number}, TContext> => {
+
+const mutationKey = ['deleteSubstitution'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteSubstitution>>, {substitutionId: number}> = (props) => {
+          const {substitutionId} = props ?? {};
+
+          return  deleteSubstitution(substitutionId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteSubstitutionMutationResult = NonNullable<Awaited<ReturnType<typeof deleteSubstitution>>>
+
+    export type DeleteSubstitutionMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Delete a substitution (e.g. undo the last substitution action)
+ */
+export const useDeleteSubstitution = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteSubstitution>>, TError,{substitutionId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteSubstitution>>,
+        TError,
+        {substitutionId: number},
+        TContext
+      > => {
+      return useMutation(getDeleteSubstitutionMutationOptions(options));
+    }
+
 export const getListTacticsUrl = () => {
 
 

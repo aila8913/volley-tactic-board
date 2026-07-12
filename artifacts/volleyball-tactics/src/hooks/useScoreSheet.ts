@@ -11,10 +11,11 @@ import {
   useCreateEvent,
   useDeleteRally,
   useCreateSubstitution,
+  useDeleteSubstitution,
   listRallies,
   getListRalliesQueryKey,
 } from "@workspace/api-client-react";
-import { ScoreSheetState, PointRecord, Side } from "../types/scoresheet";
+import { ScoreSheetState, PointRecord, Side, UndoEntry } from "../types/scoresheet";
 import {
   sideToApi,
   pointRecordToRally,
@@ -38,15 +39,25 @@ interface ScoreSheetStore {
   // 用 matchId（字串，跟 URL 參數一致）當 key，每場比賽的記錄分開存。現在改由 API 重建灌入，
   // 不再用 persist 自動存 localStorage。
   recordingsByMatch: Record<string, ScoreSheetState>;
+  // 「復原」用的動作快照堆疊，一樣用 matchId 分開存（見 types/scoresheet.ts 的 UndoEntry）。
+  // 刻意跟 recordingsByMatch 分開放、不塞進 ScoreSheetState：它是純記憶體、不進後端、也不參與
+  // 進頁重建（hydrate 不會碰它），放外面才不會被 reconstructRecording 的形狀約束或誤重建。
+  undoStacksByMatch: Record<string, UndoEntry[]>;
   // 進頁重建：把從後端 sets/rallies 重算出來的完整狀態，一次灌進某一場的記錄。
   hydrate: (matchId: string, state: ScoreSheetState) => void;
   startSet: (matchId: string, servingFirst: Side) => void;
+  // 記一個使用者動作「之前」先存一份快照，之後 undo 靠它整包還原（見 UndoEntry 註解）。
+  // 只在真正會改變狀態的使用者動作前呼叫（記分、一般換人、手動 libero）；自動 libero 回位、
+  // 換局清空這類「後果」不呼叫——它們會被下一個使用者動作的快照涵蓋，不該各自變成一個可復原步驟。
+  snapshotForUndo: (matchId: string, backendKind: UndoEntry["backendKind"]) => void;
   scorePoint: (
     matchId: string,
     side: Side,
     meta?: Pick<PointRecord, "action" | "touchedBy">,
   ) => void;
-  undoLastPoint: (matchId: string) => void;
+  // 復原最近一個動作：pop 堆疊最上面那筆快照、整包還原三個可變欄位（比分/輪轉/發球方、
+  // 一般換人清單、libero 替補）。後端要補刪什麼由 controller 依那筆的 backendKind 決定。
+  undoLast: (matchId: string) => void;
   nextSet: (matchId: string) => void;
   setLiberoSubstitution: (matchId: string, playerId: string | null) => void;
   // 一般換人（issue #42 Phase B）：跟 setLiberoSubstitution 一樣是純 reducer，瞬間更新畫面；
@@ -61,11 +72,29 @@ const getOrInitRecord = (
 
 export const useScoreSheet = create<ScoreSheetStore>()((set) => ({
   recordingsByMatch: {},
+  undoStacksByMatch: {},
 
   hydrate: (matchId, state) =>
     set((s) => ({
       recordingsByMatch: { ...s.recordingsByMatch, [matchId]: state },
     })),
+
+  snapshotForUndo: (matchId, backendKind) =>
+    set((state) => {
+      const record = state.recordingsByMatch[matchId];
+      if (!record) return state;
+      // 直接存舊物件的參照當快照（immutable 更新下等於凍結，見 UndoEntry 註解）。
+      const entry: UndoEntry = {
+        currentSet: record.currentSet,
+        regularSubs: record.regularSubs,
+        liberoSubstitution: record.liberoSubstitution,
+        backendKind,
+      };
+      const stack = state.undoStacksByMatch[matchId] ?? [];
+      return {
+        undoStacksByMatch: { ...state.undoStacksByMatch, [matchId]: [...stack, entry] },
+      };
+    }),
 
   startSet: (matchId, servingFirst) =>
     set((state) => {
@@ -115,43 +144,27 @@ export const useScoreSheet = create<ScoreSheetStore>()((set) => ({
       };
     }),
 
-  undoLastPoint: (matchId) =>
+  undoLast: (matchId) =>
     set((state) => {
+      const stack = state.undoStacksByMatch[matchId];
       const record = state.recordingsByMatch[matchId];
-      const current = record?.currentSet;
-      if (!current || current.history.length === 0) return state;
-      const last = current.history[current.history.length - 1];
-
-      const ourRotation =
-        last.wasSideOut && last.side === "us" ? (current.ourRotation + 5) % 6 : current.ourRotation;
-      const opponentRotation =
-        last.wasSideOut && last.side === "opponent"
-          ? (current.opponentRotation + 5) % 6
-          : current.opponentRotation;
-      // side-out 前的發球方，跟這次得分方剛好相反；如果這分沒有 side-out，
-      // 發球方本來就跟得分方相同，復原後維持不變。
-      const previousServing: Side = last.wasSideOut
-        ? last.side === "us"
-          ? "opponent"
-          : "us"
-        : last.side;
-
+      if (!stack || stack.length === 0 || !record) return state;
+      // pop 最上面那筆快照，把三個「動作會改到」的欄位整包還原回去。比分/輪轉/發球方的
+      // 逆運算、換人淨疊加的回退，全都由「直接換回舊物件參照」一次搞定，不用逐項反推。
+      const entry = stack[stack.length - 1];
       return {
         recordingsByMatch: {
           ...state.recordingsByMatch,
           [matchId]: {
             ...record,
-            currentSet: {
-              ...current,
-              ourScore: last.side === "us" ? current.ourScore - 1 : current.ourScore,
-              opponentScore:
-                last.side === "opponent" ? current.opponentScore - 1 : current.opponentScore,
-              serving: previousServing,
-              ourRotation,
-              opponentRotation,
-              history: current.history.slice(0, -1),
-            },
+            currentSet: entry.currentSet,
+            regularSubs: entry.regularSubs,
+            liberoSubstitution: entry.liberoSubstitution,
           },
+        },
+        undoStacksByMatch: {
+          ...state.undoStacksByMatch,
+          [matchId]: stack.slice(0, -1),
         },
       };
     }),
@@ -161,6 +174,9 @@ export const useScoreSheet = create<ScoreSheetStore>()((set) => ({
       const record = getOrInitRecord(state.recordingsByMatch, matchId);
       const finished = record.currentSet;
       return {
+        // 進新的一局就把這場的復原堆疊清空：復原只在「當前這一局」內有意義，不讓使用者
+        // 跨局往回退（上一局已封存進 completedSets，退回去會破壞已結束局的資料）。
+        undoStacksByMatch: { ...state.undoStacksByMatch, [matchId]: [] },
         recordingsByMatch: {
           ...state.recordingsByMatch,
           [matchId]: {
@@ -240,10 +256,15 @@ export function useScoreSheetController(matchId: string) {
   const createEvent = useCreateEvent();
   const deleteRally = useDeleteRally();
   const createSubstitution = useCreateSubstitution();
+  const deleteSubstitution = useDeleteSubstitution();
 
   // 持久化記帳（見上方說明）。用 ref 因為它們只影響背景寫入、不該觸發重繪。
   const currentSetIdRef = useRef<number | undefined>(undefined);
   const rallyIdsRef = useRef<number[]>([]);
+  // 換人 row id 的堆疊，跟 rallyIdsRef 是同一套路：一般換人成功 POST 後把 id 推進來，
+  // 「復原」退掉一個換人動作時 pop 出最後一個、DELETE 掉它。序列化佇列保證 create 一定
+  // 先於 delete 跑完（id 已進堆疊），所以 pop 到的就是要刪的那一筆。
+  const subIdsRef = useRef<number[]>([]);
   const queueRef = useRef<Promise<unknown>>(Promise.resolve());
 
   // 把一個後端寫入工作排進序列化佇列。本地優先：寫入失敗只記 log、不回滾畫面
@@ -305,6 +326,10 @@ export function useScoreSheetController(matchId: string) {
     rallyIdsRef.current = state.currentSet.history
       .map((h) => h.serverId)
       .filter((id): id is number => id !== undefined);
+    // 換人 id 堆疊重建後歸零：復原堆疊（undoStacksByMatch）reload 後本來就是空的（純記憶體、
+    // 不重建），所以 reload 前的換人不會被 undo 退掉、也就不需要它們的 id；只累積本次進頁後
+    // 新記的換人 id 即可。
+    subIdsRef.current = [];
 
     hydrate(matchId, state);
     hydratedMatchRef.current = matchId;
@@ -359,6 +384,10 @@ export function useScoreSheetController(matchId: string) {
       const awayScoreBefore = pre.opponentScore;
       const point: PointRecord = { side, wasSideOut: side !== pre.serving, ...meta };
 
+      // 0) 先存一份「記這分之前」的快照，讓之後「復原」能整包退回這一球（issue #41）。
+      //    backendKind 'rally'：一分＝一個 rally，復原時要 DELETE 那個 rally。
+      useScoreSheet.getState().snapshotForUndo(matchId, "rally");
+
       // 1) 本地即時更新（畫面零延遲）
       useScoreSheet.getState().scorePoint(matchId, side, meta);
 
@@ -380,19 +409,36 @@ export function useScoreSheetController(matchId: string) {
     [matchId, enqueue, createRally, createEvent],
   );
 
+  // 復原最近一個動作（issue #41）：一顆按鈕、一次退一個動作（得分 / 一般換人 / 手動 libero），
+  // 連按就一路往回。做法是先偷看堆疊最上面那筆是什麼動作（backendKind），本地整包還原後，
+  // 再依它決定後端要不要補刪、刪哪張表的 row。
   const undo = useCallback(() => {
-    const pre = useScoreSheet.getState().recordingsByMatch[matchId]?.currentSet;
-    if (!pre || pre.history.length === 0) return;
-    useScoreSheet.getState().undoLastPoint(matchId);
-    enqueue(async () => {
-      // 佇列序列化保證：即使這一分的 POST 還沒回來，它排在本 delete 前面、一定先跑完並把 id
-      // 推進堆疊，所以這裡 pop 到的就是要刪的那一分。event 靠 FK cascade 一起刪掉。
-      const rallyId = rallyIdsRef.current.pop();
-      if (rallyId !== undefined) {
-        await deleteRally.mutateAsync({ rallyId });
-      }
-    });
-  }, [matchId, enqueue, deleteRally]);
+    const stack = useScoreSheet.getState().undoStacksByMatch[matchId];
+    if (!stack || stack.length === 0) return;
+    // 先 peek（不 pop）拿到「上一個動作在後端建了什麼」，再叫 store 還原＋pop。
+    const top = stack[stack.length - 1];
+    useScoreSheet.getState().undoLast(matchId);
+
+    if (top.backendKind === "rally") {
+      enqueue(async () => {
+        // 佇列序列化保證：即使這一分的 POST 還沒回來，它排在本 delete 前面、一定先跑完並把 id
+        // 推進堆疊，所以這裡 pop 到的就是要刪的那一分。event 靠 FK cascade 一起刪掉。
+        const rallyId = rallyIdsRef.current.pop();
+        if (rallyId !== undefined) {
+          await deleteRally.mutateAsync({ rallyId });
+        }
+      });
+    } else if (top.backendKind === "substitution") {
+      enqueue(async () => {
+        // 跟 rally 同理：序列化佇列保證這筆換人的 POST 已先跑完、id 已進 subIdsRef。
+        const substitutionId = subIdsRef.current.pop();
+        if (substitutionId !== undefined) {
+          await deleteSubstitution.mutateAsync({ substitutionId });
+        }
+      });
+    }
+    // backendKind === null（手動 libero 上/下場）：純本地狀態，undoLast 已還原畫面，後端沒東西要刪。
+  }, [matchId, enqueue, deleteRally, deleteSubstitution]);
 
   const goNextSet = useCallback(() => {
     const pre = useScoreSheet.getState().recordingsByMatch[matchId]?.currentSet;
@@ -432,17 +478,22 @@ export function useScoreSheetController(matchId: string) {
       const homeScore = pre.ourScore;
       const awayScore = pre.opponentScore;
 
+      // 0) 先存一份「這次換人之前」的快照，讓「復原」能單獨退掉這個換人動作（issue #41）。
+      //    backendKind 'substitution'：復原時要 DELETE 這一筆換人 row。
+      useScoreSheet.getState().snapshotForUndo(matchId, "substitution");
+
       // 1) 本地即時更新（畫面零延遲）
       useScoreSheet.getState().recordRegularSub(matchId, outPlayerId, inPlayerId);
 
-      // 2) 背景持久化：POST 到目前這一局底下。
+      // 2) 背景持久化：POST 到目前這一局底下，成功後把 row id 推進 subIdsRef（復原要用它 DELETE）。
       enqueue(async () => {
         const setId = currentSetIdRef.current;
         if (setId === undefined) return; // 理論上 start 一定先跑過；防呆
-        await createSubstitution.mutateAsync({
+        const created = await createSubstitution.mutateAsync({
           setId,
           data: regularSubToApi({ outPlayerId, inPlayerId }, homeScore, awayScore),
         });
+        subIdsRef.current.push(created.id);
       });
     },
     [matchId, enqueue, createSubstitution],

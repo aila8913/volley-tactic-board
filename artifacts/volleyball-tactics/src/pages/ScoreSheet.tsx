@@ -54,6 +54,12 @@ export default function ScoreSheet() {
 
   const record = useScoreSheet((state) => (id ? state.recordingsByMatch[id] : undefined));
   const setLiberoSubstitution = useScoreSheet((state) => state.setLiberoSubstitution);
+  // 「復原」堆疊的深度：>0 才有東西可退（issue #41）。手動 libero 上/下場沒有對應的
+  // 後端動作，也要能被復原，所以按鈕的可用與否看這個深度，而不是只看記了幾顆球。
+  const undoDepth = useScoreSheet((state) => (id ? (state.undoStacksByMatch[id]?.length ?? 0) : 0));
+  // 手動 libero 上/下場前，要先自己存一份復原快照（記分/一般換人是走 controller 的
+  // score()/substitute() 幫忙存，libero 是元件直接改 store，所以在這裡自己叫）。
+  const snapshotForUndo = useScoreSheet((state) => state.snapshotForUndo);
   // 記分/開局/復原/下一局改走 controller：本地即時更新畫面，同時在背景寫進後端
   // sets/rallies/events；進頁時也由它從 API 重建這場的記錄。setLiberoSubstitution 仍留在
   // store（純前端、不進 API，reload 後歸零——真正的自由球員持久化是 #43 的範圍）。
@@ -194,6 +200,9 @@ export default function ScoreSheet() {
   };
 
   const handleLiberoSubstitute = (targetPlayerId: string) => {
+    // 手動把自由球員換上場是一個「使用者動作」，先存快照才能被「復原」退掉（issue #41）。
+    // backendKind null：libero 替補是純前端狀態、沒寫後端（見 controller 說明），復原只還原畫面。
+    snapshotForUndo(id, null);
     if (liberoSubstitution !== null) {
       setPreviousLiberoTarget(liberoSubstitution);
     }
@@ -210,6 +219,14 @@ export default function ScoreSheet() {
       setLiberoSubstitution(id, null);
     }
     setSelectedBenchPlayer(null);
+  };
+
+  const handleUndo = () => {
+    undo();
+    // previousLiberoTarget 是「自動回位」用的啟發式記憶，存在 component state、不在復原快照裡。
+    // 復原可能把 liberoSubstitution 一起退回去，這裡順手清掉這份記憶，避免它跟還原後的替補
+    // 狀態對不上（清成 null 是安全的：頂多讓之後的自動回位走預設行為，不會出錯）。
+    setPreviousLiberoTarget(null);
   };
 
   const handleNextSet = () => {
@@ -338,12 +355,11 @@ export default function ScoreSheet() {
                   </div>
 
                   <div className="flex gap-3 pb-2">
-                    <Button
-                      variant="ghost"
-                      disabled={currentSet.history.length === 0}
-                      onClick={() => undo()}
-                    >
-                      復原上一球
+                    {/* 一顆「復原」鈕，一次退最近一個動作（得分／一般換人／手動 libero），
+                        連按就一路往回（issue #41）。可用與否看復原堆疊深度，不是只看記了幾顆球
+                        ——這樣剛換完人、還沒記下一球時也退得掉那次換人。 */}
+                    <Button variant="ghost" disabled={undoDepth === 0} onClick={handleUndo}>
+                      復原
                     </Button>
                     <Button variant="ghost" onPointerDown={handleNoSight}>
                       沒看到

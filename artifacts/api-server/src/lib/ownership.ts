@@ -6,6 +6,7 @@ import {
   setsTable,
   ralliesTable,
   eventsTable,
+  substitutionsTable,
 } from "@workspace/db";
 
 // 巢狀資源（players/sets/rallies/events）自己沒有存 userId，它們的擁有權是「繼承」自所屬的 match。
@@ -55,6 +56,23 @@ export async function rallyBelongsToUser(rallyId: number, userId: string): Promi
     .innerJoin(setsTable, eq(ralliesTable.setId, setsTable.id))
     .innerJoin(matchesTable, eq(setsTable.matchId, matchesTable.id))
     .where(and(eq(ralliesTable.id, rallyId), eq(matchesTable.userId, userId)));
+
+  return row !== undefined;
+}
+
+// substitution 跟 rally 一樣掛在 set 底下（不是掛在 rally），所以擁有權也是 join 兩層
+// （substitutions → sets → matches）追到 match.userId。DELETE /substitutions/:id 路徑上
+// 只有 substitutionId（沒有 set/match），只能靠這條 join 鏈反推它屬不屬於這個 user。
+export async function substitutionBelongsToUser(
+  substitutionId: number,
+  userId: string,
+): Promise<boolean> {
+  const [row] = await db
+    .select({ id: substitutionsTable.id })
+    .from(substitutionsTable)
+    .innerJoin(setsTable, eq(substitutionsTable.setId, setsTable.id))
+    .innerJoin(matchesTable, eq(setsTable.matchId, matchesTable.id))
+    .where(and(eq(substitutionsTable.id, substitutionId), eq(matchesTable.userId, userId)));
 
   return row !== undefined;
 }

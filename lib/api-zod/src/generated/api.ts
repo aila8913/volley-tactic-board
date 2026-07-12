@@ -370,6 +370,14 @@ export const CreateSubstitutionBody = zod.object({
 
 
 /**
+ * @summary Delete a substitution (e.g. undo the last substitution action)
+ */
+export const DeleteSubstitutionParams = zod.object({
+  "substitutionId": zod.coerce.number()
+})
+
+
+/**
  * @summary List all saved tactics for the current user
  */
 export const ListTacticsResponseItem = zod.object({

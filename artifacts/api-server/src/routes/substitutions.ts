@@ -2,11 +2,12 @@ import { Router, type IRouter } from "express";
 import { eq, getTableColumns } from "drizzle-orm";
 import { db, substitutionsTable, setsTable } from "@workspace/db";
 import { mockAuth } from "../middleware/mockAuth";
-import { setBelongsToUser, matchBelongsToUser } from "../lib/ownership";
+import { setBelongsToUser, matchBelongsToUser, substitutionBelongsToUser } from "../lib/ownership";
 import {
   ListMatchSubstitutionsParams,
   CreateSubstitutionParams,
   CreateSubstitutionBody,
+  DeleteSubstitutionParams,
 } from "@workspace/api-zod";
 
 // 一局（set）裡的換人紀錄（regular 換人 / libero 上下場，見 lib/db/src/schema/substitutions.ts）。
@@ -80,6 +81,21 @@ router.post("/sets/:setId/substitutions", async (req, res) => {
     .returning();
 
   res.status(201).json(created);
+});
+
+// DELETE /substitutions/:substitutionId — 刪掉一筆換人紀錄（前端「復原」退掉上一個換人動作用，
+// 見 issue #41）。路徑上只有 substitutionId，所以擁有權要靠 substitutionBelongsToUser 往上
+// join 兩層追到 match.userId。跟 DELETE /rallies/:rallyId 是同一套「undo 就 hard-delete」的作法。
+router.delete("/substitutions/:substitutionId", async (req, res) => {
+  const { substitutionId } = DeleteSubstitutionParams.parse(req.params);
+
+  if (!(await substitutionBelongsToUser(substitutionId, req.userId))) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+
+  await db.delete(substitutionsTable).where(eq(substitutionsTable.id, substitutionId));
+  res.status(204).end();
 });
 
 export default router;
