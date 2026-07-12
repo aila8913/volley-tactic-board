@@ -17,15 +17,13 @@
 > promote it first, then drop it. Read this file + `gh issue list --state open` + recent
 > `git log` at the start of a session instead of re-exploring the codebase.
 
-_Last updated: 2026-07-12 — #50 情境過濾規則面窮舉完畢並關閉。(1) 規則#1（發球/接發互斥）改「反灰不刪」：
-六顆動作永遠留在固定方位，只把當下不可能的那顆灰掉、點了沒反應——PO 要記錄者靠肌肉記憶按方位（節奏遊戲
-手感）；原本是「濾掉選項」會讓 RadialMenu 環狀角度跑位，故改為 disabled 反灰（RadialMenu 加 disabled 支援、
-`excludedAction`→`disabledActions`）。(2) 評估「先記得/失分、得分時再多反灰接發/舉球/防守」的 C8 構想，
-依 Data Volley 記錄慣例作廢：防守反彈過網得分記防守、舉球失誤過網得分記舉球、接發直接得分是進階版才有的
-Freeball——得分決定球六種都可能，多知道 `pointWonBy` 換不到任何安全反灰。結論：`serving`＋`actorSide` 只
-養得起規則#1 一條，手勢順序維持原本「點球員→選動作→選得失分」不倒換。commit 33a21c3；33 個 disabledActions
-單元測試釘住規則#1＋「其餘四動作永不反灰」不變式；56 tests＋typecheck＋lint＋prettier 全綠，#50 關閉。
-（設計推導＋DV 慣例對帳的完整記錄在 #50 留言。）_
+_Last updated: 2026-07-12（session 2）— 外部標準查證入檔（PR #112，純文件、不動 schema）：把 FIVB VIS
+／Data Volley 的對照結論寫進 `event-grammar-spec.md` 新增的〈外部標準對照〉一節＋ `product-spec.md` 出處
+補充。三個結論：(1) `quality` 0–3 ↔ VIS 4 級評估官方對照（Excellent/OK/Poor/Error，UI 建議用詞「完美/
+到位/不佳/失誤」）；(2) 到位門檻 `quality >= 2` 獲 VIS 背書——官方定義就在 OK（半到位）這級劃「能否組織
+進攻」的線，預設值從空猜升級為有出處的慣例；(3) 嗆司候選定義＝DV 的 Freeball（對方無揮臂攻擊動作送過網，
+失誤與主動放球都算）。兩項仍維持「教練確認再鎖」。刻意不採用：鍵盤盲打 scouting code（與節奏遊戲定位
+相反）、DV 5 級效果制（維持 VIS 4 級）。結論已留言回灌 #51，並修其 body 過期的「後端沒實作」段落。_
 
 ## Current state
 
@@ -56,7 +54,9 @@ lives in git log + the issues named):
   分層歸屬結論已回灌 #50（零成本顯示層）/#51（子分類全進階）/#21（座標進階），#74 收工。
 - **事件文法（#73）＝統計權威依據**（`docs/event-grammar-spec.md`）：每個統計 = events/rallies/sets
   欄位的純函數。對帳確認「必須早補」的結構缺口已全數落地；剩餘缺口都是故意延到進階版的欄位
-  （#51/#21/#44）或教練待確認項（到位門檻 `quality>=2`、嗆司定義，皆有預設在跑、不擋實作）。
+  （#51/#21/#44）或教練待確認項（到位門檻 `quality>=2`、嗆司定義，皆有預設在跑、不擋實作——
+  07-12 起兩項預設皆有外部標準出處：VIS 官方門檻背書／DV Freeball 候選定義，見該 spec
+  〈外部標準對照〉一節，schema 設計亦獲 VIS/DV 慣例驗證）。
 
 ## Known gaps / next big pieces
 
