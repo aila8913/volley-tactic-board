@@ -7,6 +7,7 @@ import setsRouter from "./sets";
 import ralliesRouter from "./rallies";
 import eventsRouter from "./events";
 import substitutionsRouter from "./substitutions";
+import lineupsRouter from "./lineups";
 
 const router: IRouter = Router();
 
@@ -20,5 +21,6 @@ router.use(setsRouter);
 router.use(ralliesRouter);
 router.use(eventsRouter);
 router.use(substitutionsRouter);
+router.use(lineupsRouter);
 
 export default router;

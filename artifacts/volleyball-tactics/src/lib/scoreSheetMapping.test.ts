@@ -11,9 +11,17 @@ import {
   reconstructRegularSubs,
   reconstructRecording,
   disabledActions,
+  lineupSnapshotToApi,
+  apiLineupToSnapshot,
 } from "./scoreSheetMapping";
-import type { PointRecord, RegularSub } from "../types/scoresheet";
-import type { MatchSet, Rally, MatchEvent, Substitution } from "@workspace/api-client-react";
+import type { PointRecord, RegularSub, LineupSnapshot } from "../types/scoresheet";
+import type {
+  MatchSet,
+  Rally,
+  MatchEvent,
+  Substitution,
+  Lineup,
+} from "@workspace/api-client-react";
 
 // 純函式，最適合單元測試。重點是 us/opponent↔home/away 的翻譯，以及最容易出錯的
 // 「從 rally 序列 replay 回比分/發球方/輪轉」——輪轉規則（只有 side-out 才轉）很細，
@@ -344,6 +352,7 @@ describe("reconstructRecording", () => {
         history: [],
       },
       completedSets: [],
+      lineup: null,
       liberoSubstitution: null,
       regularSubs: [],
       subCountsHistory: [],
@@ -454,6 +463,92 @@ describe("reconstructRecording", () => {
     expect(state.currentSet.opponentScore).toBe(0);
     expect(state.currentSet.history).toEqual([]);
     expect(state.currentSet.serverId).toBe(2);
+  });
+
+  // issue #115：reload 後把每一局的先發從後端 lineups 讀回來，計分表才不會又退回去讀
+  // （可能被別場/存檔污染的）全域 store。
+  it("seeds the current set's lineup from the lineups list", () => {
+    const set1: MatchSet = { id: 1, matchId: 3, setNumber: 1, firstServer: "home" };
+    const set1Rallies: Rally[] = [
+      { id: 100, setId: 1, rallyNumber: 1, homeScore: 0, awayScore: 0, winner: "home" },
+    ];
+    const lineups: Lineup[] = [
+      {
+        id: 1,
+        setId: 1,
+        zone1PlayerId: 11,
+        zone2PlayerId: 12,
+        zone3PlayerId: 13,
+        zone4PlayerId: 14,
+        zone5PlayerId: 15,
+        zone6PlayerId: 16,
+      },
+    ];
+
+    const state = reconstructRecording([set1], [set1Rallies], [], [], lineups);
+    expect(state.lineup).toEqual({ 1: "11", 2: "12", 3: "13", 4: "14", 5: "15", 6: "16" });
+  });
+
+  it("carries the previous set's lineup forward to a trailing firstServer=null set", () => {
+    // 剛按下一局的空局（set2, firstServer=null）還沒寫自己的 lineup；沿用上一局（set1）的先發，
+    // reload 停在「這局誰先發球」時球場仍有陣容可顯示（app 沒有跨局重排先發的 UI）。
+    const set1: MatchSet = { id: 1, matchId: 3, setNumber: 1, firstServer: "home" };
+    const set2: MatchSet = { id: 2, matchId: 3, setNumber: 2, firstServer: null };
+    const set1Rallies: Rally[] = [
+      { id: 100, setId: 1, rallyNumber: 1, homeScore: 0, awayScore: 0, winner: "home" },
+    ];
+    const lineups: Lineup[] = [
+      {
+        id: 1,
+        setId: 1,
+        zone1PlayerId: 11,
+        zone2PlayerId: 12,
+        zone3PlayerId: 13,
+        zone4PlayerId: 14,
+        zone5PlayerId: 15,
+        zone6PlayerId: 16,
+      },
+    ];
+
+    const state = reconstructRecording([set1, set2], [set1Rallies, []], [], [], lineups);
+    expect(state.currentSet.setNumber).toBe(2);
+    expect(state.lineup).toEqual({ 1: "11", 2: "12", 3: "13", 4: "14", 5: "15", 6: "16" });
+  });
+
+  it("leaves lineup null when no lineups are provided", () => {
+    const set1: MatchSet = { id: 1, matchId: 3, setNumber: 1, firstServer: "home" };
+    const set1Rallies: Rally[] = [
+      { id: 100, setId: 1, rallyNumber: 1, homeScore: 0, awayScore: 0, winner: "home" },
+    ];
+    const state = reconstructRecording([set1], [set1Rallies], [], []);
+    expect(state.lineup).toBeNull();
+  });
+});
+
+// issue #115：先發快照（號位→字串 id）跟後端 lineups DTO（zone1~6PlayerId 整數）互轉，
+// 跟 regularSub 的 Number()/String() 是同一套慣例，round-trip 要對得回來。
+describe("lineup snapshot mapping", () => {
+  it("round-trips snapshot ↔ api", () => {
+    const snapshot: LineupSnapshot = { 1: "11", 2: "12", 3: "13", 4: "14", 5: "15", 6: "16" };
+    expect(lineupSnapshotToApi(snapshot)).toEqual({
+      zone1PlayerId: 11,
+      zone2PlayerId: 12,
+      zone3PlayerId: 13,
+      zone4PlayerId: 14,
+      zone5PlayerId: 15,
+      zone6PlayerId: 16,
+    });
+    const row: Lineup = {
+      id: 9,
+      setId: 2,
+      zone1PlayerId: 11,
+      zone2PlayerId: 12,
+      zone3PlayerId: 13,
+      zone4PlayerId: 14,
+      zone5PlayerId: 15,
+      zone6PlayerId: 16,
+    };
+    expect(apiLineupToSnapshot(row)).toEqual(snapshot);
   });
 });
 

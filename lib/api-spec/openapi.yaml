@@ -375,6 +375,52 @@ paths:
         "204":
           description: Deleted
 
+  # 一場比賽每一局的起始先發（我方六個號位 1~6 各站哪個球員；自由球員不列入，見
+  # lib/db/src/schema/lineups.ts）。讀（bulk）掛在 /matches/:matchId/lineups 底下
+  # （先驗 match 擁有權），道理跟 /matches/:matchId/substitutions 一樣：前端進計分表
+  # 重建時一支請求把整場所有局的先發拿回來，不用對每個 set 各發一次。
+  /matches/{matchId}/lineups:
+    parameters:
+      - $ref: "#/components/parameters/MatchId"
+    get:
+      operationId: listMatchLineups
+      tags: [matches]
+      summary: List all starting lineups for a match (one per set), for rebuilding the scoresheet
+      responses:
+        "200":
+          description: List of lineups, ordered by set
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Lineup"
+
+  # 寫掛在 /sets/:setId/lineup 底下（先驗 set 擁有權往上追到 match.userId）。一局一 row
+  # （schema 的 setId 是 unique），所以用 PUT（idempotent upsert）而不是 POST：教練若重按
+  # 先發或修正，同一局就覆寫那一 row，不會長出第二筆——語意上「設定這一局的先發」也剛好
+  # 對應 PUT（把某個資源設成給定內容）。
+  /sets/{setId}/lineup:
+    parameters:
+      - $ref: "#/components/parameters/SetId"
+    put:
+      operationId: putSetLineup
+      tags: [matches]
+      summary: Set (upsert) the starting lineup for a set
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewLineup"
+      responses:
+        "200":
+          description: Created or updated lineup
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lineup"
+
   /tactics:
     get:
       operationId: listTactics
@@ -770,6 +816,58 @@ components:
         kind:
           $ref: "#/components/schemas/SubstitutionKind"
       required: [homeScore, awayScore, kind]
+
+    # 一局的起始先發：我方六個號位（1~6）各站哪個球員。詳見 lib/db/src/schema/lineups.ts。
+    # 自由球員（L）不出現在這六個號位——前端邏輯是 L 從場邊出發、換人上場，開局先發只有這 6 人。
+    # 「六人不得重複」DB 層表達不了，交給前端/route 檢查（跟 schema 註解一致）。
+    Lineup:
+      type: object
+      properties:
+        id:
+          type: integer
+        setId:
+          type: integer
+        zone1PlayerId:
+          type: integer
+        zone2PlayerId:
+          type: integer
+        zone3PlayerId:
+          type: integer
+        zone4PlayerId:
+          type: integer
+        zone5PlayerId:
+          type: integer
+        zone6PlayerId:
+          type: integer
+      required:
+        [
+          id,
+          setId,
+          zone1PlayerId,
+          zone2PlayerId,
+          zone3PlayerId,
+          zone4PlayerId,
+          zone5PlayerId,
+          zone6PlayerId,
+        ]
+
+    NewLineup:
+      type: object
+      properties:
+        zone1PlayerId:
+          type: integer
+        zone2PlayerId:
+          type: integer
+        zone3PlayerId:
+          type: integer
+        zone4PlayerId:
+          type: integer
+        zone5PlayerId:
+          type: integer
+        zone6PlayerId:
+          type: integer
+      required:
+        [zone1PlayerId, zone2PlayerId, zone3PlayerId, zone4PlayerId, zone5PlayerId, zone6PlayerId]
 
     EventAction:
       type: string

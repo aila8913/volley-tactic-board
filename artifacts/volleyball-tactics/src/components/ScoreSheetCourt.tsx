@@ -2,6 +2,8 @@ import React, { useMemo, useRef, useState } from "react";
 import { useRotationTable } from "../hooks/useRotationTable";
 import { findNearestZone, getZoneLayout, isBackRowPosition } from "../lib/rotationLogic";
 import { Side, RegularSub } from "../types/scoresheet";
+import type { MatchPlayer } from "../types/match";
+import type { PlayerPosition } from "../types/rotationTable";
 
 export interface TouchedTarget {
   side: Side;
@@ -17,7 +19,12 @@ export interface TouchedTarget {
 export type { RegularSub };
 
 interface ScoreSheetCourtProps {
-  ourRotation: number;
+  // 我方這一輪場上 6 人的座標，由外層（pages/ScoreSheet.tsx）從計分表自己的先發快照換算好傳進來
+  // （issue #115）——這個元件不再讀那份全域、跨 match 共用的 useRotationTable.rotations，改吃
+  // 快照後就跟戰術板/輪轉表解耦、也不會被別場的 id 污染。
+  ourPositions: PlayerPosition[];
+  // 這場比賽的名單，同樣改由外層（已知自己在看哪個 matchId）當 prop 傳進來，不再讀全域 roster。
+  roster: MatchPlayer[];
   opponentRotation: number;
   serving: "us" | "opponent" | null;
   // interactive=false 時手勢與換人拖曳都關閉（RadialMenu 選到一半時用）
@@ -42,7 +49,8 @@ function dist(ax: number, ay: number, bx: number, by: number) {
 }
 
 export default function ScoreSheetCourt({
-  ourRotation,
+  ourPositions,
+  roster,
   opponentRotation,
   serving,
   interactive,
@@ -53,8 +61,8 @@ export default function ScoreSheetCourt({
   onBenchPlayerSelect,
   liberoSubstitution,
 }: ScoreSheetCourtProps) {
-  const roster = useRotationTable((state) => state.roster);
-  const rotations = useRotationTable((state) => state.rotations);
+  // circleLabel 是「圈圈顯示姓名/背號/位置」的全域顯示偏好（不是某一場的資料），留在全域 store
+  // 讀即可——它不參與 issue #115 要解的「先發被跨場污染」問題。
   const circleLabel = useRotationTable((state) => state.circleLabel);
 
   const svgRef = useRef<SVGSVGElement>(null);
@@ -63,7 +71,6 @@ export default function ScoreSheetCourt({
   const [draggingLibero, setDraggingLibero] = useState(false);
   const [liberoGhostScreen, setLiberoGhostScreen] = useState<{ x: number; y: number } | null>(null);
 
-  const ourPositions = (rotations[ourRotation] ?? rotations[0]).positions;
   const opponentZones = getZoneLayout(opponentRotation, true);
   const liberoPlayer = roster.find((p) => p.role === "L");
 

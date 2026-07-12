@@ -12,16 +12,19 @@ import {
   useDeleteRally,
   useCreateSubstitution,
   useDeleteSubstitution,
+  useListMatchLineups,
+  usePutSetLineup,
   listRallies,
   getListRalliesQueryKey,
 } from "@workspace/api-client-react";
-import { ScoreSheetState, PointRecord, Side, UndoEntry } from "../types/scoresheet";
+import { ScoreSheetState, PointRecord, Side, UndoEntry, LineupSnapshot } from "../types/scoresheet";
 import {
   sideToApi,
   pointRecordToRally,
   pointRecordToEvent,
   reconstructRecording,
   regularSubToApi,
+  lineupSnapshotToApi,
   makeEmptySet,
   emptyRecord,
 } from "../lib/scoreSheetMapping";
@@ -59,6 +62,9 @@ interface ScoreSheetStore {
   // 一般換人清單、libero 替補）。後端要補刪什麼由 controller 依那筆的 backendKind 決定。
   undoLast: (matchId: string) => void;
   nextSet: (matchId: string) => void;
+  // 擷取這場比賽的先發快照（issue #115）。開賽（選先發方）那一刻由 controller 的 start() 呼叫，
+  // 把當下輪轉表的起始站位凍結進這場的計分記錄，之後球場只讀它、跟全域 store 解耦。
+  setLineup: (matchId: string, lineup: LineupSnapshot) => void;
   setLiberoSubstitution: (matchId: string, playerId: string | null) => void;
   // 一般換人（issue #42 Phase B）：跟 setLiberoSubstitution 一樣是純 reducer，瞬間更新畫面；
   // 真正寫進後端由 controller 的 substitute() 在背景做（跟 scorePoint/score() 是同一套分工）。
@@ -190,6 +196,10 @@ export const useScoreSheet = create<ScoreSheetStore>()((set) => ({
               },
             ],
             currentSet: makeEmptySet(finished.setNumber + 1),
+            // 先發快照沿用上一局（issue #115）：app 沒有「跨局重排先發」的 UI，各局共用同一份
+            // 起始站位。保留它，下一局按「我方/對手先發」時 start() 就會沿用這份、再 PUT 一筆
+            // 這一局的 lineup row（一局一 row），reload 時每一局都對得到自己的先發。
+            lineup: record.lineup,
             // 換新的一局，自由球員替補狀態歸零（跟原本 handleNextSet 手動呼叫
             // setLiberoSubstitution(null) 是同一件事，現在收進 store 自己的動作裡）。
             liberoSubstitution: null,
@@ -200,6 +210,17 @@ export const useScoreSheet = create<ScoreSheetStore>()((set) => ({
             subCountsHistory: [...record.subCountsHistory, record.regularSubs.length],
             regularSubs: [],
           },
+        },
+      };
+    }),
+
+  setLineup: (matchId, lineup) =>
+    set((state) => {
+      const record = getOrInitRecord(state.recordingsByMatch, matchId);
+      return {
+        recordingsByMatch: {
+          ...state.recordingsByMatch,
+          [matchId]: { ...record, lineup },
         },
       };
     }),
@@ -257,6 +278,7 @@ export function useScoreSheetController(matchId: string) {
   const deleteRally = useDeleteRally();
   const createSubstitution = useCreateSubstitution();
   const deleteSubstitution = useDeleteSubstitution();
+  const putLineup = usePutSetLineup();
 
   // 持久化記帳（見上方說明）。用 ref 因為它們只影響背景寫入、不該觸發重繪。
   const currentSetIdRef = useRef<number | undefined>(undefined);
@@ -292,20 +314,24 @@ export function useScoreSheetController(matchId: string) {
   // 整場所有一般換人紀錄一次抓（跟 events 同一種 bulk endpoint 理由：避免對每個 set
   // 各發一次請求）。issue #42 Phase B：重建 regularSubs/subCountsHistory 靠它。
   const subsQuery = useListMatchSubstitutions(numericMatchId);
+  // 整場所有局的先發一次抓（同 bulk endpoint 理由）。issue #115：reload 後把先發快照讀回，
+  // 計分表才不會又退回去讀（可能被別場/存檔污染的）全域 store。
+  const lineupsQuery = useListMatchLineups(numericMatchId);
 
   const setsReady = setsQuery.isSuccess;
   const ralliesReady = ralliesQueries.every((q) => q.isSuccess);
   const eventsReady = eventsQuery.isSuccess;
   const subsReady = subsQuery.isSuccess;
+  const lineupsReady = lineupsQuery.isSuccess;
   const isHydrating =
-    !setsReady || !eventsReady || !subsReady || (sets.length > 0 && !ralliesReady);
+    !setsReady || !eventsReady || !subsReady || !lineupsReady || (sets.length > 0 && !ralliesReady);
 
   // 只在資料第一次備妥時重建一次，之後不再覆蓋（避免把使用者當下的即時編輯洗掉）。
   // matchId 變了就允許再重建一次。
   const hydratedMatchRef = useRef<string | null>(null);
   useEffect(() => {
     if (hydratedMatchRef.current === matchId) return;
-    if (!setsReady || !eventsReady || !subsReady) return;
+    if (!setsReady || !eventsReady || !subsReady || !lineupsReady) return;
     if (sets.length > 0 && !ralliesReady) return;
 
     // 「資料到位後怎麼組成 ScoreSheetState」這段純計算已抽到 reconstructRecording
@@ -319,6 +345,7 @@ export function useScoreSheetController(matchId: string) {
       ralliesBySetIndex,
       eventsQuery.data ?? [],
       subsQuery.data ?? [],
+      lineupsQuery.data ?? [],
     );
 
     // seed 記帳 ref，讓重建後接著記分/復原能對得上後端 id。
@@ -335,15 +362,25 @@ export function useScoreSheetController(matchId: string) {
     hydratedMatchRef.current = matchId;
     // ralliesQueries / eventsQuery.data 每次 render 重建，放進依賴會抖動；用 *Ready 旗標即可。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [matchId, setsReady, ralliesReady, eventsReady, subsReady, sets.length]);
+  }, [matchId, setsReady, ralliesReady, eventsReady, subsReady, lineupsReady, sets.length]);
 
   // ── 動作（本地即時 + 背景持久化）──
 
   const start = useCallback(
-    (servingFirst: Side) => {
+    (servingFirst: Side, lineup: LineupSnapshot | null) => {
       const pre = useScoreSheet.getState().recordingsByMatch[matchId]?.currentSet;
       const setNumber = pre?.setNumber ?? 1;
       useScoreSheet.getState().startSet(matchId, servingFirst);
+
+      // 先發快照（issue #115）：開賽（選先發方）這一刻凍結這場的先發。已經有快照（第 2 局以後、
+      // 或 reload 讀回）就沿用舊的、不重擷取——這正是「開賽後凍結」（症狀 B）：後續各局共用同一份
+      // 起始站位，不會再吃輪轉表/戰術板的後續變動。第一次才用呼叫端（ScoreSheet.tsx）從輪轉表擷取
+      // 好、傳進來的那份。
+      const existingLineup = useScoreSheet.getState().recordingsByMatch[matchId]?.lineup ?? null;
+      const effectiveLineup = existingLineup ?? lineup;
+      if (effectiveLineup && !existingLineup) {
+        useScoreSheet.getState().setLineup(matchId, effectiveLineup);
+      }
       // 兩條路（#63 修法）：
       //   - 第 2 局以後：goNextSet 在按下一局的當下已經 POST 過一筆 firstServer=null 的空
       //     set row，currentSetIdRef 早就有值——這裡只是教練終於選好先發方，PATCH 補上去。
@@ -367,9 +404,16 @@ export function useScoreSheetController(matchId: string) {
           currentSetIdRef.current = created.id;
           rallyIdsRef.current = [];
         }
+        // set row 確定存在後（上面兩條路都已把 currentSetIdRef 指到這一局），把先發 PUT 上去
+        // ——一局一 row（setId unique），PUT 是 idempotent upsert，同一局重按也只會覆寫、不重覆。
+        // 排在 firstServer 寫入之後同一個 task 裡，順序天然正確。
+        const setId = currentSetIdRef.current;
+        if (setId !== undefined && effectiveLineup) {
+          await putLineup.mutateAsync({ setId, data: lineupSnapshotToApi(effectiveLineup) });
+        }
       });
     },
-    [matchId, numericMatchId, enqueue, createSet, updateSet],
+    [matchId, numericMatchId, enqueue, createSet, updateSet, putLineup],
   );
 
   const score = useCallback(

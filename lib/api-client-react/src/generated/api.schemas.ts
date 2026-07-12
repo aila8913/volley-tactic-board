@@ -142,6 +142,26 @@ export interface NewSubstitution {
   kind: SubstitutionKind;
 }
 
+export interface Lineup {
+  id: number;
+  setId: number;
+  zone1PlayerId: number;
+  zone2PlayerId: number;
+  zone3PlayerId: number;
+  zone4PlayerId: number;
+  zone5PlayerId: number;
+  zone6PlayerId: number;
+}
+
+export interface NewLineup {
+  zone1PlayerId: number;
+  zone2PlayerId: number;
+  zone3PlayerId: number;
+  zone4PlayerId: number;
+  zone5PlayerId: number;
+  zone6PlayerId: number;
+}
+
 export type EventAction = typeof EventAction[keyof typeof EventAction];
 
 

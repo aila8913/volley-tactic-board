@@ -21,10 +21,12 @@ import type {
 
 import type {
   HealthStatus,
+  Lineup,
   Match,
   MatchEvent,
   MatchSet,
   NewEvent,
+  NewLineup,
   NewMatch,
   NewPlayer,
   NewRally,
@@ -1679,6 +1681,155 @@ export const useDeleteSubstitution = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getDeleteSubstitutionMutationOptions(options));
+    }
+
+export const getListMatchLineupsUrl = (matchId: number,) => {
+
+
+
+
+  return `/api/matches/${matchId}/lineups`
+}
+
+/**
+ * @summary List all starting lineups for a match (one per set), for rebuilding the scoresheet
+ */
+export const listMatchLineups = async (matchId: number, options?: RequestInit): Promise<Lineup[]> => {
+
+  return customFetch<Lineup[]>(getListMatchLineupsUrl(matchId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListMatchLineupsQueryKey = (matchId: number,) => {
+    return [
+    `/api/matches/${matchId}/lineups`
+    ] as const;
+    }
+
+
+export const getListMatchLineupsQueryOptions = <TData = Awaited<ReturnType<typeof listMatchLineups>>, TError = ErrorType<unknown>>(matchId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMatchLineups>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListMatchLineupsQueryKey(matchId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listMatchLineups>>> = ({ signal }) => listMatchLineups(matchId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(matchId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listMatchLineups>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListMatchLineupsQueryResult = NonNullable<Awaited<ReturnType<typeof listMatchLineups>>>
+export type ListMatchLineupsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List all starting lineups for a match (one per set), for rebuilding the scoresheet
+ */
+
+export function useListMatchLineups<TData = Awaited<ReturnType<typeof listMatchLineups>>, TError = ErrorType<unknown>>(
+ matchId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMatchLineups>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListMatchLineupsQueryOptions(matchId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getPutSetLineupUrl = (setId: number,) => {
+
+
+
+
+  return `/api/sets/${setId}/lineup`
+}
+
+/**
+ * @summary Set (upsert) the starting lineup for a set
+ */
+export const putSetLineup = async (setId: number,
+    newLineup: NewLineup, options?: RequestInit): Promise<Lineup> => {
+
+  return customFetch<Lineup>(getPutSetLineupUrl(setId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      newLineup,)
+  }
+);}
+
+
+
+
+export const getPutSetLineupMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putSetLineup>>, TError,{setId: number;data: BodyType<NewLineup>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof putSetLineup>>, TError,{setId: number;data: BodyType<NewLineup>}, TContext> => {
+
+const mutationKey = ['putSetLineup'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof putSetLineup>>, {setId: number;data: BodyType<NewLineup>}> = (props) => {
+          const {setId,data} = props ?? {};
+
+          return  putSetLineup(setId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PutSetLineupMutationResult = NonNullable<Awaited<ReturnType<typeof putSetLineup>>>
+    export type PutSetLineupMutationBody = BodyType<NewLineup>
+    export type PutSetLineupMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Set (upsert) the starting lineup for a set
+ */
+export const usePutSetLineup = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putSetLineup>>, TError,{setId: number;data: BodyType<NewLineup>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof putSetLineup>>,
+        TError,
+        {setId: number;data: BodyType<NewLineup>},
+        TContext
+      > => {
+      return useMutation(getPutSetLineupMutationOptions(options));
     }
 
 export const getListTacticsUrl = () => {
