@@ -10,7 +10,7 @@ import {
   regularSubToApi,
   reconstructRegularSubs,
   reconstructRecording,
-  excludedAction,
+  disabledActions,
 } from "./scoreSheetMapping";
 import type { PointRecord, RegularSub } from "../types/scoresheet";
 import type { MatchSet, Rally, MatchEvent, Substitution } from "@workspace/api-client-react";
@@ -45,27 +45,28 @@ describe("isSetComplete", () => {
   });
 });
 
-describe("excludedAction (issue #50 發球/接發互斥)", () => {
-  it("does not filter anything before the first server is chosen", () => {
-    expect(excludedAction(null, "us")).toBeNull();
-    expect(excludedAction(null, "opponent")).toBeNull();
+describe("disabledActions (issue #50 規則#1：發球/接發互斥)", () => {
+  it("disables nothing before the first server is chosen", () => {
+    expect(disabledActions(null, "us")).toEqual([]);
+    expect(disabledActions(null, "opponent")).toEqual([]);
   });
 
-  it("hides 接發 from whichever side is serving", () => {
+  it("greys 接發 for whichever side is serving", () => {
     // 我方發球：我方球員是發球方 → 不會「接發」；對手是接發方 → 不會「發球」。
-    expect(excludedAction("us", "us")).toBe("receive");
-    expect(excludedAction("us", "opponent")).toBe("serve");
+    expect(disabledActions("us", "us")).toEqual(["receive"]);
+    expect(disabledActions("us", "opponent")).toEqual(["serve"]);
   });
 
   it("flips when the opponent is serving", () => {
     // 對方發球：對手是發球方 → 不會「接發」；我方是接發方 → 不會「發球」。
-    expect(excludedAction("opponent", "opponent")).toBe("receive");
-    expect(excludedAction("opponent", "us")).toBe("serve");
+    expect(disabledActions("opponent", "opponent")).toEqual(["receive"]);
+    expect(disabledActions("opponent", "us")).toEqual(["serve"]);
   });
 
-  it("only ever excludes serve or receive, never the other four actions", () => {
-    // 不管誰發球、誰動作，被濾掉的永遠只會是 serve 或 receive 這一對，
-    // 舉球/攻擊/攔網/防守都不會被砍（決定球常常就是這四個之一，見 #74）。
+  it("only ever greys serve or receive, never the other four actions", () => {
+    // 不管誰發球、誰動作，被反灰的永遠只有 serve 或 receive 這一對，且恰好一顆。
+    // 舉球/攻擊/攔網/防守在一分裡兩邊都可能做、都可能是決定球，一律保留（見 #50：C8
+    // 得分分支依 Data Volley 慣例站不住，防守/舉球得分各記自己、不轉攻擊）。
     const combos: Array<["us" | "opponent", "us" | "opponent"]> = [
       ["us", "us"],
       ["us", "opponent"],
@@ -73,7 +74,10 @@ describe("excludedAction (issue #50 發球/接發互斥)", () => {
       ["opponent", "opponent"],
     ];
     for (const [serving, actor] of combos) {
-      expect(["serve", "receive"]).toContain(excludedAction(serving, actor));
+      const disabled = disabledActions(serving, actor);
+      expect(disabled).toHaveLength(1);
+      expect(["serve", "receive"]).toContain(disabled[0]);
+      for (const kept of ["set", "attack", "block", "dig"]) expect(disabled).not.toContain(kept);
     }
   });
 });

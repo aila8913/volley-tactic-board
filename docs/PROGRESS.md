@@ -17,13 +17,15 @@
 > promote it first, then drop it. Read this file + `gh issue list --state open` + recent
 > `git log` at the start of a session instead of re-exploring the codebase.
 
-_Last updated: 2026-07-12 — #50 計分表動作選項依發球方限制（簡易版第一條規則）：點球員選動作時，依
-`currentSet.serving` 只把「發球↔接發」這一對互斥（發球方看不到接發、接發方看不到發球），其餘四動作
-（舉球/攻擊/攔網/防守）兩邊保留——不採 issue 條列字面「發球方只剩發球一顆」，因為依 #74 一筆決定球模型，
-決定球常是攻擊/攔網/防守，砍掉會記不了。規則抽成純函數 `excludedAction`（`scoreSheetMapping.ts`）＋4 個
-單元測試釘住四種發球方×動作方組合；56 tests＋typecheck＋lint＋prettier 全綠。＋#74「落地」＝把記錄成本
-預算的分層歸屬回灌 #50/#51/#21（#20 早已關），#74 關閉。前一段 #63（空局 reload 退回）＋#20（結束比賽鈕、
-換人上限提示）已於 8201b2d（PR #109）合併並關閉。_
+_Last updated: 2026-07-12 — #50 情境過濾規則面窮舉完畢並關閉。(1) 規則#1（發球/接發互斥）改「反灰不刪」：
+六顆動作永遠留在固定方位，只把當下不可能的那顆灰掉、點了沒反應——PO 要記錄者靠肌肉記憶按方位（節奏遊戲
+手感）；原本是「濾掉選項」會讓 RadialMenu 環狀角度跑位，故改為 disabled 反灰（RadialMenu 加 disabled 支援、
+`excludedAction`→`disabledActions`）。(2) 評估「先記得/失分、得分時再多反灰接發/舉球/防守」的 C8 構想，
+依 Data Volley 記錄慣例作廢：防守反彈過網得分記防守、舉球失誤過網得分記舉球、接發直接得分是進階版才有的
+Freeball——得分決定球六種都可能，多知道 `pointWonBy` 換不到任何安全反灰。結論：`serving`＋`actorSide` 只
+養得起規則#1 一條，手勢順序維持原本「點球員→選動作→選得失分」不倒換。commit 33a21c3；33 個 disabledActions
+單元測試釘住規則#1＋「其餘四動作永不反灰」不變式；56 tests＋typecheck＋lint＋prettier 全綠，#50 關閉。
+（設計推導＋DV 慣例對帳的完整記錄在 #50 留言。）_
 
 ## Current state
 
@@ -66,13 +68,17 @@ gh issue list --milestone "M1 簡易版收尾"   # 當前階段
 gh issue list --state open                   # 全部
 ```
 
-M1 收尾焦點：#41（換人 undo，needs-plan）、#50（動作選項情境限制——已確認的「發球/接發互斥」第一條
-規則本 session 已做，其餘情境規則仍待逐條討論，issue 續開）、#64（背景寫入失敗不 reconcile，關聯部署 #26／
-離線契約 #75）。（#20/#63/#74 已於本 session 收尾關閉。）
+M1 收尾焦點：#41（換人 undo，needs-plan）、#64（背景寫入失敗不 reconcile，關聯部署 #26／離線契約 #75）。
+（#50 情境過濾規則面窮舉完畢、本 session 關閉；#20/#63/#74 先前已關閉。）
 進階版差異化（M4）：#51 動作子分類、#21 球線座標、#99 站位快照——同屬 advanced tier，可一起設計。
 
 ## Recently closed (past ~week)
 
+- **#50** — 計分表動作選單情境過濾（規則面窮舉完畢，commit 33a21c3）：規則#1（發球/接發互斥）改
+  「反灰不刪」（六顆固定方位、不合理的灰掉不能點，肌肉記憶/節奏遊戲；RadialMenu 加 disabled 支援，
+  `excludedAction`→`disabledActions`）。評估過「多知道得/失分後得分時再多反灰」的 C8 構想，依 Data Volley
+  記錄慣例作廢（防守/舉球得分各記自己、接發得分是進階版 Freeball）——`serving`＋`actorSide` 只養得起規則#1
+  一條。完整設計/DV 慣例對帳記錄在 #50 留言。
 - **#74** — 記錄成本預算「落地」：設計定案（`docs/recording-cost-budget.md`）後把分層歸屬回灌
   #50/#51/#21（#20 早已關），本 session 關閉。
 - **#63 / #20** — 計分表 M1 bug 收尾（PR #109，commit 8201b2d）：#63 未開球空局 reload 退回上一局

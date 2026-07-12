@@ -1,6 +1,12 @@
+import { cn } from "@/lib/utils";
+
 export interface RadialMenuOption<T extends string> {
   value: T;
   label: string;
+  // 反灰：這個選項仍佔一個固定方位、照樣畫出來，但灰掉、點了沒反應。用來做情境過濾
+  // （見 ScoreSheet.tsx 的 disabledActions）——刻意「灰掉」而不是「拿掉」，是為了讓
+  // 六個動作永遠在同樣的方位，記錄者可以靠肌肉記憶按方位（呼應節奏遊戲手感）。
+  disabled?: boolean;
 }
 
 interface RadialMenuProps<T extends string> {
@@ -40,10 +46,17 @@ export default function RadialMenu<T extends string>({
           <button
             key={opt.value}
             onPointerDown={(e) => {
+              // 一律 stopPropagation（連反灰的也是）：不讓這個點擊冒泡到背景的 onCancel，
+              // 所以點到反灰選項時選單不會關掉、什麼都不做，使用者可以接著點旁邊有效的那顆。
               e.stopPropagation();
-              onSelect(opt.value);
+              if (!opt.disabled) onSelect(opt.value);
             }}
-            className="absolute -translate-x-1/2 -translate-y-1/2 wobbly-border bg-white px-3 py-2 text-sm font-bold shadow-[2px_2px_0_0_#111] hover:bg-[#CCFF00] active:translate-x-[1px] active:translate-y-[1px] active:shadow-none"
+            className={cn(
+              "absolute -translate-x-1/2 -translate-y-1/2 wobbly-border px-3 py-2 text-sm font-bold shadow-[2px_2px_0_0_#111]",
+              opt.disabled
+                ? "cursor-not-allowed bg-neutral-200 text-neutral-400 opacity-60 shadow-none"
+                : "bg-white hover:bg-[#CCFF00] active:translate-x-[1px] active:translate-y-[1px] active:shadow-none",
+            )}
             style={{ left: center.x + dx, top: center.y + dy }}
           >
             {opt.label}
