@@ -10,7 +10,7 @@ import ScoreSheetCourt, { TouchedTarget } from "@/components/ScoreSheetCourt";
 import RadialMenu, { RadialMenuOption } from "@/components/RadialMenu";
 import ScoreSheetStats from "@/components/ScoreSheetStats";
 import { PlayAction } from "@/types/scoresheet";
-import { isSetComplete } from "@/lib/scoreSheetMapping";
+import { isSetComplete, excludedAction } from "@/lib/scoreSheetMapping";
 import { isLineupComplete } from "@/lib/rotationLogic";
 
 // 6 大類跟 lib/db/src/schema/events.ts 的 eventActionEnum 對齊（見
@@ -404,7 +404,12 @@ export default function ScoreSheet() {
       {gesture?.step === "action" && (
         <RadialMenu
           center={{ x: gesture.target.screenX, y: gesture.target.screenY }}
-          options={ACTION_OPTIONS}
+          // #50：依目前發球方濾掉不合理的發球/接發選項。excludedAction 回傳「要濾掉的那個動作」
+          // （serving=null 時回 null，比對永遠不相等 → 保留全部）。RadialMenu 會依剩下的選項數
+          // 自動重算環狀版面，選項變少不用另外調版（見 RadialMenu 的 step = 360/options.length）。
+          options={ACTION_OPTIONS.filter(
+            (o) => o.value !== excludedAction(currentSet?.serving ?? null, gesture.target.side),
+          )}
           onSelect={handleActionSelect}
           onCancel={() => setGesture(null)}
         />

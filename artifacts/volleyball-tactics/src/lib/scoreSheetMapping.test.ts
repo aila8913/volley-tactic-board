@@ -10,6 +10,7 @@ import {
   regularSubToApi,
   reconstructRegularSubs,
   reconstructRecording,
+  excludedAction,
 } from "./scoreSheetMapping";
 import type { PointRecord, RegularSub } from "../types/scoresheet";
 import type { MatchSet, Rally, MatchEvent, Substitution } from "@workspace/api-client-react";
@@ -41,6 +42,39 @@ describe("isSetComplete", () => {
     expect(isSetComplete(5, 15, 14)).toBe(false); // 領先 1，要 deuce
     expect(isSetComplete(5, 14, 12)).toBe(false); // 領先 2 但還沒到 15
     expect(isSetComplete(4, 15, 13)).toBe(false); // 第 4 局仍是 25 分制
+  });
+});
+
+describe("excludedAction (issue #50 發球/接發互斥)", () => {
+  it("does not filter anything before the first server is chosen", () => {
+    expect(excludedAction(null, "us")).toBeNull();
+    expect(excludedAction(null, "opponent")).toBeNull();
+  });
+
+  it("hides 接發 from whichever side is serving", () => {
+    // 我方發球：我方球員是發球方 → 不會「接發」；對手是接發方 → 不會「發球」。
+    expect(excludedAction("us", "us")).toBe("receive");
+    expect(excludedAction("us", "opponent")).toBe("serve");
+  });
+
+  it("flips when the opponent is serving", () => {
+    // 對方發球：對手是發球方 → 不會「接發」；我方是接發方 → 不會「發球」。
+    expect(excludedAction("opponent", "opponent")).toBe("receive");
+    expect(excludedAction("opponent", "us")).toBe("serve");
+  });
+
+  it("only ever excludes serve or receive, never the other four actions", () => {
+    // 不管誰發球、誰動作，被濾掉的永遠只會是 serve 或 receive 這一對，
+    // 舉球/攻擊/攔網/防守都不會被砍（決定球常常就是這四個之一，見 #74）。
+    const combos: Array<["us" | "opponent", "us" | "opponent"]> = [
+      ["us", "us"],
+      ["us", "opponent"],
+      ["opponent", "us"],
+      ["opponent", "opponent"],
+    ];
+    for (const [serving, actor] of combos) {
+      expect(["serve", "receive"]).toContain(excludedAction(serving, actor));
+    }
   });
 });
 
