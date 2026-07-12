@@ -10,7 +10,7 @@ import ScoreSheetCourt, { TouchedTarget } from "@/components/ScoreSheetCourt";
 import RadialMenu, { RadialMenuOption } from "@/components/RadialMenu";
 import ScoreSheetStats from "@/components/ScoreSheetStats";
 import { PlayAction } from "@/types/scoresheet";
-import { isSetComplete, excludedAction } from "@/lib/scoreSheetMapping";
+import { isSetComplete, disabledActions } from "@/lib/scoreSheetMapping";
 import { isLineupComplete } from "@/lib/rotationLogic";
 
 // 6 大類跟 lib/db/src/schema/events.ts 的 eventActionEnum 對齊（見
@@ -37,11 +37,12 @@ const OUTCOME_OPTIONS: RadialMenuOption<Outcome>[] = [
   { value: "win", label: "得分" },
 ];
 
+// 快速記一球的手勢流程：點球員/對手(全體) → 選「動作」→ 選「得/失分」。
 type Gesture =
   | { step: "action"; target: TouchedTarget }
   | { step: "outcome"; target: TouchedTarget; action: PlayAction }
-  // 「沒看到」：只知道螢幕上點下去的位置（給 RadialMenu 當中心點），
-  // 沒有 target 也沒有 action——直接跳去選得/失分，不記錄是誰、做了什麼動作。
+  // 「沒看到」：只知道螢幕上點下去的位置（給 RadialMenu 當中心點），沒有 target 也沒有
+  // action——直接跳去選得/失分，不記錄是誰、做了什麼動作。
   | { step: "outcome-only"; screenX: number; screenY: number };
 
 export default function ScoreSheet() {
@@ -404,12 +405,15 @@ export default function ScoreSheet() {
       {gesture?.step === "action" && (
         <RadialMenu
           center={{ x: gesture.target.screenX, y: gesture.target.screenY }}
-          // #50：依目前發球方濾掉不合理的發球/接發選項。excludedAction 回傳「要濾掉的那個動作」
-          // （serving=null 時回 null，比對永遠不相等 → 保留全部）。RadialMenu 會依剩下的選項數
-          // 自動重算環狀版面，選項變少不用另外調版（見 RadialMenu 的 step = 360/options.length）。
-          options={ACTION_OPTIONS.filter(
-            (o) => o.value !== excludedAction(currentSet?.serving ?? null, gesture.target.side),
-          )}
+          // #50：六顆動作永遠留在固定方位（肌肉記憶），只把當下不可能的那顆「反灰」（不是
+          // 拿掉）。disabledActions 依 發球方/動作方 算出要反灰的動作（規則#1 發球/接發互斥，
+          // 恰好一顆）。選項數固定 6 個，RadialMenu 的環狀角度不會因為反灰而跑掉。
+          options={ACTION_OPTIONS.map((o) => ({
+            ...o,
+            disabled: disabledActions(currentSet?.serving ?? null, gesture.target.side).includes(
+              o.value,
+            ),
+          }))}
           onSelect={handleActionSelect}
           onCancel={() => setGesture(null)}
         />

@@ -51,20 +51,24 @@ export function isSetComplete(setNumber: number, ourScore: number, opponentScore
   return leader >= target && diff >= 2;
 }
 
-// ── 動作選項的情境過濾（issue #50：發球/接發互斥）──
+// ── 動作選項的情境反灰（issue #50 規則#1：發球/接發互斥）──
 // 記一球、選動作時，依「目前誰發球（serving）」跟「這一球的動作方（actorSide）」把當下
-// 不合理的那個動作從選單濾掉。排球規則：一分裡「發球」只可能是正在發球的那一方做的，
-// 「接發」只可能是另一方做的，所以：
-//   - 動作方正在發球（actorSide === serving）→ 它不可能是「接發」，濾掉 receive。
-//   - 動作方在接對方的發球（另一方）→ 它不可能是「發球」，濾掉 serve。
-// 只互斥「發球↔接發」這一對；其餘四個動作（舉球/攻擊/攔網/防守）在一分的來回裡兩邊都
-// 可能做，一律保留——尤其依 #74 的「一筆決定球」模型，決定球常常就是攻擊/攔網/防守，
-// 硬砍掉會記不了「我方發球這分最後靠攻擊贏」這種情況。
-// 回傳「要濾掉的那個動作」，null 代表不濾（serving 還沒選、是 null 時），呼叫端就顯示全部。
-// 這是純顯示層過濾、零記錄成本（見 docs/recording-cost-budget.md 對 #50 的分層結論）。
-export function excludedAction(serving: Side | null, actorSide: Side): PlayAction | null {
-  if (serving === null) return null;
-  return actorSide === serving ? "receive" : "serve";
+// 不可能的動作標成反灰。反灰≠刪掉：呼叫端六顆動作永遠留在固定方位，只是灰掉、點了沒反應
+// ——PO 要記錄者靠肌肉記憶按方位，呼應簡易版節奏遊戲的手感（見 issue #50 討論）。
+//
+// 只有一條安全規則：排球規則裡「發球」「接發」是賽前狀態就綁死在某一方的動作——發球只可能
+// 是發球方做的、接發只可能是接發方做的。所以動作方是發球方就反灰 receive、是接發方就反灰 serve。
+// 其餘四個動作（舉球/攻擊/攔網/防守）在一分裡兩邊都可能做、也都可能是「決定球」，一律保留。
+//
+// （曾評估過「先記這分得/失分、得分時再多反灰接發/舉球/防守」的 C8 構想，但依 Data Volley 記錄
+// 慣例站不住：防守反彈過網得分記防守、舉球失誤過網得分記舉球、接發直接得分是進階版才有的
+// Freeball——得分的決定球六種都可能，多知道得失分換不到任何安全反灰，故不採用。詳見 issue #50。）
+//
+// 回傳「要反灰的動作」清單（規則#1 恰好一顆）；serving===null（還沒選先發方、理應還不能記球）
+// 時不反灰任何動作，回空陣列，呼叫端六顆全亮。
+export function disabledActions(serving: Side | null, actorSide: Side): PlayAction[] {
+  if (serving === null) return [];
+  return [actorSide === serving ? "receive" : "serve"];
 }
 
 // ── PointRecord → rally ──
