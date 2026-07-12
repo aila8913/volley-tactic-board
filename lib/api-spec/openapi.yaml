@@ -360,6 +360,21 @@ paths:
               schema:
                 $ref: "#/components/schemas/Substitution"
 
+  # 刪掉一筆換人紀錄（前端「復原」退掉上一個換人動作時用，見 issue #41）。
+  # 換人是 append-only 的，undo 靠 hard-delete 這一筆 row（不寫補償 row）——因為換人的
+  # 記錄時機是「比分快照」而非明確時間戳，補償 row 的比分較低、reload 重放時會排在前面
+  # 空轉、幽靈紀錄反而留著，所以只能真的把 row 刪掉（詳見 issue #41 討論）。
+  /substitutions/{substitutionId}:
+    parameters:
+      - $ref: "#/components/parameters/SubstitutionId"
+    delete:
+      operationId: deleteSubstitution
+      tags: [matches]
+      summary: Delete a substitution (e.g. undo the last substitution action)
+      responses:
+        "204":
+          description: Deleted
+
   /tactics:
     get:
       operationId: listTactics
@@ -487,6 +502,12 @@ components:
         type: integer
     EventId:
       name: eventId
+      in: path
+      required: true
+      schema:
+        type: integer
+    SubstitutionId:
+      name: substitutionId
       in: path
       required: true
       schema:

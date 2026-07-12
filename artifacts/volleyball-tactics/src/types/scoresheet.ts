@@ -67,6 +67,30 @@ export interface RegularSub {
   inPlayerId: string;
 }
 
+// 「復原」用的動作快照堆疊的一筆（issue #41）。
+//
+// 為什麼用「快照法」而不是逐一反轉？記一球會改比分/輪轉/發球方，換人會改淨疊加清單，
+// libero 會改替補狀態——要替每一種動作各寫一套「數學逆運算」很容易出錯（尤其換人的淨疊加
+// 去重，A→B→C 已經把中間過程壓掉了，很難精準倒回上一步）。改成「動作發生前先存一份狀態，
+// undo 就整包還原回去」，快照法無條件正確，不用維護 N 套反運算。
+//
+// 這個堆疊只活在記憶體、不寫後端、也不跨 reload：undo 是「即時改錯」用的，reload 前的動作
+// 本來就不需要再回復（跟瀏覽器重新整理後 Ctrl+Z 也回不去上一頁的編輯一樣，是各家 App 常態）。
+// reload 後真正要保證一致的是「後端別留下幽靈紀錄」，那個靠 undo 時 hard-delete 對應 row 處理。
+export interface UndoEntry {
+  // 動作發生「前」的三個可變欄位快照。store 的 reducer 都是產生全新物件（immutable 更新），
+  // 所以這裡直接存舊物件的「參照」就等於一份凍結的快照，還原時把參照設回去即可——
+  // O(1)、不需要深拷貝，因為那些舊物件之後再也不會被就地改動。
+  currentSet: SetRecordingState;
+  regularSubs: RegularSub[];
+  liberoSubstitution: string | null;
+  // 這個動作在後端建了什麼、undo 時要補刪什麼：
+  //   'rally'        — 得分（一分＝一個 rally），刪對應 rally（它的 event 靠 FK cascade 一起走）。
+  //   'substitution' — 一般換人，刪對應 substitution row。
+  //   null           — 純本地動作（手動 libero 上/下場，沒寫後端），畫面還原即可、後端沒東西要刪。
+  backendKind: "rally" | "substitution" | null;
+}
+
 export interface ScoreSheetState {
   currentSet: SetRecordingState;
   completedSets: CompletedSet[];
