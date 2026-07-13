@@ -17,13 +17,13 @@
 > promote it first, then drop it. Read this file + `gh issue list --state open` + recent
 > `git log` at the start of a session instead of re-exploring the codebase.
 
-_Last updated: 2026-07-12（session 2）— 外部標準查證入檔（PR #112，純文件、不動 schema）：把 FIVB VIS
-／Data Volley 的對照結論寫進 `event-grammar-spec.md` 新增的〈外部標準對照〉一節＋ `product-spec.md` 出處
-補充。三個結論：(1) `quality` 0–3 ↔ VIS 4 級評估官方對照（Excellent/OK/Poor/Error，UI 建議用詞「完美/
-到位/不佳/失誤」）；(2) 到位門檻 `quality >= 2` 獲 VIS 背書——官方定義就在 OK（半到位）這級劃「能否組織
-進攻」的線，預設值從空猜升級為有出處的慣例；(3) 嗆司候選定義＝DV 的 Freeball（對方無揮臂攻擊動作送過網，
-失誤與主動放球都算）。兩項仍維持「教練確認再鎖」。刻意不採用：鍵盤盲打 scouting code（與節奏遊戲定位
-相反）、DV 5 級效果制（維持 VIS 4 級）。結論已留言回灌 #51，並修其 body 過期的「後端沒實作」段落。_
+_Last updated: 2026-07-13 — 純規劃 session（無 code 落地）：#115 收尾暴露的「全域 store × 兩層真相
+脫鉤」根因家族（#117/#118/#119/#120）交 fable-advisor 評估，收斂成三條不變量並經 PO 拍板四項決定。
+完整紀錄＝ **#117 錨點留言**（三條不變量 + PO 四拍板 + 落地順序）；#118 body 已改寫（await 小修 →
+uuid 遷移）；#117–119 排進 M1。無未提交變更。三條不變量：I1 單一真相來源（有後端 id 的資料 DB 唯一
+權威、前端 store 只當快取，永不能是唯一副本／不帶 matchId 的 persist）；I2 per-match 狀態一定用 matchId
+當 key（否則「最後開的那場」蓋別場）；I3 一個實體一套 id、只鑄造一次。修法模板 repo 已有＝ #115 後的
+`useScoreSheet.ts`（`recordingsByMatch[matchId]`）。_
 
 ## Current state
 
@@ -68,14 +68,19 @@ gh issue list --milestone "M1 簡易版收尾"   # 當前階段
 gh issue list --state open                   # 全部
 ```
 
-M1 收尾焦點：#115（計分表沒有自己的先發名單、與戰術板/輪轉表共用全域 store——載入存檔會清空先發、
-站位未解耦、開賽後未凍結；三症狀同一根因，needs-plan，2026-07-12 新開；後端 `lineups` 表現成但未上 API，
-修法＝計分表擷取 per-match 先發快照＋接 `lineups` 持久化）、#64（背景寫入失敗不 reconcile，關聯部署 #26／
-離線契約 #75）。（#41/#50 本週關閉；#20/#63/#74 先前已關閉。）
+M1 收尾焦點：**全域 store 去汙染家族 #117/#118/#119**（#115 已修先發那條、CLOSED；同根因仍在別處——
+見 #117 錨點留言的三條不變量與落地順序）。順序＝(1) #117-最小止血：MatchList 顯示對不到資料夾的比賽；
+(2) schema 換季（趁部署前可丟資料窗口）：players.id→uuid（#118 離線版）／tournaments 表 uuid PK+cascade+API
+（#117 完整）／tactics 加 matchId（#119 前置）；(3) #118 前端 await；(4) #119 兩 store byMatch 分片+去
+persist；(5) #120 純展示唯讀站位視圖。另 #64（背景寫入失敗不 reconcile，關聯部署 #26／離線契約 #75）、
+#44（暫停/timeout，M1 唯一舊 open 項）。#120 純 UI、依賴 #119，暫不排期。（#115/#41/#50 本週關閉；
+#20/#63/#74 先前已關閉。）
 進階版差異化（M4）：#51 動作子分類、#21 球線座標、#99 站位快照——同屬 advanced tier，可一起設計。
 
 ## Recently closed (past ~week)
 
+- **#115** — 計分表擁有自己逐局的先發快照，與戰術板/輪轉表全域 store 解耦（PR #121，commit ce5c9f5）。
+  這是「全域 store 去汙染」家族第一條落地；暴露的同根因兄弟 #117/#118/#119 見上方焦點與 #117 錨點留言。
 - **#41** — 計分表復原改**逐動作 undo**（PR #113，commit a21afce，另一 session 完成、wrap-up 對帳關閉）：
   動作快照堆疊（每動作前存 currentSet/regularSubs/liberoSubstitution 快照，undo pop 還原），得分/換人/
   libero 各為一步連按往回；後端加 `DELETE /substitutions/:id` hard-delete 撤銷已寫入的換人。堆疊純記憶體
