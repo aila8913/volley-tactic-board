@@ -1,4 +1,6 @@
-import type { RotationPositions } from "../types/rotationTable";
+import type { RotationPositions, PlayerPosition } from "../types/rotationTable";
+import type { MatchPlayer } from "../types/match";
+import type { LineupSnapshot } from "../types/scoresheet";
 
 // 「先發是否已排好」的共用判定（issue #37）。
 // 輪轉表的 hasRotations 與計分表的 hasLineup 原本各自寫一份
@@ -11,6 +13,60 @@ import type { RotationPositions } from "../types/rotationTable";
 // （產品決策：門檻是「至少 6 人」，不強制一定要指定自由球員。）
 export function isLineupComplete(rotations: RotationPositions[]): boolean {
   return rotations.some((r) => r.positions.length >= 6);
+}
+
+// ── 計分表先發快照（issue #115）──
+// 從輪轉表全域 store 的「起始輪次（rotation 0）」擷取一份計分表專用的先發快照
+// （號位 1~6 → 球員 id）。這是計分表跟輪轉表/戰術板解耦的第一步：擷取一次之後，計分表就
+// 只讀自己這份，不再跟著全域 store 變動（見 types/scoresheet.ts 的 LineupSnapshot 說明）。
+//
+// 只收「屬於這場比賽（roster）的非自由球員」：
+//   - 過濾掉 id 不在 roster 裡的站位——這正是防止「載入別場存檔/切到別場」時，id 對不上的
+//     幽靈站位混進來的關鍵（issue #115-A 與跨場導航案例）。
+//   - 自由球員（L）不列入六個號位：計分表裡 L 從場邊出發（跟後端 lineups 表一致）。L 若在
+//     rotation 0 蓋住了某個後排球員，那個「被蓋住的人」存在 liberoReplacement 裡，要還原回來
+//     當作該號位的先發（否則會少一個人）。
+//
+// 湊不滿 6 個不同號位就回 null（代表先發還沒排好、或已被污染），呼叫端據此顯示「請先排先發」。
+export function captureLineupFromRotations(
+  rotations: RotationPositions[],
+  roster: MatchPlayer[],
+): LineupSnapshot | null {
+  const rot = rotations[0];
+  if (!rot) return null;
+
+  const liberoIds = new Set(roster.filter((p) => p.role === "L").map((p) => p.id));
+  const validIds = new Set(roster.map((p) => p.id));
+
+  // 先把 L 的站位拿掉，再把「被 L 蓋住的非自由球員」還原回來——這樣不管 rotation 0 有沒有
+  // 派 L 上場，basePositions 都是乾淨的 6 個非自由球員站位（跟 useRotationTable 的
+  // placeLiberoOnCourt 內部算 basePositions 是同一套還原邏輯）。
+  let basePositions = rot.positions.filter((p) => !liberoIds.has(p.playerId));
+  if (rot.liberoReplacement) {
+    basePositions = [...basePositions, rot.liberoReplacement.replacedPosition];
+  }
+
+  const lineup: LineupSnapshot = {};
+  for (const pos of basePositions) {
+    if (!validIds.has(pos.playerId)) continue; // 幽靈站位（id 對不上這場球員）直接略過
+    lineup[findNearestZone(pos.x, pos.y)] = pos.playerId;
+  }
+
+  // 六個號位（1~6）都要各站一個不同球員才算完整；有號位重疊或缺人就視為沒排好。
+  const filledZones = Object.keys(lineup).length;
+  return filledZones === 6 ? lineup : null;
+}
+
+// 把先發快照（rotation 0 的號位→球員）換算成「第 rotation 輪」時場上 6 個人的座標，
+// 給計分表球場渲染用。排球輪轉：起始號位 z 的人，轉了 rotation 次後落在 rotateZone(z, rotation)，
+// 取那個號位的座標。這跟 useRotationTable.placePlayerOnCourt 推算其他輪次是同一條公式，只是這裡
+// 的基準固定是 rotation 0（先發那一輪），且資料來源是計分表自己的快照、不是全域 store。
+export function lineupToPositions(lineup: LineupSnapshot, rotation: number): PlayerPosition[] {
+  return Object.entries(lineup).map(([zoneStr, playerId]) => {
+    const startZone = Number(zoneStr);
+    const coords = getZoneCoords(rotateZone(startZone, rotation));
+    return { playerId, x: coords.x, y: coords.y };
+  });
 }
 
 // 6 個球場格子的座標基準（0~1 normalized，跟戰術板球場 SVG 的 viewBox 對齊）。

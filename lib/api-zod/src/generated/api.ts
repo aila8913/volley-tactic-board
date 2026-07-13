@@ -378,6 +378,54 @@ export const DeleteSubstitutionParams = zod.object({
 
 
 /**
+ * @summary List all starting lineups for a match (one per set), for rebuilding the scoresheet
+ */
+export const ListMatchLineupsParams = zod.object({
+  "matchId": zod.coerce.number()
+})
+
+export const ListMatchLineupsResponseItem = zod.object({
+  "id": zod.number(),
+  "setId": zod.number(),
+  "zone1PlayerId": zod.number(),
+  "zone2PlayerId": zod.number(),
+  "zone3PlayerId": zod.number(),
+  "zone4PlayerId": zod.number(),
+  "zone5PlayerId": zod.number(),
+  "zone6PlayerId": zod.number()
+})
+export const ListMatchLineupsResponse = zod.array(ListMatchLineupsResponseItem)
+
+
+/**
+ * @summary Set (upsert) the starting lineup for a set
+ */
+export const PutSetLineupParams = zod.object({
+  "setId": zod.coerce.number()
+})
+
+export const PutSetLineupBody = zod.object({
+  "zone1PlayerId": zod.number(),
+  "zone2PlayerId": zod.number(),
+  "zone3PlayerId": zod.number(),
+  "zone4PlayerId": zod.number(),
+  "zone5PlayerId": zod.number(),
+  "zone6PlayerId": zod.number()
+})
+
+export const PutSetLineupResponse = zod.object({
+  "id": zod.number(),
+  "setId": zod.number(),
+  "zone1PlayerId": zod.number(),
+  "zone2PlayerId": zod.number(),
+  "zone3PlayerId": zod.number(),
+  "zone4PlayerId": zod.number(),
+  "zone5PlayerId": zod.number(),
+  "zone6PlayerId": zod.number()
+})
+
+
+/**
  * @summary List all saved tactics for the current user
  */
 export const ListTacticsResponseItem = zod.object({

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { useParams, Link } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,7 @@ import RadialMenu, { RadialMenuOption } from "@/components/RadialMenu";
 import ScoreSheetStats from "@/components/ScoreSheetStats";
 import { PlayAction } from "@/types/scoresheet";
 import { isSetComplete, disabledActions } from "@/lib/scoreSheetMapping";
-import { isLineupComplete } from "@/lib/rotationLogic";
+import { captureLineupFromRotations, lineupToPositions } from "@/lib/rotationLogic";
 
 // 6 大類跟 lib/db/src/schema/events.ts 的 eventActionEnum 對齊（見
 // types/scoresheet.ts 的說明）。陣列順序就是 RadialMenu 從正上方順時針排列的順序，
@@ -49,7 +49,9 @@ export default function ScoreSheet() {
   const { id } = useParams<{ id: string }>();
   const { match, isLoading: isMatchLoading } = useMatchWithRoster(Number(id));
 
-  const setRoster = useRotationTable((state) => state.setRoster);
+  // 只讀輪轉表的 rotations，用來「擷取」計分表自己的先發快照——擷取一次之後，計分表就完全
+  // 讀自己的快照、不再碰這份全域 store（issue #115）。刻意不再呼叫 setRoster：以前進頁時
+  // setRoster(match.players) 的幽靈站位清理，正是「切到別場/載入存檔就把先發掃空」的元兇。
   const rotations = useRotationTable((state) => state.rotations);
 
   const record = useScoreSheet((state) => (id ? state.recordingsByMatch[id] : undefined));
@@ -90,18 +92,26 @@ export default function ScoreSheet() {
   // 球員」這個純 UI 互動狀態（跟後端無關，不用持久化）。
   const [selectedBenchPlayer, setSelectedBenchPlayer] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (match) setRoster(match.players);
-  }, [match, setRoster]);
+  // ── 計分表的先發快照（issue #115）──
+  // lineup：這場已凍結的先發（開賽時擷取、reload 讀回）。capturableLineup：還沒凍結前，從輪轉表
+  // 當下站位「能不能擷取出一份完整先發」（只收屬於這場、湊滿 6 個號位才算數，否則 null）。
+  // activeLineup：優先用已凍結的，其次用可擷取的——球場渲染、開賽擷取都以它為準。
+  const lineup = record?.lineup ?? null;
+  const capturableLineup = useMemo(
+    () => (match ? captureLineupFromRotations(rotations, match.players) : null),
+    [match, rotations],
+  );
+  const activeLineup = lineup ?? capturableLineup;
 
   // ── 自由球員自動輪轉接替 ──
   // 每次我方輪轉（ourRotation 變動）檢查被替換的球員是否已輪到前排。
   const currentSet = record?.currentSet;
   useEffect(() => {
     const libSub = liberoSubRef.current;
-    if (!currentSet || currentSet.serving === null || !libSub || !id) return;
+    if (!currentSet || currentSet.serving === null || !libSub || !id || !activeLineup) return;
 
-    const positions = (rotations[currentSet.ourRotation] ?? rotations[0]).positions;
+    // 從計分表自己的先發快照算出「這一輪」場上 6 人的座標（不再讀全域 rotations）。
+    const positions = lineupToPositions(activeLineup, currentSet.ourRotation);
     const targetPos = positions.find((p) => p.playerId === libSub);
 
     const isFrontRow = targetPos && targetPos.y > 0.5 && targetPos.y <= 0.75;
@@ -140,9 +150,13 @@ export default function ScoreSheet() {
     );
   }
 
-  // 開始記錄前要求先發已排好 = 至少一輪站滿 6 人（共用判定，跟輪轉表 hasRotations
-  // 同一條規則，避免半套陣容就放行；見 issue #37）。
-  const hasLineup = isLineupComplete(rotations);
+  // 開始記錄前要求先發已排好。改讀計分表自己的快照（issue #115）：已凍結的先發，或還沒凍結前
+  // 「輪轉表當下能擷取出一份完整先發」（activeLineup 非 null）就放行。門檻仍是「滿 6 個號位」
+  // （captureLineupFromRotations 內建，跟舊的 isLineupComplete 同一條規則，見 issue #37）。
+  const hasLineup = activeLineup !== null;
+  // 球場要畫的「這一輪我方 6 人座標」，從快照即時換算（不再讀全域 rotations）。
+  const ourPositions =
+    activeLineup && currentSet ? lineupToPositions(activeLineup, currentSet.ourRotation) : [];
   const completedSets = record?.completedSets ?? [];
   const currentSubCount = regularSubs.length;
   const totalSubCount = subCountsHistory.reduce((a, b) => a + b, 0) + currentSubCount;
@@ -315,11 +329,21 @@ export default function ScoreSheet() {
                 <div className="flex flex-1 flex-col items-center justify-center gap-3">
                   <p className="text-sm font-bold">這局由誰先發球？</p>
                   <div className="flex gap-3">
-                    <Button onClick={() => start("us")}>我方先發</Button>
-                    <Button variant="outline" onClick={() => start("opponent")}>
+                    <Button onClick={() => start("us", activeLineup)}>我方先發</Button>
+                    <Button variant="outline" onClick={() => start("opponent", activeLineup)}>
                       對手先發
                     </Button>
                   </div>
+                  {/* 先發是「每局可不同」的（issue #115）：選先發方那一刻，會把當下輪轉表的站位凍結成
+                      這一局的先發。所以要換這一局的陣，得先回戰術板重排輪轉、再回來選先發方——這裡給
+                      一句提示引導，避免使用者以為「下一局自動換陣」或「陣容改不了」。 */}
+                  <p className="mt-1 text-center text-xs text-gray-400">
+                    這一局會用目前輪轉表的先發。想換陣？先到
+                    <Link href={`/matches/${id}/board`} className="mx-0.5 underline">
+                      戰術板
+                    </Link>
+                    重排輪轉，再回來選先發方。
+                  </p>
                 </div>
               ) : (
                 <>
@@ -341,7 +365,8 @@ export default function ScoreSheet() {
 
                   <div className="flex min-h-0 w-full flex-1 items-center justify-center">
                     <ScoreSheetCourt
-                      ourRotation={currentSet.ourRotation}
+                      ourPositions={ourPositions}
+                      roster={match.players}
                       opponentRotation={currentSet.opponentRotation}
                       serving={currentSet.serving}
                       interactive={gesture === null}

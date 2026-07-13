@@ -16,6 +16,8 @@ import type {
   NewEvent,
   Substitution,
   NewSubstitution,
+  Lineup,
+  NewLineup,
 } from "@workspace/api-client-react";
 import type {
   Side,
@@ -25,6 +27,7 @@ import type {
   RegularSub,
   ScoreSheetState,
   CompletedSet,
+  LineupSnapshot,
 } from "../types/scoresheet";
 
 // ── us/opponent ↔ home/away ──
@@ -227,6 +230,32 @@ export function reconstructRegularSubs(subs: Substitution[]): RegularSub[] {
   return result;
 }
 
+// ── LineupSnapshot ↔ 後端 lineups DTO（issue #115）──
+// 先發快照（號位 1~6 → 球員 id 字串）跟後端 lineups 表（zone1~6PlayerId 整數）之間的轉換。
+// 前端球員 id 是字串（跟 roster 型別一致），後端是整數主鍵，這裡做轉換——跟 regularSubToApi
+// 用 Number()、reconstructRegularSubs 用 String() 是同一套慣例。
+export function lineupSnapshotToApi(lineup: LineupSnapshot): NewLineup {
+  return {
+    zone1PlayerId: Number(lineup[1]),
+    zone2PlayerId: Number(lineup[2]),
+    zone3PlayerId: Number(lineup[3]),
+    zone4PlayerId: Number(lineup[4]),
+    zone5PlayerId: Number(lineup[5]),
+    zone6PlayerId: Number(lineup[6]),
+  };
+}
+
+export function apiLineupToSnapshot(row: Lineup): LineupSnapshot {
+  return {
+    1: String(row.zone1PlayerId),
+    2: String(row.zone2PlayerId),
+    3: String(row.zone3PlayerId),
+    4: String(row.zone4PlayerId),
+    5: String(row.zone5PlayerId),
+    6: String(row.zone6PlayerId),
+  };
+}
+
 // ── 空白狀態的建構子 ──
 // 一場比賽還沒記過任何一局時的初始狀態。原本 makeEmptySet/emptyRecord 只在
 // useScoreSheet.ts 裡私有定義；reconstructRecording（下方）在「這場還沒有任何 set」
@@ -245,6 +274,9 @@ export const makeEmptySet = (setNumber: number): SetRecordingState => ({
 export const emptyRecord = (): ScoreSheetState => ({
   currentSet: makeEmptySet(1),
   completedSets: [],
+  // lineup 初始 null：先發快照要等教練實際開賽（選先發方）那一刻才擷取（見 useScoreSheet
+  // 的 start()）。重建時若後端已有 lineups 就由 reconstructRecording 補回來。
+  lineup: null,
   liberoSubstitution: null,
   regularSubs: [],
   subCountsHistory: [],
@@ -274,6 +306,10 @@ export function reconstructRecording(
   ralliesBySetIndex: Rally[][],
   events: MatchEvent[],
   subs: Substitution[],
+  // 整場所有局的先發（GET /matches/:id/lineups）。issue #115：reload 後把計分表的先發快照
+  // 讀回來，才不會又退回去讀（可能被污染的）全域 store。選填、預設空陣列——分析頁
+  // （useMatchRecording）跟舊測試不帶它也能用，只是重建出來的 lineup 會是 null。
+  lineups: Lineup[] = [],
 ): ScoreSheetState {
   // 把整場的 event 依 rallyId 分組，餵給 reconstruct 還原每一分的動作/球員。
   // endpoint 已依 rallyId、sequence 排序，所以同一組內是照 sequence 排好的。
@@ -330,9 +366,19 @@ export function reconstructRecording(
   // 進行中這一局的換人淨疊加清單，直接重放這一局的換人紀錄即可。
   const regularSubs = reconstructRegularSubs(subsBySetId.get(sets[lastIdx].id) ?? []);
 
+  // 先發快照：一 row 一局（setId），只認「目前這一局自己的」先發（先發每局可不同，不沿用別局）。
+  // 進行中這一局若已有先發（已選過先發方）就讀回它；若還沒（例如剛按下一局、firstServer=null 的
+  // 空 set，此時還沒選先發方也就還沒寫 lineup）就給 null——此時畫面停在「這局由誰先發球？」、
+  // 還不需要顯示球場，等教練選先發方時 start() 會從當下輪轉表擷取這一局的新先發。
+  const currentLineupRow = lineups.find((l) => l.setId === sets[lastIdx].id);
+  const lineup: LineupSnapshot | null = currentLineupRow
+    ? apiLineupToSnapshot(currentLineupRow)
+    : null;
+
   return {
     currentSet,
     completedSets,
+    lineup,
     liberoSubstitution: null,
     regularSubs,
     subCountsHistory,

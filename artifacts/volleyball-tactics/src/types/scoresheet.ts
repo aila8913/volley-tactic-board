@@ -91,9 +91,28 @@ export interface UndoEntry {
   backendKind: "rally" | "substitution" | null;
 }
 
+// 計分表自己的「先發快照」（issue #115）：一局開始時，我方六個號位（1~6）各站哪個球員。
+// key 是號位（1~6），value 是球員 id（字串，跟 roster 的 MatchPlayer.id 一致）。
+//
+// 這是計分表跟輪轉表/戰術板「解耦」的關鍵。以前計分表沒有自己的先發，球場是直接讀那份
+// 全域、跨 match、被戰術板/輪轉表三邊共用的 useRotationTable.rotations——所以載入已存戰術、
+// 甚至只是切到別場比賽，都會因為「球員是每場獨立的 DB row、id 不同」被幽靈站位清理掃空。
+// 改成：教練選好先發方（開賽）那一刻，把當下輪轉表的起始站位擷取成這一份快照存進 per-match
+// 的計分 store，之後球場只讀它 → 戰術板/輪轉表怎麼動都不再污染計分表（C），開賽後天然凍結
+// （B），也不再被別場/存檔的 id 汙染（A）。
+//
+// 只記 6 個非自由球員：L 在計分表裡是「從場邊出發、換人上場」，不列入開局的六個號位
+// （跟後端 lineups 表的設計一致，見 lib/db/src/schema/lineups.ts）。
+export type LineupSnapshot = Record<number, string>;
+
 export interface ScoreSheetState {
   currentSet: SetRecordingState;
   completedSets: CompletedSet[];
+  // 「目前這一局」的先發快照（見上方 LineupSnapshot 說明）。null＝這一局還沒擷取（教練還沒
+  // 選先發方）。先發是「每局可不同」：每一局開賽（選先發方）那一刻各自從輪轉表擷取一份，之後
+  // 這一局內就凍結——局中不能直接改輪轉站位，只能換人（換人另存 regularSubs，不動這份快照）。
+  // 換下一局時歸零，等新的一局選先發方時再擷取新的（教練可先回輪轉表重排）。
+  lineup: LineupSnapshot | null;
   // 自由球員即時替補：記錄目前正在替補中的球員 id，null 代表沒有 L 在場上頂替別人。
   // 這個欄位以前放在戰術板共用的 store 裡（全域唯一一份），但比賽是一場一場分開記錄的，
   // 放在全域會導致切換不同比賽的計分表時互相污染彼此的替補狀態——所以搬來這裡，

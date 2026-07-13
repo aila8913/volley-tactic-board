@@ -11,9 +11,17 @@ import {
   reconstructRegularSubs,
   reconstructRecording,
   disabledActions,
+  lineupSnapshotToApi,
+  apiLineupToSnapshot,
 } from "./scoreSheetMapping";
-import type { PointRecord, RegularSub } from "../types/scoresheet";
-import type { MatchSet, Rally, MatchEvent, Substitution } from "@workspace/api-client-react";
+import type { PointRecord, RegularSub, LineupSnapshot } from "../types/scoresheet";
+import type {
+  MatchSet,
+  Rally,
+  MatchEvent,
+  Substitution,
+  Lineup,
+} from "@workspace/api-client-react";
 
 // 純函式，最適合單元測試。重點是 us/opponent↔home/away 的翻譯，以及最容易出錯的
 // 「從 rally 序列 replay 回比分/發球方/輪轉」——輪轉規則（只有 side-out 才轉）很細，
@@ -344,6 +352,7 @@ describe("reconstructRecording", () => {
         history: [],
       },
       completedSets: [],
+      lineup: null,
       liberoSubstitution: null,
       regularSubs: [],
       subCountsHistory: [],
@@ -454,6 +463,130 @@ describe("reconstructRecording", () => {
     expect(state.currentSet.opponentScore).toBe(0);
     expect(state.currentSet.history).toEqual([]);
     expect(state.currentSet.serverId).toBe(2);
+  });
+
+  // issue #115：reload 後把每一局的先發從後端 lineups 讀回來，計分表才不會又退回去讀
+  // （可能被別場/存檔污染的）全域 store。
+  it("seeds the current set's lineup from the lineups list", () => {
+    const set1: MatchSet = { id: 1, matchId: 3, setNumber: 1, firstServer: "home" };
+    const set1Rallies: Rally[] = [
+      { id: 100, setId: 1, rallyNumber: 1, homeScore: 0, awayScore: 0, winner: "home" },
+    ];
+    const lineups: Lineup[] = [
+      {
+        id: 1,
+        setId: 1,
+        zone1PlayerId: 11,
+        zone2PlayerId: 12,
+        zone3PlayerId: 13,
+        zone4PlayerId: 14,
+        zone5PlayerId: 15,
+        zone6PlayerId: 16,
+      },
+    ];
+
+    const state = reconstructRecording([set1], [set1Rallies], [], [], lineups);
+    expect(state.lineup).toEqual({ 1: "11", 2: "12", 3: "13", 4: "14", 5: "15", 6: "16" });
+  });
+
+  it("does NOT carry a previous set's lineup into a trailing firstServer=null set (per-set lineup)", () => {
+    // 先發每局可不同：剛按下一局的空局（set2, firstServer=null）還沒寫自己的 lineup，就給 null
+    // ——畫面停在「這局誰先發球」、還不需要顯示球場，等教練選先發方時才擷取這一局的新先發。
+    // 不沿用 set1 的先發，才能支援逐局換陣。
+    const set1: MatchSet = { id: 1, matchId: 3, setNumber: 1, firstServer: "home" };
+    const set2: MatchSet = { id: 2, matchId: 3, setNumber: 2, firstServer: null };
+    const set1Rallies: Rally[] = [
+      { id: 100, setId: 1, rallyNumber: 1, homeScore: 0, awayScore: 0, winner: "home" },
+    ];
+    const lineups: Lineup[] = [
+      {
+        id: 1,
+        setId: 1,
+        zone1PlayerId: 11,
+        zone2PlayerId: 12,
+        zone3PlayerId: 13,
+        zone4PlayerId: 14,
+        zone5PlayerId: 15,
+        zone6PlayerId: 16,
+      },
+    ];
+
+    const state = reconstructRecording([set1, set2], [set1Rallies, []], [], [], lineups);
+    expect(state.currentSet.setNumber).toBe(2);
+    expect(state.lineup).toBeNull();
+  });
+
+  it("reads the in-progress set's own lineup, independent of earlier sets (per-set lineup)", () => {
+    // set2 進行中，且有自己的先發（跟 set1 不同人）——要讀回 set2 自己那一份，不是 set1 的。
+    const set1: MatchSet = { id: 1, matchId: 3, setNumber: 1, firstServer: "home" };
+    const set2: MatchSet = { id: 2, matchId: 3, setNumber: 2, firstServer: "home" };
+    const set1Rallies: Rally[] = [
+      { id: 100, setId: 1, rallyNumber: 1, homeScore: 0, awayScore: 0, winner: "home" },
+    ];
+    const set2Rallies: Rally[] = [
+      { id: 200, setId: 2, rallyNumber: 1, homeScore: 0, awayScore: 0, winner: "home" },
+    ];
+    const lineups: Lineup[] = [
+      {
+        id: 1,
+        setId: 1,
+        zone1PlayerId: 11,
+        zone2PlayerId: 12,
+        zone3PlayerId: 13,
+        zone4PlayerId: 14,
+        zone5PlayerId: 15,
+        zone6PlayerId: 16,
+      },
+      {
+        id: 2,
+        setId: 2,
+        zone1PlayerId: 21,
+        zone2PlayerId: 22,
+        zone3PlayerId: 23,
+        zone4PlayerId: 24,
+        zone5PlayerId: 25,
+        zone6PlayerId: 26,
+      },
+    ];
+
+    const state = reconstructRecording([set1, set2], [set1Rallies, set2Rallies], [], [], lineups);
+    expect(state.lineup).toEqual({ 1: "21", 2: "22", 3: "23", 4: "24", 5: "25", 6: "26" });
+  });
+
+  it("leaves lineup null when no lineups are provided", () => {
+    const set1: MatchSet = { id: 1, matchId: 3, setNumber: 1, firstServer: "home" };
+    const set1Rallies: Rally[] = [
+      { id: 100, setId: 1, rallyNumber: 1, homeScore: 0, awayScore: 0, winner: "home" },
+    ];
+    const state = reconstructRecording([set1], [set1Rallies], [], []);
+    expect(state.lineup).toBeNull();
+  });
+});
+
+// issue #115：先發快照（號位→字串 id）跟後端 lineups DTO（zone1~6PlayerId 整數）互轉，
+// 跟 regularSub 的 Number()/String() 是同一套慣例，round-trip 要對得回來。
+describe("lineup snapshot mapping", () => {
+  it("round-trips snapshot ↔ api", () => {
+    const snapshot: LineupSnapshot = { 1: "11", 2: "12", 3: "13", 4: "14", 5: "15", 6: "16" };
+    expect(lineupSnapshotToApi(snapshot)).toEqual({
+      zone1PlayerId: 11,
+      zone2PlayerId: 12,
+      zone3PlayerId: 13,
+      zone4PlayerId: 14,
+      zone5PlayerId: 15,
+      zone6PlayerId: 16,
+    });
+    const row: Lineup = {
+      id: 9,
+      setId: 2,
+      zone1PlayerId: 11,
+      zone2PlayerId: 12,
+      zone3PlayerId: 13,
+      zone4PlayerId: 14,
+      zone5PlayerId: 15,
+      zone6PlayerId: 16,
+    };
+    expect(apiLineupToSnapshot(row)).toEqual(snapshot);
   });
 });
 
