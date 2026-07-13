@@ -210,9 +210,12 @@ export default function ScoreSheetCourt({
     // 但 hitTargets 的 playerId 保留格主 id（供自由球員拖曳邏輯使用），
     // 所以在這裡才做轉換，不動 hitTargets。
     let playerId = nearest.playerId;
-    if (nearest.side === "us" && playerId && liberoPlayer) {
-      const effectiveId = regularSubMap.get(playerId) ?? playerId;
-      if (effectiveId === effectiveLiberoSub) playerId = liberoPlayer.id;
+    // effectiveLiberoSub 記的是「被 L 蓋住的格子」的原始格主 id（跟 hitTargets／ourPositions 同一個
+    // id 空間）。所以這裡要拿原始 playerId 比對，不能先套一般換人的 effectiveId——否則這個後排格
+    // 先被一般換人換過人時（原格主 A、換上 B），A≠B 會讓比對失敗、漏判成「沒被 L 蓋住」，
+    // 觸球就不會歸給 L。
+    if (nearest.side === "us" && playerId && liberoPlayer && playerId === effectiveLiberoSub) {
+      playerId = liberoPlayer.id;
     }
     onPlayerTouch({
       side: nearest.side,
@@ -396,8 +399,11 @@ export default function ScoreSheetCourt({
             const slotPlayer = roster.find((p) => p.id === effectiveId);
             if (!slotPlayer) return null;
 
-            // L 是否正在「蓋住」此格（蓋住 ≠ 換人；格主不離場）
-            const isLiberoOverlay = effectiveId === effectiveLiberoSub && !!liberoPlayer;
+            // L 是否正在「蓋住」此格（蓋住 ≠ 換人；格主不離場）。用原始 pos.playerId 比對
+            // effectiveLiberoSub（同一個 id 空間），不是一般換人後的 effectiveId——否則這個後排格
+            // 先被一般換人換過人時，兩邊 id 對不上，orange L 疊圖不會出現（「自由換被換上場的人不
+            // 顯示」的 bug）。slotPlayer 仍用 effectiveId 找，好在下方顯示「L／被蓋格主的號碼」。
+            const isLiberoOverlay = pos.playerId === effectiveLiberoSub && !!liberoPlayer;
 
             const isFrontRow = pos.y > 0.5 && pos.y <= 0.75;
             const isServer = serving === "us" && pos.x > 0.7 && pos.y > 0.75;
