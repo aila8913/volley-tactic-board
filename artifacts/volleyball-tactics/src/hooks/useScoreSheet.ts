@@ -196,10 +196,10 @@ export const useScoreSheet = create<ScoreSheetStore>()((set) => ({
               },
             ],
             currentSet: makeEmptySet(finished.setNumber + 1),
-            // 先發快照沿用上一局（issue #115）：app 沒有「跨局重排先發」的 UI，各局共用同一份
-            // 起始站位。保留它，下一局按「我方/對手先發」時 start() 就會沿用這份、再 PUT 一筆
-            // 這一局的 lineup row（一局一 row），reload 時每一局都對得到自己的先發。
-            lineup: record.lineup,
+            // 先發快照歸零（issue #115）：先發是「每局可不同」，換下一局就清掉這一局的快照，等新
+            // 的一局選先發方時，start() 再從（教練可能已回輪轉表重排的）當下站位擷取新的一份、
+            // PUT 成這一局自己的 lineup row（一局一 row）。不沿用上一局，才能支援逐局換陣。
+            lineup: null,
             // 換新的一局，自由球員替補狀態歸零（跟原本 handleNextSet 手動呼叫
             // setLiberoSubstitution(null) 是同一件事，現在收進 store 自己的動作裡）。
             liberoSubstitution: null,
@@ -372,10 +372,11 @@ export function useScoreSheetController(matchId: string) {
       const setNumber = pre?.setNumber ?? 1;
       useScoreSheet.getState().startSet(matchId, servingFirst);
 
-      // 先發快照（issue #115）：開賽（選先發方）這一刻凍結這場的先發。已經有快照（第 2 局以後、
-      // 或 reload 讀回）就沿用舊的、不重擷取——這正是「開賽後凍結」（症狀 B）：後續各局共用同一份
-      // 起始站位，不會再吃輪轉表/戰術板的後續變動。第一次才用呼叫端（ScoreSheet.tsx）從輪轉表擷取
-      // 好、傳進來的那份。
+      // 先發快照（issue #115）：選先發方這一刻，把「這一局」的先發凍結下來。先發每局可不同，所以
+      // 這裡用的是呼叫端（ScoreSheet.tsx）從當下輪轉表擷取好、傳進來的那份；換下一局時 nextSet 已把
+      // lineup 歸零，新的一局會重新擷取（教練可先回輪轉表重排）。只有這一局「已經有快照」（同一局內
+      // reload 讀回、或極少數重按）才沿用舊的、不重擷取——這就是「局中凍結」（症狀 B）：開賽後回
+      // 輪轉表改站位不會污染進行中這一局，要動陣容得走 substitute() 換人。
       const existingLineup = useScoreSheet.getState().recordingsByMatch[matchId]?.lineup ?? null;
       const effectiveLineup = existingLineup ?? lineup;
       if (effectiveLineup && !existingLineup) {

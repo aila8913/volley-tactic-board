@@ -108,8 +108,10 @@ export type LineupSnapshot = Record<number, string>;
 export interface ScoreSheetState {
   currentSet: SetRecordingState;
   completedSets: CompletedSet[];
-  // 這場比賽的先發快照（見上方 LineupSnapshot 說明）。null＝還沒擷取（教練還沒開賽/還沒排先發）。
-  // 擷取後就凍結，整場沿用（目前 app 沒有「跨局重排先發」的 UI，各局共用同一份起始站位）。
+  // 「目前這一局」的先發快照（見上方 LineupSnapshot 說明）。null＝這一局還沒擷取（教練還沒
+  // 選先發方）。先發是「每局可不同」：每一局開賽（選先發方）那一刻各自從輪轉表擷取一份，之後
+  // 這一局內就凍結——局中不能直接改輪轉站位，只能換人（換人另存 regularSubs，不動這份快照）。
+  // 換下一局時歸零，等新的一局選先發方時再擷取新的（教練可先回輪轉表重排）。
   lineup: LineupSnapshot | null;
   // 自由球員即時替補：記錄目前正在替補中的球員 id，null 代表沒有 L 在場上頂替別人。
   // 這個欄位以前放在戰術板共用的 store 裡（全域唯一一份），但比賽是一場一場分開記錄的，

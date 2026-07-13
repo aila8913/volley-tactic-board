@@ -489,9 +489,10 @@ describe("reconstructRecording", () => {
     expect(state.lineup).toEqual({ 1: "11", 2: "12", 3: "13", 4: "14", 5: "15", 6: "16" });
   });
 
-  it("carries the previous set's lineup forward to a trailing firstServer=null set", () => {
-    // 剛按下一局的空局（set2, firstServer=null）還沒寫自己的 lineup；沿用上一局（set1）的先發，
-    // reload 停在「這局誰先發球」時球場仍有陣容可顯示（app 沒有跨局重排先發的 UI）。
+  it("does NOT carry a previous set's lineup into a trailing firstServer=null set (per-set lineup)", () => {
+    // 先發每局可不同：剛按下一局的空局（set2, firstServer=null）還沒寫自己的 lineup，就給 null
+    // ——畫面停在「這局誰先發球」、還不需要顯示球場，等教練選先發方時才擷取這一局的新先發。
+    // 不沿用 set1 的先發，才能支援逐局換陣。
     const set1: MatchSet = { id: 1, matchId: 3, setNumber: 1, firstServer: "home" };
     const set2: MatchSet = { id: 2, matchId: 3, setNumber: 2, firstServer: null };
     const set1Rallies: Rally[] = [
@@ -512,7 +513,44 @@ describe("reconstructRecording", () => {
 
     const state = reconstructRecording([set1, set2], [set1Rallies, []], [], [], lineups);
     expect(state.currentSet.setNumber).toBe(2);
-    expect(state.lineup).toEqual({ 1: "11", 2: "12", 3: "13", 4: "14", 5: "15", 6: "16" });
+    expect(state.lineup).toBeNull();
+  });
+
+  it("reads the in-progress set's own lineup, independent of earlier sets (per-set lineup)", () => {
+    // set2 進行中，且有自己的先發（跟 set1 不同人）——要讀回 set2 自己那一份，不是 set1 的。
+    const set1: MatchSet = { id: 1, matchId: 3, setNumber: 1, firstServer: "home" };
+    const set2: MatchSet = { id: 2, matchId: 3, setNumber: 2, firstServer: "home" };
+    const set1Rallies: Rally[] = [
+      { id: 100, setId: 1, rallyNumber: 1, homeScore: 0, awayScore: 0, winner: "home" },
+    ];
+    const set2Rallies: Rally[] = [
+      { id: 200, setId: 2, rallyNumber: 1, homeScore: 0, awayScore: 0, winner: "home" },
+    ];
+    const lineups: Lineup[] = [
+      {
+        id: 1,
+        setId: 1,
+        zone1PlayerId: 11,
+        zone2PlayerId: 12,
+        zone3PlayerId: 13,
+        zone4PlayerId: 14,
+        zone5PlayerId: 15,
+        zone6PlayerId: 16,
+      },
+      {
+        id: 2,
+        setId: 2,
+        zone1PlayerId: 21,
+        zone2PlayerId: 22,
+        zone3PlayerId: 23,
+        zone4PlayerId: 24,
+        zone5PlayerId: 25,
+        zone6PlayerId: 26,
+      },
+    ];
+
+    const state = reconstructRecording([set1, set2], [set1Rallies, set2Rallies], [], [], lineups);
+    expect(state.lineup).toEqual({ 1: "21", 2: "22", 3: "23", 4: "24", 5: "25", 6: "26" });
   });
 
   it("leaves lineup null when no lineups are provided", () => {

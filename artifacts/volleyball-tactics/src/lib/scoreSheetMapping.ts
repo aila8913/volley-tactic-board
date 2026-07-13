@@ -366,20 +366,14 @@ export function reconstructRecording(
   // 進行中這一局的換人淨疊加清單，直接重放這一局的換人紀錄即可。
   const regularSubs = reconstructRegularSubs(subsBySetId.get(sets[lastIdx].id) ?? []);
 
-  // 先發快照：一 row 一局（setId），把整場的 lineups 依 setId 建索引。目前這一局若已有先發就用
-  // 它；若還沒（例如剛按下一局、firstServer=null 的空 set，此時還沒選先發方也就還沒寫 lineup），
-  // 就往前找最近一局的先發沿用——app 沒有「跨局重排先發」的 UI，各局共用同一份起始站位，所以
-  // 用前一局的先發當作這一局的先發是正確的（也讓 reload 停在「這局誰先發球」時球場仍有陣容可顯示）。
-  const lineupBySetId = new Map<number, Lineup>();
-  for (const l of lineups) lineupBySetId.set(l.setId, l);
-  let lineup: LineupSnapshot | null = null;
-  for (let i = lastIdx; i >= 0; i--) {
-    const row = lineupBySetId.get(sets[i].id);
-    if (row) {
-      lineup = apiLineupToSnapshot(row);
-      break;
-    }
-  }
+  // 先發快照：一 row 一局（setId），只認「目前這一局自己的」先發（先發每局可不同，不沿用別局）。
+  // 進行中這一局若已有先發（已選過先發方）就讀回它；若還沒（例如剛按下一局、firstServer=null 的
+  // 空 set，此時還沒選先發方也就還沒寫 lineup）就給 null——此時畫面停在「這局由誰先發球？」、
+  // 還不需要顯示球場，等教練選先發方時 start() 會從當下輪轉表擷取這一局的新先發。
+  const currentLineupRow = lineups.find((l) => l.setId === sets[lastIdx].id);
+  const lineup: LineupSnapshot | null = currentLineupRow
+    ? apiLineupToSnapshot(currentLineupRow)
+    : null;
 
   return {
     currentSet,
