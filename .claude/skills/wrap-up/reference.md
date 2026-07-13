@@ -3,6 +3,8 @@
 `SKILL.md` Step 5 的操作參考。這裡只放「查一次、以後直接抄」的固定資料；原則與判斷
 邏輯留在 `SKILL.md`。這個拆法是 skill 設計的 **progressive disclosure（漸進揭露）**：
 主檔案保持短、每次都讀；細節查表放這裡，需要動手改 roadmap 時才載入。
+（原則出處：[mattpocock/skills](https://github.com/mattpocock/skills) 的
+`skills/productivity/writing-great-skills`。）
 
 ## Milestones（階段，時間序）
 

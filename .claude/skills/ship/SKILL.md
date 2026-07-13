@@ -113,6 +113,12 @@ EOF
 Explain: 「這一步等於把 code review 的第一輪從 GitHub 上搬到本地——reviewer（或未來
 的自己）看到的 diff 會更乾淨，來回修改的次數也會變少。」
 
+> 出處：smell 清單取自 Martin Fowler,《Refactoring: Improving the Design of
+> Existing Code》(2nd ed., 2018)；「用經典術語召喚模型內建知識」與「重構屬於
+> review 階段、不屬於實作迴圈」的做法取自
+> [mattpocock/skills](https://github.com/mattpocock/skills) 的
+> `skills/engineering/code-review` 與 `skills/engineering/tdd`（v1.1）。
+
 ---
 
 ## Step 5 — Push (needs confirmation)
