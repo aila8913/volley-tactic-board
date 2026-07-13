@@ -334,6 +334,16 @@ export default function ScoreSheet() {
                       對手先發
                     </Button>
                   </div>
+                  {/* 先發是「每局可不同」的（issue #115）：選先發方那一刻，會把當下輪轉表的站位凍結成
+                      這一局的先發。所以要換這一局的陣，得先回戰術板重排輪轉、再回來選先發方——這裡給
+                      一句提示引導，避免使用者以為「下一局自動換陣」或「陣容改不了」。 */}
+                  <p className="mt-1 text-center text-xs text-gray-400">
+                    這一局會用目前輪轉表的先發。想換陣？先到
+                    <Link href={`/matches/${id}/board`} className="mx-0.5 underline">
+                      戰術板
+                    </Link>
+                    重排輪轉，再回來選先發方。
+                  </p>
                 </div>
               ) : (
                 <>
