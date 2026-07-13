@@ -3,7 +3,7 @@ name: catch-up
 description: >
   Use at the start of a new session on this project, or whenever the user wants a
   refresher on where things stand — trigger phrases include "接續上次", "我們上次做到
-  哪", "回顧進度", "catch me up", "catch up", "what's the status", or the user starting a
+  哪", "回顧進度", "catch me up", "what's the status", or the user starting a
   new conversation and immediately asking to continue previous work. Reads
   docs/PROGRESS.md, open GitHub issues, and recent git history instead of re-exploring
   the whole codebase with a fresh agent.

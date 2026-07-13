@@ -4,11 +4,11 @@ description: >
   Use when the user wants to commit their work and send a pull request — trigger
   phrases include "ship", "送 PR", "發 PR", "commit 然後 PR", "幫我送出去", or any
   request to publish/submit the current changes. Guides through the full flow:
-  branch → commit → push → PR → merge, with an explanation at every step (this is
-  a learning project, teaching mode is on).
+  branch → commit → self-review → push → PR → merge, with an explanation at every
+  step (this is a learning project, teaching mode is on).
 ---
 
-# Ship: branch → commit → push → PR → merge
+# Ship: branch → commit → self-review → push → PR → merge
 
 Goal: walk through the complete "finish a feature and ship it" flow, explaining each
 git/gh command so the user understands what it does and why, not just that it ran.
@@ -50,9 +50,9 @@ GitHub, GitHub always creates a **brand-new commit object** on `origin/main` (ev
 the content is identical to what's already in the branch). Local `main` then still has
 its own separate copy of that same change, so local `main` and `origin/main` each have
 "one commit the other doesn't have" — `git status` reports them as diverged, and
-`git pull`/Step 6's fast-forward fails. Branching _before_ the commit means the commit
+`git pull`/Step 7's fast-forward fails. Branching _before_ the commit means the commit
 only ever exists on the feature branch — `main` never moves locally until the plain
-`git pull` in Step 6, so there's nothing to diverge.
+`git pull` in Step 7, so there's nothing to diverge.
 
 ---
 
@@ -89,7 +89,33 @@ EOF
 
 ---
 
-## Step 4 — Push (needs confirmation)
+## Step 4 — Self-review the diff（code smells 快掃）
+
+在推上 GitHub 之前，先自己當第一個 reviewer：`git diff main...HEAD` 看這次要送出去的
+完整 diff（三個點代表「從分支點以來的變化」，不會把 main 上別人的新 commit 混進來）。
+
+用 Martin Fowler《Refactoring》定義的 **code smells** 當檢查詞彙——這些是業界共通的
+命名，用術語描述問題比模糊地說「這裡怪怪的」更精準，也更容易查到對應的修法。掃過
+最常見的幾種：
+
+- **Mysterious Name（神秘命名）** — 名字看不出用途或單位 → 改名。
+- **Duplicated Code（重複程式碼）** — 同一段邏輯出現兩次以上 → 抽出共用。
+- **Feature Envy（特徵依戀）** — 函式整段都在操作另一個模組的資料 → 把函式搬過去。
+- **Primitive Obsession（基本型別偏執）** — 用裸 string/number 硬扛領域概念
+  （例如輪次、比分）→ 建型別。
+- **Speculative Generality（過度預留）** — 為「以後可能用到」而加、目前沒人用的
+  抽象 → 刪掉，等真的需要再加。
+
+處理原則：**只修小而確定的問題**（改名、刪死碼、抽重複），修完回 Step 3 再 commit
+一次；發現需要大重構的，開一張 issue 記下來，不要塞進同一個 PR——PR 越小越好審。
+想要更完整的自動審查，可以跑內建的 `/code-review`。
+
+Explain: 「這一步等於把 code review 的第一輪從 GitHub 上搬到本地——reviewer（或未來
+的自己）看到的 diff 會更乾淨，來回修改的次數也會變少。」
+
+---
+
+## Step 5 — Push (needs confirmation)
 
 Tell the user what you're about to run and **wait for explicit confirmation** before
 executing.
@@ -105,7 +131,7 @@ retrying — don't just re-run blindly.
 
 ---
 
-## Step 5 — Create PR
+## Step 6 — Create PR
 
 Use `gh pr create` to open the PR. Draft the title and body first, show them to the
 user, and ask for any edits before submitting.
@@ -130,7 +156,7 @@ Print the returned PR URL so the user can click through to GitHub.
 
 ---
 
-## Step 6 — Merge (needs confirmation)
+## Step 7 — Merge (needs confirmation)
 
 **Do not merge automatically.** First confirm with the user that they're ready to merge.
 
