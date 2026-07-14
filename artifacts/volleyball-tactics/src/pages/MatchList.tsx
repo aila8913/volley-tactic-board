@@ -30,9 +30,17 @@ export default function MatchList() {
   // 不然每次手滑點到資料夾就直接跳轉，很容易誤觸。
   const [selectedTournamentId, setSelectedTournamentId] = useState<string | null>(null);
 
-  // !m.tournamentId 而不是 === null：舊版資料（改版前存進 localStorage 的比賽）根本沒有
-  // tournamentId 這個欄位，讀出來是 undefined，用 falsy 判斷一樣會被當成「最上層」，不用特別寫遷移邏輯。
-  const topLevelMatches = matches.filter((m) => !m.tournamentId);
+  // 已知資料夾的 id 集合。比賽存在後端 DB、資料夾卻只存在這台裝置的 localStorage，
+  // 兩者是「兩層真相來源」（見 #117）：換裝置/清 storage 後，比賽的 tournamentId 會指向
+  // 一個本機根本沒有的資料夾。用 Set 而不是每次 .some()，是為了讓下面的 filter 從 O(n²) 降到 O(n)。
+  const tournamentIds = new Set(tournaments.map((t) => t.id));
+
+  // 「最上層」= 沒有 tournamentId（舊版資料，undefined 走 falsy）＋ tournamentId 對不到任何已知資料夾
+  // 的「孤兒」比賽。後者是 #117 的止血重點：以前只判斷 !m.tournamentId，孤兒比賽會被首頁濾掉、
+  // 資料夾卡片又渲染不出來 → 資料無聲消失。fallback 到最上層讓它至少可達（正解＝後端建 tournaments 表）。
+  const topLevelMatches = matches.filter(
+    (m) => !m.tournamentId || !tournamentIds.has(m.tournamentId),
+  );
 
   const items: RootItem[] = [
     ...tournaments.map((t): RootItem => ({ kind: "tournament", data: t })),
