@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, text, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, uuid, integer, text, pgEnum } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { matchesTable } from "./matches";
@@ -15,7 +15,17 @@ export const playerRoleEnum = pgEnum("player_role", ["S", "OH", "MB", "OPP", "L"
 // 球員名單掛在「比賽」底下，不是獨立的「球隊」實體 —— 同一支隊伍每場比賽的先發/名單都可能不同，
 // 目前不需要跨比賽共用球員資料，所以先用最簡單的模型。
 export const playersTable = pgTable("players", {
-  id: serial("id").primaryKey(),
+  // id 從自動遞增整數（serial）改成 uuid：讓「前端」也能自己生一個 id，而不是永遠要等後端
+  // insert 完、拿到 DB 配的號碼才知道這個球員的 id 是誰。
+  // 為什麼這樣改：戰術板在「離線/樂觀更新」情境下，使用者新增球員的當下畫面要馬上能用
+  // 這個 id（例如立刻把他畫上場、掛進輪轉表），但如果 id 是後端才決定的號碼，前端只能
+  // 先用一個「暫時 id」頂著，等後端回應後再把畫面上所有引用這個暫時 id 的地方換成真正的
+  // id —— 這就是「兩套 id 系統」的競態問題（前端暫時 id vs 後端真正 id，若換頭沒做乾淨
+  // 就會兜不起來）。uuid 全域唯一、不用等資料庫配號，前端可以直接生一個當作「這個球員的
+  // 真正 id」，離線先用、之後同步上去也不用再換頭 —— 這消掉了整類「換頭」bug（對應
+  // invariant I3：一個實體從建立到刪除，id 全程不變）。
+  // defaultRandom()：即使前端沒傳 id，資料庫也會自己生一個隨機 uuid 頂著，兩種情境都撐得住。
+  id: uuid("id").primaryKey().defaultRandom(),
   matchId: integer("match_id")
     .notNull()
     .references(() => matchesTable.id, { onDelete: "cascade" }),
@@ -33,6 +43,10 @@ export const playersTable = pgTable("players", {
   personId: integer("person_id").references(() => peopleTable.id, { onDelete: "set null" }),
 });
 
-export const insertPlayerSchema = createInsertSchema(playersTable).omit({ id: true });
+// 不再 .omit({ id: true })：id 欄位改成 uuid + defaultRandom() 之後，drizzle-zod 會自動把
+// 「有 default 值的欄位」在 insert schema 裡標成 optional（見 drizzle-zod insertConditions.optional：
+// !column.notNull || column.hasDefault），所以這裡什麼都不用做，id 就已經是「可傳可不傳」的
+// 選填欄位 —— 前端可以自己塞一個 uuid 進來（client-mintable），也可以完全不傳、交給資料庫生。
+export const insertPlayerSchema = createInsertSchema(playersTable);
 export type InsertPlayer = z.infer<typeof insertPlayerSchema>;
 export type Player = typeof playersTable.$inferSelect;

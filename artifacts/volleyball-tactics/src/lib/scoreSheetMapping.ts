@@ -94,14 +94,15 @@ export function pointRecordToRally(
 // ── PointRecord → event ──
 // 簡易版一分最多記一球（sequence 固定 1）：有選動作又有動作方時才產生 event。
 // 「沒看到」/沒帶動作 → 回 null，代表這分只有 rally、底下不記任何一球。
-// playerId 只有我方球員對得到（string id → 後端 int）；對手(全體)沒有球員 → null。
+// playerId 只有我方球員對得到；對手(全體)沒有球員 → null。前後端球員 id 現在都是字串 uuid
+// （見 lib/db/src/schema/players.ts 的改動），不用再轉型別，undefined 轉成 null 即可。
 // ballType/quality/座標都是進階版（賽後精確記）才填，簡易版一律留空。
 export function pointRecordToEvent(point: PointRecord, sequence: number): NewEvent | null {
   if (!point.action || !point.touchedBy) return null;
   return {
     sequence,
     side: sideToApi(point.touchedBy.side),
-    playerId: point.touchedBy.playerId !== undefined ? Number(point.touchedBy.playerId) : null,
+    playerId: point.touchedBy.playerId ?? null,
     action: point.action,
     source: "live",
   };
@@ -118,7 +119,7 @@ export function eventToMeta(event: MatchEvent): Pick<PointRecord, "action" | "to
     action: event.action as PlayAction,
     touchedBy: {
       side: apiToSide(event.side),
-      playerId: event.playerId != null ? String(event.playerId) : undefined,
+      playerId: event.playerId ?? undefined,
     },
   };
 }
@@ -189,7 +190,7 @@ export function reconstructSetFromRallies(
 // （homeScore/awayScore），不是掛在某個 rally 底下——理由跟 substitutions.ts 的後端註解
 // 一樣：換人可能發生在兩個 rally 之間（下一球都還沒開始），那時下一個 rally 的 id 還不存在，
 // 沒辦法拿來當外鍵，只能記「發生時的比分」當時間戳記。
-// 前端球員 id 是字串（跟輪轉表共用的 roster 型別一致），後端是整數主鍵，這裡做轉換。
+// 前端球員 id 跟後端一樣是字串 uuid（見 lib/db/src/schema/players.ts 的改動），不用再轉型別。
 export function regularSubToApi(
   sub: RegularSub,
   homeScore: number,
@@ -198,8 +199,8 @@ export function regularSubToApi(
   return {
     homeScore,
     awayScore,
-    playerInId: Number(sub.inPlayerId),
-    playerOutId: Number(sub.outPlayerId),
+    playerInId: sub.inPlayerId,
+    playerOutId: sub.outPlayerId,
     kind: "regular",
   };
 }
@@ -231,28 +232,28 @@ export function reconstructRegularSubs(subs: Substitution[]): RegularSub[] {
 }
 
 // ── LineupSnapshot ↔ 後端 lineups DTO（issue #115）──
-// 先發快照（號位 1~6 → 球員 id 字串）跟後端 lineups 表（zone1~6PlayerId 整數）之間的轉換。
-// 前端球員 id 是字串（跟 roster 型別一致），後端是整數主鍵，這裡做轉換——跟 regularSubToApi
-// 用 Number()、reconstructRegularSubs 用 String() 是同一套慣例。
+// 先發快照（號位 1~6 → 球員 id 字串）跟後端 lineups 表（zone1~6PlayerId 字串 uuid）之間的轉換。
+// 前後端球員 id 現在都是字串 uuid（見 lib/db/src/schema/players.ts 的改動），型別一致，
+// 這裡只是把「號位 → id」的物件形狀轉成 API 要的六個獨立欄位，不用再轉型別。
 export function lineupSnapshotToApi(lineup: LineupSnapshot): NewLineup {
   return {
-    zone1PlayerId: Number(lineup[1]),
-    zone2PlayerId: Number(lineup[2]),
-    zone3PlayerId: Number(lineup[3]),
-    zone4PlayerId: Number(lineup[4]),
-    zone5PlayerId: Number(lineup[5]),
-    zone6PlayerId: Number(lineup[6]),
+    zone1PlayerId: lineup[1],
+    zone2PlayerId: lineup[2],
+    zone3PlayerId: lineup[3],
+    zone4PlayerId: lineup[4],
+    zone5PlayerId: lineup[5],
+    zone6PlayerId: lineup[6],
   };
 }
 
 export function apiLineupToSnapshot(row: Lineup): LineupSnapshot {
   return {
-    1: String(row.zone1PlayerId),
-    2: String(row.zone2PlayerId),
-    3: String(row.zone3PlayerId),
-    4: String(row.zone4PlayerId),
-    5: String(row.zone5PlayerId),
-    6: String(row.zone6PlayerId),
+    1: row.zone1PlayerId,
+    2: row.zone2PlayerId,
+    3: row.zone3PlayerId,
+    4: row.zone4PlayerId,
+    5: row.zone5PlayerId,
+    6: row.zone6PlayerId,
   };
 }
 

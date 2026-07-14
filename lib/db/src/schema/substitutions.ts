@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, uuid, pgEnum } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { setsTable } from "./sets";
@@ -39,8 +39,8 @@ export const substitutionsTable = pgTable("substitutions", {
   // 這跟 events.playerId 用 "set null" 的理由完全一樣：刪一名球員（或刪整場比賽連帶清
   // 名單）時，若外鍵是預設的 NO ACTION，會因為這裡還指著那名球員而擋下刪除，
   // 引發「刪比賽卻刪不掉」的 FK 錯誤（Phase 3b-ii 修過的那個 bug）。
-  playerInId: integer("player_in_id").references(() => playersTable.id, { onDelete: "set null" }),
-  playerOutId: integer("player_out_id").references(() => playersTable.id, {
+  playerInId: uuid("player_in_id").references(() => playersTable.id, { onDelete: "set null" }),
+  playerOutId: uuid("player_out_id").references(() => playersTable.id, {
     onDelete: "set null",
   }),
   kind: substitutionKindEnum("kind").notNull(),

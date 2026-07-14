@@ -1,4 +1,4 @@
-import { pgTable, serial, integer } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, uuid } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { setsTable } from "./sets";
@@ -28,22 +28,22 @@ export const lineupsTable = pgTable("lineups", {
   // 球員被刪掉時没辦法把欄位設成 null（會違反 not null constraint），只能整筆處理。
   // 選擇連整局的 lineup 一起刪掉，維持「lineup 要嘛完整六人、要嘛不存在」這條不變量，
   // 不允許出現「陣容少一人」的中間狀態。
-  zone1PlayerId: integer("zone1_player_id")
+  zone1PlayerId: uuid("zone1_player_id")
     .notNull()
     .references(() => playersTable.id, { onDelete: "cascade" }),
-  zone2PlayerId: integer("zone2_player_id")
+  zone2PlayerId: uuid("zone2_player_id")
     .notNull()
     .references(() => playersTable.id, { onDelete: "cascade" }),
-  zone3PlayerId: integer("zone3_player_id")
+  zone3PlayerId: uuid("zone3_player_id")
     .notNull()
     .references(() => playersTable.id, { onDelete: "cascade" }),
-  zone4PlayerId: integer("zone4_player_id")
+  zone4PlayerId: uuid("zone4_player_id")
     .notNull()
     .references(() => playersTable.id, { onDelete: "cascade" }),
-  zone5PlayerId: integer("zone5_player_id")
+  zone5PlayerId: uuid("zone5_player_id")
     .notNull()
     .references(() => playersTable.id, { onDelete: "cascade" }),
-  zone6PlayerId: integer("zone6_player_id")
+  zone6PlayerId: uuid("zone6_player_id")
     .notNull()
     .references(() => playersTable.id, { onDelete: "cascade" }),
 });

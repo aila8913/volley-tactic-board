@@ -13,7 +13,7 @@ import type { EventSource } from './eventSource';
 export interface NewEvent {
   sequence: number;
   side: EventSide;
-  playerId?: number | null;
+  playerId?: string | null;
   action: EventAction;
   ballType?: BallType;
   quality?: number | null;

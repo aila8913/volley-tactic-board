@@ -21,7 +21,7 @@ export const PlayerRole = {
 } as const;
 
 export interface Player {
-  id: number;
+  id: string;
   matchId: number;
   name: string;
   number: number;
@@ -29,6 +29,7 @@ export interface Player {
 }
 
 export interface NewPlayer {
+  id?: string;
   name: string;
   number: number;
   role: PlayerRole;
@@ -129,37 +130,37 @@ export interface Substitution {
   setId: number;
   homeScore: number;
   awayScore: number;
-  playerInId: number | null;
-  playerOutId: number | null;
+  playerInId: string | null;
+  playerOutId: string | null;
   kind: SubstitutionKind;
 }
 
 export interface NewSubstitution {
   homeScore: number;
   awayScore: number;
-  playerInId?: number | null;
-  playerOutId?: number | null;
+  playerInId?: string | null;
+  playerOutId?: string | null;
   kind: SubstitutionKind;
 }
 
 export interface Lineup {
   id: number;
   setId: number;
-  zone1PlayerId: number;
-  zone2PlayerId: number;
-  zone3PlayerId: number;
-  zone4PlayerId: number;
-  zone5PlayerId: number;
-  zone6PlayerId: number;
+  zone1PlayerId: string;
+  zone2PlayerId: string;
+  zone3PlayerId: string;
+  zone4PlayerId: string;
+  zone5PlayerId: string;
+  zone6PlayerId: string;
 }
 
 export interface NewLineup {
-  zone1PlayerId: number;
-  zone2PlayerId: number;
-  zone3PlayerId: number;
-  zone4PlayerId: number;
-  zone5PlayerId: number;
-  zone6PlayerId: number;
+  zone1PlayerId: string;
+  zone2PlayerId: string;
+  zone3PlayerId: string;
+  zone4PlayerId: string;
+  zone5PlayerId: string;
+  zone6PlayerId: string;
 }
 
 export type EventAction = typeof EventAction[keyof typeof EventAction];
@@ -205,7 +206,7 @@ export interface MatchEvent {
   rallyId: number;
   sequence: number;
   side: EventSide;
-  playerId?: number | null;
+  playerId?: string | null;
   action: EventAction;
   ballType?: BallType;
   quality?: number | null;
@@ -222,7 +223,7 @@ export interface MatchEvent {
 export interface NewEvent {
   sequence: number;
   side: EventSide;
-  playerId?: number | null;
+  playerId?: string | null;
   action: EventAction;
   ballType?: BallType;
   quality?: number | null;

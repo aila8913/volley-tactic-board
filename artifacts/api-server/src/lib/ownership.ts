@@ -25,7 +25,7 @@ export async function matchBelongsToUser(matchId: number, userId: string): Promi
 // player 的擁有權分兩步：先用上面的 matchBelongsToUser 確認 match 是這個 user 的，
 // 再用這支確認這個 player 真的屬於那場 match（擋掉 /matches/1/players/999 這種 playerId
 // 存在、但其實掛在別場比賽底下的情況）。比對的是 player.matchId，不需要再 join 到 userId。
-export async function playerBelongsToMatch(playerId: number, matchId: number): Promise<boolean> {
+export async function playerBelongsToMatch(playerId: string, matchId: number): Promise<boolean> {
   const [player] = await db
     .select({ id: playersTable.id })
     .from(playersTable)

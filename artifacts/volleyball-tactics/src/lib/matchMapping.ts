@@ -1,7 +1,8 @@
 // 前端 domain 型別（types/match.ts）跟後端 API DTO（@workspace/api-client-react 產生的
-// Match/Player）之間的轉換都集中在這裡，不散落到各元件。三個主要落差：
-//   1. id：後端是 serial 整數，前端 domain 沿用字串（把整數 String() 起來當字串用，
-//      URL 參數、localStorage key 都還是字串，改動最小）。
+// Match/Player）之間的轉換都集中在這裡，不散落到各元件。兩個主要落差：
+//   1. id：match.id 後端仍是 serial 整數，前端 domain 沿用字串（把整數 String() 起來當字串用，
+//      URL 參數、localStorage key 都還是字串，改動最小）；player.id 後端已改成字串 uuid
+//      （見 lib/db/src/schema/players.ts），前後端型別一致，不用再轉換。
 //   2. 時間：後端存 ISO timestamp；前端 <input type="datetime-local"> 要的是
 //      "2026-06-24T15:30" 這種沒有時區的本地字串。
 //   3. 名單：後端 players 是獨立資源要分開抓；domain Match 仍把它內嵌成 players[]。
@@ -53,8 +54,8 @@ export function serverMatchToDomain(m: ApiMatch, players: ApiPlayer[] = []): Mat
 //   - 既有球員帶的是 String(serverId)，對得到 → 視情況更新或不動。
 export interface RosterDiff {
   toCreate: NewPlayer[];
-  toUpdate: { playerId: number; data: UpdatePlayer }[];
-  toDelete: number[];
+  toUpdate: { playerId: string; data: UpdatePlayer }[];
+  toDelete: string[];
 }
 
 // next 用比 MatchPlayer 寬鬆的型別：表單裡新增的球員列沒有 id（id 為 undefined），
@@ -66,7 +67,7 @@ export function diffRoster(existing: MatchPlayer[], next: readonly RosterInput[]
   const nextIds = new Set(next.map((p) => p.id));
 
   const toCreate: NewPlayer[] = [];
-  const toUpdate: { playerId: number; data: UpdatePlayer }[] = [];
+  const toUpdate: { playerId: string; data: UpdatePlayer }[] = [];
 
   for (const p of next) {
     // 沒 id（表單新增列）直接視為新增；有 id 才去 existing 裡找對應的既有球員。
@@ -77,16 +78,19 @@ export function diffRoster(existing: MatchPlayer[], next: readonly RosterInput[]
       continue;
     }
     // 對得到 → 只有欄位真的變了才發 PATCH，沒變就不打不必要的請求。
+    // playerId 用 prev.id（MatchPlayer.id 型別上保證是 string）而不是 p.id：
+    // TS 沒辦法把上面那行的 ternary narrowing 帶到這裡，p.id 在這裡型別仍是 string | undefined，
+    // 但既然對得到 prev，代表 p.id 當初一定有值、且等於 prev.id，用 prev.id 等價又不用斷言。
     if (prev.name !== p.name || prev.number !== p.number || prev.role !== p.role) {
       toUpdate.push({
-        playerId: Number(p.id),
+        playerId: prev.id,
         data: { name: p.name, number: p.number, role: p.role },
       });
     }
   }
 
   // 在 existing 裡、但新名單沒有的 → 刪除。
-  const toDelete = existing.filter((p) => !nextIds.has(p.id)).map((p) => Number(p.id));
+  const toDelete = existing.filter((p) => !nextIds.has(p.id)).map((p) => p.id);
 
   return { toCreate, toUpdate, toDelete };
 }
