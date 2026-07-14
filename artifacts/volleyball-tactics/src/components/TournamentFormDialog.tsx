@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { useTournaments } from "@/hooks/useTournaments";
+import { useCreateTournament, useUpdateTournament } from "@/hooks/useTournaments";
 import { Tournament, TournamentFormValues, tournamentFormSchema } from "@/types/tournament";
 
 const emptyDefaults: TournamentFormValues = { name: "" };
@@ -35,8 +35,8 @@ export default function TournamentFormDialog({
   onOpenChange,
   tournament,
 }: TournamentFormDialogProps) {
-  const addTournament = useTournaments((state) => state.addTournament);
-  const updateTournament = useTournaments((state) => state.updateTournament);
+  const addTournament = useCreateTournament();
+  const updateTournament = useUpdateTournament();
   const isEditing = !!tournament;
 
   const form = useForm<TournamentFormValues>({
@@ -52,11 +52,13 @@ export default function TournamentFormDialog({
     }
   }, [open, tournament, form]);
 
-  const onSubmit = (values: TournamentFormValues) => {
+  // 寫入改成非同步（打後端 API）。await 完成後才關 dialog，讓 React Query 的 invalidate
+  // 有機會把列表重抓好；失敗就不關、讓使用者知道沒存成功。
+  const onSubmit = async (values: TournamentFormValues) => {
     if (tournament) {
-      updateTournament(tournament.id, values);
+      await updateTournament(tournament.id, values);
     } else {
-      addTournament(values);
+      await addTournament(values);
     }
     onOpenChange(false);
   };

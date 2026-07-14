@@ -4,7 +4,7 @@ import { Folder, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { useMatchList, useDeleteMatch } from "@/hooks/useMatches";
-import { useTournaments } from "@/hooks/useTournaments";
+import { useTournamentList, useDeleteTournament } from "@/hooks/useTournaments";
 import MatchFormDialog from "@/components/MatchFormDialog";
 import TournamentFormDialog from "@/components/TournamentFormDialog";
 import MatchCard from "@/components/MatchCard";
@@ -19,8 +19,9 @@ export default function MatchList() {
   const [, navigate] = useLocation();
   const { matches, isLoading } = useMatchList();
   const deleteMatch = useDeleteMatch();
-  const tournaments = useTournaments((state) => state.tournaments);
-  const deleteTournament = useTournaments((state) => state.deleteTournament);
+  // 資料夾現在也來自 API（#117），不再是本機 localStorage store。
+  const { tournaments } = useTournamentList();
+  const deleteTournament = useDeleteTournament();
 
   const [matchDialogOpen, setMatchDialogOpen] = useState(false);
   const [editingMatch, setEditingMatch] = useState<Match | null>(null);
@@ -30,17 +31,11 @@ export default function MatchList() {
   // 不然每次手滑點到資料夾就直接跳轉，很容易誤觸。
   const [selectedTournamentId, setSelectedTournamentId] = useState<string | null>(null);
 
-  // 已知資料夾的 id 集合。比賽存在後端 DB、資料夾卻只存在這台裝置的 localStorage，
-  // 兩者是「兩層真相來源」（見 #117）：換裝置/清 storage 後，比賽的 tournamentId 會指向
-  // 一個本機根本沒有的資料夾。用 Set 而不是每次 .some()，是為了讓下面的 filter 從 O(n²) 降到 O(n)。
-  const tournamentIds = new Set(tournaments.map((t) => t.id));
-
-  // 「最上層」= 沒有 tournamentId（舊版資料，undefined 走 falsy）＋ tournamentId 對不到任何已知資料夾
-  // 的「孤兒」比賽。後者是 #117 的止血重點：以前只判斷 !m.tournamentId，孤兒比賽會被首頁濾掉、
-  // 資料夾卡片又渲染不出來 → 資料無聲消失。fallback 到最上層讓它至少可達（正解＝後端建 tournaments 表）。
-  const topLevelMatches = matches.filter(
-    (m) => !m.tournamentId || !tournamentIds.has(m.tournamentId),
-  );
+  // 「最上層」比賽 = 沒有歸到任何資料夾（tournamentId 為 null）。
+  // #117 修好後這裡回到單純判斷 !m.tournamentId：資料夾已進 DB、tournamentId 是帶 cascade 的
+  // 外鍵，資料庫保證它「要嘛 null、要嘛指向真實存在的資料夾」，不可能再出現指向不存在資料夾的
+  // 孤兒比賽——所以 #122 那段「對不到資料夾就 fallback 到最上層」的止血碼可以拿掉了。
+  const topLevelMatches = matches.filter((m) => !m.tournamentId);
 
   const items: RootItem[] = [
     ...tournaments.map((t): RootItem => ({ kind: "tournament", data: t })),
@@ -74,8 +69,10 @@ export default function MatchList() {
     setTournamentDialogOpen(true);
   };
 
-  // 刪資料夾要連同裡面的比賽一起刪，不然會留下「孤兒」比賽——tournamentId 指到一個
-  // 已經不存在的資料夾，沒有任何畫面會再顯示它，但資料還留在 localStorage 裡。
+  // 刪資料夾＝連同裡面的比賽一起刪（PO 拍板）。#117 後這是 DB 外鍵 onDelete: "cascade" 一次做到：
+  // 前端只要送一個 DELETE /tournaments/:id，資料庫就會自動把資料夾底下的比賽一併清掉，不必再
+  // 手動逐場 deleteMatch。useDeleteTournament 內部會 invalidate 比賽列表，讓被連帶刪掉的卡片消失。
+  // 這裡仍算一下裡面有幾場比賽，只是為了在確認框提醒使用者「會連同這些一起刪」。
   const handleDeleteTournament = (tournament: Tournament) => {
     const matchesInside = matches.filter((m) => m.tournamentId === tournament.id);
     const message =
@@ -83,10 +80,7 @@ export default function MatchList() {
         ? `這個資料夾裡還有 ${matchesInside.length} 場比賽，確定要連同這些比賽一起刪除嗎？`
         : "確定要刪除這個資料夾嗎？";
     if (window.confirm(message)) {
-      // 先把資料夾裡的比賽逐一刪掉（各自送 DELETE），全部完成後再刪本地的資料夾記錄。
-      void Promise.all(matchesInside.map((m) => deleteMatch(Number(m.id)))).then(() => {
-        deleteTournament(tournament.id);
-      });
+      void deleteTournament(tournament.id);
     }
   };
 

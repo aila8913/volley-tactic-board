@@ -27,7 +27,7 @@ export const ListMatchesResponseItem = zod.object({
   "opponent": zod.string(),
   "location": zod.string().nullish(),
   "videoUrl": zod.string().nullish(),
-  "tournamentId": zod.string().nullish(),
+  "tournamentId": zod.string().uuid().nullish(),
   "createdAt": zod.coerce.date()
 })
 export const ListMatchesResponse = zod.array(ListMatchesResponseItem)
@@ -42,7 +42,7 @@ export const CreateMatchBody = zod.object({
   "opponent": zod.string(),
   "location": zod.string().nullish(),
   "videoUrl": zod.string().nullish(),
-  "tournamentId": zod.string().nullish()
+  "tournamentId": zod.string().uuid().nullish()
 })
 
 
@@ -60,7 +60,7 @@ export const GetMatchResponse = zod.object({
   "opponent": zod.string(),
   "location": zod.string().nullish(),
   "videoUrl": zod.string().nullish(),
-  "tournamentId": zod.string().nullish(),
+  "tournamentId": zod.string().uuid().nullish(),
   "createdAt": zod.coerce.date()
 })
 
@@ -77,7 +77,7 @@ export const UpdateMatchBody = zod.object({
   "date": zod.coerce.date().optional(),
   "location": zod.string().nullish(),
   "videoUrl": zod.string().nullish(),
-  "tournamentId": zod.string().nullish()
+  "tournamentId": zod.string().uuid().nullish()
 })
 
 export const UpdateMatchResponse = zod.object({
@@ -87,7 +87,7 @@ export const UpdateMatchResponse = zod.object({
   "opponent": zod.string(),
   "location": zod.string().nullish(),
   "videoUrl": zod.string().nullish(),
-  "tournamentId": zod.string().nullish(),
+  "tournamentId": zod.string().uuid().nullish(),
   "createdAt": zod.coerce.date()
 })
 
@@ -97,6 +97,52 @@ export const UpdateMatchResponse = zod.object({
  */
 export const DeleteMatchParams = zod.object({
   "matchId": zod.coerce.number()
+})
+
+
+/**
+ * @summary List tournaments (folders)
+ */
+export const ListTournamentsResponseItem = zod.object({
+  "id": zod.string().uuid(),
+  "name": zod.string(),
+  "createdAt": zod.coerce.date()
+})
+export const ListTournamentsResponse = zod.array(ListTournamentsResponseItem)
+
+
+/**
+ * @summary Create a tournament (folder)
+ */
+export const CreateTournamentBody = zod.object({
+  "id": zod.string().uuid().optional(),
+  "name": zod.string()
+})
+
+
+/**
+ * @summary Rename a tournament (folder)
+ */
+export const UpdateTournamentParams = zod.object({
+  "tournamentId": zod.coerce.string().uuid()
+})
+
+export const UpdateTournamentBody = zod.object({
+  "name": zod.string().optional()
+})
+
+export const UpdateTournamentResponse = zod.object({
+  "id": zod.string().uuid(),
+  "name": zod.string(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete a tournament (cascades to the matches inside it)
+ */
+export const DeleteTournamentParams = zod.object({
+  "tournamentId": zod.coerce.string().uuid()
 })
 
 

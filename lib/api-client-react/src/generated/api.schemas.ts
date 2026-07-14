@@ -35,6 +35,21 @@ export interface NewPlayer {
   role: PlayerRole;
 }
 
+export interface Tournament {
+  id: string;
+  name: string;
+  createdAt: string;
+}
+
+export interface NewTournament {
+  id?: string;
+  name: string;
+}
+
+export interface UpdateTournament {
+  name?: string;
+}
+
 export interface Match {
   id: number;
   name?: string | null;
