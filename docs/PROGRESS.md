@@ -17,15 +17,15 @@
 > promote it first, then drop it. Read this file + `gh issue list --state open` + recent
 > `git log` at the start of a session instead of re-exploring the codebase.
 
-_Last updated: 2026-07-14 — schema 換季第一刀落地：**players.id serial→uuid**（#118 的 schema 部分，
-commit `5741452`，branch `schema/players-id-uuid`，**PR 待開/待 merge**）。連動 events/lineups/
-substitutions 三張 FK 表改 uuid、openapi→codegen 重生、後端 players POST 收 body.id、順帶簡化 mapping
-層多餘的 Number/String 轉換；typecheck/lint/76 tests 全綠。dev DB 已 **drop 重建**成 uuid schema
-（int→uuid 不能原地 ALTER，只能 drop——用一次性腳本 `DROP…CASCADE` 後 `drizzle push`）。後端目前只是
-「有能力」收前端鑄造 id、行為不變；前端實際送 uuid ＋ handleRosterSave 改 await 是 #118 後續 PR。
-**兩條 branch 待送 PR**：本 branch（players uuid）＋ `docs/openvolley-external-reference`（70cf591，
-openvolley 外部參考 docs，上 session 遺留、尚未開 PR）。三條不變量提醒：I1 單一真相來源、I2 per-match
-狀態用 matchId 當 key、I3 一個實體一套 id 只鑄造一次（完整＝ #117 錨點留言）。_
+_Last updated: 2026-07-14 — schema 換季第一刀**已 merge 進主幹**：**players.id serial→uuid**（#118 的
+schema 部分，PR **#124** squash 進 main，commit `a40cb59`）。連動 events/lineups/substitutions 三張 FK
+表改 uuid、openapi→codegen 重生、後端 players POST 收 body.id、順帶簡化 mapping 層多餘的 Number/String
+轉換；typecheck/lint/76 tests 全綠。dev DB 已 **drop 重建**成 uuid schema（int→uuid 不能原地 ALTER，只能
+drop——用一次性腳本 `DROP…CASCADE` 後 `drizzle push`）。後端目前只是「有能力」收前端鑄造 id、行為不變；
+前端實際送 uuid ＋ handleRosterSave 改 await 是 #118 後續 PR（**故 #124 刻意不 close #118**）。
+**一條 branch 仍待送 PR**：`docs/openvolley-external-reference`（70cf591，openvolley 外部參考 docs，
+上 session 遺留、尚未開 PR）。三條不變量提醒：I1 單一真相來源、I2 per-match 狀態用 matchId 當 key、
+I3 一個實體一套 id 只鑄造一次（完整＝ #117 錨點留言）。_
 
 ## Current state
 
@@ -72,8 +72,8 @@ gh issue list --state open                   # 全部
 
 M1 收尾焦點：**全域 store 去汙染家族 #117/#118/#119**（#115 已修先發那條、CLOSED；同根因仍在別處——
 見 #117 錨點留言的三條不變量與落地順序）。順序＝(1) ✅ #117-最小止血（#122 已 merge）；
-(2) schema 換季（趁部署前可丟資料窗口）三刀，可拆 PR：**✅ players.id→uuid（#118 離線版，commit
-`5741452`，PR 待開/待 merge）**／⬜ tournaments 表 uuid PK+cascade+API（#117 完整，照 `useMatches.ts`
+(2) schema 換季（趁部署前可丟資料窗口）三刀，可拆 PR：**✅ players.id→uuid（#118 schema 部分，PR #124
+已 merge，commit `a40cb59`）**／⬜ tournaments 表 uuid PK+cascade+API（#117 完整，照 `useMatches.ts`
 模板）／⬜ tactics 加 matchId（#119 前置）；(3) #118 前端 await ＋實際送鑄造 uuid；(4) #119 兩 store
 byMatch 分片+去 persist；(5) #120 純展示唯讀站位視圖。另 #64（背景寫入失敗不 reconcile，關聯部署 #26／
 離線契約 #75）、#44（暫停/timeout，M1 唯一舊 open 項）。#120 純 UI、依賴 #119，暫不排期。（#115/#41/#50
