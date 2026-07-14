@@ -17,6 +17,20 @@ interface MatchCardProps {
   onDelete: () => void;
 }
 
+// 卡片底部三個操作連結共用同一套樣式，抽成資料 + map 避免同一段 class 字串複製三份
+// ——以後要調整 hover 顏色之類的樣式，改這裡一個地方就好。
+const ACTION_LINK_CLASS =
+  "inline-flex items-center gap-1.5 rounded-xl border border-white/[0.26] px-3 py-2 text-[13px] " +
+  "font-semibold text-[#f5f5f0] transition hover:border-[#c6f135] hover:text-[#c6f135]";
+
+function actionLinks(matchId: string) {
+  return [
+    { href: `/matches/${matchId}/board`, icon: LayoutGrid, label: "戰術板" },
+    { href: `/matches/${matchId}/record`, icon: ClipboardList, label: "計分表" },
+    { href: `/matches/${matchId}/analytics`, icon: BarChart3, label: "數據" },
+  ];
+}
+
 // datetime-local 字串（無時區，見 types/match.ts）轉成卡片要的「07/14（二）19:00」格式。
 function formatMatchDateTime(dateTime: string): string {
   const d = new Date(dateTime);
@@ -72,30 +86,12 @@ export default function MatchCard({ match, onEdit, onDelete }: MatchCardProps) {
       </p>
 
       <div className="flex gap-2">
-        <Link
-          href={`/matches/${match.id}/board`}
-          className="inline-flex items-center gap-1.5 rounded-xl border border-white/[0.26] px-3 py-2
-            text-[13px] font-semibold text-[#f5f5f0] transition hover:border-[#c6f135] hover:text-[#c6f135]"
-        >
-          <LayoutGrid className="h-4 w-4" />
-          戰術板
-        </Link>
-        <Link
-          href={`/matches/${match.id}/record`}
-          className="inline-flex items-center gap-1.5 rounded-xl border border-white/[0.26] px-3 py-2
-            text-[13px] font-semibold text-[#f5f5f0] transition hover:border-[#c6f135] hover:text-[#c6f135]"
-        >
-          <ClipboardList className="h-4 w-4" />
-          計分表
-        </Link>
-        <Link
-          href={`/matches/${match.id}/analytics`}
-          className="inline-flex items-center gap-1.5 rounded-xl border border-white/[0.26] px-3 py-2
-            text-[13px] font-semibold text-[#f5f5f0] transition hover:border-[#c6f135] hover:text-[#c6f135]"
-        >
-          <BarChart3 className="h-4 w-4" />
-          數據
-        </Link>
+        {actionLinks(match.id).map(({ href, icon: Icon, label }) => (
+          <Link key={href} href={href} className={ACTION_LINK_CLASS}>
+            <Icon className="h-4 w-4" />
+            {label}
+          </Link>
+        ))}
       </div>
     </article>
   );
