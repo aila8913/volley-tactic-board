@@ -2,7 +2,7 @@
 name: wrap-up
 description: >
   Use when the user is ending a work session on this project and wants to close things
-  out properly — trigger phrases include "收工", "今天先做到這", "結束工作", "wrap up",
+  out properly — trigger phrases include "收工", "今天先做到這", "wrap up",
   "before I stop for today", "commit 前幫我整理一下", "幫我更新進度", or right after the
   user has just asked for a commit and seems to be finishing up. Syncs GitHub Issues
   with what actually got done/discovered this session and refreshes docs/PROGRESS.md.
@@ -91,31 +91,23 @@ numbers.
        only when genuinely urgent/essential, not by default.
 
 5. **Sync the roadmap (Milestones + GitHub Project).** The time-ordered roadmap
-   (built 2026-07-11) lives in two GitHub structures with distinct jobs:
-   - **Milestones M1–M5 = 階段（時間序）**：M1 簡易版收尾 → M2 數據分析價值 →
-     M3 部署給真人試用 → M4 進階版差異化 → M5 體驗重整與雜項. Every open issue
-     should carry exactly one — assign new issues from step 4 in the same pass:
-     `gh issue edit <n> --milestone "M1 簡易版收尾"`. Milestones carry **soft due
-     dates**（估自實際 velocity，2026-07-11 起算 M1=7/18 → M5=9/11）— they feed the
-     Roadmap view's timeline, not deadlines. If reality has drifted noticeably,
-     propose adjusted dates (PO confirms) and update via
-     `gh api -X PATCH repos/aila8913/volley-tactic-board/milestones/<n> -f due_on="YYYY-MM-DDT00:00:00Z"`.
-   - **Project "Volley Tactics Board"** (https://github.com/users/aila8913/projects/4)
-     **= 當下狀態**（Status: Backlog/Todo/In Progress/Blocked/Done）。Workflows
-     auto-add new issues and move closed ones to Done; what needs manual care is
-     **Todo** — keep it to the current milestone's next 3–5 items, no more. That
-     discipline is the whole point of the Backlog/Todo split.
+   lives in two GitHub structures with distinct jobs — each fact has exactly one
+   home（single source of truth）:
+   - **Milestones M1–M5 = 階段（時間序）**. Every open issue should carry exactly
+     one — assign new issues from step 4 in the same pass. Milestones carry **soft
+     due dates** that feed the Roadmap view's timeline, not deadlines; if reality
+     has drifted noticeably, propose adjusted dates (PO confirms).
+   - **Project "Volley Tactics Board" = 當下狀態**（Status:
+     Backlog/Todo/In Progress/Blocked/Done）。Workflows auto-add new issues and
+     move closed ones to Done; what needs manual care is **Todo** — keep it to the
+     current milestone's next 3–5 items, no more. That discipline is the whole
+     point of the Backlog/Todo split.
    - Re-scoping the roadmap (moving an issue between milestones, splitting/adding a
      phase) is a PO decision — put it in step 3's proposal list, don't settle it
      unilaterally.
-   - Stable CLI ids (recorded so future sessions don't re-derive them): project
-     number `4`, owner `aila8913`, project id `PVT_kwHOBD0rps4BdEuf`, Status field
-     `PVTSSF_lAHOBD0rps4BdEufzhXo8Gs`, option ids Backlog `3c3a173d` / Todo
-     `f077b203` / In Progress `51faacd6` / Blocked `31ceab16` / Done `5095b43f`.
-     Change a card's status:
-     `gh project item-edit --id <item-id> --project-id <project-id> --field-id <field-id> --single-select-option-id <option-id>`
-     where item-id comes from
-     `gh project item-list 4 --owner aila8913 --format json --jq '.items[] | select(.content.number==<n>).id'`.
+   - Exact milestone names, due dates, stable CLI ids, and the `gh` commands for
+     all of the above live in [reference.md](reference.md) — read it when actually
+     executing this step, not before.
 
 6. **Refresh `docs/PROGRESS.md` — it is a rolling ~1-week snapshot, not a log.** The
    single most common failure mode here is letting it grow into an append-only session
