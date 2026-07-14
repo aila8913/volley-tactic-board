@@ -3,8 +3,8 @@ import path from "path";
 
 export default defineConfig({
   test: {
-    // useMatches.ts/useTournaments.ts 用 zustand 的 persist middleware 讀寫 localStorage，
-    // 這個全域物件在 vitest 預設的 node 環境裡不存在，要用 jsdom 模擬瀏覽器環境才有。
+    // 用 jsdom 模擬瀏覽器環境，讓需要 DOM/瀏覽器全域物件的測試（React 元件、還在用
+    // localStorage 的 store 如 useScoreSheet）能跑。純函式測試不依賴它，但統一用 jsdom 最省事。
     environment: "jsdom",
   },
   resolve: {

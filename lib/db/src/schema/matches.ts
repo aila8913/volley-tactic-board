@@ -1,7 +1,8 @@
-import { pgTable, serial, integer, text, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { teamsTable } from "./teams";
+import { tournamentsTable } from "./tournaments";
 
 // 一場比賽。videoUrl 留空代表目前還沒有可以做「賽後補填」的影片連結。
 export const matchesTable = pgTable("matches", {
@@ -18,11 +19,18 @@ export const matchesTable = pgTable("matches", {
   opponent: text("opponent").notNull(),
   location: text("location"),
   videoUrl: text("video_url"),
-  // 前端把比賽歸類到「資料夾（Tournament）」，但資料夾本身還是前端 localStorage 的概念，
-  // 後端沒有 tournaments 表。這裡只存資料夾的 id（前端產生的 uuid 字串），當成不透明字串
-  // 存放/回傳即可 —— 後端不需要知道資料夾叫什麼、有哪些。nullable：null 代表這場比賽放在
-  // 最上層、沒歸到任何資料夾。
-  tournamentId: text("tournament_id"),
+  // 比賽所屬的資料夾（Tournament）。#117 前這裡是不帶 FK 的 text、只存前端 localStorage 資料夾的
+  // 不透明字串；現在資料夾進了 DB（tournaments 表），這裡改成真正的 uuid 外鍵指過去。
+  // nullable：null 代表這場比賽放在最上層、沒歸到任何資料夾。
+  // onDelete: "cascade"（PO 拍板：刪資料夾＝連同裡面的比賽一起刪）—— 刪掉一個 tournament，
+  // 資料庫會自動把指著它的 matches 一併刪除（再往下 cascade 到 players/sets/rallies/events）。
+  // 這把「刪資料夾要不要順便刪比賽」的邏輯下沉到 DB 一次做對，前端不必再手動逐場刪、也就不會
+  // 留下孤兒比賽（#117 的病根）。注意這跟 teamId 的 set null 是刻意相反的取捨：team 只是可選的
+  // 分組標籤，刪標籤不該牽連比賽；但資料夾是使用者主動的收納容器，「刪掉整個資料夾」的語意本就
+  // 包含裡面的東西。
+  tournamentId: uuid("tournament_id").references(() => tournamentsTable.id, {
+    onDelete: "cascade",
+  }),
   // teamId 指回 teams 表，標記這場比賽是哪支隊伍打的（用來之後按球隊切片統計）。
   // nullable：PO 決定建立比賽時不強制選球隊 —— 優先求「隨手就能記」，球隊標籤是可選的補充資訊。
   // onDelete: "set null"：刪掉一個 team 時，只把指著它的 matches.teamId 設回 null

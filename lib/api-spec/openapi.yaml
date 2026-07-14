@@ -100,6 +100,66 @@ paths:
         "204":
           description: Deleted
 
+  /tournaments:
+    get:
+      operationId: listTournaments
+      tags: [tournaments]
+      summary: List tournaments (folders)
+      responses:
+        "200":
+          description: List of tournaments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Tournament"
+    post:
+      operationId: createTournament
+      tags: [tournaments]
+      summary: Create a tournament (folder)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewTournament"
+      responses:
+        "201":
+          description: Created tournament
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tournament"
+
+  /tournaments/{tournamentId}:
+    parameters:
+      - $ref: "#/components/parameters/TournamentId"
+    patch:
+      operationId: updateTournament
+      tags: [tournaments]
+      summary: Rename a tournament (folder)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTournament"
+      responses:
+        "200":
+          description: Updated tournament
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tournament"
+    delete:
+      operationId: deleteTournament
+      tags: [tournaments]
+      summary: Delete a tournament (cascades to the matches inside it)
+      responses:
+        "204":
+          description: Deleted
+
   /matches/{matchId}/players:
     parameters:
       - $ref: "#/components/parameters/MatchId"
@@ -566,6 +626,13 @@ components:
       schema:
         type: string
         format: uuid
+    TournamentId:
+      name: tournamentId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
 
   schemas:
     HealthStatus:
@@ -616,6 +683,38 @@ components:
           $ref: "#/components/schemas/PlayerRole"
       required: [name, number, role]
 
+    Tournament:
+      type: object
+      properties:
+        # 資料夾 id：uuid（client-mintable，見 lib/db/src/schema/tournaments.ts）。
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, name, createdAt]
+
+    NewTournament:
+      type: object
+      properties:
+        # id 選填：前端可自己生一個 uuid 傳進來（client-mintable），不傳則由 DB 的 defaultRandom() 生。
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+      required: [name]
+
+    UpdateTournament:
+      type: object
+      # 目前資料夾只有名稱可改，所以更新就是改名；name 選填以保持 PATCH「只帶想改的」語意。
+      properties:
+        name:
+          type: string
+
     Match:
       type: object
       properties:
@@ -638,10 +737,11 @@ components:
         videoUrl:
           type: string
           nullable: true
-        # 前端資料夾（Tournament）的 id；資料夾本身仍是前端 localStorage 概念，後端只當
-        # 不透明字串存放/回傳。null 代表放在最上層、沒歸到任何資料夾。
+        # 這場比賽所屬資料夾（Tournament）的 id。#117 後資料夾進了 DB，這是指向 tournaments 表
+        # 的 uuid 外鍵。null 代表放在最上層、沒歸到任何資料夾。
         tournamentId:
           type: string
+          format: uuid
           nullable: true
         createdAt:
           type: string
@@ -667,6 +767,7 @@ components:
           nullable: true
         tournamentId:
           type: string
+          format: uuid
           nullable: true
       required: [date, opponent]
 
@@ -687,6 +788,7 @@ components:
           nullable: true
         tournamentId:
           type: string
+          format: uuid
           nullable: true
 
     UpdatePlayer:
