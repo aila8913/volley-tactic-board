@@ -8,7 +8,7 @@
 import type { PlayerRole } from './playerRole';
 
 export interface Player {
-  id: number;
+  id: string;
   matchId: number;
   name: string;
   number: number;

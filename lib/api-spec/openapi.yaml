@@ -533,7 +533,8 @@ components:
       in: path
       required: true
       schema:
-        type: integer
+        type: string
+        format: uuid
     SetId:
       name: setId
       in: path
@@ -585,7 +586,8 @@ components:
       type: object
       properties:
         id:
-          type: integer
+          type: string
+          format: uuid
         matchId:
           type: integer
         name:
@@ -600,6 +602,12 @@ components:
     NewPlayer:
       type: object
       properties:
+        # id 選填：前端可以自己生一個 uuid 當作球員 id 傳進來（client-mintable，見
+        # lib/db/src/schema/players.ts 的 id 欄位改動說明）；不傳的話由資料庫的
+        # defaultRandom() 自動生一個。
+        id:
+          type: string
+          format: uuid
         name:
           type: string
         number:
@@ -791,10 +799,12 @@ components:
         # 上場、下場的球員；nullable，理由見 substitutions.ts：即使不知道是「誰」，
         # 「這一局發生過一次換人」本身仍有統計意義，球員被刪除時不該連帶刪掉這筆紀錄。
         playerInId:
-          type: integer
+          type: string
+          format: uuid
           nullable: true
         playerOutId:
-          type: integer
+          type: string
+          format: uuid
           nullable: true
         kind:
           $ref: "#/components/schemas/SubstitutionKind"
@@ -808,10 +818,12 @@ components:
         awayScore:
           type: integer
         playerInId:
-          type: integer
+          type: string
+          format: uuid
           nullable: true
         playerOutId:
-          type: integer
+          type: string
+          format: uuid
           nullable: true
         kind:
           $ref: "#/components/schemas/SubstitutionKind"
@@ -828,17 +840,23 @@ components:
         setId:
           type: integer
         zone1PlayerId:
-          type: integer
+          type: string
+          format: uuid
         zone2PlayerId:
-          type: integer
+          type: string
+          format: uuid
         zone3PlayerId:
-          type: integer
+          type: string
+          format: uuid
         zone4PlayerId:
-          type: integer
+          type: string
+          format: uuid
         zone5PlayerId:
-          type: integer
+          type: string
+          format: uuid
         zone6PlayerId:
-          type: integer
+          type: string
+          format: uuid
       required:
         [
           id,
@@ -855,17 +873,23 @@ components:
       type: object
       properties:
         zone1PlayerId:
-          type: integer
+          type: string
+          format: uuid
         zone2PlayerId:
-          type: integer
+          type: string
+          format: uuid
         zone3PlayerId:
-          type: integer
+          type: string
+          format: uuid
         zone4PlayerId:
-          type: integer
+          type: string
+          format: uuid
         zone5PlayerId:
-          type: integer
+          type: string
+          format: uuid
         zone6PlayerId:
-          type: integer
+          type: string
+          format: uuid
       required:
         [zone1PlayerId, zone2PlayerId, zone3PlayerId, zone4PlayerId, zone5PlayerId, zone6PlayerId]
 
@@ -902,7 +926,8 @@ components:
           $ref: "#/components/schemas/EventSide"
         # nullable：只有我方 (side = home) 動作對得到名單球員；對方動作與簡易版「對手(全體)」留空。
         playerId:
-          type: integer
+          type: string
+          format: uuid
           nullable: true
         action:
           $ref: "#/components/schemas/EventAction"
@@ -949,7 +974,8 @@ components:
         side:
           $ref: "#/components/schemas/EventSide"
         playerId:
-          type: integer
+          type: string
+          format: uuid
           nullable: true
         action:
           $ref: "#/components/schemas/EventAction"

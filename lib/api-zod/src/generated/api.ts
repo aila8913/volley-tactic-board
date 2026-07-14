@@ -108,7 +108,7 @@ export const ListPlayersParams = zod.object({
 })
 
 export const ListPlayersResponseItem = zod.object({
-  "id": zod.number(),
+  "id": zod.string().uuid(),
   "matchId": zod.number(),
   "name": zod.string(),
   "number": zod.number(),
@@ -125,6 +125,7 @@ export const CreatePlayerParams = zod.object({
 })
 
 export const CreatePlayerBody = zod.object({
+  "id": zod.string().uuid().optional(),
   "name": zod.string(),
   "number": zod.number(),
   "role": zod.enum(['S', 'OH', 'MB', 'OPP', 'L'])
@@ -136,7 +137,7 @@ export const CreatePlayerBody = zod.object({
  */
 export const UpdatePlayerParams = zod.object({
   "matchId": zod.coerce.number(),
-  "playerId": zod.coerce.number()
+  "playerId": zod.coerce.string().uuid()
 })
 
 export const UpdatePlayerBody = zod.object({
@@ -146,7 +147,7 @@ export const UpdatePlayerBody = zod.object({
 })
 
 export const UpdatePlayerResponse = zod.object({
-  "id": zod.number(),
+  "id": zod.string().uuid(),
   "matchId": zod.number(),
   "name": zod.string(),
   "number": zod.number(),
@@ -159,7 +160,7 @@ export const UpdatePlayerResponse = zod.object({
  */
 export const DeletePlayerParams = zod.object({
   "matchId": zod.coerce.number(),
-  "playerId": zod.coerce.number()
+  "playerId": zod.coerce.string().uuid()
 })
 
 
@@ -224,7 +225,7 @@ export const ListMatchEventsResponseItem = zod.object({
   "rallyId": zod.number(),
   "sequence": zod.number(),
   "side": zod.enum(['home', 'away']),
-  "playerId": zod.number().nullish(),
+  "playerId": zod.string().uuid().nullish(),
   "action": zod.enum(['serve', 'receive', 'set', 'attack', 'block', 'dig']),
   "ballType": zod.enum(['serve', 'spike', 'tip', 'chance']).optional(),
   "quality": zod.number().nullish(),
@@ -285,7 +286,7 @@ export const ListEventsResponseItem = zod.object({
   "rallyId": zod.number(),
   "sequence": zod.number(),
   "side": zod.enum(['home', 'away']),
-  "playerId": zod.number().nullish(),
+  "playerId": zod.string().uuid().nullish(),
   "action": zod.enum(['serve', 'receive', 'set', 'attack', 'block', 'dig']),
   "ballType": zod.enum(['serve', 'spike', 'tip', 'chance']).optional(),
   "quality": zod.number().nullish(),
@@ -311,7 +312,7 @@ export const CreateEventParams = zod.object({
 export const CreateEventBody = zod.object({
   "sequence": zod.number(),
   "side": zod.enum(['home', 'away']),
-  "playerId": zod.number().nullish(),
+  "playerId": zod.string().uuid().nullish(),
   "action": zod.enum(['serve', 'receive', 'set', 'attack', 'block', 'dig']),
   "ballType": zod.enum(['serve', 'spike', 'tip', 'chance']).optional(),
   "quality": zod.number().nullish(),
@@ -346,8 +347,8 @@ export const ListMatchSubstitutionsResponseItem = zod.object({
   "setId": zod.number(),
   "homeScore": zod.number(),
   "awayScore": zod.number(),
-  "playerInId": zod.number().nullable(),
-  "playerOutId": zod.number().nullable(),
+  "playerInId": zod.string().uuid().nullable(),
+  "playerOutId": zod.string().uuid().nullable(),
   "kind": zod.enum(['regular', 'libero'])
 })
 export const ListMatchSubstitutionsResponse = zod.array(ListMatchSubstitutionsResponseItem)
@@ -363,8 +364,8 @@ export const CreateSubstitutionParams = zod.object({
 export const CreateSubstitutionBody = zod.object({
   "homeScore": zod.number(),
   "awayScore": zod.number(),
-  "playerInId": zod.number().nullish(),
-  "playerOutId": zod.number().nullish(),
+  "playerInId": zod.string().uuid().nullish(),
+  "playerOutId": zod.string().uuid().nullish(),
   "kind": zod.enum(['regular', 'libero'])
 })
 
@@ -387,12 +388,12 @@ export const ListMatchLineupsParams = zod.object({
 export const ListMatchLineupsResponseItem = zod.object({
   "id": zod.number(),
   "setId": zod.number(),
-  "zone1PlayerId": zod.number(),
-  "zone2PlayerId": zod.number(),
-  "zone3PlayerId": zod.number(),
-  "zone4PlayerId": zod.number(),
-  "zone5PlayerId": zod.number(),
-  "zone6PlayerId": zod.number()
+  "zone1PlayerId": zod.string().uuid(),
+  "zone2PlayerId": zod.string().uuid(),
+  "zone3PlayerId": zod.string().uuid(),
+  "zone4PlayerId": zod.string().uuid(),
+  "zone5PlayerId": zod.string().uuid(),
+  "zone6PlayerId": zod.string().uuid()
 })
 export const ListMatchLineupsResponse = zod.array(ListMatchLineupsResponseItem)
 
@@ -405,23 +406,23 @@ export const PutSetLineupParams = zod.object({
 })
 
 export const PutSetLineupBody = zod.object({
-  "zone1PlayerId": zod.number(),
-  "zone2PlayerId": zod.number(),
-  "zone3PlayerId": zod.number(),
-  "zone4PlayerId": zod.number(),
-  "zone5PlayerId": zod.number(),
-  "zone6PlayerId": zod.number()
+  "zone1PlayerId": zod.string().uuid(),
+  "zone2PlayerId": zod.string().uuid(),
+  "zone3PlayerId": zod.string().uuid(),
+  "zone4PlayerId": zod.string().uuid(),
+  "zone5PlayerId": zod.string().uuid(),
+  "zone6PlayerId": zod.string().uuid()
 })
 
 export const PutSetLineupResponse = zod.object({
   "id": zod.number(),
   "setId": zod.number(),
-  "zone1PlayerId": zod.number(),
-  "zone2PlayerId": zod.number(),
-  "zone3PlayerId": zod.number(),
-  "zone4PlayerId": zod.number(),
-  "zone5PlayerId": zod.number(),
-  "zone6PlayerId": zod.number()
+  "zone1PlayerId": zod.string().uuid(),
+  "zone2PlayerId": zod.string().uuid(),
+  "zone3PlayerId": zod.string().uuid(),
+  "zone4PlayerId": zod.string().uuid(),
+  "zone5PlayerId": zod.string().uuid(),
+  "zone6PlayerId": zod.string().uuid()
 })
 
 
@@ -518,7 +519,7 @@ export const UpdateEventResponse = zod.object({
   "rallyId": zod.number(),
   "sequence": zod.number(),
   "side": zod.enum(['home', 'away']),
-  "playerId": zod.number().nullish(),
+  "playerId": zod.string().uuid().nullish(),
   "action": zod.enum(['serve', 'receive', 'set', 'attack', 'block', 'dig']),
   "ballType": zod.enum(['serve', 'spike', 'tip', 'chance']).optional(),
   "quality": zod.number().nullish(),

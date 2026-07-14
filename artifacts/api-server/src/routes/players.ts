@@ -46,7 +46,15 @@ router.post("/matches/:matchId/players", async (req, res) => {
   const [created] = await db
     .insert(playersTable)
     // matchId 來自路徑（已驗證擁有權），不是 body——避免 client 亂塞別場比賽的 id。
-    .values({ matchId, name: body.name, number: body.number, role: body.role })
+    // id 則相反：body.id 有帶就用前端自己生的 uuid（client-mintable，見
+    // lib/db/src/schema/players.ts 的說明）；沒帶就交給資料庫的 defaultRandom() 生一個。
+    .values({
+      ...(body.id !== undefined && { id: body.id }),
+      matchId,
+      name: body.name,
+      number: body.number,
+      role: body.role,
+    })
     .returning();
 
   res.status(201).json(created);

@@ -7,10 +7,10 @@
  */
 
 export interface NewLineup {
-  zone1PlayerId: number;
-  zone2PlayerId: number;
-  zone3PlayerId: number;
-  zone4PlayerId: number;
-  zone5PlayerId: number;
-  zone6PlayerId: number;
+  zone1PlayerId: string;
+  zone2PlayerId: string;
+  zone3PlayerId: string;
+  zone4PlayerId: string;
+  zone5PlayerId: string;
+  zone6PlayerId: string;
 }

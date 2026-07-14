@@ -81,19 +81,19 @@ describe("diffRoster", () => {
     expect(diff.toDelete).toEqual([]);
   });
 
-  it("flags a changed existing player as update (playerId as number)", () => {
+  it("flags a changed existing player as update (playerId as uuid string)", () => {
     const diff = diffRoster(existing, [
       { id: "1", name: "A", number: 10, role: "S" }, // 背號改了
       { id: "2", name: "B", number: 2, role: "OH" }, // 沒變
     ]);
-    expect(diff.toUpdate).toEqual([{ playerId: 1, data: { name: "A", number: 10, role: "S" } }]);
+    expect(diff.toUpdate).toEqual([{ playerId: "1", data: { name: "A", number: 10, role: "S" } }]);
     expect(diff.toCreate).toEqual([]);
     expect(diff.toDelete).toEqual([]);
   });
 
   it("flags a removed player as delete", () => {
     const diff = diffRoster(existing, [{ id: "1", name: "A", number: 1, role: "S" }]);
-    expect(diff.toDelete).toEqual([2]);
+    expect(diff.toDelete).toEqual(["2"]);
     expect(diff.toCreate).toEqual([]);
     expect(diff.toUpdate).toEqual([]);
   });

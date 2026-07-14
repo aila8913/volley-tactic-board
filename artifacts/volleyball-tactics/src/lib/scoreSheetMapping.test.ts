@@ -121,7 +121,7 @@ describe("pointRecordToEvent", () => {
     expect(pointRecordToEvent(point, 1)).toEqual({
       sequence: 1,
       side: "home",
-      playerId: 12,
+      playerId: "12",
       action: "attack",
       source: "live",
     });
@@ -167,7 +167,7 @@ const makeEvent = (over: Partial<MatchEvent> & Pick<MatchEvent, "rallyId">): Mat
 describe("eventToMeta", () => {
   it("maps our player's event back to touchedBy (int id → string)", () => {
     expect(
-      eventToMeta(makeEvent({ rallyId: 1, side: "home", playerId: 12, action: "attack" })),
+      eventToMeta(makeEvent({ rallyId: 1, side: "home", playerId: "12", action: "attack" })),
     ).toEqual({ action: "attack", touchedBy: { side: "us", playerId: "12" } });
   });
 
@@ -267,7 +267,7 @@ describe("reconstructSetFromRallies", () => {
   it("attaches action/touchedBy from events when the map is provided (3b-ii)", () => {
     const rallies = [rally(1, "home", 100), rally(2, "away", 200)];
     const eventsByRallyId = new Map<number, MatchEvent[]>([
-      [100, [makeEvent({ rallyId: 100, side: "home", playerId: 12, action: "attack" })]],
+      [100, [makeEvent({ rallyId: 100, side: "home", playerId: "12", action: "attack" })]],
       [200, [makeEvent({ rallyId: 200, side: "away", playerId: null, action: "serve" })]],
     ]);
     const state = reconstructSetFromRallies(set, rallies, eventsByRallyId);
@@ -289,7 +289,7 @@ describe("reconstructSetFromRallies", () => {
     const rallies = [rally(1, "home", 100), rally(2, "home", 200)];
     // 只有 rally 100 有 event；rally 200 是「沒看到」，map 裡沒有它。
     const eventsByRallyId = new Map<number, MatchEvent[]>([
-      [100, [makeEvent({ rallyId: 100, side: "home", playerId: 5, action: "dig" })]],
+      [100, [makeEvent({ rallyId: 100, side: "home", playerId: "5", action: "dig" })]],
     ]);
     const state = reconstructSetFromRallies(set, rallies, eventsByRallyId);
     expect(state.history[0].action).toBe("dig");
@@ -303,8 +303,8 @@ describe("reconstructSetFromRallies", () => {
       [
         100,
         [
-          makeEvent({ rallyId: 100, sequence: 1, side: "home", playerId: 3, action: "receive" }),
-          makeEvent({ rallyId: 100, sequence: 2, side: "home", playerId: 9, action: "attack" }),
+          makeEvent({ rallyId: 100, sequence: 1, side: "home", playerId: "3", action: "receive" }),
+          makeEvent({ rallyId: 100, sequence: 2, side: "home", playerId: "9", action: "attack" }),
         ],
       ],
     ]);
@@ -319,8 +319,8 @@ describe("regularSubToApi", () => {
     expect(regularSubToApi(sub, 10, 8)).toEqual({
       homeScore: 10,
       awayScore: 8,
-      playerInId: 12,
-      playerOutId: 7,
+      playerInId: "12",
+      playerOutId: "7",
       kind: "regular",
     });
   });
@@ -401,8 +401,8 @@ describe("reconstructRecording", () => {
       { id: 200, setId: 2, rallyNumber: 1, homeScore: 0, awayScore: 0, winner: "home" },
     ];
     const events: MatchEvent[] = [
-      makeEvent({ rallyId: 100, side: "home", playerId: 5, action: "serve" }),
-      makeEvent({ rallyId: 200, side: "home", playerId: 9, action: "attack" }),
+      makeEvent({ rallyId: 100, side: "home", playerId: "5", action: "serve" }),
+      makeEvent({ rallyId: 200, side: "home", playerId: "9", action: "attack" }),
     ];
 
     const state = reconstructRecording([set1, set2], [set1Rallies, set2Rallies], events, []);
@@ -427,8 +427,8 @@ describe("reconstructRecording", () => {
       { id: 200, setId: 2, rallyNumber: 1, homeScore: 0, awayScore: 0, winner: "home" },
     ];
     const subs = [
-      makeSub({ setId: 1, playerOutId: 1, playerInId: 2, homeScore: 0, awayScore: 0 }),
-      makeSub({ setId: 2, playerOutId: 3, playerInId: 4, homeScore: 1, awayScore: 0 }),
+      makeSub({ setId: 1, playerOutId: "1", playerInId: "2", homeScore: 0, awayScore: 0 }),
+      makeSub({ setId: 2, playerOutId: "3", playerInId: "4", homeScore: 1, awayScore: 0 }),
     ];
 
     const state = reconstructRecording([set1, set2], [set1Rallies, set2Rallies], [], subs);
@@ -476,12 +476,12 @@ describe("reconstructRecording", () => {
       {
         id: 1,
         setId: 1,
-        zone1PlayerId: 11,
-        zone2PlayerId: 12,
-        zone3PlayerId: 13,
-        zone4PlayerId: 14,
-        zone5PlayerId: 15,
-        zone6PlayerId: 16,
+        zone1PlayerId: "11",
+        zone2PlayerId: "12",
+        zone3PlayerId: "13",
+        zone4PlayerId: "14",
+        zone5PlayerId: "15",
+        zone6PlayerId: "16",
       },
     ];
 
@@ -502,12 +502,12 @@ describe("reconstructRecording", () => {
       {
         id: 1,
         setId: 1,
-        zone1PlayerId: 11,
-        zone2PlayerId: 12,
-        zone3PlayerId: 13,
-        zone4PlayerId: 14,
-        zone5PlayerId: 15,
-        zone6PlayerId: 16,
+        zone1PlayerId: "11",
+        zone2PlayerId: "12",
+        zone3PlayerId: "13",
+        zone4PlayerId: "14",
+        zone5PlayerId: "15",
+        zone6PlayerId: "16",
       },
     ];
 
@@ -530,22 +530,22 @@ describe("reconstructRecording", () => {
       {
         id: 1,
         setId: 1,
-        zone1PlayerId: 11,
-        zone2PlayerId: 12,
-        zone3PlayerId: 13,
-        zone4PlayerId: 14,
-        zone5PlayerId: 15,
-        zone6PlayerId: 16,
+        zone1PlayerId: "11",
+        zone2PlayerId: "12",
+        zone3PlayerId: "13",
+        zone4PlayerId: "14",
+        zone5PlayerId: "15",
+        zone6PlayerId: "16",
       },
       {
         id: 2,
         setId: 2,
-        zone1PlayerId: 21,
-        zone2PlayerId: 22,
-        zone3PlayerId: 23,
-        zone4PlayerId: 24,
-        zone5PlayerId: 25,
-        zone6PlayerId: 26,
+        zone1PlayerId: "21",
+        zone2PlayerId: "22",
+        zone3PlayerId: "23",
+        zone4PlayerId: "24",
+        zone5PlayerId: "25",
+        zone6PlayerId: "26",
       },
     ];
 
@@ -569,22 +569,22 @@ describe("lineup snapshot mapping", () => {
   it("round-trips snapshot ↔ api", () => {
     const snapshot: LineupSnapshot = { 1: "11", 2: "12", 3: "13", 4: "14", 5: "15", 6: "16" };
     expect(lineupSnapshotToApi(snapshot)).toEqual({
-      zone1PlayerId: 11,
-      zone2PlayerId: 12,
-      zone3PlayerId: 13,
-      zone4PlayerId: 14,
-      zone5PlayerId: 15,
-      zone6PlayerId: 16,
+      zone1PlayerId: "11",
+      zone2PlayerId: "12",
+      zone3PlayerId: "13",
+      zone4PlayerId: "14",
+      zone5PlayerId: "15",
+      zone6PlayerId: "16",
     });
     const row: Lineup = {
       id: 9,
       setId: 2,
-      zone1PlayerId: 11,
-      zone2PlayerId: 12,
-      zone3PlayerId: 13,
-      zone4PlayerId: 14,
-      zone5PlayerId: 15,
-      zone6PlayerId: 16,
+      zone1PlayerId: "11",
+      zone2PlayerId: "12",
+      zone3PlayerId: "13",
+      zone4PlayerId: "14",
+      zone5PlayerId: "15",
+      zone6PlayerId: "16",
     };
     expect(apiLineupToSnapshot(row)).toEqual(snapshot);
   });
@@ -594,8 +594,8 @@ describe("reconstructRegularSubs", () => {
   it("keeps two independent subs at different positions", () => {
     // 位置 1 換成 2，位置 4 換成 5，兩筆彼此不相干，都保留。
     const subs = [
-      makeSub({ playerOutId: 1, playerInId: 2, homeScore: 3, awayScore: 1 }),
-      makeSub({ playerOutId: 4, playerInId: 5, homeScore: 6, awayScore: 2 }),
+      makeSub({ playerOutId: "1", playerInId: "2", homeScore: 3, awayScore: 1 }),
+      makeSub({ playerOutId: "4", playerInId: "5", homeScore: 6, awayScore: 2 }),
     ];
     expect(reconstructRegularSubs(subs)).toEqual([
       { outPlayerId: "1", inPlayerId: "2" },
@@ -608,24 +608,24 @@ describe("reconstructRegularSubs", () => {
     // inPlayerId，dedup 會把前一筆濾掉，只留下最後這筆——跟 useScoreSheet.ts 的
     // recordRegularSub 是同一套邏輯（見 scoreSheetMapping.ts 的函式註解）。
     const subs = [
-      makeSub({ playerOutId: 1, playerInId: 2, homeScore: 3, awayScore: 1 }),
-      makeSub({ playerOutId: 2, playerInId: 3, homeScore: 5, awayScore: 2 }),
+      makeSub({ playerOutId: "1", playerInId: "2", homeScore: 3, awayScore: 1 }),
+      makeSub({ playerOutId: "2", playerInId: "3", homeScore: 5, awayScore: 2 }),
     ];
     expect(reconstructRegularSubs(subs)).toEqual([{ outPlayerId: "2", inPlayerId: "3" }]);
   });
 
   it("ignores libero rows (issue #43 territory, not regular subs)", () => {
     const subs = [
-      makeSub({ playerOutId: 1, playerInId: 2, homeScore: 3, awayScore: 1 }),
-      makeSub({ playerOutId: 6, playerInId: null, kind: "libero", homeScore: 4, awayScore: 1 }),
+      makeSub({ playerOutId: "1", playerInId: "2", homeScore: 3, awayScore: 1 }),
+      makeSub({ playerOutId: "6", playerInId: null, kind: "libero", homeScore: 4, awayScore: 1 }),
     ];
     expect(reconstructRegularSubs(subs)).toEqual([{ outPlayerId: "1", inPlayerId: "2" }]);
   });
 
   it("skips regular rows with a null player id (shouldn't happen, but defends against it)", () => {
     const subs = [
-      makeSub({ playerOutId: 1, playerInId: null, homeScore: 3, awayScore: 1 }),
-      makeSub({ playerOutId: null, playerInId: 2, homeScore: 4, awayScore: 1 }),
+      makeSub({ playerOutId: "1", playerInId: null, homeScore: 3, awayScore: 1 }),
+      makeSub({ playerOutId: null, playerInId: "2", homeScore: 4, awayScore: 1 }),
     ];
     expect(reconstructRegularSubs(subs)).toEqual([]);
   });

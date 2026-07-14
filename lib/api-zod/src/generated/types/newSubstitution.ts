@@ -10,7 +10,7 @@ import type { SubstitutionKind } from './substitutionKind';
 export interface NewSubstitution {
   homeScore: number;
   awayScore: number;
-  playerInId?: number | null;
-  playerOutId?: number | null;
+  playerInId?: string | null;
+  playerOutId?: string | null;
   kind: SubstitutionKind;
 }

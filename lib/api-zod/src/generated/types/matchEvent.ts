@@ -15,7 +15,7 @@ export interface MatchEvent {
   rallyId: number;
   sequence: number;
   side: EventSide;
-  playerId?: number | null;
+  playerId?: string | null;
   action: EventAction;
   ballType?: BallType;
   quality?: number | null;

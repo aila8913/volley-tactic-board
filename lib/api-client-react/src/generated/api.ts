@@ -651,7 +651,7 @@ export const useCreatePlayer = <TError = ErrorType<unknown>,
     }
 
 export const getUpdatePlayerUrl = (matchId: number,
-    playerId: number,) => {
+    playerId: string,) => {
 
 
 
@@ -663,7 +663,7 @@ export const getUpdatePlayerUrl = (matchId: number,
  * @summary Update a player on a match's roster
  */
 export const updatePlayer = async (matchId: number,
-    playerId: number,
+    playerId: string,
     updatePlayer: UpdatePlayer, options?: RequestInit): Promise<Player> => {
 
   return customFetch<Player>(getUpdatePlayerUrl(matchId,playerId),
@@ -680,8 +680,8 @@ export const updatePlayer = async (matchId: number,
 
 
 export const getUpdatePlayerMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updatePlayer>>, TError,{matchId: number;playerId: number;data: BodyType<UpdatePlayer>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof updatePlayer>>, TError,{matchId: number;playerId: number;data: BodyType<UpdatePlayer>}, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updatePlayer>>, TError,{matchId: number;playerId: string;data: BodyType<UpdatePlayer>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updatePlayer>>, TError,{matchId: number;playerId: string;data: BodyType<UpdatePlayer>}, TContext> => {
 
 const mutationKey = ['updatePlayer'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -693,7 +693,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updatePlayer>>, {matchId: number;playerId: number;data: BodyType<UpdatePlayer>}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updatePlayer>>, {matchId: number;playerId: string;data: BodyType<UpdatePlayer>}> = (props) => {
           const {matchId,playerId,data} = props ?? {};
 
           return  updatePlayer(matchId,playerId,data,requestOptions)
@@ -714,18 +714,18 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
  * @summary Update a player on a match's roster
  */
 export const useUpdatePlayer = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updatePlayer>>, TError,{matchId: number;playerId: number;data: BodyType<UpdatePlayer>}, TContext>, request?: SecondParameter<typeof customFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updatePlayer>>, TError,{matchId: number;playerId: string;data: BodyType<UpdatePlayer>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof updatePlayer>>,
         TError,
-        {matchId: number;playerId: number;data: BodyType<UpdatePlayer>},
+        {matchId: number;playerId: string;data: BodyType<UpdatePlayer>},
         TContext
       > => {
       return useMutation(getUpdatePlayerMutationOptions(options));
     }
 
 export const getDeletePlayerUrl = (matchId: number,
-    playerId: number,) => {
+    playerId: string,) => {
 
 
 
@@ -737,7 +737,7 @@ export const getDeletePlayerUrl = (matchId: number,
  * @summary Remove a player from a match's roster
  */
 export const deletePlayer = async (matchId: number,
-    playerId: number, options?: RequestInit): Promise<void> => {
+    playerId: string, options?: RequestInit): Promise<void> => {
 
   return customFetch<void>(getDeletePlayerUrl(matchId,playerId),
   {
@@ -752,8 +752,8 @@ export const deletePlayer = async (matchId: number,
 
 
 export const getDeletePlayerMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deletePlayer>>, TError,{matchId: number;playerId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof deletePlayer>>, TError,{matchId: number;playerId: number}, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deletePlayer>>, TError,{matchId: number;playerId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deletePlayer>>, TError,{matchId: number;playerId: string}, TContext> => {
 
 const mutationKey = ['deletePlayer'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -765,7 +765,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deletePlayer>>, {matchId: number;playerId: number}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deletePlayer>>, {matchId: number;playerId: string}> = (props) => {
           const {matchId,playerId} = props ?? {};
 
           return  deletePlayer(matchId,playerId,requestOptions)
@@ -786,11 +786,11 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
  * @summary Remove a player from a match's roster
  */
 export const useDeletePlayer = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deletePlayer>>, TError,{matchId: number;playerId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deletePlayer>>, TError,{matchId: number;playerId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof deletePlayer>>,
         TError,
-        {matchId: number;playerId: number},
+        {matchId: number;playerId: string},
         TContext
       > => {
       return useMutation(getDeletePlayerMutationOptions(options));

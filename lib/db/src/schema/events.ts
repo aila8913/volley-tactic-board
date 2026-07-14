@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, real, text, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, uuid, real, text, pgEnum } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { ralliesTable } from "./rallies";
@@ -50,7 +50,7 @@ export const eventsTable = pgTable("events", {
   // onDelete: "set null"：刪掉一名球員（或刪整場比賽連帶清名單）時，把引用他的 event 的
   // playerId 設為 null，而不是擋下刪除。這一球「發生過」的事實仍保留，只是失去球員歸屬；
   // 若不設，預設 NO ACTION 會讓「刪比賽 → 連帶刪名單」因為 event 還指著球員而觸發外鍵違反。
-  playerId: integer("player_id").references(() => playersTable.id, { onDelete: "set null" }),
+  playerId: uuid("player_id").references(() => playersTable.id, { onDelete: "set null" }),
   action: eventActionEnum("action").notNull(),
   ballType: ballTypeEnum("ball_type"), // nullable：只有接球動作才需要填
   // 0~3 的品質評分，沿用排球記錄的慣例刻度：0 分 = 直接失誤、3 分 = 完美到位（舉球員可以自由選戰術）。
