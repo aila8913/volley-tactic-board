@@ -17,13 +17,15 @@
 > promote it first, then drop it. Read this file + `gh issue list --state open` + recent
 > `git log` at the start of a session instead of re-exploring the codebase.
 
-_Last updated: 2026-07-13 — 純規劃 session（無 code 落地）：#115 收尾暴露的「全域 store × 兩層真相
-脫鉤」根因家族（#117/#118/#119/#120）交 fable-advisor 評估，收斂成三條不變量並經 PO 拍板四項決定。
-完整紀錄＝ **#117 錨點留言**（三條不變量 + PO 四拍板 + 落地順序）；#118 body 已改寫（await 小修 →
-uuid 遷移）；#117–119 排進 M1。無未提交變更。三條不變量：I1 單一真相來源（有後端 id 的資料 DB 唯一
-權威、前端 store 只當快取，永不能是唯一副本／不帶 matchId 的 persist）；I2 per-match 狀態一定用 matchId
-當 key（否則「最後開的那場」蓋別場）；I3 一個實體一套 id、只鑄造一次。修法模板 repo 已有＝ #115 後的
-`useScoreSheet.ts`（`recordingsByMatch[matchId]`）。_
+_Last updated: 2026-07-14 — schema 換季第一刀落地：**players.id serial→uuid**（#118 的 schema 部分，
+commit `5741452`，branch `schema/players-id-uuid`，**PR 待開/待 merge**）。連動 events/lineups/
+substitutions 三張 FK 表改 uuid、openapi→codegen 重生、後端 players POST 收 body.id、順帶簡化 mapping
+層多餘的 Number/String 轉換；typecheck/lint/76 tests 全綠。dev DB 已 **drop 重建**成 uuid schema
+（int→uuid 不能原地 ALTER，只能 drop——用一次性腳本 `DROP…CASCADE` 後 `drizzle push`）。後端目前只是
+「有能力」收前端鑄造 id、行為不變；前端實際送 uuid ＋ handleRosterSave 改 await 是 #118 後續 PR。
+**兩條 branch 待送 PR**：本 branch（players uuid）＋ `docs/openvolley-external-reference`（70cf591，
+openvolley 外部參考 docs，上 session 遺留、尚未開 PR）。三條不變量提醒：I1 單一真相來源、I2 per-match
+狀態用 matchId 當 key、I3 一個實體一套 id 只鑄造一次（完整＝ #117 錨點留言）。_
 
 ## Current state
 
@@ -69,12 +71,13 @@ gh issue list --state open                   # 全部
 ```
 
 M1 收尾焦點：**全域 store 去汙染家族 #117/#118/#119**（#115 已修先發那條、CLOSED；同根因仍在別處——
-見 #117 錨點留言的三條不變量與落地順序）。順序＝(1) #117-最小止血：MatchList 顯示對不到資料夾的比賽；
-(2) schema 換季（趁部署前可丟資料窗口）：players.id→uuid（#118 離線版）／tournaments 表 uuid PK+cascade+API
-（#117 完整）／tactics 加 matchId（#119 前置）；(3) #118 前端 await；(4) #119 兩 store byMatch 分片+去
-persist；(5) #120 純展示唯讀站位視圖。另 #64（背景寫入失敗不 reconcile，關聯部署 #26／離線契約 #75）、
-#44（暫停/timeout，M1 唯一舊 open 項）。#120 純 UI、依賴 #119，暫不排期。（#115/#41/#50 本週關閉；
-#20/#63/#74 先前已關閉。）
+見 #117 錨點留言的三條不變量與落地順序）。順序＝(1) ✅ #117-最小止血（#122 已 merge）；
+(2) schema 換季（趁部署前可丟資料窗口）三刀，可拆 PR：**✅ players.id→uuid（#118 離線版，commit
+`5741452`，PR 待開/待 merge）**／⬜ tournaments 表 uuid PK+cascade+API（#117 完整，照 `useMatches.ts`
+模板）／⬜ tactics 加 matchId（#119 前置）；(3) #118 前端 await ＋實際送鑄造 uuid；(4) #119 兩 store
+byMatch 分片+去 persist；(5) #120 純展示唯讀站位視圖。另 #64（背景寫入失敗不 reconcile，關聯部署 #26／
+離線契約 #75）、#44（暫停/timeout，M1 唯一舊 open 項）。#120 純 UI、依賴 #119，暫不排期。（#115/#41/#50
+本週關閉；#20/#63/#74 先前已關閉。）
 進階版差異化（M4）：#51 動作子分類、#21 球線座標、#99 站位快照——同屬 advanced tier，可一起設計。
 
 ## Recently closed (past ~week)
