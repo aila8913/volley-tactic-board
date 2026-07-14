@@ -2,12 +2,13 @@
 
 這份文件是「比賽記錄與分析」這組新功能的規格入口，串接下面三份文件：
 
-| 文件                                     | 內容                                                           | 真正的規格來源                        |
-| ---------------------------------------- | -------------------------------------------------------------- | ------------------------------------- |
-| [product-vision.md](./product-vision.md) | 產品定位：給誰用、差異化、亮點、裝置形態（比下面三份更上一層） | 這份文件本身                          |
-| [product-spec.md](./product-spec.md)     | 要做什麼、為什麼（賽中記錄、賽後補填、防守數據分析）           | 這份文件本身                          |
-| [db-schema-spec.md](./db-schema-spec.md) | 資料表關係總覽                                                 | `lib/db/src/schema/*.ts`（程式碼）    |
-| [api-spec.md](./api-spec.md)             | API endpoint 總覽                                              | `lib/api-spec/openapi.yaml`（程式碼） |
+| 文件                                                                   | 內容                                                              | 真正的規格來源                        |
+| ---------------------------------------------------------------------- | ----------------------------------------------------------------- | ------------------------------------- |
+| [product-vision.md](./product-vision.md)                               | 產品定位：給誰用、差異化、亮點、裝置形態（比下面三份更上一層）    | 這份文件本身                          |
+| [product-spec.md](./product-spec.md)                                   | 要做什麼、為什麼（賽中記錄、賽後補填、防守數據分析）              | 這份文件本身                          |
+| [db-schema-spec.md](./db-schema-spec.md)                               | 資料表關係總覽                                                    | `lib/db/src/schema/*.ts`（程式碼）    |
+| [api-spec.md](./api-spec.md)                                           | API endpoint 總覽                                                 | `lib/api-spec/openapi.yaml`（程式碼） |
+| [external-openvolley-reference.md](./external-openvolley-reference.md) | 外部參考：openvolley 生態系全景（統計/ML/報表分層＋我們該抄哪層） | 外部（openvolley GitHub 組織）        |
 
 ## 目前進度
 
