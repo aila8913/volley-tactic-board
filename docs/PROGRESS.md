@@ -17,18 +17,23 @@
 > promote it first, then drop it. Read this file + `gh issue list --state open` + recent
 > `git log` at the start of a session instead of re-exploring the codebase.
 
-_Last updated: 2026-07-14（晚）— schema 換季第二刀完成、**待送 PR**：**#117 完整版——資料夾
-（tournaments）進 DB**。新增 `tournaments` 表（uuid PK+defaultRandom，client-mintable）、
-`matches.tournamentId` 從 text 改 uuid＋FK `onDelete: cascade`（＝PO 拍板「刪資料夾＝連同比賽刪」，
-下沉到 DB 一次做對）；openapi 加 `/tournaments` CRUD→codegen 重生、後端新 `routes/tournaments.ts`、
-前端 `useTournaments` 從 Zustand+persist 改寫成 API adapter（照 `useMatches` 模板），三個消費端改
-async/await，**順帶拆掉 #122 的孤兒 fallback**（cascade FK 保證孤兒結構上不可能）。dev DB：text→uuid
-不能原地自動轉型，先手動 `ALTER…USING`（欄位全 NULL 安全）再 `drizzle push` 補建表+FK；既有比賽
-tournamentId 清 NULL（localStorage 舊資料夾沒得遷移）。typecheck/lint/76 tests/prettier 全綠，端到端
-實跑驗過 cascade 刪除＋client-minted id＋rename。commit 時 `Closes #117`（完整根治，#122 只是止血）。
-順帶發現 **#127**（後端 match POST/PATCH 沒驗 tournamentId 擁有權，latent authz gap，真 auth 後要補）。
+\_Last updated: 2026-07-15 — schema 換季第二刀**已合併**：**#117 完整版——資料夾（tournaments）
+進 DB**（PR #128，commit `241a7eb`，`Closes #117`）。新增 `tournaments` 表（uuid PK+defaultRandom，
+client-mintable）、`matches.tournamentId` 從 text 改 uuid＋FK `onDelete: cascade`（＝PO 拍板「刪資料夾
+＝連同比賽刪」，下沉到 DB 一次做對）；openapi 加 `/tournaments` CRUD→codegen 重生、後端新
+`routes/tournaments.ts`、前端 `useTournaments` 從 Zustand+persist 改寫成 API adapter（照 `useMatches`
+模板），三個消費端改 async/await，**順帶拆掉 #122 的孤兒 fallback**（cascade FK 保證孤兒結構上不可能）。
+dev DB：text→uuid 不能原地自動轉型，先手動 `ALTER…USING`（欄位全 NULL 安全）再 `drizzle push` 補建表
++FK；既有比賽 tournamentId 清 NULL（localStorage 舊資料夾沒得遷移）。順帶發現 **#127**（後端 match
+POST/PATCH 沒驗 tournamentId 擁有權，latent authz gap，真 auth 後要補）。
+
+**#118 一度被誤關、07-15 已重開**：PR #124 body 寫「故不 close #118」，但 GitHub 關鍵字偵測是笨的
+子字串比對、不解析否定詞，merge 時照樣關掉（GraphQL `closer` = PR #124，非手動關）。#124 只完成
+schema 半段，**前端半段仍未做**（見下方 M1 焦點）。規則已落地進 ship skill Step 6：要留著寫
+「#118 保持 open」，通則是**正面描述、別用否定詞反轉句意**。
+
 三條不變量提醒：I1 單一真相來源、I2 per-match 狀態用 matchId 當 key、I3 一個實體一套 id 只鑄造一次
-（完整＝ #117 錨點留言）。_
+（完整＝ #117 錨點留言）。\_
 
 ## Current state
 
@@ -78,15 +83,22 @@ gh issue list --state open                   # 全部
 M1 收尾焦點：**全域 store 去汙染家族 #117/#118/#119**（#115 已修先發那條、CLOSED；同根因仍在別處——
 見 #117 錨點留言的三條不變量與落地順序）。順序＝(1) ✅ #117-最小止血（#122 已 merge）；
 (2) schema 換季（趁部署前可丟資料窗口）三刀，可拆 PR：**✅ players.id→uuid（#118 schema 部分，PR #124
-已 merge，commit `a40cb59`）**／**✅ tournaments 表 uuid PK+cascade+API（#117 完整版，待送 PR，`Closes #117`）**
-／⬜ tactics 加 matchId（#119 前置）；(3) #118 前端 await ＋實際送鑄造 uuid；(4) #119 兩 store
-byMatch 分片+去 persist；(5) #120 純展示唯讀站位視圖。另 #64（背景寫入失敗不 reconcile，關聯部署 #26／
+已 merge，commit `a40cb59`）**／**✅ tournaments 表 uuid PK+cascade+API（#117 完整版，PR #128 已 merge，
+commit `241a7eb`）**／⬜ tactics 加 matchId（#119 前置）；**(3) ⬜ #118 前端半段（issue 07-15 已重開）：
+`hooks/useMatches.ts` 的 createPlayer 實際送出鑄造好的 uuid（目前只送 `{name, number, role}`，
+`RosterEditDialog.tsx:68` 鑄的 uuid 被丟棄→同人兩套 id）＋ `RotationTable.tsx:29` 的
+`void saveRoster(...)` 改 await（目前存檔失敗會無聲吃掉球員）。後端 #124 已具備收 `body.id` 的能力，
+只差前端**；(4) #119 兩 store byMatch 分片+去 persist；(5) #120 純展示唯讀站位視圖。另 #64（背景寫入失敗不 reconcile，關聯部署 #26／
 離線契約 #75）、#44（暫停/timeout，M1 唯一舊 open 項）、**#127（後端沒驗 tournamentId 擁有權，真 auth 後補）**。
 #120 純 UI、依賴 #119，暫不排期。（#115/#41/#50 本週關閉；#20/#63/#74 先前已關閉。）
 進階版差異化（M4）：#51 動作子分類、#21 球線座標、#99 站位快照——同屬 advanced tier，可一起設計。
 
 ## Recently closed (past ~week)
 
+- **#117** — 資料夾（tournaments）進 DB：uuid PK + cascade FK（PR #128，commit 241a7eb）。`tournaments`
+  表 client-mintable uuid PK、`matches.tournamentId` text→uuid FK `onDelete: cascade`（刪資料夾＝連同
+  比賽刪，PO 拍板下沉到 DB）；前端 `useTournaments` 從 Zustand+persist 改成 API adapter。#122 的孤兒
+  fallback 一併拆除（cascade 保證孤兒結構上不可能）。留下 #127（tournamentId 擁有權未驗）。
 - **#115** — 計分表擁有自己逐局的先發快照，與戰術板/輪轉表全域 store 解耦（PR #121，commit ce5c9f5）。
   這是「全域 store 去汙染」家族第一條落地；暴露的同根因兄弟 #117/#118/#119 見上方焦點與 #117 錨點留言。
 - **#41** — 計分表復原改**逐動作 undo**（PR #113，commit a21afce，另一 session 完成、wrap-up 對帳關閉）：
