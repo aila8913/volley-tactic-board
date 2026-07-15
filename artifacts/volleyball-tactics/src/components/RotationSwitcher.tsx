@@ -17,7 +17,8 @@ export default function RotationSwitcher() {
       <button
         onClick={goPrev}
         data-testid="rotation-prev"
-        className="wobbly-border flex-1 bg-white px-2 py-1.5 text-xs font-bold hover:bg-gray-100"
+        className="flex-1 rounded-lg border border-white/[0.26] bg-white/[0.05] px-2 py-1.5 text-xs
+          font-bold text-[#f5f5f0] transition hover:border-[#c6f135] hover:text-[#c6f135]"
       >
         ‹ 上一輪
       </button>
@@ -27,7 +28,8 @@ export default function RotationSwitcher() {
       <button
         onClick={goNext}
         data-testid="rotation-next"
-        className="wobbly-border flex-1 bg-white px-2 py-1.5 text-xs font-bold hover:bg-gray-100"
+        className="flex-1 rounded-lg border border-white/[0.26] bg-white/[0.05] px-2 py-1.5 text-xs
+          font-bold text-[#f5f5f0] transition hover:border-[#c6f135] hover:text-[#c6f135]"
       >
         下一輪 ›
       </button>

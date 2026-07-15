@@ -25,6 +25,14 @@ const COLORS = [
   "#111111",
 ];
 
+// 次要按鈕（取消/undo-redo/匯出這類不強調的操作），跟比賽列表那邊的次要按鈕同一套語言。
+const SECONDARY_BTN_CLASS =
+  "rounded-lg border border-white/[0.26] bg-white/[0.05] text-[#f5f5f0] transition " +
+  "hover:border-[#c6f135] hover:text-[#c6f135]";
+
+// 主要按鈕（戰術布置/儲存這類最強調的操作），螢光綠底、深色文字。
+const PRIMARY_BTN_CLASS = "rounded-lg bg-[#c6f135] text-[#0a0b07] transition hover:brightness-110";
+
 export default function TacticsBoardPanel() {
   const {
     activeTool,
@@ -118,7 +126,11 @@ export default function TacticsBoardPanel() {
   const handleTool = (tool: ToolType) => setActiveTool(tool);
 
   const toolBtnClass = (tool: ToolType) =>
-    `wobbly-border py-1.5 text-xs font-bold transition-colors ${activeTool === tool ? "bg-[#CCFF00] shadow-[2px_2px_0_0_#111]" : "bg-white hover:bg-gray-100"}`;
+    `rounded-lg border py-1.5 text-xs font-bold transition ${
+      activeTool === tool
+        ? "border-[#c6f135] bg-[#c6f135] text-[#0a0b07]"
+        : "border-white/[0.26] bg-white/[0.05] text-[#f5f5f0] hover:border-[#c6f135] hover:text-[#c6f135]"
+    }`;
 
   const handleDelete = () => {
     if (selectedObjectId) {
@@ -205,21 +217,22 @@ export default function TacticsBoardPanel() {
 
   // 戰術列表區塊（非布置模式和布置模式都會用到，抽出來避免重複）
   const TacticsList = ({ maxHeight }: { maxHeight: string }) => (
-    <div className="border-2 border-[#111] bg-white p-2">
-      <div className="text-[10px] font-bold mb-1">已儲存 (點擊載入)</div>
+    <div className="rounded-lg border border-white/[0.14] bg-white/[0.08] p-2 shadow-sm shadow-black/20 backdrop-blur-md">
+      <div className="mb-1 text-[10px] font-bold">已儲存 (點擊載入)</div>
       {tactics.length === 0 ? (
-        <p className="text-[10px] text-gray-400 py-1">尚無已儲存戰術</p>
+        <p className="py-1 text-[10px] text-[#a9b096]">尚無已儲存戰術</p>
       ) : (
         <div className="space-y-1 overflow-y-auto" style={{ maxHeight }}>
           {tactics.map((t) => (
             <div
               key={t.id}
-              className={`flex items-center text-[10px] p-1 gap-1 ${t.id === activeProjectId ? "bg-[#CCFF00]/30" : "hover:bg-gray-100"}`}
+              className={`flex items-center gap-1 rounded p-1 text-[10px] ${t.id === activeProjectId ? "bg-[#c6f135]/20" : "hover:bg-white/[0.08]"}`}
             >
               {editingId === t.id ? (
                 <input
                   autoFocus
-                  className="flex-1 text-[10px] border border-[#111] px-1 outline-none"
+                  className="flex-1 rounded border border-white/[0.26] bg-white/[0.05] px-1 text-[10px]
+                    text-[#f5f5f0] outline-none focus:border-[#c6f135]"
                   value={editingName}
                   onChange={(e) => setEditingName(e.target.value)}
                   onBlur={() => handleRename(t)}
@@ -230,7 +243,7 @@ export default function TacticsBoardPanel() {
                 />
               ) : (
                 <span
-                  className="truncate flex-1 cursor-pointer hover:underline"
+                  className="flex-1 cursor-pointer truncate hover:underline"
                   onClick={() => {
                     loadProject(t.data as unknown as SavedTacticData, t.id, t.name);
                     toast({ title: "專案已載入" });
@@ -245,12 +258,12 @@ export default function TacticsBoardPanel() {
                   setEditingId(t.id);
                   setEditingName(t.name);
                 }}
-                className="shrink-0 text-gray-400 hover:text-[#111] leading-none px-0.5"
+                className="shrink-0 px-0.5 leading-none text-[#a9b096] hover:text-[#f5f5f0]"
                 title="改名"
               >
                 ✏
               </button>
-              <span className="text-gray-400 shrink-0">
+              <span className="shrink-0 text-[#a9b096]">
                 {new Date(t.updatedAt).toLocaleDateString()}
               </span>
               <button
@@ -259,7 +272,7 @@ export default function TacticsBoardPanel() {
                   deleteTactic.mutate({ tacticId: t.id });
                   if (t.id === activeProjectId) setActiveProjectId(null);
                 }}
-                className="shrink-0 text-gray-400 hover:text-red-600 font-bold leading-none px-0.5"
+                className="shrink-0 px-0.5 font-bold leading-none text-[#a9b096] hover:text-[#ef4444]"
                 title="刪除"
                 data-testid={`button-delete-project-${t.id}`}
               >
@@ -273,18 +286,18 @@ export default function TacticsBoardPanel() {
   );
 
   return (
-    <div className="flex flex-col h-full bg-[#f8f8f8]">
-      <div className="p-3 flex flex-col gap-4 overflow-y-auto flex-1">
+    <div className="flex h-full flex-col font-dash">
+      <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-3">
         {!isLayoutMode ? (
           <>
             <section>
-              <h2 className="font-display mb-2 text-[15px] font-bold">戰術布置</h2>
-              <p className="text-[10px] text-gray-500 mb-2">
+              <h2 className="mb-2 text-[15px] font-bold">戰術布置</h2>
+              <p className="mb-2 text-[10px] text-[#a9b096]">
                 「戰術布置」用輪轉表現在的站位重新編排一個戰術。想修改已儲存的戰術，先在下面清單點一個載入，「編輯」才會亮起。
               </p>
               <button
                 onClick={() => enterTacticsLayout()}
-                className="w-full wobbly-border py-1.5 bg-[#CCFF00] hover:bg-[#111] hover:text-[#CCFF00] transition-colors font-bold text-xs shadow-[2px_2px_0_0_#111]"
+                className={`w-full py-1.5 text-xs font-bold ${PRIMARY_BTN_CLASS}`}
                 data-testid="button-enter-layout-mode"
               >
                 戰術布置
@@ -295,7 +308,7 @@ export default function TacticsBoardPanel() {
                   setCourtView("tactics");
                 }}
                 disabled={!activeProjectId}
-                className="w-full wobbly-border py-1.5 bg-white hover:bg-gray-100 font-bold text-xs mt-1.5 disabled:opacity-40 disabled:hover:bg-white"
+                className={`mt-1.5 w-full py-1.5 text-xs font-bold disabled:opacity-40 ${SECONDARY_BTN_CLASS}`}
                 data-testid="button-edit-current"
               >
                 編輯
@@ -306,16 +319,18 @@ export default function TacticsBoardPanel() {
         ) : (
           <>
             <section>
-              <div className="flex items-center justify-between mb-2">
-                <h2 className="font-display text-[15px] font-bold">戰術管理</h2>
+              <div className="mb-2 flex items-center justify-between">
+                <h2 className="text-[15px] font-bold">戰術管理</h2>
                 <span
-                  className={`text-[10px] font-bold px-1.5 py-0.5 wobbly-border ${activeProjectId ? "bg-[#CCFF00]" : "bg-gray-200 text-gray-500"}`}
+                  className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${activeProjectId ? "bg-[#c6f135] text-[#0a0b07]" : "bg-white/[0.08] text-[#a9b096]"}`}
                 >
                   {activeProjectId ? "正在編輯" : "草稿"}
                 </span>
               </div>
               <input
-                className="w-full wobbly-border px-2 py-1.5 text-xs bg-white outline-none focus:ring-2 focus:ring-[#CCFF00]"
+                className="w-full rounded-lg border border-white/[0.26] bg-white/[0.05] px-2 py-1.5
+                  text-xs text-[#f5f5f0] outline-none focus:border-[#c6f135] focus:ring-1
+                  focus:ring-[#c6f135]"
                 placeholder="戰術名稱（如：接發11號強發）"
                 value={projectSituation}
                 onChange={(e) => setProjectSituation(e.target.value)}
@@ -324,13 +339,13 @@ export default function TacticsBoardPanel() {
             </section>
 
             <section>
-              <div className="flex justify-between items-center mb-2">
-                <h2 className="font-display text-[15px] font-bold">畫筆工具</h2>
+              <div className="mb-2 flex items-center justify-between">
+                <h2 className="text-[15px] font-bold">畫筆工具</h2>
                 <div className="flex gap-1">
                   <button
                     onClick={undo}
                     disabled={historyIndex <= 0}
-                    className="px-2 py-1 wobbly-border bg-white text-xs disabled:opacity-50 hover:bg-[#CCFF00]"
+                    className={`px-2 py-1 text-xs disabled:opacity-50 ${SECONDARY_BTN_CLASS}`}
                     title="Undo (Ctrl+Z)"
                   >
                     ↩
@@ -338,7 +353,7 @@ export default function TacticsBoardPanel() {
                   <button
                     onClick={redo}
                     disabled={historyIndex >= history.length - 1}
-                    className="px-2 py-1 wobbly-border bg-white text-xs disabled:opacity-50 hover:bg-[#CCFF00]"
+                    className={`px-2 py-1 text-xs disabled:opacity-50 ${SECONDARY_BTN_CLASS}`}
                     title="Redo (Ctrl+Y)"
                   >
                     ↪
@@ -346,7 +361,7 @@ export default function TacticsBoardPanel() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-1.5 mb-2">
+              <div className="mb-2 grid grid-cols-2 gap-1.5">
                 <button
                   onClick={() => handleTool("select")}
                   className={toolBtnClass("select")}
@@ -393,7 +408,9 @@ export default function TacticsBoardPanel() {
               <button
                 onClick={handleDelete}
                 disabled={!selectedObjectId}
-                className="w-full wobbly-border py-1.5 text-xs bg-white hover:bg-red-100 disabled:opacity-50 text-red-600 font-bold transition-colors"
+                className="w-full rounded-lg border border-white/[0.26] bg-white/[0.05] py-1.5 text-xs
+                  font-bold text-[#ef4444] transition hover:border-[#ef4444] hover:bg-[#ef4444]/10
+                  disabled:opacity-50"
                 data-testid="button-delete-marker"
               >
                 刪除選取標記 (Del)
@@ -401,8 +418,8 @@ export default function TacticsBoardPanel() {
             </section>
 
             <section>
-              <h2 className="font-display mb-2 text-[15px] font-bold">防守範圍</h2>
-              <div className="grid grid-cols-3 gap-1.5 mb-2">
+              <h2 className="mb-2 text-[15px] font-bold">防守範圍</h2>
+              <div className="mb-2 grid grid-cols-3 gap-1.5">
                 <button
                   onClick={() => handleTool("circle")}
                   className={toolBtnClass("circle")}
@@ -427,10 +444,10 @@ export default function TacticsBoardPanel() {
               </div>
 
               {selectedRange && (
-                <div className="p-2 bg-white wobbly-border text-xs space-y-2">
-                  <div className="font-bold text-xs">範圍屬性</div>
+                <div className="space-y-2 rounded-lg border border-white/[0.14] bg-white/[0.08] p-2 text-xs shadow-sm shadow-black/20 backdrop-blur-md">
+                  <div className="text-xs font-bold">範圍屬性</div>
                   <div>
-                    <label className="text-[10px] mb-1 block">
+                    <label className="mb-1 block text-[10px] text-[#a9b096]">
                       透明度: {Math.round(selectedRange.opacity * 100)}%
                     </label>
                     <input
@@ -444,16 +461,16 @@ export default function TacticsBoardPanel() {
                           opacity: parseFloat(e.target.value),
                         })
                       }
-                      className="w-full accent-[#CCFF00]"
+                      className="w-full accent-[#c6f135]"
                     />
                   </div>
                   <div>
-                    <label className="text-[10px] mb-1 block">顏色</label>
-                    <div className="flex gap-1 flex-wrap">
+                    <label className="mb-1 block text-[10px] text-[#a9b096]">顏色</label>
+                    <div className="flex flex-wrap gap-1">
                       {COLORS.map((c) => (
                         <button
                           key={c}
-                          className={`w-5 h-5 border-2 border-[#111] ${selectedRange.color === c ? "ring-2 ring-offset-1 ring-[#111]" : ""}`}
+                          className={`h-5 w-5 rounded border border-white/[0.26] ${selectedRange.color === c ? "ring-2 ring-[#c6f135] ring-offset-1 ring-offset-[#0a0b07]" : ""}`}
                           style={{ backgroundColor: c }}
                           onClick={() => updateDefenseRange(selectedRange.id, { color: c })}
                         />
@@ -462,7 +479,7 @@ export default function TacticsBoardPanel() {
                   </div>
                   {selectedRange.type === "circle" && (
                     <div>
-                      <label className="text-[10px] mb-1 block">
+                      <label className="mb-1 block text-[10px] text-[#a9b096]">
                         半徑: {selectedRange.radius || 15}
                       </label>
                       <input
@@ -473,14 +490,14 @@ export default function TacticsBoardPanel() {
                         onChange={(e) =>
                           updateDefenseRange(selectedRange.id, { radius: parseInt(e.target.value) })
                         }
-                        className="w-full accent-[#CCFF00]"
+                        className="w-full accent-[#c6f135]"
                       />
                     </div>
                   )}
                   {selectedRange.type === "ellipse" && (
                     <>
                       <div>
-                        <label className="text-[10px] mb-1 block">
+                        <label className="mb-1 block text-[10px] text-[#a9b096]">
                           長軸: {selectedRange.rx || 15}
                         </label>
                         <input
@@ -491,11 +508,11 @@ export default function TacticsBoardPanel() {
                           onChange={(e) =>
                             updateDefenseRange(selectedRange.id, { rx: parseInt(e.target.value) })
                           }
-                          className="w-full accent-[#CCFF00]"
+                          className="w-full accent-[#c6f135]"
                         />
                       </div>
                       <div>
-                        <label className="text-[10px] mb-1 block">
+                        <label className="mb-1 block text-[10px] text-[#a9b096]">
                           短軸: {selectedRange.ry || 10}
                         </label>
                         <input
@@ -506,11 +523,11 @@ export default function TacticsBoardPanel() {
                           onChange={(e) =>
                             updateDefenseRange(selectedRange.id, { ry: parseInt(e.target.value) })
                           }
-                          className="w-full accent-[#CCFF00]"
+                          className="w-full accent-[#c6f135]"
                         />
                       </div>
                       <div>
-                        <label className="text-[10px] mb-1 block">
+                        <label className="mb-1 block text-[10px] text-[#a9b096]">
                           旋轉: {selectedRange.rotation || 0}°
                         </label>
                         <input
@@ -523,7 +540,7 @@ export default function TacticsBoardPanel() {
                               rotation: parseInt(e.target.value),
                             })
                           }
-                          className="w-full accent-[#CCFF00]"
+                          className="w-full accent-[#c6f135]"
                         />
                       </div>
                     </>
@@ -531,7 +548,7 @@ export default function TacticsBoardPanel() {
                   {selectedRange.type === "fan" && (
                     <>
                       <div>
-                        <label className="text-[10px] mb-1 block">
+                        <label className="mb-1 block text-[10px] text-[#a9b096]">
                           半徑: {selectedRange.radius || 15}
                         </label>
                         <input
@@ -544,11 +561,11 @@ export default function TacticsBoardPanel() {
                               radius: parseInt(e.target.value),
                             })
                           }
-                          className="w-full accent-[#CCFF00]"
+                          className="w-full accent-[#c6f135]"
                         />
                       </div>
                       <div>
-                        <label className="text-[10px] mb-1 block">
+                        <label className="mb-1 block text-[10px] text-[#a9b096]">
                           扇形角度:{" "}
                           {Math.abs(
                             (selectedRange.endAngle || 45) - (selectedRange.startAngle || -45),
@@ -569,11 +586,11 @@ export default function TacticsBoardPanel() {
                               endAngle: half,
                             });
                           }}
-                          className="w-full accent-[#CCFF00]"
+                          className="w-full accent-[#c6f135]"
                         />
                       </div>
                       <div>
-                        <label className="text-[10px] mb-1 block">
+                        <label className="mb-1 block text-[10px] text-[#a9b096]">
                           旋轉方向: {selectedRange.rotation || 0}°
                         </label>
                         <input
@@ -586,7 +603,7 @@ export default function TacticsBoardPanel() {
                               rotation: parseInt(e.target.value),
                             })
                           }
-                          className="w-full accent-[#CCFF00]"
+                          className="w-full accent-[#c6f135]"
                         />
                       </div>
                     </>
@@ -604,7 +621,7 @@ export default function TacticsBoardPanel() {
               <div className="grid grid-cols-3 gap-1.5">
                 <button
                   onClick={handleCancel}
-                  className="wobbly-border py-1.5 bg-white hover:bg-gray-100 font-bold text-xs"
+                  className={`py-1.5 text-xs font-bold ${SECONDARY_BTN_CLASS}`}
                   data-testid="button-cancel-layout"
                 >
                   取消
@@ -612,7 +629,7 @@ export default function TacticsBoardPanel() {
                 <button
                   onClick={handleSave}
                   disabled={createTactic.isPending || updateTactic.isPending}
-                  className="wobbly-border py-1.5 bg-[#CCFF00] hover:bg-[#111] hover:text-[#CCFF00] transition-colors font-bold text-xs shadow-[2px_2px_0_0_#111] disabled:opacity-50"
+                  className={`py-1.5 text-xs font-bold disabled:opacity-50 ${PRIMARY_BTN_CLASS}`}
                   data-testid="button-finish-layout"
                 >
                   儲存
@@ -620,7 +637,7 @@ export default function TacticsBoardPanel() {
                 <button
                   onClick={handleSaveAs}
                   disabled={createTactic.isPending}
-                  className="wobbly-border py-1.5 bg-white hover:bg-gray-100 font-bold text-xs disabled:opacity-50"
+                  className={`py-1.5 text-xs font-bold disabled:opacity-50 ${SECONDARY_BTN_CLASS}`}
                   data-testid="button-save-as-layout"
                 >
                   另存新檔
@@ -631,26 +648,26 @@ export default function TacticsBoardPanel() {
         )}
       </div>
 
-      <div className="p-3 border-t-2 border-[#111] bg-white">
-        <h2 className="font-display text-[15px] font-bold mb-2">分享匯出</h2>
+      <div className="border-t border-white/[0.12] p-3">
+        <h2 className="mb-2 text-[15px] font-bold">分享匯出</h2>
         <div className="grid grid-cols-2 gap-1.5">
           <button
             onClick={handleExportPNG}
-            className="wobbly-border py-1.5 bg-white text-xs hover:bg-[#CCFF00] font-bold"
+            className={`py-1.5 text-xs font-bold ${SECONDARY_BTN_CLASS}`}
             data-testid="button-export-png"
           >
             匯出 PNG
           </button>
           <button
             onClick={handleExportJSON}
-            className="wobbly-border py-1.5 bg-white text-xs hover:bg-[#CCFF00] font-bold"
+            className={`py-1.5 text-xs font-bold ${SECONDARY_BTN_CLASS}`}
             data-testid="button-export-json"
           >
             匯出 JSON
           </button>
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="wobbly-border py-1.5 bg-white text-xs hover:bg-[#CCFF00] font-bold"
+            className={`py-1.5 text-xs font-bold ${SECONDARY_BTN_CLASS}`}
             data-testid="button-import-json"
           >
             匯入 JSON

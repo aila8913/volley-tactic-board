@@ -9,6 +9,12 @@ import RotationSwitcher from "./RotationSwitcher";
 import RosterEditDialog from "./RosterEditDialog";
 import { useToast } from "../hooks/use-toast";
 
+// 小按鈕共用樣式（編輯/重置站位/清除畫筆），跟比賽列表那邊的次要按鈕是同一套語言，
+// 只是尺寸縮小配合這裡的資訊密度。
+const PANEL_BUTTON_CLASS =
+  "rounded-lg border border-white/[0.26] bg-white/[0.05] px-2 py-1 text-xs " +
+  "font-bold text-[#f5f5f0] transition hover:border-[#c6f135] hover:text-[#c6f135]";
+
 export default function RotationTable() {
   const { roster, setRoster, rotations, currentRotation, startingLiberoId } = useRotationTable();
   const resetCurrentRotationPositions = useRotationTable(
@@ -65,15 +71,15 @@ export default function RotationTable() {
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#f8f8f8]">
-      <div className="p-4 overflow-y-auto flex-1 space-y-5">
+    <div className="flex h-full flex-col font-dash">
+      <div className="flex-1 space-y-5 overflow-y-auto p-4">
         {/* 球員名單：可拖到球場（輪轉視圖吸附格子；戰術視圖+布置模式自由放置） */}
         <section>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="font-display text-[15px] font-bold">球員設定</h2>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-[15px] font-bold">球員設定</h2>
             <button
               onClick={() => setIsRosterDialogOpen(true)}
-              className="wobbly-border bg-white px-2 py-0.5 text-xs font-bold hover:bg-gray-100"
+              className={PANEL_BUTTON_CLASS}
               data-testid="button-edit-roster"
             >
               編輯
@@ -81,40 +87,41 @@ export default function RotationTable() {
           </div>
           <div className="space-y-1">
             {roster.length === 0 && (
-              <p className="text-xs text-gray-500">尚未設定球員，點右上角「編輯」新增</p>
+              <p className="text-xs text-[#a9b096]">尚未設定球員，點右上角「編輯」新增</p>
             )}
             {roster.map((p) => (
               <div
                 key={p.id}
                 draggable
                 onDragStart={(e) => e.dataTransfer.setData("text/plain", p.id)}
-                className={`flex items-center gap-2 text-sm cursor-grab active:cursor-grabbing wobbly-border px-1.5 py-1 ${
-                  p.role === "L"
-                    ? "bg-red-100"
-                    : onCourtIds.has(p.id)
-                      ? "bg-[#CCFF00]/30"
-                      : "bg-white"
-                }`}
+                className={`roster-row flex cursor-grab items-center gap-2 rounded-lg border px-1.5
+                  py-1 text-sm shadow-sm shadow-black/20 backdrop-blur-md active:cursor-grabbing ${
+                    p.role === "L"
+                      ? "border-[#ef4444]/40 bg-[#ef4444]/15"
+                      : onCourtIds.has(p.id)
+                        ? "border-[#c6f135]/40 bg-[#c6f135]/15"
+                        : "border-white/[0.14] bg-white/[0.08]"
+                  }`}
                 data-testid={`roster-row-${p.id}`}
               >
-                {/* L 用紅色區分，其他用灰色 */}
+                {/* L 用紅色區分，其他用灰綠色 */}
                 <span
-                  className={`w-8 text-right text-xs font-bold ${p.role === "L" ? "text-red-600" : "text-gray-600"}`}
+                  className={`w-8 text-right text-xs font-bold ${p.role === "L" ? "text-[#ef4444]" : "text-[#a9b096]"}`}
                 >
                   {p.role}
                 </span>
-                <span className="w-8 text-gray-500">{p.number}</span>
+                <span className="w-8 text-[#a9b096]">{p.number}</span>
                 <span className="flex-1">{p.name}</span>
                 {/* 狀態顯示跟一般球員統一，不再用按鈕手動切換先發：
                     已上場（含 L）沿用同一個「已上場」標籤；
                     L 沒上場但被指定為先發（在球場備位區等待）則顯示「備位」，
                     要變成先發只要把它拖到球場後排（Court.tsx 的 placePlayerOnCourt 會自動同步 startingLiberoId）。 */}
                 {onCourtIds.has(p.id) ? (
-                  <span className="text-[10px] text-gray-500">已上場</span>
+                  <span className="text-[10px] text-[#a9b096]">已上場</span>
                 ) : (
                   p.role === "L" &&
                   p.id === startingLiberoId && (
-                    <span className="text-[10px] text-[#FF6B00] font-bold">備位</span>
+                    <span className="text-[10px] font-bold text-[#f5a623]">備位</span>
                   )
                 )}
               </div>
@@ -125,18 +132,17 @@ export default function RotationTable() {
         {/* 輪次選擇：6 個縮圖 + 重置/清除按鈕 */}
         {hasRotations && (
           <section>
-            <h2 className="font-display mb-1 text-[15px] font-bold">輪次選擇</h2>
+            <h2 className="mb-1 text-[15px] font-bold">輪次選擇</h2>
             <RotationSwitcher />
-            <div className="flex gap-2 mt-1">
-              <button
-                onClick={handleResetRotation}
-                className="flex-1 wobbly-border bg-white px-2 py-1 text-xs font-bold hover:bg-gray-100"
-              >
+            <div className="mt-1 flex gap-2">
+              <button onClick={handleResetRotation} className={`flex-1 ${PANEL_BUTTON_CLASS}`}>
                 重置站位
               </button>
               <button
                 onClick={clearMarkers}
-                className="flex-1 wobbly-border bg-white px-2 py-1 text-xs font-bold hover:bg-red-100 text-red-600"
+                className="flex-1 rounded-lg border border-white/[0.26] bg-white/[0.05] px-2 py-1
+                  text-xs font-bold text-[#a9b096] transition hover:border-[#ef4444]
+                  hover:bg-[#ef4444]/10 hover:text-[#ef4444]"
               >
                 清除畫筆
               </button>
@@ -146,13 +152,13 @@ export default function RotationTable() {
       </div>
 
       {/* Tips Section */}
-      <div className="p-3 border-t-2 border-[#111] bg-white">
+      <div className="border-t border-white/[0.12] p-3">
         <details className="group">
-          <summary className="font-display cursor-pointer font-bold outline-none marker:content-[''] text-sm">
+          <summary className="cursor-pointer text-sm font-bold outline-none marker:content-['']">
             <span className="group-open:hidden">👉 新手提示 (Tips)</span>
             <span className="hidden group-open:inline">👇 隱藏提示</span>
           </summary>
-          <ul className="mt-2 text-xs space-y-1 list-disc pl-4 text-gray-700">
+          <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-[#a9b096]">
             <li>輪轉視圖：把球員從名單拖到球場，會自動吸附到最近的號位，6 個輪次同步推算</li>
             <li>戰術視圖 + 布置模式：自由拖放，只影響目前輪次，不受格子限制</li>
             <li>切換輪次後自動回到輪轉視圖</li>
