@@ -74,9 +74,22 @@ describe("diffRoster", () => {
   it("flags a player with no matching id as create", () => {
     const diff = diffRoster(existing, [
       ...existing,
-      { name: "C", number: 3, role: "MB" }, // 沒 id → 新增
+      { name: "C", number: 3, role: "MB" }, // 沒 id（MatchFormDialog 新增列）→ 新增，不帶 id 欄位，交給 DB 生
     ]);
     expect(diff.toCreate).toEqual([{ name: "C", number: 3, role: "MB" }]);
+    expect(diff.toUpdate).toEqual([]);
+    expect(diff.toDelete).toEqual([]);
+  });
+
+  it("carries the client-minted id through to toCreate when a new player already has one", () => {
+    // RosterEditDialog 會用 uuidv4() 幫新球員先鑄好 id（同一個 id 也被存進輪轉表站位），
+    // 這個 id 對不到 existing，仍然是「新增」，但要把 id 一起送出去，讓後端沿用同一個 id，
+    // 而不是自己另生一個——不然前端站位認得的 id 在後端就找不到對應的球員了。
+    const diff = diffRoster(existing, [
+      ...existing,
+      { id: "new-uuid-123", name: "C", number: 3, role: "MB" },
+    ]);
+    expect(diff.toCreate).toEqual([{ name: "C", number: 3, role: "MB", id: "new-uuid-123" }]);
     expect(diff.toUpdate).toEqual([]);
     expect(diff.toDelete).toEqual([]);
   });
