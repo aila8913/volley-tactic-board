@@ -149,6 +149,28 @@ The PR body structure lives in `.github/PULL_REQUEST_TEMPLATE.md` — follow it
 Explain: "gh pr create 透過 GitHub CLI 直接開 Pull Request。PR 是讓程式碼在合併進
 main 之前被看過、討論的機會，也留下修改記錄。"
 
+### 提到 issue 編號時：用正面描述
+
+**要關**：`Closes #118`。**要留著**：寫「**#118 保持 open**」。
+
+**絕對不要寫「不 close #118」「故不 close #118」**——GitHub 的關鍵字偵測是笨的子字串比對
+（`close|closes|fix|fixes|resolve|resolves` 後面接 `#數字`），**不解析任何語言的否定詞**。
+只要那個字串出現在 body 裡，merge 時照樣關。這個坑已經踩過兩次（#58；以及 PR #124 寫了
+「故不 close #118」仍關掉 #118，害沒做完的前端半段從 backlog 消失了一天）。
+
+送出前先掃一遍 body：出現 `close/fix/resolve` 緊接 `#數字`、但那張 issue 其實要留著的，
+改寫成「#數字 保持 open」。squash merge 會把 body 拉進 commit message，所以 commit
+message 同一條規則。
+
+> **通則：以後盡量用正面描述**，不要靠否定詞去反轉一個句子的意思。理由不只 GitHub 會
+> 誤判——否定句對人類讀者也比較容易看漏（漏掉一個「不」字，意思就完全相反），而正面描述
+> 直接講出「實際成立的狀態是什麼」。同理：與其寫「這個 PR 沒有動到 schema」，不如寫
+> 「這個 PR 只動前端」；與其寫「測試沒跑」，不如寫「測試待補：<哪些>」。
+
+**兄弟坑——逗號列表不會全關**：`Closes #35, #45, #37` 只關第一個（#35），後面的只是引用。
+要關多張就每張都重複關鍵字：`Closes #35, closes #45, closes #37`。多張 issue 的 PR merge
+後，逐張 `gh issue view <n> --json state` 確認，別假設 body 有生效。
+
 Command:
 
 ```
