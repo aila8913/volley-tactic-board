@@ -7,6 +7,7 @@ import { MatchPlayer } from "../types/match";
 import { isLineupComplete } from "../lib/rotationLogic";
 import RotationSwitcher from "./RotationSwitcher";
 import RosterEditDialog from "./RosterEditDialog";
+import { useToast } from "../hooks/use-toast";
 
 export default function RotationTable() {
   const { roster, setRoster, rotations, currentRotation, startingLiberoId } = useRotationTable();
@@ -20,13 +21,29 @@ export default function RotationTable() {
   const { players: serverRoster } = useRoster(Number(matchId));
   const saveRoster = useSaveRoster();
   const [isRosterDialogOpen, setIsRosterDialogOpen] = useState(false);
+  const { toast } = useToast();
 
   // 球員名單同時要存進輪轉表自己的 roster（本地即時反映），也要回寫到後端。
   // 回寫用 diff：把新名單對伺服器現有名單比對，只送有變動的 create/patch/delete。
-  const handleRosterSave = (players: MatchPlayer[]) => {
+  //
+  // 為什麼要 async/await 而不是原本的 void saveRoster(...)：
+  // 原本不等待背景回寫的結果，寫入失敗（網路斷線、後端驗證錯誤等）會被無聲吞掉——
+  // setRoster 已經讓畫面看起來「存好了」，但球員其實沒進資料庫，使用者完全不會發現。
+  // 這裡改成 await，抓到錯誤時用 toast 提醒使用者，跟 MatchFormDialog.tsx 儲存失敗
+  // 用的是同一套 useToast + destructive 樣式，不重複造一套新的錯誤提示模式。
+  const handleRosterSave = async (players: MatchPlayer[]) => {
+    // local-first：不管後端回寫成不成功，先讓畫面立刻反映使用者剛編輯的名單。
     setRoster(players);
     if (matchId) {
-      void saveRoster(Number(matchId), serverRoster, players);
+      try {
+        await saveRoster(Number(matchId), serverRoster, players);
+      } catch {
+        toast({
+          title: "名單儲存失敗",
+          description: "球員名單尚未同步到伺服器，請稍後再試一次",
+          variant: "destructive",
+        });
+      }
     }
   };
 

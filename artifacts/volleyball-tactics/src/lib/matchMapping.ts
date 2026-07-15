@@ -52,6 +52,14 @@ export function serverMatchToDomain(m: ApiMatch, players: ApiPlayer[] = []): Mat
 //   - RosterEditDialog 給新球員補的是 uuid、MatchFormDialog 新列則根本沒 id，
 //     兩者都對不到 existing → 視為新增。
 //   - 既有球員帶的是 String(serverId)，對得到 → 視情況更新或不動。
+//
+// 新增的這個 uuid 若有值，要一併送給後端建立（見下方 toCreate.push），不能丟掉：
+// RosterEditDialog 鑄的 uuid 同時被存進輪轉表 store 當站位的 playerId，若後端不收、
+// 改用 DB 的 defaultRandom() 另生一個 id，同一個人就會有兩套 id——前端站位認得的
+// id 在後端找不到，幽靈清理會把剛排好的站位當成無主資料掃掉。送出前端鑄的 id，
+// 才能保住「一個實體只鑄造一次 id」這個不變量（即使後端也有能力生 id，也不能自己
+// 另生一份跟前端不同的）。MatchFormDialog 新增列沒有 id（p.id 為 undefined）則維持
+// 原行為，不送 id、交給 DB 生。
 export interface RosterDiff {
   toCreate: NewPlayer[];
   toUpdate: { playerId: string; data: UpdatePlayer }[];
@@ -74,7 +82,12 @@ export function diffRoster(existing: MatchPlayer[], next: readonly RosterInput[]
     const prev = p.id !== undefined ? existingById.get(p.id) : undefined;
     if (!prev) {
       // 對不到既有球員 → 新增。
-      toCreate.push({ name: p.name, number: p.number, role: p.role });
+      toCreate.push({
+        name: p.name,
+        number: p.number,
+        role: p.role,
+        ...(p.id !== undefined && { id: p.id }),
+      });
       continue;
     }
     // 對得到 → 只有欄位真的變了才發 PATCH，沒變就不打不必要的請求。
