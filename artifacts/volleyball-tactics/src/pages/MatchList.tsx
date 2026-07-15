@@ -1,8 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { Folder, Pencil, Trash2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { Folder, Pencil, Trash2, Plus } from "lucide-react";
 import { useMatchList, useDeleteMatch } from "@/hooks/useMatches";
 import { useTournamentList, useDeleteTournament } from "@/hooks/useTournaments";
 import MatchFormDialog from "@/components/MatchFormDialog";
@@ -85,71 +83,104 @@ export default function MatchList() {
   };
 
   return (
-    <div className="min-h-screen w-full bg-white">
+    <div className="min-h-screen w-full bg-[#0a0b07] font-dash text-[#f5f5f0]">
       <div className="mx-auto max-w-3xl px-4 py-8">
         <div className="mb-6 flex items-center justify-between">
-          <h1 className="text-2xl font-bold">比賽列表</h1>
+          <h1 className="font-badge text-2xl font-black">比賽列表</h1>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={openCreateTournamentDialog}>
+            <button
+              type="button"
+              onClick={openCreateTournamentDialog}
+              className="inline-flex h-10 items-center gap-1.5 rounded-full border border-white/[0.26]
+                px-5 text-[13px] font-semibold text-[#f5f5f0] transition hover:border-[#c6f135]
+                hover:text-[#c6f135]"
+            >
+              <Plus className="h-[15px] w-[15px]" />
               新增資料夾
-            </Button>
-            <Button onClick={openCreateMatchDialog}>新增比賽</Button>
+            </button>
+            <button
+              type="button"
+              onClick={openCreateMatchDialog}
+              className="inline-flex h-10 items-center gap-1.5 rounded-full bg-[#c6f135] px-5 text-[13px]
+                font-semibold text-[#0a0b07] transition hover:brightness-110"
+            >
+              <Plus className="h-[15px] w-[15px]" />
+              新增比賽
+            </button>
           </div>
         </div>
 
         {isLoading ? (
-          <Card>
-            <CardContent className="py-12 text-center text-muted-foreground">載入中…</CardContent>
-          </Card>
+          <div className="rounded-2xl border border-white/[0.12] bg-white/[0.07] py-12 text-center text-[#a9b096] backdrop-blur-md">
+            載入中…
+          </div>
         ) : items.length === 0 ? (
-          <Card>
-            <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
-              <p className="text-muted-foreground">尚未建立任何比賽或資料夾</p>
-              <Button onClick={openCreateMatchDialog}>新增第一場比賽</Button>
-            </CardContent>
-          </Card>
+          <div className="flex flex-col items-center gap-4 rounded-2xl border border-white/[0.12] bg-white/[0.07] py-12 text-center backdrop-blur-md">
+            <p className="text-[#a9b096]">尚未建立任何比賽或資料夾</p>
+            <button
+              type="button"
+              onClick={openCreateMatchDialog}
+              className="inline-flex h-10 items-center gap-1.5 rounded-full bg-[#c6f135] px-5 text-[13px]
+                font-semibold text-[#0a0b07] transition hover:brightness-110"
+            >
+              新增第一場比賽
+            </button>
+          </div>
         ) : (
           <div className="space-y-3">
             {items.map((item) =>
               item.kind === "tournament" ? (
-                <Card
+                <article
                   key={item.data.id}
-                  className={
-                    selectedTournamentId === item.data.id ? "ring-2 ring-primary" : undefined
-                  }
+                  onClick={() => setSelectedTournamentId(item.data.id)}
+                  onDoubleClick={() => navigate(`/tournaments/${item.data.id}`)}
+                  className={`relative flex cursor-pointer select-none flex-col rounded-2xl border
+                    bg-white/[0.07] p-5 shadow-lg shadow-black/35 backdrop-blur-md transition ${
+                      selectedTournamentId === item.data.id
+                        ? "border-[#c6f135]/70"
+                        : "border-white/[0.12]"
+                    }`}
                 >
-                  <CardHeader className="flex flex-row items-start justify-between space-y-0">
-                    <div
-                      className="flex flex-1 cursor-pointer select-none items-center gap-2"
-                      onClick={() => setSelectedTournamentId(item.data.id)}
-                      onDoubleClick={() => navigate(`/tournaments/${item.data.id}`)}
-                    >
-                      <Folder className="h-5 w-5 text-muted-foreground" />
+                  <div className="flex items-start justify-between gap-2.5">
+                    <div className="flex items-center gap-3">
+                      <span className="flex h-[38px] w-[38px] flex-shrink-0 items-center justify-center rounded-xl bg-[#c6f135]/15 text-[#c6f135]">
+                        <Folder className="h-[19px] w-[19px]" />
+                      </span>
                       <div>
-                        <CardTitle>{item.data.name}</CardTitle>
-                        <CardDescription>
+                        <h2 className="font-badge text-[17px] font-black">{item.data.name}</h2>
+                        <p className="text-xs text-[#a9b096]">
                           {matches.filter((m) => m.tournamentId === item.data.id).length} 場比賽
-                        </CardDescription>
+                        </p>
                       </div>
                     </div>
-                    <div className="flex gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => openEditTournamentDialog(item.data)}
+                    <div className="flex flex-shrink-0 gap-1">
+                      <button
+                        type="button"
+                        aria-label="編輯資料夾"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openEditTournamentDialog(item.data);
+                        }}
+                        className="flex h-[30px] w-[30px] items-center justify-center rounded-full
+                          text-[#a9b096] transition hover:bg-white/[0.12] hover:text-[#f5f5f0]"
                       >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleDeleteTournament(item.data)}
+                        <Pencil className="h-[15px] w-[15px]" />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="刪除資料夾"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteTournament(item.data);
+                        }}
+                        className="flex h-[30px] w-[30px] items-center justify-center rounded-full
+                          text-[#a9b096] transition hover:bg-[#ef4444]/15 hover:text-[#ef4444]"
                       >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                        <Trash2 className="h-[15px] w-[15px]" />
+                      </button>
                     </div>
-                  </CardHeader>
-                </Card>
+                  </div>
+                </article>
               ) : (
                 <MatchCard
                   key={item.data.id}
