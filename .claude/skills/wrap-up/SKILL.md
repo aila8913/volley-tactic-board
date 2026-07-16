@@ -33,6 +33,12 @@ numbers.
 2. **Check the current backlog.** Run `gh issue list --state open --limit 100`. Cross-
    reference against what happened this session:
    - Work that this session's commits/diff appear to **finish** → candidate to close.
+   - **Issues opened by the other team member** (two-person team — see the 分工表 in
+     CONTRIBUTING.md「協作與溝通」): don't close these unilaterally unless this session's
+     PR literally completed them via `Closes #n`. Otherwise propose a comment that
+     @-mentions the opener asking them to confirm/close, and leave the issue open. Every
+     close must carry a comment explaining what resolved it (commit/PR) or why it's not
+     planned — a silent manual close is the failure mode this rule exists to prevent.
    - **Design decisions that changed or were abandoned this session** → close the
      affected issue immediately with a one-line reason (e.g. "decided not to implement",
      "replaced by #NN", "design changed to X"). Don't leave stale open issues that no

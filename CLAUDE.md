@@ -92,6 +92,30 @@ Windows while passing in CI.
 - `pnpm-workspace.yaml` enforces a 1-day minimum npm package release age as a supply-chain safeguard
   (`minimumReleaseAge`). Don't remove or bypass it when adding dependencies.
 
+## Team & collaboration rules
+
+Two-person team: `aila8913` (owner, full-stack — backend/db/infra/product) and `tangyi1025`
+(design & UI — `area:design`, visual side of `area:frontend`). The human-facing collaboration
+conventions live in CONTRIBUTING.md's「協作與溝通」section; the rules Claude must actively
+enforce are:
+
+- **Cross-area PRs need the partner as reviewer before merge.** If a diff touches the other
+  member's area, or any shared-convention file (`CLAUDE.md`, `CONTRIBUTING.md`,
+  `.claude/skills/`, `docs/design-spec.md`, `lib/api-spec/openapi.yaml`,
+  `lib/db/src/schema/`), add the partner via `gh pr edit --add-reviewer` and do NOT
+  squash-merge until they've responded. The `ship` skill has a dedicated step for this.
+- **Never close an issue silently.** Prefer `Closes #n` in a PR body; a manual close must
+  carry a comment explaining why (done by which commit/PR, or "not planned because…").
+  Closing an issue the partner opened needs their @-mentioned confirmation first, unless a
+  PR literally completed it.
+- **Project discussion belongs on GitHub, not chat apps** — issue comments for task-scoped
+  questions, PR reviews for code, a `question`-labeled issue for new decisions. When the
+  user relays a decision made over chat, offer to record the conclusion on the relevant
+  issue/PR.
+- **Conventions for the partner's Claude are communicated by editing the shared config files
+  themselves** (CLAUDE.md / CONTRIBUTING.md / `.claude/skills/`) via a reviewed PR — never
+  assume the other Claude "was told" something that isn't written here.
+
 ## Collaboration style
 
 The user is using this project to learn full-stack development end-to-end, not just to ship features. This
