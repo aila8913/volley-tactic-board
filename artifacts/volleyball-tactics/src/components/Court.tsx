@@ -7,34 +7,36 @@ import Markers from "./Markers";
 import DefenseRange from "./DefenseRange";
 
 // 球場「真正比賽用」的座標範圍，永遠固定 0~100 / 0~200——格子吸附、界外判斷、
-// 6 個站位格全部都認這組數字，不會因為下面要多留 L 備位空間就跟著變動。
+// 6 個站位格全部都認這組數字，不會因為旁邊要多留 L 備位空間就跟著變動。
 const COURT_W = 100;
 const COURT_H = 200;
 
-// 一格站位格的寬度（跟 rotationLogic.ts 算 6 個站位格用的是同一顆球場，欄寬概念一致），
-// 拿來當「L 備位紅框至少要留多寬」的量尺（issue #18 + 新需求：至少一格 + 10px）。
-const GRID_CELL = COURT_W / 3; // ≈ 33.33
-// SVG viewBox 用的是抽象座標單位，不是螢幕真正的 px，沒辦法把「10px」精確換算進來；
-// 這裡直接借用跟球場同一套座標尺度加 10 個單位當緩衝，不追求 px 級精確，只求「肉眼看
-// 起來比一格再寬鬆一些」，兩邊（我方/對方）都用這個深度來留白。
-const LIBERO_ZONE_DEPTH = GRID_CELL + 10; // ≈ 43.33
+// L 備位紅框的尺寸（issue #18）。原本連同緩衝一起畫在球場「上下方」，會把球場本體
+// 往內壓縮快 30% 高度；2026-07-15 改成畫在球場「左右側」、對齊 1 號位的高度——
+// 縱向是排球場比較稀缺的方向（球場本身就是窄長形），橫向留白換來的球場本體反而更大。
+const LIBERO_BOX_SIZE = 18;
+// 留給備位框的水平寬度：框本身 18 + 兩側各留一點視覺呼吸空間，不追求 px 級精確。
+const LIBERO_ZONE_WIDTH = LIBERO_BOX_SIZE + 14; // = 32
 
 // court-canvas：SVG 實際要畫出來的範圍，比賽場地（0~100/0~200）只是置中畫在裡面的
-// 一塊，上下各多留 LIBERO_ZONE_DEPTH 空間給 1 號位後方的 L 紅框備位格（issue #18）。
-const COURT_CANVAS_MIN_Y = -LIBERO_ZONE_DEPTH;
-const COURT_CANVAS_HEIGHT = COURT_H + LIBERO_ZONE_DEPTH * 2;
+// 一塊，左右各多留 LIBERO_ZONE_WIDTH 空間給 1 號位外側的 L 紅框備位格。垂直方向
+// 完全不用再留白，canvas 高度直接等於球場本身的高度。
+const COURT_CANVAS_MIN_X = -LIBERO_ZONE_WIDTH;
+const COURT_CANVAS_WIDTH = COURT_W + LIBERO_ZONE_WIDTH * 2;
+const COURT_CANVAS_MIN_Y = 0;
+const COURT_CANVAS_HEIGHT = COURT_H;
 
-// 輪轉視圖：viewBox 固定等於 court-canvas（球場本身 + 上下 L 備位留白），球員只能
+// 輪轉視圖：viewBox 固定等於 court-canvas（球場本身 + 左右 L 備位留白），球員只能
 // 吸附在 6 個格子裡，嚴格對應真實比賽規則，不需要、也不應該讓人跑到界外。
-const VIEWBOX_ROTATION = `0 ${COURT_CANVAS_MIN_Y} ${COURT_W} ${COURT_CANVAS_HEIGHT}`;
+const VIEWBOX_ROTATION = `${COURT_CANVAS_MIN_X} ${COURT_CANVAS_MIN_Y} ${COURT_CANVAS_WIDTH} ${COURT_CANVAS_HEIGHT}`;
 
 // 戰術視圖：白板要跟外層 panel 一樣大（不是固定留一小圈邊界），court-canvas（球場
-// +上下 L 備位留白）置中畫在裡面。用 wrapper 實際量到的寬高比決定要往哪個方向多留白，
+// +左右 L 備位留白）置中畫在裡面。用 wrapper 實際量到的寬高比決定要往哪個方向多留白，
 // 這樣球場才不會被拉伸變形——量不到尺寸（還沒 mount）就先退回跟輪轉視圖一樣的範圍。
 function computeTacticsViewBox(size: { width: number; height: number } | null): string {
   if (!size || size.width <= 0 || size.height <= 0) return VIEWBOX_ROTATION;
   const containerRatio = size.width / size.height;
-  const courtCanvasRatio = COURT_W / COURT_CANVAS_HEIGHT;
+  const courtCanvasRatio = COURT_CANVAS_WIDTH / COURT_CANVAS_HEIGHT;
   let vw: number, vh: number;
   if (containerRatio > courtCanvasRatio) {
     // panel 比 court-canvas「寬」：高度吃滿 court-canvas 的高，寬度依 panel 比例往外撐開
@@ -42,10 +44,10 @@ function computeTacticsViewBox(size: { width: number; height: number } | null): 
     vw = vh * containerRatio;
   } else {
     // panel 比 court-canvas「窄／高」：寬度吃滿 court-canvas 的寬，高度依 panel 比例往外撐開
-    vw = COURT_W;
+    vw = COURT_CANVAS_WIDTH;
     vh = vw / containerRatio;
   }
-  const minX = -(vw - COURT_W) / 2;
+  const minX = COURT_CANVAS_MIN_X - (vw - COURT_CANVAS_WIDTH) / 2;
   const minY = COURT_CANVAS_MIN_Y - (vh - COURT_CANVAS_HEIGHT) / 2;
   return `${minX} ${minY} ${vw} ${vh}`;
 }
@@ -274,20 +276,26 @@ export default function Court() {
     topPercent: ((y - vbY) / vbHeight) * 100,
   });
 
-  // L 備位紅框（issue #18 + 新需求）：畫在 1 號位正後方——我方 1 號位 x=83（見
-  // rotationLogic.ts 的 zoneCoords），對方鏡射過來 x=17，兩側都留在球場 baseline
-  // 之外、留白帶正中央。尺寸抓玩家圓圈（半徑 6）的 1.5 倍左右。
-  const LIBERO_BOX_SIZE = 18;
+  // L 備位紅框（issue #18，2026-07-15 改成側邊留白）：畫在 1 號位外側——
+  // 我方 1 號位 y=185（見 rotationLogic.ts 的 zoneCoords，zone 1: {x:0.83, y:0.85}，
+  // 我方半場是 y:100~200，100 + 0.85*100 = 185），對方鏡射過來 y=15（200-185）。
+  // 框在留白帶裡置中，尺寸抓玩家圓圈（半徑 6）的 1.5 倍左右。
+  const OUR_ZONE1_Y = 185;
+  const OPPONENT_ZONE1_Y = COURT_H - OUR_ZONE1_Y; // = 15
+  const LIBERO_STRIP_MARGIN = (LIBERO_ZONE_WIDTH - LIBERO_BOX_SIZE) / 2;
   const ourLiberoBox = {
-    x: 83 - LIBERO_BOX_SIZE / 2,
-    y: COURT_H + LIBERO_ZONE_DEPTH / 2 - LIBERO_BOX_SIZE / 2,
+    x: COURT_W + LIBERO_STRIP_MARGIN,
+    y: OUR_ZONE1_Y - LIBERO_BOX_SIZE / 2,
   };
   const opponentLiberoBox = {
-    x: 17 - LIBERO_BOX_SIZE / 2,
-    y: -LIBERO_ZONE_DEPTH / 2 - LIBERO_BOX_SIZE / 2,
+    x: -LIBERO_ZONE_WIDTH + LIBERO_STRIP_MARGIN,
+    y: OPPONENT_ZONE1_Y - LIBERO_BOX_SIZE / 2,
   };
   // 我方紅框正中央的百分比位置，給下面可拖曳的 L 備位圓圈疊上去用。
-  const ourLiberoCenterPercent = svgPointToPercent(83, COURT_H + LIBERO_ZONE_DEPTH / 2);
+  const ourLiberoCenterPercent = svgPointToPercent(
+    COURT_W + LIBERO_STRIP_MARGIN + LIBERO_BOX_SIZE / 2,
+    OUR_ZONE1_Y,
+  );
 
   return (
     <div className="h-full w-full flex flex-col justify-center items-center relative">
@@ -295,15 +303,11 @@ export default function Court() {
           做區分）。原本這裡有 10px 留白＋灰底是為了讓人看出白板比球場大（issue #49），
           現在留白責任整個下放給下面的「場地元件」，白板跟 panel 完全重疊本來就是
           刻意的設計選擇，不需要再額外畫出來強調。 */}
-      <div
-        className={`flex-1 w-full flex items-center justify-center min-h-0 py-[5px] px-[10px] ${
-          courtView === "rotation" ? "max-w-[500px] mx-auto" : ""
-        }`}
-      >
+      <div className="flex-1 w-full flex items-center justify-center min-h-0 py-[5px] px-[10px]">
         {/* 場地元件：白板到球場真正外框之間的留白，上下 5px、左右 10px（上面那層
             padding），兩個視圖共用同一組數字。輪轉視圖原本用不對稱的 32/72/16px 是
             為了幫最下面那排「L 備位」列留位置，現在備位改畫進 SVG 自己的留白帶裡
-            （見 LIBERO_ZONE_DEPTH），外層就不用再特別留大留白了。 */}
+            （見 LIBERO_ZONE_WIDTH），外層就不用再特別留大留白了。 */}
         <div
           id="court-wrapper"
           ref={wrapperRef}
@@ -315,7 +319,7 @@ export default function Court() {
           style={
             courtView === "tactics"
               ? undefined
-              : { aspectRatio: `${COURT_W} / ${COURT_CANVAS_HEIGHT}` }
+              : { aspectRatio: `${COURT_CANVAS_WIDTH} / ${COURT_CANVAS_HEIGHT}` }
           }
         >
           <svg
@@ -334,21 +338,14 @@ export default function Court() {
             className="touch-none select-none"
           >
             <defs>
-              <filter id="wobbly-filter">
-                <feTurbulence
-                  type="fractalNoise"
-                  baseFrequency="0.05"
-                  numOctaves="2"
-                  result="noise"
-                />
-                <feDisplacementMap
-                  in="SourceGraphic"
-                  in2="noise"
-                  scale="1.5"
-                  xChannelSelector="R"
-                  yChannelSelector="G"
-                />
-              </filter>
+              {/* 球場底色：深青漸層（design-spec.md 第 5 節，2026-07-15 選定的方案 B）——
+                  比暖木色更貼近整體深色 UI，冷色調對己方萊姆綠跟對方珊瑚紅球員點都是安全的
+                  對比組合。 */}
+              <linearGradient id="court-gradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#12403f" />
+                <stop offset="50%" stopColor="#1c5654" />
+                <stop offset="100%" stopColor="#2a6e6a" />
+              </linearGradient>
               <marker
                 id="arrowhead"
                 markerWidth="6"
@@ -372,7 +369,14 @@ export default function Court() {
             </defs>
 
             {/* Court Background */}
-            <rect id="court-bg" x="0" y="0" width={COURT_W} height={COURT_H} fill="#fff" />
+            <rect
+              id="court-bg"
+              x="0"
+              y="0"
+              width={COURT_W}
+              height={COURT_H}
+              fill="url(#court-gradient)"
+            />
 
             {/* 球場粗框：兩個視圖都畫在 SVG 裡、貼著球場本身（0,0 到 100,200），不會
                 被上下 L 備位留白帶撐大（過去輪轉視圖是靠 wrapper 的 CSS border 畫框，
@@ -389,7 +393,8 @@ export default function Court() {
               width={COURT_W}
               height={COURT_H}
               fill="none"
-              stroke="#111111"
+              stroke="#F5F5F0"
+              strokeOpacity="0.6"
               strokeWidth="3"
               vectorEffect="non-scaling-stroke"
               rx="3"
@@ -423,9 +428,18 @@ export default function Court() {
               rx="4"
             />
 
-            <g className="wobbly-svg">
-              {/* Center Line (Net) — x 從 0 到 100 貼齊 div 邊框 */}
-              <line x1="0" y1="100" x2="100" y2="100" stroke="#111" strokeWidth="2.5" />
+            <g>
+              {/* Center Line (Net) — x 從 0 到 100 貼齊 div 邊框。米白半透明，見
+                  docs/design-spec.md 第 5 節「球網/邊線」。 */}
+              <line
+                x1="0"
+                y1="100"
+                x2="100"
+                y2="100"
+                stroke="#F5F5F0"
+                strokeOpacity="0.6"
+                strokeWidth="2.5"
+              />
 
               {/* Attack Lines (3m)
                 viewBox 高 200，每半場 100 個單位代表 9m，3m = 100/3 ≈ 33.3
@@ -435,7 +449,8 @@ export default function Court() {
                 y1="66.7"
                 x2="100"
                 y2="66.7"
-                stroke="#111"
+                stroke="#F5F5F0"
+                strokeOpacity="0.6"
                 strokeWidth="1"
                 strokeDasharray="3 3"
               />
@@ -444,7 +459,8 @@ export default function Court() {
                 y1="133.3"
                 x2="100"
                 y2="133.3"
-                stroke="#111"
+                stroke="#F5F5F0"
+                strokeOpacity="0.6"
                 strokeWidth="1"
                 strokeDasharray="3 3"
               />
@@ -452,7 +468,7 @@ export default function Court() {
 
             {/* Zone Labels */}
             {labelToggles.zone && (
-              <g className="opacity-10 font-sans text-4xl" fill="#111">
+              <g className="opacity-10 font-sans text-4xl" fill="#F5F5F0">
                 {/* Bottom half (Our team) */}
                 <text x="80" y="180" textAnchor="middle">
                   1
@@ -495,10 +511,24 @@ export default function Court() {
               </g>
             )}
 
-            <text x="50" y="15" fontSize="6" fill="#111" textAnchor="middle" className="font-sans">
+            <text
+              x="50"
+              y="15"
+              fontSize="6"
+              fill="#F5F5F0"
+              textAnchor="middle"
+              className="font-sans"
+            >
               對手
             </text>
-            <text x="50" y="192" fontSize="6" fill="#111" textAnchor="middle" className="font-sans">
+            <text
+              x="50"
+              y="192"
+              fontSize="6"
+              fill="#F5F5F0"
+              textAnchor="middle"
+              className="font-sans"
+            >
               我方
             </text>
 

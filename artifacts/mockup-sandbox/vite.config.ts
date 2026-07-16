@@ -5,23 +5,19 @@ import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 import { mockupPreviewPlugin } from "./mockupPreviewPlugin";
 
-const rawPort = process.env.PORT;
-
-if (!rawPort) {
-  throw new Error("PORT environment variable is required but was not provided.");
-}
-
+// 本機開發預設 5174（見 .claude/launch.json 的 mockup-sandbox 設定）；
+// Replit / 正式環境透過 PORT env var 覆蓋。跟 volleyball-tactics 的 vite.config.ts
+// 用同一套「有預設值，不強制要求」的寫法，這個 sandbox 才能直接被 preview 工具
+// 用 launch.json 啟動，不用另外手動設環境變數。
+const rawPort = process.env.PORT ?? "5174";
 const port = Number(rawPort);
 
 if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-const basePath = process.env.BASE_PATH;
-
-if (!basePath) {
-  throw new Error("BASE_PATH environment variable is required but was not provided.");
-}
+// 本機開發預設 "/"；部署到子路徑時透過 BASE_PATH env var 覆蓋。
+const basePath = process.env.BASE_PATH ?? "/";
 
 export default defineConfig({
   base: basePath,

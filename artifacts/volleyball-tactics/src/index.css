@@ -137,11 +137,24 @@
   }
 }
 
+/* 戰術板頁面已經退役這套「手繪白板感」（見 docs/design-spec.md），但 RadialMenu.tsx
+   （計分表在用）還依賴 wobbly-border，先留著；等計分表也套用深色設計語言時再一併移除。 */
 .wobbly-border {
   border: 2px solid hsl(var(--border));
   border-radius: 8px 12px 6px 10px / 10px 6px 12px 8px;
 }
 
-.wobbly-svg {
-  filter: url(#wobbly-filter);
+/* 球員設定名單的「發光」hover 效果——直接寫成一般 CSS class，不用 Tailwind 的
+   hover:shadow-[...] 方括號寫法。方括號裡兩層光暈疊加、每層又各自用 rgba() 帶逗號，
+   逗號巢狀容易讓 Tailwind 的任意值解析出錯（class 名字寫上去了，但沒真的產生 CSS
+   規則），所以改成明確的 :hover 規則最保險。只在滑鼠移過去（:hover）時觸發，
+   跟拖曳（draggable/dragstart）完全是兩回事，拖曳中瀏覽器原生的半透明拖曳預覽
+   不會受這條規則影響。 */
+.roster-row {
+  transition: box-shadow 0.2s ease;
+}
+.roster-row:hover {
+  box-shadow:
+    0 0 6px 1px rgba(255, 255, 255, 0.55),
+    0 0 26px 6px rgba(198, 241, 53, 0.5);
 }

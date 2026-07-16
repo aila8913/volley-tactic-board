@@ -1,6 +1,5 @@
 import React, { useEffect } from "react";
 import { useParams, Link } from "wouter";
-import { Button } from "@/components/ui/button";
 import BackToMatchListButton from "../components/BackToMatchListButton";
 import RotationTable from "../components/RotationTable";
 import TacticsBoardPanel from "../components/TacticsBoardPanel";
@@ -26,40 +25,46 @@ export default function TacticsBoard() {
   const backHref = match?.tournamentId ? `/tournaments/${match.tournamentId}` : "/";
 
   return (
-    <div className="flex h-screen w-full flex-col overflow-hidden bg-white text-[#111111] font-sans">
-      <header className="flex items-center justify-between border-b-2 border-[#111] px-4 py-3 shrink-0">
+    // 整頁共用一張材質更豐富的背景（兩顆柔光暈疊底層斜切漸層，呼應球場的螢光綠強調色
+    // 跟深青球場色，比單純兩色漸層更有層次）。玻璃分兩層、刻意做出不同的「霧面程度」：
+    // 外層 chrome（header、左右功能欄）是大片、模糊度低、幾乎透明的「窗格」，只負責
+    // 界定區域；裡面的小卡片（球員列、已儲存戰術）是模糊度更高、更明顯的霧面玻璃，
+    // 才是真正讀起來「有質感」的物件——呼應參考圖裡小徽章清楚飄浮在背景上的效果。
+    <div
+      className="flex h-screen w-full flex-col overflow-hidden font-dash text-[#f5f5f0]"
+      style={{
+        background:
+          "radial-gradient(ellipse 55% 45% at 18% 12%, rgba(198,241,53,0.10), transparent 70%), " +
+          "radial-gradient(ellipse 65% 55% at 88% 92%, rgba(42,110,106,0.30), transparent 70%), " +
+          "linear-gradient(160deg, #0a0b07 0%, #16241c 55%, #0a0b07 100%)",
+      }}
+    >
+      <header className="flex shrink-0 items-center justify-between border-b border-white/[0.08] bg-white/[0.02] px-4 py-3 backdrop-blur-sm">
         <BackToMatchListButton href={backHref} />
         <h1 className="text-lg font-bold">{match ? `vs ${match.opponent}` : "戰術板"}</h1>
-        <Button asChild variant="outline" size="sm">
-          <Link href={`/matches/${id}/record`}>計分表</Link>
-        </Button>
+        <Link
+          href={`/matches/${id}/record`}
+          className="inline-flex h-9 items-center rounded-full border border-white/[0.26] px-4
+            text-[13px] font-semibold text-[#f5f5f0] transition hover:border-[#c6f135]
+            hover:text-[#c6f135]"
+        >
+          計分表
+        </Link>
       </header>
 
-      <div className="flex flex-1 min-h-0 overflow-hidden">
-        <div className="w-[260px] border-r-2 border-[#111111] flex-shrink-0 flex flex-col">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <div className="flex w-[260px] flex-shrink-0 flex-col border-r border-white/[0.08] bg-white/[0.02] backdrop-blur-sm">
           <RotationTable />
         </div>
-        <div className="flex-1 flex flex-col relative overflow-hidden bg-white">
-          <div className="flex-1 p-4 flex items-center justify-center relative min-h-0">
+        <div className="relative flex flex-1 flex-col overflow-hidden">
+          <div className="relative flex min-h-0 flex-1 items-center justify-center p-4">
             <Court />
           </div>
         </div>
-        <div className="w-[250px] border-l-2 border-[#111111] flex-shrink-0 flex flex-col">
+        <div className="flex w-[250px] flex-shrink-0 flex-col border-l border-white/[0.08] bg-white/[0.02] backdrop-blur-sm">
           <TacticsBoardPanel />
         </div>
       </div>
-      <svg className="hidden">
-        <filter id="wobbly-filter">
-          <feTurbulence type="fractalNoise" baseFrequency="0.05" numOctaves="2" result="noise" />
-          <feDisplacementMap
-            in="SourceGraphic"
-            in2="noise"
-            scale="3"
-            xChannelSelector="R"
-            yChannelSelector="G"
-          />
-        </filter>
-      </svg>
     </div>
   );
 }
