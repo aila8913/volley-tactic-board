@@ -4,11 +4,11 @@ description: >
   Use when the user wants to commit their work and send a pull request — trigger
   phrases include "ship", "送 PR", "發 PR", "commit 然後 PR", "幫我送出去", or any
   request to publish/submit the current changes. Guides through the full flow:
-  branch → commit → self-review → push → PR → merge, with an explanation at every
-  step (this is a learning project, teaching mode is on).
+  branch → commit → self-review → push → PR → 協作確認 → merge, with an explanation
+  at every step (this is a learning project, teaching mode is on).
 ---
 
-# Ship: branch → commit → self-review → push → PR → merge
+# Ship: branch → commit → self-review → push → PR → 協作確認 → merge
 
 Goal: walk through the complete "finish a feature and ship it" flow, explaining each
 git/gh command so the user understands what it does and why, not just that it ran.
@@ -50,9 +50,9 @@ GitHub, GitHub always creates a **brand-new commit object** on `origin/main` (ev
 the content is identical to what's already in the branch). Local `main` then still has
 its own separate copy of that same change, so local `main` and `origin/main` each have
 "one commit the other doesn't have" — `git status` reports them as diverged, and
-`git pull`/Step 7's fast-forward fails. Branching _before_ the commit means the commit
+`git pull`/Step 8's fast-forward fails. Branching _before_ the commit means the commit
 only ever exists on the feature branch — `main` never moves locally until the plain
-`git pull` in Step 7, so there's nothing to diverge.
+`git pull` in Step 8, so there's nothing to diverge.
 
 ---
 
@@ -195,7 +195,38 @@ Print the returned PR URL so the user can click through to GitHub.
 
 ---
 
-## Step 7 — Merge (needs confirmation)
+## Step 7 — 協作確認（跨領域的 PR 要對方 review）
+
+這個專案是兩人協作（分工表和完整規則見 `CONTRIBUTING.md` 的「協作與溝通」章節）。
+開完 PR、merge 之前，先檢查這次的 diff 有沒有踩到「需要對方確認」的範圍：
+
+1. `git diff main...HEAD --name-only` 列出這個 PR 改到的所有檔案。
+2. 對照兩類「要對方看過」的情況：
+   - **動到對方主要負責的範圍**——例如 aila 動了視覺設計/UX，或 tang 動了
+     backend／db／build 設定。
+   - **動到共用約定檔**：`CLAUDE.md`、`CONTRIBUTING.md`、`.claude/skills/`、
+     `docs/design-spec.md`、`lib/api-spec/openapi.yaml`、`lib/db/src/schema/`。
+     這些是雙方（和雙方的 Claude）共同遵守的規範或介面契約，單方面改掉等於
+     偷改了對方的工作規則。
+3. **有踩到** → 把對方加成 reviewer，並在 PR 留言 @ 對方、說明重點看哪裡：
+
+   ```
+   gh pr edit <PR-number> --add-reviewer <對方帳號>
+   gh pr comment <PR-number> --body "@<對方帳號> <一句話說明這個 PR 動到你的範圍的哪裡>"
+   ```
+
+   然後**停在這裡，等對方 approve 或回覆之後才進 Step 8**——這種 PR 不自己 merge。
+   （等待期間可以先去做別的事，不用掛著。）
+
+4. **沒踩到**（純粹自己範圍內的改動）→ 直接進 Step 8，照常自己 merge。
+
+Explain: 「reviewer 機制是 GitHub 內建的『請對方看過再合併』流程。用它取代訊息軟體
+來回，是因為意見會直接留在 PR 上、跟程式碼綁在一起，未來翻記錄時看得到當時為什麼
+這樣決定；訊息軟體只拿來提醒對方『有 PR 等你看』。」
+
+---
+
+## Step 8 — Merge (needs confirmation)
 
 **Do not merge automatically.** First confirm with the user that they're ready to merge.
 
