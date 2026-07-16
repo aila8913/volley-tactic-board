@@ -17,35 +17,26 @@
 > promote it first, then drop it. Read this file + `gh issue list --state open` + recent
 > `git log` at the start of a session instead of re-exploring the codebase.
 
-\_Last updated: 2026-07-15 — **設計語言首度落地，且第一次有夥伴的 PR 進 main**：@tangyi1025 的
-**PR #129 已合併**（commit `bef0e14`），比賽列表首頁換成深色儀表板語言（`#0a0b07` 底＋萊姆綠
-`#C6F135`＋玻璃卡片＋Space Grotesk/JetBrains Mono/Anton），並新增規範本體 `docs/design-spec.md`。
-**PO 已確認視覺方向正確、繼續走**，所以「其他頁面要跟上」從擋門問題變成後續工作。
+\_Last updated: 2026-07-16 — **戰術板跟上深色語言，#131 決定拍板，且 #132 補上收尾 PR**：
+@tangyi1025 現在是 repo 的 **collaborator**（PO 邀請並接受），寫入權限已生效，不用再走 fork。
 
-由此開出兩張、都掛 M3（判準＝**真人第一次打開 app 之前必須成立**，第一印象只有一次）：
-**#132 首頁自己的收尾**——review 的四點在 PR 合併時都沒處理、仍活在 main 上（純色背景使
-`backdrop-blur` 視覺零效果、Anton 用在 17–18px 不易讀且只有 400 一個字重所以 `font-black` 對它
-無效、`--font-mono` 是 Tailwind 內建 key 屬全域覆蓋但註解宣稱只影響該頁、`.claude/launch.json`
-用途待確認）。**#131 其他頁面跟上**——現存手繪風（`wobbly-border`/`#f8f8f8`/`#CCFF00`）散在 9 檔
-53 處，卡一個 PO 決定：**手繪風要全拿掉，還是留給球場本身**（design-spec 第 5 節把戰術板畫布
-獨立規定，手繪感在球場上也許是特色而非債）。
+**PR #135 已合併**（commit `0d63ee3`）——戰術板頁面（`TacticsBoard.tsx` +
+`RotationTable`/`TacticsBoardPanel`/`RotationSwitcher`/`Court`）退役 wobbly-border/`font-display`/
+漫畫陰影，改用 design-spec.md 的玻璃卡片語言；球場底色從暖木色 `#C9A25D` 改成深青漸層（避免跟
+己方萊姆綠/對方珊瑚紅球員點的顏色衝突），L 備位框從球場上下方搬到左右側（球場垂直可用面積變大，
+順手解決 PO 反饋的「桌機寬螢幕兩側空空」問題）。`RadialMenu.tsx`（計分表在用）還依賴
+wobbly-border，是 #131 剩餘範圍之一，先不動。**#131「手繪風去留」拍板：全拿掉**，議題到此完成。
 
-**review 的方法論收穫**：#129 落後 main 四個 commit 且與 #128 改到同一個 `MatchList.tsx`，git
-自動合併無衝突——但**「能合」不等於「合對」**，必須讀合併後的檔案確認 #128 的 async 改寫仍在
-（確認無誤）。另：fork PR 的 CI 預設不跑，要 PO 手動核准 workflow，別把「本機跑過」當成綠燈。
+**#132 曾被誤關一次**：標題「首頁深色改版的收尾」跟 #135「戰術板」範圍不重疊，關 issue 時看錯，
+已重開。PR #129 review 的四點修正（純色背景讓 `backdrop-blur` 沒效果、Anton 在 17–18px 標題難讀、
+`--font-mono` 蓋掉 Tailwind 內建 key、`.claude/launch.json` 跟視覺改版無關）補進新 PR，
+`Closes #132`。**教訓：commit 存在 ≠ 有人看得到**，落地前務必確認 PR 真的開了、issue 真的連得到。
 
-**#118 兩半都收尾了**：schema 半段（PR #124）＋**前端半段本次完成**——`diffRoster` 把
-`RosterEditDialog` 鑄的 uuid 一併送給後端建立（後端 `players.ts:52` 早就收 `body.id`、openapi
-`NewPlayer.id` 是選填 uuid，都是 #124 鋪好的路，前端只差走完），同人不再有兩套 id；
-`RotationTable` 的 `void saveRoster(...)` 改 await＋失敗 toast，背景回寫失敗不再無聲吃掉球員
-（`setRoster` 仍在 try 外先跑，維持 local-first）。PO 已手動驗過「新增球員→排站位→reload」站位存活。
-過程中 #118 一度被誤關：PR #124 body 寫「故不 close #118」，但 GitHub 關鍵字偵測是笨的子字串比對、
-不解析否定詞，merge 時照樣關掉（GraphQL `closer` = PR #124，非手動關），07-15 重開。規則已落地進
-ship skill Step 6：要留著寫「#118 保持 open」，通則是**正面描述、別用否定詞反轉句意**。
-
-schema 換季第二刀 **#117（資料夾進 DB：uuid PK + cascade FK）已於 07-14 合併**（PR #128，commit
-`241a7eb`）；順帶發現 **#127**（後端 match POST/PATCH 沒驗 tournamentId 擁有權，latent authz
-gap），已掛 M3，待真 auth（#77）落地後補。
+**新開 #134（戰術板視覺定案，needs-plan）**：PO 跟夥伴看過 #135 的畫面後，想再往前一步——微 3D
+球場（傾角+厚度+陰影）、材質再強化（毛玻璃/發光加碼）、桌機版面呼吸空間。**微 3D 明確牴觸現行
+design-spec 第 6 節「動效輕量」**，要做的話得先改規範。球場配色 PO 那邊看到的還是 issue 開的時候
+的舊 spec 值（暖木色），要先跟他對齊「現在已經是深青漸層」這個事實，才能接著討論。動手前排定要
+先進 Plan mode，且 PO 那邊還要補齊微 3D 參考圖跟夥伴收集的 Pinterest 參考。
 
 三條不變量提醒：I1 單一真相來源、I2 per-match 狀態用 matchId 當 key、I3 一個實體一套 id 只鑄造一次
 （完整＝ #117 錨點留言）。\_
@@ -84,11 +75,14 @@ lives in git log + the issues named):
   （#51/#21/#44）或教練待確認項（到位門檻 `quality>=2`、嗆司定義，皆有預設在跑、不擋實作——
   07-12 起兩項預設皆有外部標準出處：VIS 官方門檻背書／DV Freeball 候選定義，見該 spec
   〈外部標準對照〉一節，schema 設計亦獲 VIS/DV 慣例驗證）。
-- **設計規範已有本體，但只落地一頁**（`docs/design-spec.md`，PR #129）：深色儀表板語言
-  （`#0a0b07` 底＋萊姆綠 `#C6F135`＋玻璃卡片＋Space Grotesk/JetBrains Mono/Anton），**PO 已確認
-  方向**。目前只有比賽列表首頁套用，其餘頁面仍是手繪風——app 現在有兩套視覺語言並存，收斂工作
-  在 #131（其他頁面）＋#132（首頁收尾），皆 M3。**寫 UI 前先讀 design-spec.md**；注意實作數值以
-  該檔「實作微調」註記為準（背景 `#0a0b07`、邊框 `white/[0.12]`～`[0.26]`，非原始的 `#121310`）。
+- **設計規範已落地兩頁**（`docs/design-spec.md`）：深色儀表板語言（`#0a0b07` 底＋萊姆綠
+  `#C6F135`＋玻璃卡片＋Space Grotesk/JetBrains Mono）已套進比賽列表首頁（PR #129＋#132 收尾）跟
+  戰術板頁面（PR #135）。戰術板另外定案：球場底色深青漸層（非原規範的暖木色）、L 備位框在球場
+  左右側，Anton 已棄用、標題一律 Space Grotesk。剩餘待轉換：計分表（`ScoreSheetCourt.tsx`/
+  `RadialMenu.tsx`）、數據分析頁、資料夾內頁——屬 #131 剩餘範圍，M3。視覺再進化（微 3D 球場等）
+  待 #134（needs-plan）討論定案。**寫 UI 前先讀 design-spec.md**；注意實作數值以該檔「實作微調」/
+  「實作決定」註記為準（背景 `#0a0b07`、邊框 `white/[0.12]`～`[0.26]`、球場漸層，非原始的
+  `#121310`/`#C9A25D`）。
 
 ## Known gaps / next big pieces
 
@@ -113,11 +107,12 @@ commit `241a7eb`）**／⬜ tactics 加 matchId（#119 前置）；**(3) ✅ #11
 
 ## Recently closed (past ~week)
 
-- **#118** — 名單編輯新增球員的同人兩套 id（本次收尾，前端半段）。`diffRoster` 送出前端鑄的 uuid
+- **#118** — 名單編輯新增球員的同人兩套 id（07-15 收尾，前端半段）。`diffRoster` 送出前端鑄的 uuid
   ＋`RotationTable` 的名單回寫改 await＋失敗 toast。schema 半段是 PR #124；I3「一個實體一套 id
   只鑄造一次」到此在名單這條路徑上成立。「全域 store 去汙染」家族只剩 #119。
 - **PR #129**（無對應 issue）— 首頁深色改版＋`docs/design-spec.md`（commit `bef0e14`）。**夥伴
   @tangyi1025 的第一個 PR**。review 四點未處理即合併→已由 **#132** 接住；其他頁面跟上→**#131**。
+- **PR #135** — 戰術板深色改版（issue #131 完成，commit `0d63ee3`）。見上方 `_Last updated_`。
 - **#117** — 資料夾（tournaments）進 DB：uuid PK + cascade FK（PR #128，commit 241a7eb）。`tournaments`
   表 client-mintable uuid PK、`matches.tournamentId` text→uuid FK `onDelete: cascade`（刪資料夾＝連同
   比賽刪，PO 拍板下沉到 DB）；前端 `useTournaments` 從 Zustand+persist 改成 API adapter。#122 的孤兒

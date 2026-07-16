@@ -52,8 +52,8 @@ export default function MatchCard({ match, onEdit, onDelete }: MatchCardProps) {
     >
       <div className="mb-3 flex items-start justify-between gap-2.5">
         <div>
-          <h2 className="font-badge text-lg font-black leading-tight">vs {match.opponent}</h2>
-          <p className="mt-1 flex items-center gap-1.5 font-mono text-[13px] tabular-nums text-[#a9b096]">
+          <h2 className="font-dash text-lg font-bold leading-tight">vs {match.opponent}</h2>
+          <p className="mt-1 flex items-center gap-1.5 font-numeric text-[13px] tabular-nums text-[#a9b096]">
             <Calendar className="h-[13px] w-[13px] flex-shrink-0" />
             {formatMatchDateTime(match.dateTime)}
           </p>
