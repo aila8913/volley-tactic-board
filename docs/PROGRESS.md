@@ -17,38 +17,19 @@
 > promote it first, then drop it. Read this file + `gh issue list --state open` + recent
 > `git log` at the start of a session instead of re-exploring the codebase.
 
-\_Last updated: 2026-07-15 — **設計語言首度落地，且第一次有夥伴的 PR 進 main**：@tangyi1025 的
-**PR #129 已合併**（commit `bef0e14`），比賽列表首頁換成深色儀表板語言（`#0a0b07` 底＋萊姆綠
-`#C6F135`＋玻璃卡片＋Space Grotesk/JetBrains Mono/Anton），並新增規範本體 `docs/design-spec.md`。
-**PO 已確認視覺方向正確、繼續走**，所以「其他頁面要跟上」從擋門問題變成後續工作。
+\_Last updated: 2026-07-16 — 兩件事進 main：**戰術板跟上深色語言**（PR #135，commit `0d63ee3`）
+與**兩人協作流程正式上線**（PR #137，commit `ab626b1`）。
 
-由此開出兩張、都掛 M3（判準＝**真人第一次打開 app 之前必須成立**，第一印象只有一次）：
-**#132 首頁自己的收尾**——review 的四點在 PR 合併時都沒處理、仍活在 main 上（純色背景使
-`backdrop-blur` 視覺零效果、Anton 用在 17–18px 不易讀且只有 400 一個字重所以 `font-black` 對它
-無效、`--font-mono` 是 Tailwind 內建 key 屬全域覆蓋但註解宣稱只影響該頁、`.claude/launch.json`
-用途待確認）。**#131 其他頁面跟上**——現存手繪風（`wobbly-border`/`#f8f8f8`/`#CCFF00`）散在 9 檔
-53 處，卡一個 PO 決定：**手繪風要全拿掉，還是留給球場本身**（design-spec 第 5 節把戰術板畫布
-獨立規定，手繪感在球場上也許是特色而非債）。
+**#131 原本卡的 PO 決定已拍板：手繪風全拿掉**——戰術板已退役 `wobbly-border`/手繪字體，球場底色
+改深青漸層（**非** spec 原始的暖木色 `#C9A25D`，理由記在 design-spec.md 第 5 節「實作決定」）。
+#131 剩計分表／數據分析頁／資料夾內頁三處，但**先等 #134（戰術板視覺定案：微 3D／材質／版面呼吸，
+needs-plan）討論定案**——若 #134 的結論動到 design-spec 本身（尤其第 6 節「動效輕量」），剩餘頁面
+以更新後的 spec 為準，別急著套舊規範。
 
-**review 的方法論收穫**：#129 落後 main 四個 commit 且與 #128 改到同一個 `MatchList.tsx`，git
-自動合併無衝突——但**「能合」不等於「合對」**，必須讀合併後的檔案確認 #128 的 async 改寫仍在
-（確認無誤）。另：fork PR 的 CI 預設不跑，要 PO 手動核准 workflow，別把「本機跑過」當成綠燈。
-
-**#118 兩半都收尾了**：schema 半段（PR #124）＋**前端半段本次完成**——`diffRoster` 把
-`RosterEditDialog` 鑄的 uuid 一併送給後端建立（後端 `players.ts:52` 早就收 `body.id`、openapi
-`NewPlayer.id` 是選填 uuid，都是 #124 鋪好的路，前端只差走完），同人不再有兩套 id；
-`RotationTable` 的 `void saveRoster(...)` 改 await＋失敗 toast，背景回寫失敗不再無聲吃掉球員
-（`setRoster` 仍在 try 外先跑，維持 local-first）。PO 已手動驗過「新增球員→排站位→reload」站位存活。
-過程中 #118 一度被誤關：PR #124 body 寫「故不 close #118」，但 GitHub 關鍵字偵測是笨的子字串比對、
-不解析否定詞，merge 時照樣關掉（GraphQL `closer` = PR #124，非手動關），07-15 重開。規則已落地進
-ship skill Step 6：要留著寫「#118 保持 open」，通則是**正面描述、別用否定詞反轉句意**。
-
-schema 換季第二刀 **#117（資料夾進 DB：uuid PK + cascade FK）已於 07-14 合併**（PR #128，commit
-`241a7eb`）；順帶發現 **#127**（後端 match POST/PATCH 沒驗 tournamentId 擁有權，latent authz
-gap），已掛 M3，待真 auth（#77）落地後補。
-
-三條不變量提醒：I1 單一真相來源、I2 per-match 狀態用 matchId 當 key、I3 一個實體一套 id 只鑄造一次
-（完整＝ #117 錨點留言）。\_
+**協作流程（PR #137）**：tang（@tangyi1025）review + approve 後合併——這張 PR 本身就是新流程的
+第一次完整演練（跨領域 PR → 加 reviewer → @ 留言 → 等 approve → PO 確認才 merge）。規範本體住
+CONTRIBUTING.md「協作與溝通」＋ CLAUDE.md「Team & collaboration rules」，ship skill 多了 Step 7
+協作確認、wrap-up 多了「對方的 issue 不單方面關」——這裡只留指標，細節看那四個檔案。\_
 
 ## Current state
 
@@ -84,11 +65,15 @@ lives in git log + the issues named):
   （#51/#21/#44）或教練待確認項（到位門檻 `quality>=2`、嗆司定義，皆有預設在跑、不擋實作——
   07-12 起兩項預設皆有外部標準出處：VIS 官方門檻背書／DV Freeball 候選定義，見該 spec
   〈外部標準對照〉一節，schema 設計亦獲 VIS/DV 慣例驗證）。
-- **設計規範已有本體，但只落地一頁**（`docs/design-spec.md`，PR #129）：深色儀表板語言
-  （`#0a0b07` 底＋萊姆綠 `#C6F135`＋玻璃卡片＋Space Grotesk/JetBrains Mono/Anton），**PO 已確認
-  方向**。目前只有比賽列表首頁套用，其餘頁面仍是手繪風——app 現在有兩套視覺語言並存，收斂工作
-  在 #131（其他頁面）＋#132（首頁收尾），皆 M3。**寫 UI 前先讀 design-spec.md**；注意實作數值以
-  該檔「實作微調」註記為準（背景 `#0a0b07`、邊框 `white/[0.12]`～`[0.26]`，非原始的 `#121310`）。
+- **設計規範已落地兩頁（首頁＋戰術板），手繪風確定全退役**（`docs/design-spec.md`，PR #129/#135）：
+  深色儀表板語言（`#0a0b07` 底＋萊姆綠 `#C6F135`＋玻璃卡片＋Space Grotesk/JetBrains Mono）。
+  剩計分表（`ScoreSheetCourt`/`RadialMenu`）、數據分析頁、資料夾內頁三處仍是手繪風，由 #131 追蹤，
+  但**排在 #134（戰術板視覺定案，needs-plan）之後**——#134 可能改動 spec 本身。#132（首頁 review
+  收尾）獨立進行。**寫 UI 前先讀 design-spec.md**；實作數值以該檔「實作微調」「實作決定」註記為準
+  （背景 `#0a0b07`、邊框 `white/[0.12]`～`[0.26]`、球場深青漸層——非原始的 `#121310`/暖木色）。
+- **兩人協作流程已上線**（PR #137，tang approve）：討論分流／關 issue 規則／跨領域 review 住
+  CONTRIBUTING.md「協作與溝通」，Claude 要主動把關的版本住 CLAUDE.md「Team & collaboration
+  rules」，ship Step 7 會在 merge 前做跨領域確認。改協作規範＝開 PR 動那些檔案並請對方 review。
 
 ## Known gaps / next big pieces
 
@@ -113,33 +98,30 @@ commit `241a7eb`）**／⬜ tactics 加 matchId（#119 前置）；**(3) ✅ #11
 
 ## Recently closed (past ~week)
 
-- **#118** — 名單編輯新增球員的同人兩套 id（本次收尾，前端半段）。`diffRoster` 送出前端鑄的 uuid
+- **PR #137**（無對應 issue）— 兩人協作流程規範（commit `ab626b1`，07-16）。CONTRIBUTING.md
+  「協作與溝通」＋ CLAUDE.md「Team & collaboration rules」＋ ship Step 7 ＋ wrap-up 對方 issue
+  保護。tang review + approve，新流程用自己完成第一次演練。順帶評估過 ship skill 瘦身：**先不動**
+  （Step 6 坑史是規則的威懾力來源），門檻＝超過 ~350 行或單一步驟一眼掃不完時，把 Step 6 的坑史
+  ／通則移去 `ship/reference.md`（比照 wrap-up 的模式）。
+- **PR #135**（#131 部分進度，該 issue 保持 open）— 戰術板套深色語言（commit `0d63ee3`，07-16）。
+  手繪風全拿掉拍板、球場改深青漸層；進度與剩餘頁面記錄在 #131 body。後續視覺提案收斂進 #134。
+- **#118** — 名單編輯新增球員的同人兩套 id（前端半段收尾）。`diffRoster` 送出前端鑄的 uuid
   ＋`RotationTable` 的名單回寫改 await＋失敗 toast。schema 半段是 PR #124；I3「一個實體一套 id
   只鑄造一次」到此在名單這條路徑上成立。「全域 store 去汙染」家族只剩 #119。
 - **PR #129**（無對應 issue）— 首頁深色改版＋`docs/design-spec.md`（commit `bef0e14`）。**夥伴
   @tangyi1025 的第一個 PR**。review 四點未處理即合併→已由 **#132** 接住；其他頁面跟上→**#131**。
+  方法論教訓（留給未來 review 夥伴 PR 時用）：落後 main 又同檔的 PR，git 自動合併無衝突**不等於
+  合對**，要讀合併後的檔案確認雙方改動都活著；fork PR 的 CI 預設不跑、要手動核准 workflow，
+  「本機跑過」不是綠燈。
 - **#117** — 資料夾（tournaments）進 DB：uuid PK + cascade FK（PR #128，commit 241a7eb）。`tournaments`
   表 client-mintable uuid PK、`matches.tournamentId` text→uuid FK `onDelete: cascade`（刪資料夾＝連同
   比賽刪，PO 拍板下沉到 DB）；前端 `useTournaments` 從 Zustand+persist 改成 API adapter。#122 的孤兒
   fallback 一併拆除（cascade 保證孤兒結構上不可能）。留下 #127（tournamentId 擁有權未驗）。
 - **#115** — 計分表擁有自己逐局的先發快照，與戰術板/輪轉表全域 store 解耦（PR #121，commit ce5c9f5）。
   這是「全域 store 去汙染」家族第一條落地；暴露的同根因兄弟 #117/#118/#119 見上方焦點與 #117 錨點留言。
-- **#41** — 計分表復原改**逐動作 undo**（PR #113，commit a21afce，另一 session 完成、wrap-up 對帳關閉）：
-  動作快照堆疊（每動作前存 currentSet/regularSubs/liberoSubstitution 快照，undo pop 還原），得分/換人/
-  libero 各為一步連按往回；後端加 `DELETE /substitutions/:id` hard-delete 撤銷已寫入的換人。堆疊純記憶體
-  不跨 reload（undo 定位＝即時改錯）。64 tests 全綠。
+- **#41** — 計分表復原改**逐動作 undo**（PR #113，commit a21afce）：動作快照堆疊，得分/換人/libero
+  各為一步連按往回；後端加 `DELETE /substitutions/:id` 撤銷已寫入的換人。堆疊純記憶體不跨 reload。
 - **#50** — 計分表動作選單情境過濾（規則面窮舉完畢，commit 33a21c3）：規則#1（發球/接發互斥）改
-  「反灰不刪」（六顆固定方位、不合理的灰掉不能點，肌肉記憶/節奏遊戲；RadialMenu 加 disabled 支援，
-  `excludedAction`→`disabledActions`）。評估過「多知道得/失分後得分時再多反灰」的 C8 構想，依 Data Volley
-  記錄慣例作廢（防守/舉球得分各記自己、接發得分是進階版 Freeball）——`serving`＋`actorSide` 只養得起規則#1
-  一條。完整設計/DV 慣例對帳記錄在 #50 留言。
-- **#74** — 記錄成本預算「落地」：設計定案（`docs/recording-cost-budget.md`）後把分層歸屬回灌
-  #50/#51/#21（#20 早已關），本 session 關閉。
-- **#63 / #20** — 計分表 M1 bug 收尾（PR #109，commit 8201b2d）：#63 未開球空局 reload 退回上一局
-  （`sets.firstServer` 改 nullable ＋空局防呆）；#20「結束比賽」鈕（導向 analytics）＋換人上限 X/6 提示。
-- **#73** — 事件文法領域模型。設計 T1（PR #92）＋對帳收束（PR #105）；缺口對帳結論見上方 Current state。
-- **#102** — `people`＋`teams` 身分/球隊 schema 地基（PR #104）。刻意留給 #65 後面階段：openapi/codegen、
-  前端讀寫、建名單去重 UX、舊資料回填。
-- **#42** — 計分表換人不持久化（PR #98）：`substitutions` 後端 REST ＋ 前端搬進 store 走「本地即時＋背景
-  POST＋進頁重建」。libero 持久化留 #43、undo 留 #41。
-- **#93** — `lineups` 起始先發表（PR #94）。
+  「反灰不刪」。C8 構想依 Data Volley 慣例作廢；完整對帳記錄在 #50 留言。
+- （更早的 #74/#63/#20/#73/#102/#42/#93 已修剪——記錄住在各自的 issue 留言、
+  `docs/recording-cost-budget.md`/`docs/event-grammar-spec.md`、git log。）
