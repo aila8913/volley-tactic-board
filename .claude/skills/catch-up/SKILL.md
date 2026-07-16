@@ -5,8 +5,9 @@ description: >
   refresher on where things stand — trigger phrases include "接續上次", "我們上次做到
   哪", "回顧進度", "catch me up", "what's the status", or the user starting a
   new conversation and immediately asking to continue previous work. Reads
-  docs/PROGRESS.md, open GitHub issues, partner @mentions (with comment content), and
-  recent git history instead of re-exploring the whole codebase with a fresh agent.
+  docs/PROGRESS.md, open GitHub issues, partner @mentions (with comment content),
+  in-flight partner branches/PRs, and recent git history instead of re-exploring the
+  whole codebase with a fresh agent.
 ---
 
 # Catch up at the start of a session
@@ -41,7 +42,7 @@ agent to rebuild a mental model of the codebase from scratch every time.
 
    對「上次 wrap-up（PROGRESS.md 的 Last updated 日期）之後有更新」的每一筆，用
    `gh issue view <n> --comments`／`gh pr view <n> --comments` 把**留言內容讀進來**，
-   在 step 6 的摘要裡逐筆報告：誰、在哪張 issue/PR、說了什麼、在等什麼回覆。
+   在 step 7 的摘要裡逐筆報告：誰、在哪張 issue/PR、說了什麼、在等什麼回覆。
    **把內容帶進對話是這一步的全部目的**——使用者不需要自己去翻 GitHub 再轉述。
 
    已知限制：`mentions:` 只知道「被 @ 過」、不知道「處理過沒」（已讀狀態在
@@ -49,9 +50,24 @@ agent to rebuild a mental model of the codebase from scratch every time.
    可能多報已處理的——摘要前檢查該留言**之後**有沒有本人的回覆，有的話標成
    「看起來已回」，而不是直接省略（寧可多報，不可漏報）。
 
-4. **Check actual recent history:** `git log --oneline -10` and `git status --short`.
+4. **Scan in-flight partner work（未 merge 的分支與 open PR）。** `docs/PROGRESS.md`
+   只反映「merge 進 main 的現實」——夥伴在分支上進行中的工作（包括對方 session 的
+   wrap-up 改動）在 main 上完全看不到，不掃的話兩人會在彼此的盲區裡重工或衝突：
+
+   ```sh
+   git fetch --prune origin                # 先同步遠端現況（--prune 順手清掉已刪分支）
+   git branch -r --no-merged origin/main   # 所有還沒進 main 的遠端分支
+   gh pr list --state open                 # 其中已掛 PR 的（正式在 review 流程裡）
+   ```
+
+   兩份清單相減，**有分支、還沒開 PR 的就是最看不見的進行中工作**——對每一條用
+   `git log origin/main..origin/<branch> --oneline -5` 看是誰的、大概在做什麼，
+   在 step 7 摘要裡報告。不用逐檔細讀 diff，「誰正在動哪一塊」的顆粒度就夠了——
+   目的是避免撞工，不是 review 對方沒送出的東西。
+
+5. **Check actual recent history:** `git log --oneline -10` and `git status --short`.
    This is ground truth — trust it over the doc if they disagree.
-5. **Cross-check for drift** before presenting anything as fact:
+6. **Cross-check for drift** before presenting anything as fact:
    - Does PROGRESS.md mention an issue number that's already closed? Or describe
      something as "in progress" when recent commits look like they finished it?
    - Is there an open issue that recent commits appear to have resolved (but wasn't
@@ -61,11 +77,11 @@ agent to rebuild a mental model of the codebase from scratch every time.
      If you find a mismatch, surface it explicitly to the user rather than silently
      trusting whichever source is more convenient — the docs are a snapshot, not
      guaranteed current.
-6. **Summarize briefly** for the user: **pending @mentions first**（step 3 —— 誰在哪張
-   issue/PR 說了什麼、在等什麼），then last commit, current state per the doc, open
-   issues (esp. anything that looks like a natural next step), and any drift found in
-   step 5. A few sentences / a short list — not a full re-explanation of the
-   architecture.
+7. **Summarize briefly** for the user: **pending @mentions first**（step 3 —— 誰在哪張
+   issue/PR 說了什麼、在等什麼），then in-flight partner work（step 4 —— 誰的分支／
+   PR 正在動哪一塊），last commit, current state per the doc, open issues (esp.
+   anything that looks like a natural next step), and any drift found in step 6. A few
+   sentences / a short list — not a full re-explanation of the architecture.
 
 ## When to fall back to deeper exploration
 
