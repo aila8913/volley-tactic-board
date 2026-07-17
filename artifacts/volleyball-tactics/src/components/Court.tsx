@@ -1,10 +1,24 @@
 import React, { useRef, useState, useEffect } from "react";
+import { useParams } from "wouter";
 import { useRotationTable } from "../hooks/useRotationTable";
 import { useTacticsBoard } from "../hooks/useTacticsBoard";
 import { findNearestZone } from "../lib/rotationLogic";
+import type { RotationPositions } from "../types/rotationTable";
+import type { RotationTactics } from "../types/tacticsBoard";
+import type { MatchPlayer } from "../types/match";
 import PlayerNode from "./PlayerNode";
 import Markers from "./Markers";
 import DefenseRange from "./DefenseRange";
+
+// 這一場還沒有分片資料時用的空白預設值（模組層、參照穩定，避免每 render 換新陣列造成重繪）。
+const EMPTY_ROSTER: MatchPlayer[] = [];
+const EMPTY_ROTATIONS: RotationPositions[] = Array(6)
+  .fill(null)
+  .map(() => ({ positions: [], liberoReplacement: null }));
+const EMPTY_TACTICS: RotationTactics[] = Array(6)
+  .fill(null)
+  .map(() => ({ tacticPositions: [], markers: [], defenseRanges: [] }));
+const DEFAULT_LABEL_TOGGLES = { zone: false };
 
 // 球場「真正比賽用」的座標範圍，永遠固定 0~100 / 0~200——格子吸附、界外判斷、
 // 6 個站位格全部都認這組數字，不會因為旁邊要多留 L 備位空間就跟著變動。
@@ -57,24 +71,32 @@ export default function Court() {
   // Court 是兩邊資料實際「合流顯示」的地方——戰術板要疊圖畫在球員身上，天生就要同時
   // 讀兩個 store，這跟我們說好的「戰術板依賴輪轉表」並不衝突：這裡只是元件同時訂閱
   // 兩個 store，不是其中一個 store 內部互相呼叫。
-  const { rotations, currentRotation, roster, startingLiberoId, setStartingLiberoId } =
-    useRotationTable();
-  const {
-    tacticsByRotation,
-    labelToggles,
-    activeTool,
-    setActiveTool,
-    addMarker,
-    updateMarker,
-    setSelectedObjectId,
-    addDefenseRange,
-    undo,
-    redo,
-    isLayoutMode,
-    courtView,
-  } = useTacticsBoard();
-  const placePlayerOnCourt = useRotationTable((state) => state.placePlayerOnCourt);
-  const placePlayerFree = useTacticsBoard((state) => state.placePlayerFree);
+  // 兩個 store 現在都用 matchId 分片（issue #119），資料一律從 dataByMatch[matchId] 讀，
+  // 動作則第一參數帶 matchId。matchId 來自 URL（這個元件只在 /matches/:id/board 底下）。
+  const { id: matchId } = useParams<{ id: string }>();
+  const rotationData = useRotationTable((s) => (matchId ? s.dataByMatch[matchId] : undefined));
+  const rotations = rotationData?.rotations ?? EMPTY_ROTATIONS;
+  const currentRotation = rotationData?.currentRotation ?? 0;
+  const roster = rotationData?.roster ?? EMPTY_ROSTER;
+  const startingLiberoId = rotationData?.startingLiberoId ?? null;
+  const setStartingLiberoId = useRotationTable((s) => s.setStartingLiberoId);
+  const placePlayerOnCourt = useRotationTable((s) => s.placePlayerOnCourt);
+
+  const tacticsData = useTacticsBoard((s) => (matchId ? s.dataByMatch[matchId] : undefined));
+  const tacticsByRotation = tacticsData?.tacticsByRotation ?? EMPTY_TACTICS;
+  const labelToggles = tacticsData?.labelToggles ?? DEFAULT_LABEL_TOGGLES;
+  // 這些是全域、暫時性的畫面狀態（不隨 match 走），個別選取。
+  const activeTool = useTacticsBoard((s) => s.activeTool);
+  const isLayoutMode = useTacticsBoard((s) => s.isLayoutMode);
+  const courtView = useTacticsBoard((s) => s.courtView);
+  const setActiveTool = useTacticsBoard((s) => s.setActiveTool);
+  const setSelectedObjectId = useTacticsBoard((s) => s.setSelectedObjectId);
+  const addMarker = useTacticsBoard((s) => s.addMarker);
+  const updateMarker = useTacticsBoard((s) => s.updateMarker);
+  const addDefenseRange = useTacticsBoard((s) => s.addDefenseRange);
+  const undo = useTacticsBoard((s) => s.undo);
+  const redo = useTacticsBoard((s) => s.redo);
+  const placePlayerFree = useTacticsBoard((s) => s.placePlayerFree);
 
   const courtRef = useRef<SVGSVGElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -102,19 +124,20 @@ export default function Court() {
   // 某次 render 提早離開時 hook 數量就對不上，React 內部的 hook 對應表會整個錯位
   //（這正是 eslint react-hooks/rules-of-hooks 抓到的錯誤）。
   useEffect(() => {
+    if (!matchId) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "z") {
         e.preventDefault();
-        if (e.shiftKey) redo();
-        else undo();
+        if (e.shiftKey) redo(matchId);
+        else undo(matchId);
       } else if ((e.ctrlKey || e.metaKey) && e.key === "y") {
         e.preventDefault();
-        redo();
+        redo(matchId);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [undo, redo]);
+  }, [matchId, undo, redo]);
 
   const rotationPositions = rotations[currentRotation];
   const rotationTactics = tacticsByRotation[currentRotation];
@@ -131,6 +154,7 @@ export default function Court() {
   };
 
   const handlePointerDown = (e: React.PointerEvent) => {
+    if (!matchId) return;
     // Only process if clicking on the court background/svg directly
     // （球場外圍那圈白板空間沒有畫任何形狀，點在那裡會直接落在 svg 根元素上，
     // 跟點在 court-bg 上一樣都算「點空白處」）
@@ -147,7 +171,7 @@ export default function Court() {
         // But since we can't synchronously get the ID easily without modifying addMarker,
         // we'll just set a drawing mode and update the *last* marker.
         // Actually, we can just dispatch addMarker, then in pointerMove we update the last marker.
-        addMarker({
+        addMarker(matchId, {
           // Array.includes() 不會幫 TS 自動收窄型別（TS 只看得懂 === 比較），
           // 上面的 includes 已經保證只剩這三種，這裡用明確的字面量聯集斷言取代 any——
           // 好處是若未來 Marker 的 type 聯集改了，這行會直接編譯錯誤，any 則會默默放行。
@@ -160,7 +184,7 @@ export default function Court() {
         // We will set a flag so pointerMove knows we are drawing
         setDrawingMarkerId("drawing");
       } else if (isLayoutMode && (activeTool === "text" || activeTool === "volleyball")) {
-        addMarker({
+        addMarker(matchId, {
           // 這裡不用斷言：上面的條件是直接的 === 比較，TS 已把 activeTool
           // 自動收窄成 "text" | "volleyball"。
           type: activeTool,
@@ -170,7 +194,7 @@ export default function Court() {
         });
         setActiveTool("select");
       } else if (isLayoutMode && ["circle", "ellipse", "fan"].includes(activeTool)) {
-        addDefenseRange({
+        addDefenseRange(matchId, {
           playerId: "",
           // 同上：includes 保證了範圍，用字面量聯集斷言（對應 DefenseRange 的 type）取代 any。
           type: activeTool as "circle" | "ellipse" | "fan",
@@ -191,6 +215,7 @@ export default function Court() {
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
+    if (!matchId) return;
     if (drawingMarkerId === "drawing") {
       const pt = getSvgPoint(e);
       // We assume the last marker added is the one being drawn
@@ -198,7 +223,7 @@ export default function Court() {
       if (markers.length > 0) {
         const lastMarker = markers[markers.length - 1];
         if (lastMarker.points && lastMarker.points.length === 2) {
-          updateMarker(lastMarker.id, {
+          updateMarker(matchId, lastMarker.id, {
             points: [lastMarker.points[0], { x: pt.x, y: pt.y }],
           });
         }
@@ -222,6 +247,7 @@ export default function Court() {
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
+    if (!matchId) return;
     const playerId = e.dataTransfer.getData("text/plain");
     if (!playerId || !courtRef.current) return;
     const CTM = courtRef.current.getScreenCTM();
@@ -238,15 +264,15 @@ export default function Court() {
         // 「拖不進紅框」問題：不是真的拖不進去，是拖進去後被吸到球場上了）。
         const player = roster.find((p) => p.id === playerId);
         if (player?.role === "L") {
-          setStartingLiberoId(playerId);
+          setStartingLiberoId(matchId, playerId);
         }
       } else {
         // 輪轉視圖：吸附到最近格子，自動推算全部 6 個輪次
-        placePlayerOnCourt(playerId, findNearestZone(rawX / 100, rawY / 200));
+        placePlayerOnCourt(matchId, playerId, findNearestZone(rawX / 100, rawY / 200));
       }
     } else if (courtView === "tactics" && isLayoutMode) {
       // 戰術視圖 + 布置模式：自由座標放置，只影響目前輪次的 tacticPositions
-      placePlayerFree(playerId, rawX / 100, rawY / 200);
+      placePlayerFree(matchId, playerId, rawX / 100, rawY / 200);
     }
     // 戰術視圖 + 非布置模式：不接受拖曳（唯讀）
   };
@@ -600,7 +626,7 @@ export default function Court() {
                   onContextMenu={(e) => {
                     e.preventDefault();
                     // 右鍵點備位區 L = 取消先發設定，備位區變空白
-                    setStartingLiberoId(null);
+                    if (matchId) setStartingLiberoId(matchId, null);
                   }}
                   className="w-7 h-7 rounded-full bg-red-100 border-2 border-red-300 flex items-center justify-center text-[10px] font-bold cursor-grab active:cursor-grabbing select-none"
                   title={`${p.name} #${p.number} — 拖到後排（1/5/6）上場；右鍵取消先發`}

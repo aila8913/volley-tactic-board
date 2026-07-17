@@ -29,7 +29,10 @@ export interface RotationPositions {
   liberoReplacement: LiberoReplacement | null;
 }
 
-export interface RotationTableData {
+// 「一場比賽」自己的輪轉狀態（issue #119）。這是會跨場污染的部分，所以在 store 裡用
+// matchId 當 key 分片存放（dataByMatch[matchId]），一場一份、彼此不互相覆寫。
+// 刻意不含 circleLabel——見 RotationTableData 的說明。
+export interface PerMatchRotationState {
   // 完整球員名單（人數不固定），跟比賽列表那邊的 match.players 是同一份資料、同一個型別，
   // 編輯這裡會回寫到 match list。球場上 PlayerPosition.playerId 直接存這份名單裡的球員 id，
   // 哪個球員站場上哪個位置，完全由教練拖曳決定（見 hooks/useRotationTable.ts 的 placePlayerOnCourt）。
@@ -38,5 +41,12 @@ export interface RotationTableData {
   rotations: RotationPositions[];
   // 備位區要顯示哪位 L——名單裡可能有多個 L，但場上（備位區）同時只能有一位。
   startingLiberoId: string | null;
+}
+
+// 存檔／讀檔的邊界型別：一份完整戰術包含 per-match 狀態「加上」circleLabel。
+// circleLabel 是全域顯示偏好（圈圈顯示姓名/背號/位置），不隨某一場比賽走——ScoreSheetCourt
+// 也直接讀它，所以它留在 store 頂層當全域欄位、不進 dataByMatch 分片。存檔時仍把它一起寫進
+// JSON（載入舊戰術要能還原當時的顯示偏好），所以這個邊界型別把兩者合在一起。
+export interface RotationTableData extends PerMatchRotationState {
   circleLabel: CircleLabelType;
 }
