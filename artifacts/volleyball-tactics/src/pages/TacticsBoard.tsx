@@ -6,20 +6,30 @@ import TacticsBoardPanel from "../components/TacticsBoardPanel";
 import Court from "../components/Court";
 import { useMatchWithRoster } from "../hooks/useMatches";
 import { useRotationTable } from "../hooks/useRotationTable";
+import { useTacticsBoard } from "../hooks/useTacticsBoard";
 
 export default function TacticsBoard() {
   const { id } = useParams<{ id: string }>();
   // URL 的 id 是字串，後端 match id 是整數，取用前轉成 number。
   const { match } = useMatchWithRoster(Number(id));
   const setRoster = useRotationTable((state) => state.setRoster);
+  const resetBoardView = useTacticsBoard((state) => state.resetBoardView);
+
+  // 切換到某一場戰術板時，把全域、暫時性的畫面狀態（undo 歷史、布置模式、視圖）歸零
+  //（issue #119）：這些是全域共用、但戰術資料是 per-match，不歸零的話從 A 場帶著歷史
+  // 切到 B 場再按 Ctrl+Z 會把 A 的快照還原進 B。只在 matchId 變動時跑一次。
+  useEffect(() => {
+    resetBoardView();
+  }, [id, resetBoardView]);
 
   // 進入戰術板時，把這場比賽名單帶進來，這樣球員設定才會跟外面比賽列表輸入的資訊一致。
   // 只在比賽資料本身變動時才重新同步，不然每次 render 都會跑。
+  // setRoster 現在要指定 matchId（issue #119）：名單存進「這一場」的分片，不會污染別場。
   useEffect(() => {
-    if (match) {
-      setRoster(match.players);
+    if (match && id) {
+      setRoster(id, match.players);
     }
-  }, [match, setRoster]);
+  }, [match, id, setRoster]);
 
   // tournamentId 存在時返回該資料夾頁，否則返回根列表。
   const backHref = match?.tournamentId ? `/tournaments/${match.tournamentId}` : "/";

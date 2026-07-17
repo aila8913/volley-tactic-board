@@ -1,8 +1,10 @@
 import React, { useRef } from "react";
+import { useParams } from "wouter";
 import { DefenseRange as DefenseRangeType } from "../types/tacticsBoard";
 import { useTacticsBoard } from "../hooks/useTacticsBoard";
 
 export default function DefenseRange({ range }: { range: DefenseRangeType }) {
+  const { id: matchId } = useParams<{ id: string }>();
   const { selectedObjectId, setSelectedObjectId, activeTool, updateDefenseRange, isLayoutMode } =
     useTacticsBoard();
   const isDragging = useRef(false);
@@ -39,7 +41,7 @@ export default function DefenseRange({ range }: { range: DefenseRangeType }) {
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
-    if (!isDragging.current) return;
+    if (!isDragging.current || !matchId) return;
     const target = e.target as Element;
     const svg = target.closest("svg");
     if (svg) {
@@ -50,7 +52,7 @@ export default function DefenseRange({ range }: { range: DefenseRangeType }) {
         const dx = currentX - dragStart.current.x;
         const dy = currentY - dragStart.current.y;
 
-        updateDefenseRange(range.id, {
+        updateDefenseRange(matchId, range.id, {
           x: dragStart.current.initialX + dx,
           y: dragStart.current.initialY + dy,
         });

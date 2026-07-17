@@ -49,10 +49,13 @@ export default function ScoreSheet() {
   const { id } = useParams<{ id: string }>();
   const { match, isLoading: isMatchLoading } = useMatchWithRoster(Number(id));
 
-  // 只讀輪轉表的 rotations，用來「擷取」計分表自己的先發快照——擷取一次之後，計分表就完全
-  // 讀自己的快照、不再碰這份全域 store（issue #115）。刻意不再呼叫 setRoster：以前進頁時
-  // setRoster(match.players) 的幽靈站位清理，正是「切到別場/載入存檔就把先發掃空」的元兇。
-  const rotations = useRotationTable((state) => state.rotations);
+  // 只讀輪轉表這一場的 rotations，用來「擷取」計分表自己的先發快照——擷取一次之後，計分表就
+  // 完全讀自己的快照、不再碰輪轉表（issue #115）。輪轉表現在用 matchId 分片（issue #119），所以
+  // 讀 dataByMatch[id] 這一場自己的站位；那場還沒排就 undefined，capturableLineup 會算成 null。
+  // 這其實比以前讀全域 state.rotations 更正確——舊寫法會讀到「最後開的那場」的站位（#119 的污染源）。
+  const rotations = useRotationTable((state) =>
+    id ? state.dataByMatch[id]?.rotations : undefined,
+  );
 
   const record = useScoreSheet((state) => (id ? state.recordingsByMatch[id] : undefined));
   const setLiberoSubstitution = useScoreSheet((state) => state.setLiberoSubstitution);
@@ -98,7 +101,7 @@ export default function ScoreSheet() {
   // activeLineup：優先用已凍結的，其次用可擷取的——球場渲染、開賽擷取都以它為準。
   const lineup = record?.lineup ?? null;
   const capturableLineup = useMemo(
-    () => (match ? captureLineupFromRotations(rotations, match.players) : null),
+    () => (match ? captureLineupFromRotations(rotations ?? [], match.players) : null),
     [match, rotations],
   );
   const activeLineup = lineup ?? capturableLineup;

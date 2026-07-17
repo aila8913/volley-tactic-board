@@ -1,4 +1,5 @@
 import React, { useRef, useState } from "react";
+import { useParams } from "wouter";
 import { PlayerPosition } from "../types/rotationTable";
 import { MatchPlayer } from "../types/match";
 import { useRotationTable } from "../hooks/useRotationTable";
@@ -20,6 +21,8 @@ export default function PlayerNode({
   isLibero,
   courtRef,
 }: PlayerNodeProps) {
+  const { id: matchId } = useParams<{ id: string }>();
+  // circleLabel 是全域顯示偏好（不隨 match 走），留在 store 頂層直接讀。站位動作則帶 matchId。
   const { placePlayerOnCourt, removePlayerFromCourt, circleLabel } = useRotationTable();
   const {
     placePlayerFree,
@@ -33,10 +36,11 @@ export default function PlayerNode({
   // 輪轉視圖跟戰術視圖的「移除」現在是兩件完全獨立的事：輪轉視圖動的是輪轉表的
   // 即時站位，戰術視圖只動這張快照（tacticPositions），彼此不影響對方。
   const removeFromCourt = (playerId: string) => {
+    if (!matchId) return;
     if (courtView === "tactics") {
-      removePlayerFromTacticView(playerId);
+      removePlayerFromTacticView(matchId, playerId);
     } else {
-      removePlayerFromCourt(playerId);
+      removePlayerFromCourt(matchId, playerId);
     }
   };
   const [isDragging, setIsDragging] = useState(false);
@@ -129,6 +133,7 @@ export default function PlayerNode({
   const handlePointerUp = (e: React.PointerEvent) => {
     setIsDragging(false);
     (e.target as Element).releasePointerCapture(e.pointerId);
+    if (!matchId) return;
 
     if (courtView === "tactics" && dragPos) {
       if (isLibero && isOverBench) {
@@ -136,13 +141,13 @@ export default function PlayerNode({
         removeFromCourt(position.playerId);
       } else {
         // 戰術視圖：自由座標存進 tacticPositions
-        placePlayerFree(position.playerId, dragPos.x / 100, dragPos.y / 200);
+        placePlayerFree(matchId, position.playerId, dragPos.x / 100, dragPos.y / 200);
       }
       setDragPos(null);
       setIsOverBench(false);
     } else if (courtView === "rotation" && dragZone !== null) {
       // 輪轉視圖：格子吸附並推算全部 6 輪
-      placePlayerOnCourt(position.playerId, dragZone);
+      placePlayerOnCourt(matchId, position.playerId, dragZone);
       setDragZone(null);
     }
   };
