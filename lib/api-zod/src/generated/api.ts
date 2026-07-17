@@ -475,8 +475,13 @@ export const PutSetLineupResponse = zod.object({
 /**
  * @summary List all saved tactics for the current user
  */
+export const ListTacticsQueryParams = zod.object({
+  "matchId": zod.coerce.number().optional()
+})
+
 export const ListTacticsResponseItem = zod.object({
   "id": zod.string().uuid(),
+  "matchId": zod.number().nullish(),
   "name": zod.string(),
   "data": zod.record(zod.string(), zod.unknown()),
   "createdAt": zod.coerce.date(),
@@ -489,6 +494,7 @@ export const ListTacticsResponse = zod.array(ListTacticsResponseItem)
  * @summary Save a new tactic
  */
 export const CreateTacticBody = zod.object({
+  "matchId": zod.number().nullish(),
   "name": zod.string(),
   "data": zod.record(zod.string(), zod.unknown())
 })
@@ -503,6 +509,7 @@ export const GetTacticParams = zod.object({
 
 export const GetTacticResponse = zod.object({
   "id": zod.string().uuid(),
+  "matchId": zod.number().nullish(),
   "name": zod.string(),
   "data": zod.record(zod.string(), zod.unknown()),
   "createdAt": zod.coerce.date(),
@@ -524,6 +531,7 @@ export const UpdateTacticBody = zod.object({
 
 export const UpdateTacticResponse = zod.object({
   "id": zod.string().uuid(),
+  "matchId": zod.number().nullish(),
   "name": zod.string(),
   "data": zod.record(zod.string(), zod.unknown()),
   "createdAt": zod.coerce.date(),

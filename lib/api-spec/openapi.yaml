@@ -486,6 +486,14 @@ paths:
       operationId: listTactics
       tags: [tactics]
       summary: List all saved tactics for the current user
+      parameters:
+        # 依比賽過濾戰術庫（#119）。帶 matchId 就只回這場的戰術，戰術面板才不會跨場汙染。
+        # 不帶就回全部（保留舊行為）。
+        - name: matchId
+          in: query
+          required: false
+          schema:
+            type: integer
       responses:
         "200":
           description: List of tactics
@@ -1118,6 +1126,11 @@ components:
         id:
           type: string
           format: uuid
+        # 這份戰術所屬的比賽 id（#119）。matches.id 是 serial 整數，所以這裡是 integer 不是 uuid。
+        # null 代表 #119 之前存的舊戰術（沒有歸屬某場）。
+        matchId:
+          type: integer
+          nullable: true
         name:
           type: string
         # TacticsState 的完整快照，以 jsonb 存在 DB，前端直接解析成 TacticsState 型別。
@@ -1135,6 +1148,11 @@ components:
     NewTactic:
       type: object
       properties:
+        # 存檔時帶上當前比賽 id，讓這份戰術歸屬到這場（#119）。optional/nullable：不帶就是全域戰術，
+        # 保留舊行為的相容性，但正常路徑前端都會帶。
+        matchId:
+          type: integer
+          nullable: true
         name:
           type: string
         data:

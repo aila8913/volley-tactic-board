@@ -22,6 +22,7 @@ import type {
 import type {
   HealthStatus,
   Lineup,
+  ListTacticsParams,
   Match,
   MatchEvent,
   MatchSet,
@@ -2125,20 +2126,27 @@ export const usePutSetLineup = <TError = ErrorType<unknown>,
       return useMutation(getPutSetLineupMutationOptions(options));
     }
 
-export const getListTacticsUrl = () => {
+export const getListTacticsUrl = (params?: ListTacticsParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/tactics`
+  return stringifiedParams.length > 0 ? `/api/tactics?${stringifiedParams}` : `/api/tactics`
 }
 
 /**
  * @summary List all saved tactics for the current user
  */
-export const listTactics = async ( options?: RequestInit): Promise<Tactic[]> => {
+export const listTactics = async (params?: ListTacticsParams, options?: RequestInit): Promise<Tactic[]> => {
 
-  return customFetch<Tactic[]>(getListTacticsUrl(),
+  return customFetch<Tactic[]>(getListTacticsUrl(params),
   {
     ...options,
     method: 'GET'
@@ -2151,23 +2159,23 @@ export const listTactics = async ( options?: RequestInit): Promise<Tactic[]> => 
 
 
 
-export const getListTacticsQueryKey = () => {
+export const getListTacticsQueryKey = (params?: ListTacticsParams,) => {
     return [
-    `/api/tactics`
+    `/api/tactics`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getListTacticsQueryOptions = <TData = Awaited<ReturnType<typeof listTactics>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listTactics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getListTacticsQueryOptions = <TData = Awaited<ReturnType<typeof listTactics>>, TError = ErrorType<unknown>>(params?: ListTacticsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listTactics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getListTacticsQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getListTacticsQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof listTactics>>> = ({ signal }) => listTactics({ signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listTactics>>> = ({ signal }) => listTactics(params, { signal, ...requestOptions });
 
 
 
@@ -2185,11 +2193,11 @@ export type ListTacticsQueryError = ErrorType<unknown>
  */
 
 export function useListTactics<TData = Awaited<ReturnType<typeof listTactics>>, TError = ErrorType<unknown>>(
-  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listTactics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+ params?: ListTacticsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listTactics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
-  const queryOptions = getListTacticsQueryOptions(options)
+  const queryOptions = getListTacticsQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

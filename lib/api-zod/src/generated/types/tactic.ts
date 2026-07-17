@@ -9,6 +9,7 @@ import type { TacticData } from './tacticData';
 
 export interface Tactic {
   id: string;
+  matchId?: number | null;
   name: string;
   data: TacticData;
   createdAt: Date;

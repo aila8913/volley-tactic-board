@@ -256,6 +256,7 @@ export type TacticData = { [key: string]: unknown };
 
 export interface Tactic {
   id: string;
+  matchId?: number | null;
   name: string;
   data: TacticData;
   createdAt: string;
@@ -265,6 +266,7 @@ export interface Tactic {
 export type NewTacticData = { [key: string]: unknown };
 
 export interface NewTactic {
+  matchId?: number | null;
   name: string;
   data: NewTacticData;
 }
@@ -289,4 +291,8 @@ export interface UpdateEvent {
   note?: string | null;
   videoTimestamp?: number | null;
 }
+
+export type ListTacticsParams = {
+matchId?: number;
+};
 
