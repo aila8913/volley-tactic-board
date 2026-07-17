@@ -17,8 +17,12 @@
 > promote it first, then drop it. Read this file + `gh issue list --state open` + recent
 > `git log` at the start of a session instead of re-exploring the codebase.
 
-\_Last updated: 2026-07-16 — 兩件事進 main：**戰術板跟上深色語言**（PR #135，commit `0d63ee3`）
-與**兩人協作流程正式上線**（PR #137，commit `ab626b1`）。
+\_Last updated: 2026-07-17 — 需求層分析 session：fable-advisor 用《The Timeless Way of Building》的
+pattern 語言把 app 的**需求**（非程式碼架構）拆成 P1–P7 七個 pattern（context/forces/problem/
+solution/resulting context），存進 **`docs/requirements-pattern-language.md`**。沒動程式碼、沒關 issue；
+只把兩個磨利的判斷釘進既有 issue 留言——**#75**（離線是最大「假牆」，優先序應在部署 #26 之前）、
+**#51**（進階版「節奏遊戲」要用 recording-cost-budget 成本表反推成可量測預算）。上一輪（07-16）背景：
+**戰術板跟上深色語言**（PR #135，commit `0d63ee3`）與**兩人協作流程正式上線**（PR #137，commit `ab626b1`）。
 
 **#131 原本卡的 PO 決定已拍板：手繪風全拿掉**——戰術板已退役 `wobbly-border`/手繪字體，球場底色
 改深青漸層（**非** spec 原始的暖木色 `#C9A25D`，理由記在 design-spec.md 第 5 節「實作決定」）。
@@ -74,6 +78,11 @@ lives in git log + the issues named):
 - **兩人協作流程已上線**（PR #137，tang approve）：討論分流／關 issue 規則／跨領域 review 住
   CONTRIBUTING.md「協作與溝通」，Claude 要主動把關的版本住 CLAUDE.md「Team & collaboration
   rules」，ship Step 7 會在 merge 前做跨領域確認。改協作規範＝開 PR 動那些檔案並請對方 review。
+- **需求層的 pattern-language 分析住 `docs/requirements-pattern-language.md`**（Alexander 式，P1–P7）：
+  把「為什麼要做這些功能／背後哪兩股力在打架」講清楚，是 product-vision（定位）／recording-cost-budget
+  （記錄成本）／event-grammar-spec（統計可推導）三份 spec 的上位框架。每個 pattern 的「落點」都標了
+  對應 issue，最後的「整體性評語」點名 P7 離線（假牆）與 P6 球線分布（wow 點的洞）是兩處待補的張力。
+  **尚未 commit**（07-17 session 產出，待 ship）。
 
 ## Known gaps / next big pieces
 
