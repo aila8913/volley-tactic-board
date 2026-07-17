@@ -1,8 +1,10 @@
 import React, { useRef, useState } from "react";
+import { useParams } from "wouter";
 import { Marker as MarkerType } from "../types/tacticsBoard";
 import { useTacticsBoard } from "../hooks/useTacticsBoard";
 
 export default function Markers({ marker }: { marker: MarkerType }) {
+  const { id: matchId } = useParams<{ id: string }>();
   const { selectedObjectId, setSelectedObjectId, activeTool, updateMarker, isLayoutMode } =
     useTacticsBoard();
   const [isEditingText, setIsEditingText] = useState(false);
@@ -39,7 +41,7 @@ export default function Markers({ marker }: { marker: MarkerType }) {
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
-    if (!isDragging.current) return;
+    if (!isDragging.current || !matchId) return;
     const target = e.target as Element;
     const svg = target.closest("svg");
     if (!svg) return;
@@ -48,11 +50,11 @@ export default function Markers({ marker }: { marker: MarkerType }) {
     const dy = current.y - dragStart.current.y;
 
     if (dragOrigin.current.points) {
-      updateMarker(marker.id, {
+      updateMarker(matchId, marker.id, {
         points: dragOrigin.current.points.map((p) => ({ x: p.x + dx, y: p.y + dy })),
       });
     } else if (dragOrigin.current.x !== undefined && dragOrigin.current.y !== undefined) {
-      updateMarker(marker.id, {
+      updateMarker(matchId, marker.id, {
         x: dragOrigin.current.x + dx,
         y: dragOrigin.current.y + dy,
       });
@@ -78,8 +80,8 @@ export default function Markers({ marker }: { marker: MarkerType }) {
 
   const handleTextBlur = () => {
     setIsEditingText(false);
-    if (tempText.trim() !== marker.text) {
-      updateMarker(marker.id, { text: tempText });
+    if (matchId && tempText.trim() !== marker.text) {
+      updateMarker(matchId, marker.id, { text: tempText });
     }
   };
 

@@ -4,10 +4,19 @@ import { useRotationTable } from "../hooks/useRotationTable";
 import { useTacticsBoard } from "../hooks/useTacticsBoard";
 import { useRoster, useSaveRoster } from "../hooks/useMatches";
 import { MatchPlayer } from "../types/match";
+import type { RotationPositions } from "../types/rotationTable";
 import { isLineupComplete } from "../lib/rotationLogic";
 import RotationSwitcher from "./RotationSwitcher";
 import RosterEditDialog from "./RosterEditDialog";
 import { useToast } from "../hooks/use-toast";
+
+// 這一場還沒有分片資料時用的空白預設值。定義在模組層（不是每次 render 新建）是為了保持
+// 參照穩定：roster/rotations 是 useMemo/依賴陣列跟 zustand selector 會比對的值，每 render
+// 換一個新陣列會造成不必要的重繪，甚至跟 effect 互踩成迴圈。
+const EMPTY_ROSTER: MatchPlayer[] = [];
+const EMPTY_ROTATIONS: RotationPositions[] = Array(6)
+  .fill(null)
+  .map(() => ({ positions: [], liberoReplacement: null }));
 
 // 小按鈕共用樣式（編輯/重置站位/清除畫筆），跟比賽列表那邊的次要按鈕是同一套語言，
 // 只是尺寸縮小配合這裡的資訊密度。
@@ -16,13 +25,20 @@ const PANEL_BUTTON_CLASS =
   "font-bold text-[#f5f5f0] transition hover:border-[#c6f135] hover:text-[#c6f135]";
 
 export default function RotationTable() {
-  const { roster, setRoster, rotations, currentRotation, startingLiberoId } = useRotationTable();
+  const { id: matchId } = useParams<{ id: string }>();
+  // 名單/站位/目前輪次/先發 L 現在都存在「這一場」的分片裡（issue #119），統一從
+  // dataByMatch[matchId] 讀；那場還沒任何資料時給空白預設值。
+  const data = useRotationTable((state) => (matchId ? state.dataByMatch[matchId] : undefined));
+  const roster = data?.roster ?? EMPTY_ROSTER;
+  const rotations = data?.rotations ?? EMPTY_ROTATIONS;
+  const currentRotation = data?.currentRotation ?? 0;
+  const startingLiberoId = data?.startingLiberoId ?? null;
+  const setRoster = useRotationTable((state) => state.setRoster);
   const resetCurrentRotationPositions = useRotationTable(
     (state) => state.resetCurrentRotationPositions,
   );
   const resetCurrentRotationTactics = useTacticsBoard((state) => state.resetCurrentRotationTactics);
   const clearMarkers = useTacticsBoard((state) => state.clearMarkers);
-  const { id: matchId } = useParams<{ id: string }>();
   // 伺服器目前的名單，當作「儲存名單」時算差異（新增/修改/刪除哪些球員）的基準。
   const { players: serverRoster } = useRoster(Number(matchId));
   const saveRoster = useSaveRoster();
@@ -38,8 +54,9 @@ export default function RotationTable() {
   // 這裡改成 await，抓到錯誤時用 toast 提醒使用者，跟 MatchFormDialog.tsx 儲存失敗
   // 用的是同一套 useToast + destructive 樣式，不重複造一套新的錯誤提示模式。
   const handleRosterSave = async (players: MatchPlayer[]) => {
+    if (!matchId) return;
     // local-first：不管後端回寫成不成功，先讓畫面立刻反映使用者剛編輯的名單。
-    setRoster(players);
+    setRoster(matchId, players);
     if (matchId) {
       try {
         await saveRoster(Number(matchId), serverRoster, players);
@@ -65,9 +82,10 @@ export default function RotationTable() {
   // 這個動作沒有 undo，點錯會直接清空——用瀏覽器內建的 window.confirm() 擋一下，
   // 跟 MatchList.tsx / TournamentDetail.tsx 刪除比賽/賽事時用的是同一套簡單彈窗模式。
   const handleResetRotation = () => {
+    if (!matchId) return;
     if (!window.confirm("確定要重置目前輪次的站位嗎？此動作無法復原。")) return;
-    resetCurrentRotationPositions();
-    resetCurrentRotationTactics();
+    resetCurrentRotationPositions(matchId);
+    resetCurrentRotationTactics(matchId);
   };
 
   return (
@@ -139,7 +157,7 @@ export default function RotationTable() {
                 重置站位
               </button>
               <button
-                onClick={clearMarkers}
+                onClick={() => matchId && clearMarkers(matchId)}
                 className="flex-1 rounded-lg border border-white/[0.26] bg-white/[0.05] px-2 py-1
                   text-xs font-bold text-[#a9b096] transition hover:border-[#ef4444]
                   hover:bg-[#ef4444]/10 hover:text-[#ef4444]"
