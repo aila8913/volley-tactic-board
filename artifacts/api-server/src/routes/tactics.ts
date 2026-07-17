@@ -8,6 +8,7 @@ import {
   GetTacticParams,
   UpdateTacticParams,
   DeleteTacticParams,
+  ListTacticsQueryParams,
 } from "@workspace/api-zod";
 
 const router: IRouter = Router();
@@ -15,12 +16,23 @@ const router: IRouter = Router();
 // 所有戰術路由都套用 mock auth，userId 會被注入到 req.userId
 router.use(mockAuth);
 
-// GET /tactics — 取得目前使用者的所有戰術，按建立時間新→舊排列
+// GET /tactics — 取得目前使用者的戰術，按建立時間新→舊排列。
+// 帶 ?matchId=<n> 就只回那場比賽的戰術（#119：戰術庫 per-match，面板不再跨場汙染）；
+// 不帶就回全部（保留舊行為）。
 router.get("/tactics", async (req, res) => {
+  const { matchId } = ListTacticsQueryParams.parse(req.query);
+
   const tactics = await db
     .select()
     .from(tacticsTable)
-    .where(eq(tacticsTable.userId, req.userId))
+    .where(
+      // 一律先鎖 userId（擁有權），有帶 matchId 再多疊一個等值條件。
+      // and(...) 接受 undefined 會自動略過，所以沒帶 matchId 時等同只有 userId 條件。
+      and(
+        eq(tacticsTable.userId, req.userId),
+        matchId !== undefined ? eq(tacticsTable.matchId, matchId) : undefined,
+      ),
+    )
     .orderBy(tacticsTable.createdAt);
 
   res.json(tactics);
@@ -34,6 +46,8 @@ router.post("/tactics", async (req, res) => {
     .insert(tacticsTable)
     .values({
       userId: req.userId,
+      // 歸屬到哪一場比賽（#119）。前端存檔時帶當前 matchId；沒帶就是 null（全域戰術）。
+      matchId: body.matchId,
       name: body.name,
       // data 欄位是 jsonb，Drizzle 直接接受 JS 物件
       data: body.data,
