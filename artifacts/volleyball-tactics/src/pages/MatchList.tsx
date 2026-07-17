@@ -83,10 +83,21 @@ export default function MatchList() {
   };
 
   return (
-    <div className="min-h-screen w-full bg-[#0a0b07] font-dash text-[#f5f5f0]">
+    // 純色背景會讓 backdrop-blur 白忙一場（模糊純色還是同一個純色，卡片的玻璃感其實沒有真的
+    // 產生）。這裡疊一層很淡的斜線網格當「球網紋理」，讓 blur 有東西可以模糊，也呼應排球主題
+    // （PR #129 review 建議：docs/design-spec.md 第 4 節寫的玻璃質感本來就是設計給疊在有內容
+    // 的背景上用的）。
+    <div
+      className="min-h-screen w-full bg-[#0a0b07] font-dash text-[#f5f5f0]"
+      style={{
+        backgroundImage:
+          "repeating-linear-gradient(45deg, rgba(245,245,240,0.035) 0 1px, transparent 1px 28px)," +
+          "repeating-linear-gradient(-45deg, rgba(245,245,240,0.035) 0 1px, transparent 1px 28px)",
+      }}
+    >
       <div className="mx-auto max-w-3xl px-4 py-8">
         <div className="mb-6 flex items-center justify-between">
-          <h1 className="font-badge text-2xl font-black">比賽列表</h1>
+          <h1 className="font-dash text-2xl font-bold">比賽列表</h1>
           <div className="flex gap-2">
             <button
               type="button"
@@ -147,7 +158,7 @@ export default function MatchList() {
                         <Folder className="h-[19px] w-[19px]" />
                       </span>
                       <div>
-                        <h2 className="font-badge text-[17px] font-black">{item.data.name}</h2>
+                        <h2 className="font-dash text-[17px] font-bold">{item.data.name}</h2>
                         <p className="text-xs text-[#a9b096]">
                           {matches.filter((m) => m.tournamentId === item.data.id).length} 場比賽
                         </p>

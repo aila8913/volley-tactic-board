@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Caveat:wght@400..700&family=Permanent+Marker&family=Noto+Sans+TC:wght@400;500;700;900&family=Inter:wght@400..700&family=Space+Grotesk:wght@400..700&family=JetBrains+Mono:wght@400;500;700&family=Anton&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Caveat:wght@400..700&family=Permanent+Marker&family=Noto+Sans+TC:wght@400;500;700;900&family=Inter:wght@400..700&family=Space+Grotesk:wght@400..700&family=JetBrains+Mono:wght@400;500;700&display=swap");
 @import "tailwindcss";
 @import "tw-animate-css";
 @plugin "@tailwindcss/typography";
@@ -38,12 +38,13 @@
   --font-sans: "Inter", "Noto Sans TC", sans-serif;
   --font-display: "Permanent Marker", "Caveat", "Noto Sans TC", cursive;
 
-  /* 給「比賽列表」深色儀表板改版用的字體變數，只在該頁面透過 font-dash / font-mono / font-badge
-     這些 class 使用，不影響其他頁面仍在用的 --font-sans / --font-display。
-     見 docs/design-spec.md 第 3 節。 */
+  /* 給「比賽列表」深色儀表板改版用的字體變數。--font-dash 是自訂名字，只在該頁面透過
+     font-dash 這個 class 使用，不影響其他頁面仍在用的 --font-sans / --font-display。
+     見 docs/design-spec.md 第 3 節。
+     注意：--font-numeric 特意不叫 --font-mono——後者是 Tailwind 內建的 theme key，蓋掉它會讓
+     全 app 任何用到 font-mono class 的地方都變成 JetBrains Mono（PR #129 review 抓到的坑）。 */
   --font-dash: "Space Grotesk", "Noto Sans TC", sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, monospace;
-  --font-badge: "Anton", "Space Grotesk", "Noto Sans TC", sans-serif;
+  --font-numeric: "JetBrains Mono", ui-monospace, monospace;
 
   --radius-sm: 4px;
   --radius-md: 6px;
