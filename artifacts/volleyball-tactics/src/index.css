@@ -1,4 +1,13 @@
-@import url("https://fonts.googleapis.com/css2?family=Caveat:wght@400..700&family=Permanent+Marker&family=Noto+Sans+TC:wght@400;500;700;900&family=Inter:wght@400..700&family=Space+Grotesk:wght@400..700&family=JetBrains+Mono:wght@400;500;700&display=swap");
+/* 拆成一家字體一行（原本擠在一行 @import 裡，這次跟 PR #136 剛好撞在同一行——
+   拆開之後兩人各自加字體不會再共用同一行、衝突機率大幅降低。代價是多幾個 HTTP
+   request，這個專案規模可以接受）。 */
+@import url("https://fonts.googleapis.com/css2?family=Caveat:wght@400..700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Permanent+Marker&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400..700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400..700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Sixtyfour&display=swap");
 @import "tailwindcss";
 @import "tw-animate-css";
 @plugin "@tailwindcss/typography";
@@ -158,4 +167,82 @@
   box-shadow:
     0 0 6px 1px rgba(255, 255, 255, 0.55),
     0 0 26px 6px rgba(198, 241, 53, 0.5);
+}
+
+/* 戰術板背景材質（issue #134 Track B：材質強化）——兩層東西疊在球場底色之上：
+   一道幾乎察覺不到的斜向光影（.tb-beam），跟置中放大的字標（.tb-mark），都用
+   plain CSS 寫（同上面 .roster-row 的理由：避免 Tailwind 任意值解析多層 rgba 出錯）。
+   兩者都是 position: absolute，TacticsBoard.tsx 那邊要記得把 header／中間三欄
+   那個外層 div 加上 relative，不然這兩層絕對定位的背景會蓋到前景 UI 上面
+   （沒有明確 stacking context 時，absolute 元素預設蓋在一般文件流的靜態元素上面）。
+   VOLLEY / BOARD 是品牌名稱定案前的佔位字，之後改文字就好，樣式不用動。 */
+.tb-beam {
+  position: absolute;
+  z-index: 1;
+  width: 160%;
+  height: 380px;
+  left: -30%;
+  top: 2%;
+  transform: rotate(-14deg);
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(245, 245, 240, 0.05) 45%,
+    rgba(245, 245, 240, 0.07) 52%,
+    rgba(245, 245, 240, 0.05) 60%,
+    transparent 100%
+  );
+  filter: blur(30px);
+  pointer-events: none;
+}
+
+.tb-mark {
+  position: absolute;
+  z-index: 1;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: clamp(420px, 55vw, 720px);
+  text-align: center;
+  pointer-events: none;
+}
+.tb-mark-flourish {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  margin-bottom: 22px;
+}
+.tb-mark-flourish span {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(198, 241, 53, 0.35);
+}
+.tb-mark-hero {
+  position: relative;
+  height: clamp(120px, 22vw, 220px);
+}
+.tb-mark-hero .layer {
+  position: absolute;
+  inset: 0;
+  font-family: "Sixtyfour", "Space Grotesk", monospace;
+  font-size: clamp(48px, 9vw, 92px);
+  font-weight: 400;
+  letter-spacing: 0.01em;
+  line-height: 1.02;
+}
+.tb-mark-hero .layer-glow {
+  color: rgba(245, 245, 240, 0.22);
+  filter: blur(16px);
+}
+.tb-mark-hero .layer-core {
+  color: rgba(245, 245, 240, 0.1);
+}
+.tb-mark-caption {
+  margin-top: 18px;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 13px;
+  letter-spacing: 0.16em;
+  color: rgba(198, 241, 53, 0.28);
+  text-transform: uppercase;
 }
