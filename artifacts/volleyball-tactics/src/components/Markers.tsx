@@ -5,8 +5,10 @@ import { useTacticsBoard } from "../hooks/useTacticsBoard";
 
 export default function Markers({ marker }: { marker: MarkerType }) {
   const { id: matchId } = useParams<{ id: string }>();
-  const { selectedObjectId, setSelectedObjectId, activeTool, updateMarker, isLayoutMode } =
+  const { selectedObjectId, setSelectedObjectId, activeTool, updateMarker, session } =
     useTacticsBoard();
+  // 有 session＝正在即時布置、可拖曳編輯（取代舊的 isLayoutMode，issue #154 PR C）。
+  const isLayoutMode = session !== null;
   const [isEditingText, setIsEditingText] = useState(false);
   const [tempText, setTempText] = useState(marker.text || "");
 
@@ -50,11 +52,11 @@ export default function Markers({ marker }: { marker: MarkerType }) {
     const dy = current.y - dragStart.current.y;
 
     if (dragOrigin.current.points) {
-      updateMarker(matchId, marker.id, {
+      updateMarker(marker.id, {
         points: dragOrigin.current.points.map((p) => ({ x: p.x + dx, y: p.y + dy })),
       });
     } else if (dragOrigin.current.x !== undefined && dragOrigin.current.y !== undefined) {
-      updateMarker(matchId, marker.id, {
+      updateMarker(marker.id, {
         x: dragOrigin.current.x + dx,
         y: dragOrigin.current.y + dy,
       });
@@ -81,7 +83,7 @@ export default function Markers({ marker }: { marker: MarkerType }) {
   const handleTextBlur = () => {
     setIsEditingText(false);
     if (matchId && tempText.trim() !== marker.text) {
-      updateMarker(matchId, marker.id, { text: tempText });
+      updateMarker(marker.id, { text: tempText });
     }
   };
 

@@ -10,15 +10,14 @@ import {
 } from "@workspace/api-client-react";
 import { useTacticsBoard, ToolType } from "../hooks/useTacticsBoard";
 import { useRotationTable } from "../hooks/useRotationTable";
-import { RotationTactics } from "../types/tacticsBoard";
+import { captureFromRotation } from "../lib/courtSnapshot";
 import { exportCourtAsPng, exportStateAsJson, importStateFromJson } from "../lib/exportUtils";
 import { Toaster } from "@/components/ui/toaster";
 import { useToast } from "@/hooks/use-toast";
 
-// 這一場還沒有分片資料時的空白畫筆陣列（模組層、參照穩定）。
-const EMPTY_TACTICS: RotationTactics[] = Array(6)
-  .fill(null)
-  .map(() => ({ tacticPositions: [], markers: [], defenseRanges: [] }));
+// 未存內容捨棄前的確認訊息（issue #154 PR C）：白板單向化後，唯一還會「弄丟東西」的動作
+// 就是捨棄一個編到一半、還沒存的 session——所以確認彈窗集中搬到這裡（取代舊的載入覆蓋確認）。
+const DISCARD_MSG = "未儲存的戰術內容將會捨棄，確定嗎？";
 
 const COLORS = [
   "#CCFF00",
@@ -41,34 +40,36 @@ const PRIMARY_BTN_CLASS = "rounded-lg bg-[#c6f135] text-[#0a0b07] transition hov
 
 export default function TacticsBoardPanel() {
   const { id: matchId } = useParams<{ id: string }>();
-  // 全域畫面狀態（工具、選取、布置模式、undo 歷史）個別讀；per-match 資料
-  //（目前情境名稱、正在編輯的戰術 id、各輪畫筆）從 dataByMatch[matchId] 讀（issue #119）。
+  // 戰術白板改成單景 session 後（issue #154 PR C）：正在編輯的名稱/serverId/畫筆/undo 歷史
+  // 全都住在 session 這一個物件裡，用完即丟；沒有 session 就是「沒在編輯」（顯示戰術布置入口）。
   const {
+    session,
     activeTool,
     setActiveTool,
-    setSelectedObjectId,
+    startSession,
+    discardSession,
+    enterEditFromViewing,
+    setSessionName,
     loadProject,
     importState,
-    buildSnapshot,
-    setProjectSituation,
-    setActiveProjectId,
+    buildSavedTactic,
     removeMarker,
     removeDefenseRange,
     selectedObjectId,
     updateDefenseRange,
     undo,
     redo,
-    historyIndex,
-    history,
-    isLayoutMode,
-    setLayoutMode,
-    setCourtView,
-    enterTacticsLayout,
+    viewingScene,
+    viewingTacticId,
   } = useTacticsBoard();
-  const tacticsData = useTacticsBoard((s) => (matchId ? s.dataByMatch[matchId] : undefined));
-  const projectSituation = tacticsData?.projectSituation ?? "";
-  const activeProjectId = tacticsData?.activeProjectId ?? null;
-  const tacticsByRotation = tacticsData?.tacticsByRotation ?? EMPTY_TACTICS;
+  // 有 session＝正在即時布置（取代舊的 isLayoutMode 常駐布林）。
+  const isLayoutMode = session !== null;
+  // 「有未存內容」判準：session 一開始就種了一格起始歷史（history[0]），只要使用者動過任何
+  // 東西就會 push 成第 1 格以後，所以 length > 1 剛好等於「編過、還沒存」。
+  const isDirty = session !== null && session.history.length > 1;
+  const projectSituation = session?.name ?? "";
+  // 清單高亮：正在編輯就看 session.serverId，正在唯讀檢視就看 viewingTacticId。
+  const activeTacticId = session?.serverId ?? viewingTacticId;
   const currentRotation = useRotationTable((state) =>
     matchId ? (state.dataByMatch[matchId]?.currentRotation ?? 0) : 0,
   );
@@ -85,14 +86,11 @@ export default function TacticsBoardPanel() {
   // useCreateTactic：新增一筆戰術，成功後讓 list query 重新抓資料
   const createTactic = useCreateTactic({
     mutation: {
-      onSuccess: (created) => {
+      onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListTacticsQueryKey() });
-        // 把伺服器回傳的 id 寫進「這一場」的分片，之後「儲存」才知道要覆寫哪筆
-        if (matchId) setActiveProjectId(matchId, created.id);
         toast({ title: "戰術已儲存" });
-        setLayoutMode(false);
-        // 存完戰術後回到輪轉表——戰術布置的工作告一段落，畫面回到「誰站哪」的畫面。
-        setCourtView("rotation");
+        // 存完就結束 session（內容已進資料庫），畫面回到輪轉表——白板是暫時工具，用完即丟。
+        discardSession();
       },
       onError: () => toast({ title: "儲存失敗", variant: "destructive" }),
     },
@@ -104,8 +102,7 @@ export default function TacticsBoardPanel() {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListTacticsQueryKey() });
         toast({ title: "戰術已更新" });
-        setLayoutMode(false);
-        setCourtView("rotation");
+        discardSession();
       },
       onError: () => toast({ title: "更新失敗", variant: "destructive" }),
     },
@@ -152,8 +149,8 @@ export default function TacticsBoardPanel() {
 
   const handleDelete = () => {
     if (selectedObjectId) {
-      removeMarker(matchId, selectedObjectId);
-      removeDefenseRange(matchId, selectedObjectId);
+      removeMarker(selectedObjectId);
+      removeDefenseRange(selectedObjectId);
     }
   };
 
@@ -164,12 +161,10 @@ export default function TacticsBoardPanel() {
     toast({ title: "匯出成功", description: "PNG 下載中..." });
   };
 
-  // 匯出 JSON：直接用 buildSnapshot() 組出完整資料，不再直接讀 localStorage 的原始字串——
-  // 拆成兩個 store 之後，「目前狀態」分散在 volleyboard_rotationtable 跟
-  // volleyboard_tacticsboard 兩把 localStorage key 裡，靠字串組合會很脆弱，
-  // buildSnapshot() 已經知道怎麼把兩邊資料併成一份，直接重用最單純。
+  // 匯出 JSON：直接用 buildSavedTactic() 組出 v2 格式（單景快照）。白板單向化後，存檔/匯出
+  // 的內容就是「當前 session 這一景」，不再需要回頭去併輪轉表兩份資料。
   const handleExportJSON = () => {
-    exportStateAsJson(buildSnapshot(matchId), situationLabel);
+    exportStateAsJson(buildSavedTactic(), situationLabel);
     toast({ title: "匯出成功", description: "JSON 下載中..." });
   };
 
@@ -180,47 +175,55 @@ export default function TacticsBoardPanel() {
       const data = await importStateFromJson(file);
       // importStateFromJson 回傳 unknown（JSON 檔內容沒驗證），直接交給 importState——
       // 它內部走 parseSavedTactic 用 zod 驗證，格式錯誤會拋錯、落到下面的 catch 顯示「匯入失敗」。
-      importState(matchId, data);
-      toast({ title: "匯入成功", description: "戰術板已更新" });
+      importState(data);
+      toast({ title: "匯入成功", description: "戰術板已更新（唯讀檢視）" });
     } catch {
       toast({ title: "匯入失敗", description: "檔案格式錯誤", variant: "destructive" });
     }
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  // 儲存：有 activeProjectId → 覆寫；沒有（草稿）→ 新建
-  // SavedTacticData を Record<string, unknown> にキャストするのは、
-  // codegen が additionalProperties:true から生成した NewTacticData の型要件を満たすため。
-  // 実際には SavedTacticData をそのまま JSON として送る。
+  // 進入戰術布置：在「元件層」讀輪轉表當下的站位 + 名單，用純函式 captureFromRotation 擷取成
+  // 一張純值快照（capture by value）再傳進 startSession——store 自己完全不碰輪轉表，單向性靠這
+  // 條邊界保證（見 useTacticsBoard.ts 的說明）。編到一半按這顆會重新擷取，先確認捨棄。
+  const handleEnterLayout = () => {
+    if (isDirty && !window.confirm(DISCARD_MSG)) return;
+    const rt = useRotationTable.getState().dataByMatch[matchId];
+    const r = rt?.currentRotation ?? 0;
+    const positions = rt?.rotations[r]?.positions ?? [];
+    const roster = rt?.roster ?? [];
+    const snapshot = captureFromRotation(positions, roster, { matchId, rotation: r });
+    startSession(snapshot);
+  };
+
+  // 儲存：session 有 serverId → 覆寫那一筆；沒有（草稿）→ 新建。buildSavedTactic() 回傳 v2 物件，
+  // cast 成 Record<string, unknown> 是為了滿足 codegen 從 additionalProperties:true 生成的
+  // NewTacticData 型別要求（實際就是把整包當 JSON 送）。
   const handleSave = () => {
-    const data = buildSnapshot(matchId) as unknown as Record<string, unknown>;
-    if (activeProjectId) {
-      // 覆寫既有戰術：它已經歸屬某一場（matchId 欄早就寫好），這裡只更新 name/data。
-      updateTactic.mutate({ tacticId: activeProjectId, data: { name: projectSituation, data } });
+    if (!session) return;
+    const data = buildSavedTactic() as unknown as Record<string, unknown>;
+    if (session.serverId) {
+      updateTactic.mutate({ tacticId: session.serverId, data: { name: session.name, data } });
     } else {
-      // 新建：把 matchId 一起送上去，戰術就歸屬到「這一場」（issue #119 戰術庫 per-match）。
-      createTactic.mutate({ data: { name: projectSituation, data, matchId: Number(matchId) } });
+      createTactic.mutate({ data: { name: session.name, data, matchId: Number(matchId) } });
     }
   };
 
-  // 另存新檔：永遠建新的一筆，不管目前有沒有 activeProjectId——跟「儲存」的差別是
-  // 「儲存」在已經有 activeProjectId 時會覆寫原本那筆，另存新檔則是複製一份新的。
+  // 另存新檔：永遠建新的一筆，不管 session 有沒有 serverId——跟「儲存」的差別是「儲存」在
+  // 有 serverId 時會覆寫原本那筆，另存新檔則是複製一份新的。
   const handleSaveAs = () => {
-    const data = buildSnapshot(matchId) as unknown as Record<string, unknown>;
-    createTactic.mutate({ data: { name: projectSituation, data, matchId: Number(matchId) } });
+    if (!session) return;
+    const data = buildSavedTactic() as unknown as Record<string, unknown>;
+    createTactic.mutate({ data: { name: session.name, data, matchId: Number(matchId) } });
   };
 
-  // 取消：不呼叫存檔 API，直接放棄這次編輯、回到輪轉表——這次在球場上動的東西
-  // （畫筆、移動的球員快照）不會被存進資料庫，但也不會特別復原，下次按「戰術布置」
-  // 本來就會用輪轉表重新拍一張乾淨的照片蓋過去。
+  // 取消：放棄這次編輯、回到輪轉表。有未存內容先確認（唯一還會弄丟東西的動作）。
   const handleCancel = () => {
-    setSelectedObjectId(null);
-    setLayoutMode(false);
-    setCourtView("rotation");
+    if (isDirty && !window.confirm(DISCARD_MSG)) return;
+    discardSession();
   };
 
-  const currentRotState = tacticsByRotation[currentRotation];
-  const selectedRange = currentRotState?.defenseRanges.find((dr) => dr.id === selectedObjectId);
+  const selectedRange = session?.defenseRanges.find((dr) => dr.id === selectedObjectId);
 
   // 把已儲存戰術的名稱送 API 更新；名稱沒變或是空的就只關閉 input
   const handleRename = (t: (typeof tactics)[number]) => {
@@ -245,7 +248,7 @@ export default function TacticsBoardPanel() {
           {tactics.map((t) => (
             <div
               key={t.id}
-              className={`flex items-center gap-1 rounded p-1 text-[10px] ${t.id === activeProjectId ? "bg-[#c6f135]/20" : "hover:bg-white/[0.08]"}`}
+              className={`flex items-center gap-1 rounded p-1 text-[10px] ${t.id === activeTacticId ? "bg-[#c6f135]/20" : "hover:bg-white/[0.08]"}`}
             >
               {editingId === t.id ? (
                 <input
@@ -264,11 +267,13 @@ export default function TacticsBoardPanel() {
                 <span
                   className="flex-1 cursor-pointer truncate hover:underline"
                   onClick={() => {
+                    // 點清單＝切到唯讀檢視這張快照。若正在編一個沒存的 session，會被清掉，先確認。
+                    if (isDirty && !window.confirm(DISCARD_MSG)) return;
                     // loadProject 現在走 parseSavedTactic（zod 驗證），格式無法辨識會 throw，
                     // 包起來給使用者明確提示，而不是整個畫面炸掉。
                     try {
-                      loadProject(matchId, t.data, t.id, t.name);
-                      toast({ title: "專案已載入" });
+                      loadProject(t.data, t.id, t.name);
+                      toast({ title: "已載入（唯讀檢視），按「編輯」可修改" });
                     } catch {
                       toast({
                         title: "載入失敗",
@@ -299,7 +304,6 @@ export default function TacticsBoardPanel() {
                 onClick={(e) => {
                   e.stopPropagation();
                   deleteTactic.mutate({ tacticId: t.id });
-                  if (t.id === activeProjectId) setActiveProjectId(matchId, null);
                 }}
                 className="shrink-0 px-0.5 font-bold leading-none text-[#a9b096] hover:text-[#ef4444]"
                 title="刪除"
@@ -322,23 +326,23 @@ export default function TacticsBoardPanel() {
             <section>
               <h2 className="mb-2 text-[15px] font-bold">戰術布置</h2>
               <p className="mb-2 text-[10px] text-[#a9b096]">
-                「戰術布置」用輪轉表現在的站位重新編排一個戰術。點下面清單的已儲存戰術是「唯讀檢視」（看一張凍結的快照），編輯功能整修中（#154
-                PR C）。
+                「戰術布置」用輪轉表現在的站位擷取一張快照、疊在白板上編排一個戰術。點下面清單的已儲存戰術是「唯讀檢視」（看一張凍結的照片），按下方「編輯」才進可修改模式。
               </p>
               <button
-                onClick={() => enterTacticsLayout(matchId)}
+                onClick={handleEnterLayout}
                 className={`w-full py-1.5 text-xs font-bold ${PRIMARY_BTN_CLASS}`}
                 data-testid="button-enter-layout-mode"
               >
                 戰術布置
               </button>
               <button
-                disabled
-                title="編輯功能整修中（#154 PR C）"
+                onClick={enterEditFromViewing}
+                disabled={!viewingScene}
+                title={viewingScene ? "編輯這張已存戰術" : "先從下方清單點一張已存戰術檢視"}
                 className={`mt-1.5 w-full py-1.5 text-xs font-bold disabled:opacity-40 ${SECONDARY_BTN_CLASS}`}
                 data-testid="button-edit-current"
               >
-                編輯（整修中）
+                編輯
               </button>
             </section>
             <TacticsList maxHeight="160px" />
@@ -349,9 +353,9 @@ export default function TacticsBoardPanel() {
               <div className="mb-2 flex items-center justify-between">
                 <h2 className="text-[15px] font-bold">戰術管理</h2>
                 <span
-                  className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${activeProjectId ? "bg-[#c6f135] text-[#0a0b07]" : "bg-white/[0.08] text-[#a9b096]"}`}
+                  className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${session?.serverId ? "bg-[#c6f135] text-[#0a0b07]" : "bg-white/[0.08] text-[#a9b096]"}`}
                 >
-                  {activeProjectId ? "正在編輯" : "草稿"}
+                  {session?.serverId ? "正在編輯" : "草稿"}
                 </span>
               </div>
               <input
@@ -360,7 +364,7 @@ export default function TacticsBoardPanel() {
                   focus:ring-[#c6f135]"
                 placeholder="戰術名稱（如：接發11號強發）"
                 value={projectSituation}
-                onChange={(e) => setProjectSituation(matchId, e.target.value)}
+                onChange={(e) => setSessionName(e.target.value)}
                 data-testid="input-project-situation"
               />
             </section>
@@ -370,16 +374,16 @@ export default function TacticsBoardPanel() {
                 <h2 className="text-[15px] font-bold">畫筆工具</h2>
                 <div className="flex gap-1">
                   <button
-                    onClick={() => undo(matchId)}
-                    disabled={historyIndex <= 0}
+                    onClick={() => undo()}
+                    disabled={!session || session.historyIndex <= 0}
                     className={`px-2 py-1 text-xs disabled:opacity-50 ${SECONDARY_BTN_CLASS}`}
                     title="Undo (Ctrl+Z)"
                   >
                     ↩
                   </button>
                   <button
-                    onClick={() => redo(matchId)}
-                    disabled={historyIndex >= history.length - 1}
+                    onClick={() => redo()}
+                    disabled={!session || session.historyIndex >= session.history.length - 1}
                     className={`px-2 py-1 text-xs disabled:opacity-50 ${SECONDARY_BTN_CLASS}`}
                     title="Redo (Ctrl+Y)"
                   >
@@ -484,7 +488,7 @@ export default function TacticsBoardPanel() {
                       step="0.1"
                       value={selectedRange.opacity}
                       onChange={(e) =>
-                        updateDefenseRange(matchId, selectedRange.id, {
+                        updateDefenseRange(selectedRange.id, {
                           opacity: parseFloat(e.target.value),
                         })
                       }
@@ -499,9 +503,7 @@ export default function TacticsBoardPanel() {
                           key={c}
                           className={`h-5 w-5 rounded border border-white/[0.26] ${selectedRange.color === c ? "ring-2 ring-[#c6f135] ring-offset-1 ring-offset-[#0a0b07]" : ""}`}
                           style={{ backgroundColor: c }}
-                          onClick={() =>
-                            updateDefenseRange(matchId, selectedRange.id, { color: c })
-                          }
+                          onClick={() => updateDefenseRange(selectedRange.id, { color: c })}
                         />
                       ))}
                     </div>
@@ -517,7 +519,7 @@ export default function TacticsBoardPanel() {
                         max="60"
                         value={selectedRange.radius || 15}
                         onChange={(e) =>
-                          updateDefenseRange(matchId, selectedRange.id, {
+                          updateDefenseRange(selectedRange.id, {
                             radius: parseInt(e.target.value),
                           })
                         }
@@ -537,7 +539,7 @@ export default function TacticsBoardPanel() {
                           max="60"
                           value={selectedRange.rx || 15}
                           onChange={(e) =>
-                            updateDefenseRange(matchId, selectedRange.id, {
+                            updateDefenseRange(selectedRange.id, {
                               rx: parseInt(e.target.value),
                             })
                           }
@@ -554,7 +556,7 @@ export default function TacticsBoardPanel() {
                           max="60"
                           value={selectedRange.ry || 10}
                           onChange={(e) =>
-                            updateDefenseRange(matchId, selectedRange.id, {
+                            updateDefenseRange(selectedRange.id, {
                               ry: parseInt(e.target.value),
                             })
                           }
@@ -571,7 +573,7 @@ export default function TacticsBoardPanel() {
                           max="359"
                           value={selectedRange.rotation || 0}
                           onChange={(e) =>
-                            updateDefenseRange(matchId, selectedRange.id, {
+                            updateDefenseRange(selectedRange.id, {
                               rotation: parseInt(e.target.value),
                             })
                           }
@@ -592,7 +594,7 @@ export default function TacticsBoardPanel() {
                           max="80"
                           value={selectedRange.radius || 15}
                           onChange={(e) =>
-                            updateDefenseRange(matchId, selectedRange.id, {
+                            updateDefenseRange(selectedRange.id, {
                               radius: parseInt(e.target.value),
                             })
                           }
@@ -616,7 +618,7 @@ export default function TacticsBoardPanel() {
                           )}
                           onChange={(e) => {
                             const half = parseInt(e.target.value) / 2;
-                            updateDefenseRange(matchId, selectedRange.id, {
+                            updateDefenseRange(selectedRange.id, {
                               startAngle: -half,
                               endAngle: half,
                             });
@@ -634,7 +636,7 @@ export default function TacticsBoardPanel() {
                           max="359"
                           value={selectedRange.rotation || 0}
                           onChange={(e) =>
-                            updateDefenseRange(matchId, selectedRange.id, {
+                            updateDefenseRange(selectedRange.id, {
                               rotation: parseInt(e.target.value),
                             })
                           }

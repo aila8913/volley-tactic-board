@@ -5,8 +5,10 @@ import { useTacticsBoard } from "../hooks/useTacticsBoard";
 
 export default function DefenseRange({ range }: { range: DefenseRangeType }) {
   const { id: matchId } = useParams<{ id: string }>();
-  const { selectedObjectId, setSelectedObjectId, activeTool, updateDefenseRange, isLayoutMode } =
+  const { selectedObjectId, setSelectedObjectId, activeTool, updateDefenseRange, session } =
     useTacticsBoard();
+  // 有 session＝正在即時布置、可拖曳編輯（取代舊的 isLayoutMode，issue #154 PR C）。
+  const isLayoutMode = session !== null;
   const isDragging = useRef(false);
   const dragStart = useRef({ x: 0, y: 0, initialX: 0, initialY: 0 });
 
@@ -52,7 +54,7 @@ export default function DefenseRange({ range }: { range: DefenseRangeType }) {
         const dx = currentX - dragStart.current.x;
         const dy = currentY - dragStart.current.y;
 
-        updateDefenseRange(matchId, range.id, {
+        updateDefenseRange(range.id, {
           x: dragStart.current.initialX + dx,
           y: dragStart.current.initialY + dy,
         });
