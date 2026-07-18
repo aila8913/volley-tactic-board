@@ -237,7 +237,7 @@ export default function TacticsBoardPanel() {
 
   // 戰術列表區塊（非布置模式和布置模式都會用到，抽出來避免重複）
   const TacticsList = ({ maxHeight }: { maxHeight: string }) => (
-    <div className="rounded-lg border border-white/[0.14] bg-white/[0.08] p-2 shadow-sm shadow-black/20 backdrop-blur-md">
+    <div className="rounded-lg border border-white/[0.18] bg-white/[0.11] p-2 shadow-sm shadow-black/20 backdrop-blur-lg">
       <div className="mb-1 text-[10px] font-bold">已儲存 (點擊載入)</div>
       {tactics.length === 0 ? (
         <p className="py-1 text-[10px] text-[#a9b096]">尚無已儲存戰術</p>
@@ -464,7 +464,7 @@ export default function TacticsBoardPanel() {
               </div>
 
               {selectedRange && (
-                <div className="space-y-2 rounded-lg border border-white/[0.14] bg-white/[0.08] p-2 text-xs shadow-sm shadow-black/20 backdrop-blur-md">
+                <div className="space-y-2 rounded-lg border border-white/[0.18] bg-white/[0.11] p-2 text-xs shadow-sm shadow-black/20 backdrop-blur-lg">
                   <div className="text-xs font-bold">範圍屬性</div>
                   <div>
                     <label className="mb-1 block text-[10px] text-[#a9b096]">

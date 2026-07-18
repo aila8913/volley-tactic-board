@@ -113,12 +113,12 @@ export default function RotationTable() {
                 draggable
                 onDragStart={(e) => e.dataTransfer.setData("text/plain", p.id)}
                 className={`roster-row flex cursor-grab items-center gap-2 rounded-lg border px-1.5
-                  py-1 text-sm shadow-sm shadow-black/20 backdrop-blur-md active:cursor-grabbing ${
+                  py-1 text-sm shadow-sm shadow-black/20 backdrop-blur-lg active:cursor-grabbing ${
                     p.role === "L"
                       ? "border-[#ef4444]/40 bg-[#ef4444]/15"
                       : onCourtIds.has(p.id)
                         ? "border-[#c6f135]/40 bg-[#c6f135]/15"
-                        : "border-white/[0.14] bg-white/[0.08]"
+                        : "border-white/[0.18] bg-white/[0.11]"
                   }`}
                 data-testid={`roster-row-${p.id}`}
               >

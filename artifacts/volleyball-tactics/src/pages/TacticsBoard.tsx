@@ -41,7 +41,7 @@ export default function TacticsBoard() {
     // 界定區域；裡面的小卡片（球員列、已儲存戰術）是模糊度更高、更明顯的霧面玻璃，
     // 才是真正讀起來「有質感」的物件——呼應參考圖裡小徽章清楚飄浮在背景上的效果。
     <div
-      className="flex h-screen w-full flex-col overflow-hidden font-dash text-[#f5f5f0]"
+      className="relative flex h-screen w-full flex-col overflow-hidden font-dash text-[#f5f5f0]"
       style={{
         background:
           "radial-gradient(ellipse 55% 45% at 18% 12%, rgba(198,241,53,0.10), transparent 70%), " +
@@ -49,7 +49,34 @@ export default function TacticsBoard() {
           "linear-gradient(160deg, #0a0b07 0%, #16241c 55%, #0a0b07 100%)",
       }}
     >
-      <header className="flex shrink-0 items-center justify-between border-b border-white/[0.08] bg-white/[0.02] px-4 py-3 backdrop-blur-sm">
+      {/* issue #134 Track B（材質強化）：低調斜向光影 + 置中放大的字標，破除原本
+          「整片平」的單調感。兩個都是 position: absolute，所以下面的 header／三欄
+          主體都加了 relative，讓它們有自己的 stacking context 疊在這兩層上面——
+          不然沒有明確 stacking context 時，absolute 定位的背景元素預設會蓋到一般
+          文件流的前景 UI 上面。VOLLEY / BOARD 是品牌名稱定案前的佔位字。 */}
+      <div className="tb-beam" />
+      <div className="tb-mark">
+        <div className="tb-mark-flourish">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+        <div className="tb-mark-hero">
+          <span className="layer layer-glow">
+            VOLLEY
+            <br />
+            BOARD
+          </span>
+          <span className="layer layer-core">
+            VOLLEY
+            <br />
+            BOARD
+          </span>
+        </div>
+        <div className="tb-mark-caption">Tactics Board · Est. 2026</div>
+      </div>
+
+      <header className="relative z-10 flex shrink-0 items-center justify-between border-b border-white/[0.08] bg-white/[0.02] px-4 py-3 backdrop-blur-sm">
         <BackToMatchListButton href={backHref} />
         <h1 className="text-lg font-bold">{match ? `vs ${match.opponent}` : "戰術板"}</h1>
         <Link
@@ -62,7 +89,7 @@ export default function TacticsBoard() {
         </Link>
       </header>
 
-      <div className="flex min-h-0 flex-1 overflow-hidden">
+      <div className="relative z-10 flex min-h-0 flex-1 overflow-hidden">
         <div className="flex w-[260px] flex-shrink-0 flex-col border-r border-white/[0.08] bg-white/[0.02] backdrop-blur-sm">
           <RotationTable />
         </div>
