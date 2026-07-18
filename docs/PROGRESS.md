@@ -22,9 +22,9 @@
 > 平行 PR 就落在不同行段、git 幾乎都能自動合併，不用真的把檔案拆兩份、也保住一眼 catch-up。
 > 上面的 `_Last updated_` 是共用一行摘要（誰更新了什麼），保持精簡、別長成段落。
 
-\_Last updated: 2026-07-18 (aila) — #44：暫停/timeout 功能全棧落地（DB→API→前端），M1 實作項清空。
-上一輪（07-18）PROGRESS 改單檔分區（#146）、全域 store 去汙染家族收官（#119/#145）、修掉 undo 一次退兩步
-（#147/#149）。\_
+\_Last updated: 2026-07-18 (aila) — #154 戰術板單向化重構：PR A（#155，快照型別／舊檔轉接層）已開、
+PR B（載入改唯讀檢視、砍掉反向寫回，#154 bug 本體）本 session 完成待送。前一輪 #44 暫停/timeout
+全棧落地、M1 實作項清空。\_
 
 ## Current state
 
@@ -44,6 +44,12 @@ lives in git log + the issues named).
   （`useTacticsBoard`／`useRotationTable`，#119）都改成 `dataByMatch[matchId]` 分片，A 場的編輯不會污染
   B 場；戰術板/輪轉表工作狀態**不再 persist**（PO 決策：只有存成戰術才算數，硬重整不還原未存排版）。
   切輪次的跨 store 同步走 `RotationSwitcher → syncRotationChange` 明確呼叫，不再靠全域 subscribe。
+- **戰術板單向化重構（#154）進行中。** PO 拍板把戰術板從「會回寫輪轉表的完整狀態包」降級成「唯讀
+  快照＋暫時白板」，資料流嚴格單向（設計展開＋PR 切分 A–E 都在 #154 留言）。**PR A（#155，denormalized
+  `CourtSnapshot` 型別＋`parseSavedTactic` 舊檔轉接層＋擷取純函式，零 UI）已開 PR**；**PR B（載入已存
+  戰術改唯讀檢視、砍掉 `loadRotationData` 反向寫回、Court 渲染改吃 `SnapshotPlayer` 快照）本 session
+  完成、待送 PR**——#154 三個 bug（新增球員消失／站位被覆蓋回不去／刪名單舊快照對不上人）的本體修復。
+  PR B 暫時停用「編輯已存戰術」鈕；可編輯 session＋側邊滑出白板 UI 留給 PR C。
 - **Schema foundations for stats are in place:** `lineups`（起始先發，一局一 row）、
   `substitutions`（換人，存比分快照）、`events.outcome`（得/失/球續 enum）、`people`＋`teams`
   （跨場跨隊身分／分組標籤，`players.personId`/`matches.teamId` nullable FK、`onDelete: set null`
