@@ -9,6 +9,7 @@ export * from "./rallies";
 export * from "./events";
 export * from "./lineups";
 export * from "./substitutions";
+export * from "./timeouts";
 export * from "./tactics";
 // people / teams 是橫跨上面巢狀結構的「身分／分組」概念，不屬於某一場比賽底下，
 // 而是被 matches（team）、players（person）指回去引用，所以放在最後單獨列出。

@@ -435,6 +435,59 @@ paths:
         "204":
           description: Deleted
 
+  # 暫停紀錄（issue #44）。整組路由刻意跟 substitutions 平行：讀（bulk）掛在
+  # /matches/{matchId}/timeouts、寫掛在 /sets/{setId}/timeouts、undo 走 DELETE /timeouts/{id}。
+  /matches/{matchId}/timeouts:
+    parameters:
+      - $ref: "#/components/parameters/MatchId"
+    get:
+      operationId: listMatchTimeouts
+      tags: [matches]
+      summary: List all timeouts for a match (across all its sets), for rebuilding the scoresheet
+      responses:
+        "200":
+          description: List of timeouts, ordered by set then score
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Timeout"
+
+  /sets/{setId}/timeouts:
+    parameters:
+      - $ref: "#/components/parameters/SetId"
+    post:
+      operationId: createTimeout
+      tags: [matches]
+      summary: Record one timeout within a set
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewTimeout"
+      responses:
+        "201":
+          description: Created timeout
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Timeout"
+
+  # 刪掉一筆暫停紀錄（前端「復原」退掉上一個暫停動作時用）。跟 substitutions 一樣是 append-only、
+  # 記錄時機是比分快照，所以 undo 只能 hard-delete 這一筆 row（見 substitutions 的同段說明）。
+  /timeouts/{timeoutId}:
+    parameters:
+      - $ref: "#/components/parameters/TimeoutId"
+    delete:
+      operationId: deleteTimeout
+      tags: [matches]
+      summary: Delete a timeout (e.g. undo the last timeout action)
+      responses:
+        "204":
+          description: Deleted
+
   # 一場比賽每一局的起始先發（我方六個號位 1~6 各站哪個球員；自由球員不列入，見
   # lib/db/src/schema/lineups.ts）。讀（bulk）掛在 /matches/:matchId/lineups 底下
   # （先驗 match 擁有權），道理跟 /matches/:matchId/substitutions 一樣：前端進計分表
@@ -623,6 +676,12 @@ components:
         type: integer
     SubstitutionId:
       name: substitutionId
+      in: path
+      required: true
+      schema:
+        type: integer
+    TimeoutId:
+      name: timeoutId
       in: path
       required: true
       schema:
@@ -938,6 +997,39 @@ components:
         kind:
           $ref: "#/components/schemas/SubstitutionKind"
       required: [homeScore, awayScore, kind]
+
+    # 暫停是哪一方叫的（issue #44）。跟 RallyWinner 一樣用 home/away（前端 us/opponent 在
+    # mapping 層翻譯）。獨立一個 enum、不共用 RallyWinner，對齊後端各表各自定 pgEnum 的慣例。
+    TimeoutSide:
+      type: string
+      enum: [home, away]
+
+    Timeout:
+      type: object
+      properties:
+        id:
+          type: integer
+        setId:
+          type: integer
+        # 暫停發生的「時機」＝這一局當下的比分快照（而非 rallyId），理由見 lib/db/src/schema/timeouts.ts。
+        homeScore:
+          type: integer
+        awayScore:
+          type: integer
+        side:
+          $ref: "#/components/schemas/TimeoutSide"
+      required: [id, setId, homeScore, awayScore, side]
+
+    NewTimeout:
+      type: object
+      properties:
+        homeScore:
+          type: integer
+        awayScore:
+          type: integer
+        side:
+          $ref: "#/components/schemas/TimeoutSide"
+      required: [homeScore, awayScore, side]
 
     # 一局的起始先發：我方六個號位（1~6）各站哪個球員。詳見 lib/db/src/schema/lineups.ts。
     # 自由球員（L）不出現在這六個號位——前端邏輯是 L 從場邊出發、換人上場，開局先發只有這 6 人。

@@ -67,6 +67,14 @@ export interface RegularSub {
   inPlayerId: string;
 }
 
+// 一次暫停（issue #44）。前端只需要「哪一方叫的」來計數與顯示——記錄時機（比分快照）在
+// 寫入後端時才由 controller 帶上，不進前端狀態（跟 RegularSub 不存 homeScore/awayScore 同理）。
+// 換人有「淨疊加去重」是因為同一位置會被連續換人覆蓋；暫停沒有這種覆蓋語意，每次都是獨立
+// 一筆 append，所以這裡不需要 dedup，是比 RegularSub 更單純的結構。
+export interface TimeoutRecord {
+  side: Side;
+}
+
 // 「復原」用的動作快照堆疊的一筆（issue #41）。
 //
 // 為什麼用「快照法」而不是逐一反轉？記一球會改比分/輪轉/發球方，換人會改淨疊加清單，
@@ -84,11 +92,14 @@ export interface UndoEntry {
   currentSet: SetRecordingState;
   regularSubs: RegularSub[];
   liberoSubstitution: string | null;
+  // 暫停清單（issue #44）也一起進快照，undo 才能整包退回叫暫停「之前」的狀態。
+  timeouts: TimeoutRecord[];
   // 這個動作在後端建了什麼、undo 時要補刪什麼：
   //   'rally'        — 得分（一分＝一個 rally），刪對應 rally（它的 event 靠 FK cascade 一起走）。
   //   'substitution' — 一般換人，刪對應 substitution row。
+  //   'timeout'      — 暫停，刪對應 timeout row。
   //   null           — 純本地動作（手動 libero 上/下場，沒寫後端），畫面還原即可、後端沒東西要刪。
-  backendKind: "rally" | "substitution" | null;
+  backendKind: "rally" | "substitution" | "timeout" | null;
 }
 
 // 計分表自己的「先發快照」（issue #115）：一局開始時，我方六個號位（1~6）各站哪個球員。
@@ -127,4 +138,11 @@ export interface ScoreSheetState {
   // 已結束各局的換人「次數」（每局淨值，即該局 regularSubs 陣列最終的長度），依局數順序排列。
   // 只存數字不存明細，因為賽後只需要「這局換了幾次人」這個統計數字（見 ScoreSheetStats）。
   subCountsHistory: number[];
+  // 「當前這一局」的暫停清單（issue #44）。換人是「淨疊加」，暫停沒有覆蓋語意，所以這裡是
+  // 單純的 append 清單（每叫一次暫停就多一筆）；帶著 side 是為了分別計算兩隊各用了幾次
+  // （排球規則：每隊每局上限 2 次）。
+  timeouts: TimeoutRecord[];
+  // 已結束各局的暫停「次數」（該局 timeouts 陣列長度），依局數順序排列，對齊 subCountsHistory
+  // 的作法——賽後只需要「這局叫了幾次暫停」這個數字。
+  timeoutCountsHistory: number[];
 }

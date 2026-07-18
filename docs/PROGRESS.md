@@ -22,9 +22,9 @@
 > 平行 PR 就落在不同行段、git 幾乎都能自動合併，不用真的把檔案拆兩份、也保住一眼 catch-up。
 > 上面的 `_Last updated_` 是共用一行摘要（誰更新了什麼），保持精簡、別長成段落。
 
-\_Last updated: 2026-07-18 (aila) — #146：PROGRESS 改單檔＋開發／設計分區，降低平行編輯衝突；
-新增 `workflow` 標籤。上一輪（07-18）全域 store 去汙染家族收官（#119/#145）、修掉 undo 一次退兩步
-（#147/#149），M1 實作項現在只剩 #44（暫停/timeout）。\_
+\_Last updated: 2026-07-18 (aila) — #44：暫停/timeout 功能全棧落地（DB→API→前端），M1 實作項清空。
+上一輪（07-18）PROGRESS 改單檔分區（#146）、全域 store 去汙染家族收官（#119/#145）、修掉 undo 一次退兩步
+（#147/#149）。\_
 
 ## Current state
 
@@ -48,6 +48,12 @@ lives in git log + the issues named).
   `substitutions`（換人，存比分快照）、`events.outcome`（得/失/球續 enum）、`people`＋`teams`
   （跨場跨隊身分／分組標籤，`players.personId`/`matches.teamId` nullable FK、`onDelete: set null`
   保留歷史事實）全部 live。這些是 #65 數據分析頁往上長的地基。
+- **暫停/timeout（#44）全棧落地。** `timeouts` 表（`setId`＋比分快照＋`side` home/away，跟
+  `substitutions` 同形狀、更簡單：無球員無 kind、只記次數與時機、不記時長——PO 定的「純記錄事件」範圍）
+  已 push；REST（GET bulk-per-match／POST-per-set／DELETE-for-undo）＋ownership 全掛上；前端接進
+  `useScoreSheet` 同一套本地優先＋背景寫入＋undo（`backendKind:"timeout"`），計分頁每方一顆暫停鈕
+  （每局上限 2 次，達標反灰——與換人「只提醒不擋」不同，因 2 次是無例外硬規則），統計欄加暫停區。
+  全棧 happy-path 驗過（create→POST→bulk-GET→DELETE→cascade）。**這是 M1 最後一個實作項。**
 - **#65 數據分析頁：視圖一（單場比賽分析）骨架已上線**（`pages/MatchAnalytics.tsx`，PR #101）。
   比分總覽＋球員決定球矩陣＋換人統計；比率統計（side-out%/輪次得失）與差異化區塊（到位率/球線
   熱區）目前是**誠實空狀態**，等進階記錄 #51/#21 落地才點亮。視圖二（隊伍）/視圖三（球員跨場跨隊）
@@ -96,19 +102,24 @@ gh issue list --milestone "M1 簡易版收尾"   # 當前階段
 gh issue list --state open                   # 全部
 ```
 
-M1 收尾焦點：**全域 store 去汙染家族已收官**——#115/#117/#118/#119 全數 CLOSED（三條不變量的落地
-記錄見各 issue＋git log）；#147（undo 一次退兩步）也已修完關閉（PR #149）。**M1 實作項現在只剩 #44**
-（暫停/timeout，唯一舊 open 項）＝下一步。另 #120（純展示唯讀站位視圖）依賴 #119 定案的分片形狀、暫不排期；
-#40（undo/redo 不涵蓋輪轉拖曳，與 #147 同塊邏輯但不同 store）、#64（背景寫入失敗不 reconcile，關聯部署
-#26／離線契約 #75）、**#127（後端沒驗 tournamentId 擁有權，真 auth 後補）** 仍 open。
+M1 收尾焦點：**M1 實作項已清空**——全域 store 去汙染家族（#115/#117/#118/#119）、undo 一次退兩步
+（#147/#149）、暫停/timeout（#44，本 session，待 ship 的 PR `Closes #44`）全數落地。**M1 收尾實質完成，
+下一步是 PO 決定 M2 起點**（部署 #26／離線契約 #75 屬 priority:essential，是自然接續）。另 #120（純展示唯讀
+站位視圖）依賴 #119 定案的分片形狀、暫不排期；#40（undo/redo 不涵蓋輪轉拖曳，與 #147 同塊邏輯但不同 store）、
+#64（背景寫入失敗不 reconcile，關聯部署 #26／離線契約 #75）、**#127（後端沒驗 tournamentId 擁有權，真 auth
+後補）** 仍 open。
 進階版差異化（M4）：#51 動作子分類、#21 球線座標、#99 站位快照——同屬 advanced tier，可一起設計。
 
 ## Recently closed (past ~week)
 
 ### 開發 (aila)
 
-- **#146**（本 session）— PROGRESS.md 改單檔＋開發／設計分區（本結構），並新增 `workflow` 標籤。
-- **#119**（本 session 關）— 戰術板/輪轉表兩 store 改 `dataByMatch[matchId]` 分片、去 persist、
+- **#44**（本 session，待 ship 的 PR 帶 `Closes #44`）— 暫停/timeout 全棧：`lib/db/src/schema/timeouts.ts`
+  ＋`routes/timeouts.ts`＋`timeoutBelongsToUser`＋openapi/codegen＋前端 `useScoreSheet`（reducer/controller/
+  reconstruct/undo）＋計分頁按鈕＋統計欄。形狀早在 `docs/event-grammar-spec.md` G 群定案；範圍（純記錄事件、
+  不記時長）由 PO 本 session 拍板。typecheck/85 test（+2 新）/lint/prettier 全綠，全棧 CRUD happy-path 驗過。
+- **#146**（上一 session）— PROGRESS.md 改單檔＋開發／設計分區（本結構），並新增 `workflow` 標籤。
+- **#119**（上一 session 關）— 戰術板/輪轉表兩 store 改 `dataByMatch[matchId]` 分片、去 persist、
   `buildSnapshot` 過濾幽靈站位。前端 **PR #145 已 merge**（commit `d18f69e`），後端前置 **PR #143**
   （`tactics` 加 `matchId` integer FK＋`?matchId=` 過濾，commit `e905844`）。三症狀（跨場汙染／幽靈站位／
   activeProjectId 誤覆寫）有 `useTacticsBoard.test.ts` 釘住、整套綠 → 驗證後關閉。跨 store 全域 subscribe

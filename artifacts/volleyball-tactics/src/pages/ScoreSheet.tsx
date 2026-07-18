@@ -37,6 +37,11 @@ const OUTCOME_OPTIONS: RadialMenuOption<Outcome>[] = [
   { value: "win", label: "得分" },
 ];
 
+// 排球規則（issue #44）：每隊每局最多 2 次暫停。跟一般換人（顯示上限但不擋）不同，這裡
+// 達到上限就直接把該方的暫停鈕反灰——2 次是沒有任何合法例外的硬規則，按第 3 次一定是誤觸、
+// 會寫進去變成髒資料，所以擋掉比較安全（換人的 6 次上限有邊界情境，才選擇只提醒不擋）。
+const MAX_TIMEOUTS_PER_SET = 2;
+
 // 快速記一球的手勢流程：點球員/對手(全體) → 選「動作」→ 選「得/失分」。
 type Gesture =
   | { step: "action"; target: TouchedTarget }
@@ -68,9 +73,8 @@ export default function ScoreSheet() {
   // 記分/開局/復原/下一局改走 controller：本地即時更新畫面，同時在背景寫進後端
   // sets/rallies/events；進頁時也由它從 API 重建這場的記錄。setLiberoSubstitution 仍留在
   // store（純前端、不進 API，reload 後歸零——真正的自由球員持久化是 #43 的範圍）。
-  const { isHydrating, start, score, undo, goNextSet, substitute } = useScoreSheetController(
-    id ?? "",
-  );
+  const { isHydrating, start, score, undo, goNextSet, substitute, callTimeout } =
+    useScoreSheetController(id ?? "");
   // 這場比賽目前的自由球員替補狀態——現在跟著 matchId 存在 useScoreSheet 裡（見
   // types/scoresheet.ts 的說明），不會再跟別場比賽的計分表互相污染。
   const liberoSubstitution = record?.liberoSubstitution ?? null;
@@ -79,6 +83,9 @@ export default function ScoreSheet() {
   // useScoreSheetController 從後端 /sets/:setId/substitutions 重建，reload 後不會消失。
   const regularSubs = record?.regularSubs ?? [];
   const subCountsHistory = record?.subCountsHistory ?? [];
+  // 暫停清單/歷史（issue #44），跟換人一樣從 record 衍生、由 controller 從後端重建，reload 不消失。
+  const timeouts = record?.timeouts ?? [];
+  const timeoutCountsHistory = record?.timeoutCountsHistory ?? [];
 
   const [gesture, setGesture] = useState<Gesture | null>(null);
 
@@ -163,6 +170,11 @@ export default function ScoreSheet() {
   const completedSets = record?.completedSets ?? [];
   const currentSubCount = regularSubs.length;
   const totalSubCount = subCountsHistory.reduce((a, b) => a + b, 0) + currentSubCount;
+  // 暫停計數（issue #44）：本局每一方各用了幾次（排球規則每隊每局上限 2 次），加全場累計。
+  const ourTimeoutCount = timeouts.filter((t) => t.side === "us").length;
+  const opponentTimeoutCount = timeouts.filter((t) => t.side === "opponent").length;
+  const currentTimeoutCount = timeouts.length;
+  const totalTimeoutCount = timeoutCountsHistory.reduce((a, b) => a + b, 0) + currentTimeoutCount;
   const ourSetsWon = completedSets.filter((s) => s.ourScore > s.opponentScore).length;
   const opponentSetsWon = completedSets.filter((s) => s.opponentScore > s.ourScore).length;
 
@@ -382,8 +394,30 @@ export default function ScoreSheet() {
                     />
                   </div>
 
+                  {/* 暫停（issue #44）：每一方一顆鈕，標籤帶「已用/上限」，達到 2 次就反灰
+                      （MAX_TIMEOUTS_PER_SET，理由見常數註解）。叫暫停跟得分/換人一樣走
+                      controller 的 callTimeout：本地即時記一筆、背景寫進後端、可被「復原」退掉。 */}
+                  <div className="flex gap-3">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={ourTimeoutCount >= MAX_TIMEOUTS_PER_SET}
+                      onClick={() => callTimeout("us")}
+                    >
+                      我方暫停 {ourTimeoutCount}/{MAX_TIMEOUTS_PER_SET}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={opponentTimeoutCount >= MAX_TIMEOUTS_PER_SET}
+                      onClick={() => callTimeout("opponent")}
+                    >
+                      對手暫停 {opponentTimeoutCount}/{MAX_TIMEOUTS_PER_SET}
+                    </Button>
+                  </div>
+
                   <div className="flex gap-3 pb-2">
-                    {/* 一顆「復原」鈕，一次退最近一個動作（得分／一般換人／手動 libero），
+                    {/* 一顆「復原」鈕，一次退最近一個動作（得分／一般換人／手動 libero／暫停），
                         連按就一路往回（issue #41）。可用與否看復原堆疊深度，不是只看記了幾顆球
                         ——這樣剛換完人、還沒記下一球時也退得掉那次換人。 */}
                     <Button variant="ghost" disabled={undoDepth === 0} onClick={handleUndo}>
@@ -438,6 +472,8 @@ export default function ScoreSheet() {
                     record={m.id === id ? record : undefined}
                     currentSetSubCount={m.id === id ? currentSubCount : undefined}
                     totalSubCount={m.id === id ? totalSubCount : undefined}
+                    currentSetTimeoutCount={m.id === id ? currentTimeoutCount : undefined}
+                    totalTimeoutCount={m.id === id ? totalTimeoutCount : undefined}
                   />
                 </div>
               </div>

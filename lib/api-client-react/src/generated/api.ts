@@ -34,11 +34,13 @@ import type {
   NewSet,
   NewSubstitution,
   NewTactic,
+  NewTimeout,
   NewTournament,
   Player,
   Rally,
   Substitution,
   Tactic,
+  Timeout,
   Tournament,
   UpdateEvent,
   UpdateMatch,
@@ -1975,6 +1977,225 @@ export const useDeleteSubstitution = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getDeleteSubstitutionMutationOptions(options));
+    }
+
+export const getListMatchTimeoutsUrl = (matchId: number,) => {
+
+
+
+
+  return `/api/matches/${matchId}/timeouts`
+}
+
+/**
+ * @summary List all timeouts for a match (across all its sets), for rebuilding the scoresheet
+ */
+export const listMatchTimeouts = async (matchId: number, options?: RequestInit): Promise<Timeout[]> => {
+
+  return customFetch<Timeout[]>(getListMatchTimeoutsUrl(matchId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListMatchTimeoutsQueryKey = (matchId: number,) => {
+    return [
+    `/api/matches/${matchId}/timeouts`
+    ] as const;
+    }
+
+
+export const getListMatchTimeoutsQueryOptions = <TData = Awaited<ReturnType<typeof listMatchTimeouts>>, TError = ErrorType<unknown>>(matchId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMatchTimeouts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListMatchTimeoutsQueryKey(matchId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listMatchTimeouts>>> = ({ signal }) => listMatchTimeouts(matchId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(matchId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listMatchTimeouts>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListMatchTimeoutsQueryResult = NonNullable<Awaited<ReturnType<typeof listMatchTimeouts>>>
+export type ListMatchTimeoutsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List all timeouts for a match (across all its sets), for rebuilding the scoresheet
+ */
+
+export function useListMatchTimeouts<TData = Awaited<ReturnType<typeof listMatchTimeouts>>, TError = ErrorType<unknown>>(
+ matchId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMatchTimeouts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListMatchTimeoutsQueryOptions(matchId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getCreateTimeoutUrl = (setId: number,) => {
+
+
+
+
+  return `/api/sets/${setId}/timeouts`
+}
+
+/**
+ * @summary Record one timeout within a set
+ */
+export const createTimeout = async (setId: number,
+    newTimeout: NewTimeout, options?: RequestInit): Promise<Timeout> => {
+
+  return customFetch<Timeout>(getCreateTimeoutUrl(setId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      newTimeout,)
+  }
+);}
+
+
+
+
+export const getCreateTimeoutMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createTimeout>>, TError,{setId: number;data: BodyType<NewTimeout>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createTimeout>>, TError,{setId: number;data: BodyType<NewTimeout>}, TContext> => {
+
+const mutationKey = ['createTimeout'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createTimeout>>, {setId: number;data: BodyType<NewTimeout>}> = (props) => {
+          const {setId,data} = props ?? {};
+
+          return  createTimeout(setId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateTimeoutMutationResult = NonNullable<Awaited<ReturnType<typeof createTimeout>>>
+    export type CreateTimeoutMutationBody = BodyType<NewTimeout>
+    export type CreateTimeoutMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Record one timeout within a set
+ */
+export const useCreateTimeout = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createTimeout>>, TError,{setId: number;data: BodyType<NewTimeout>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createTimeout>>,
+        TError,
+        {setId: number;data: BodyType<NewTimeout>},
+        TContext
+      > => {
+      return useMutation(getCreateTimeoutMutationOptions(options));
+    }
+
+export const getDeleteTimeoutUrl = (timeoutId: number,) => {
+
+
+
+
+  return `/api/timeouts/${timeoutId}`
+}
+
+/**
+ * @summary Delete a timeout (e.g. undo the last timeout action)
+ */
+export const deleteTimeout = async (timeoutId: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteTimeoutUrl(timeoutId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteTimeoutMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteTimeout>>, TError,{timeoutId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteTimeout>>, TError,{timeoutId: number}, TContext> => {
+
+const mutationKey = ['deleteTimeout'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteTimeout>>, {timeoutId: number}> = (props) => {
+          const {timeoutId} = props ?? {};
+
+          return  deleteTimeout(timeoutId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteTimeoutMutationResult = NonNullable<Awaited<ReturnType<typeof deleteTimeout>>>
+
+    export type DeleteTimeoutMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Delete a timeout (e.g. undo the last timeout action)
+ */
+export const useDeleteTimeout = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteTimeout>>, TError,{timeoutId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteTimeout>>,
+        TError,
+        {timeoutId: number},
+        TContext
+      > => {
+      return useMutation(getDeleteTimeoutMutationOptions(options));
     }
 
 export const getListMatchLineupsUrl = (matchId: number,) => {
