@@ -21,20 +21,25 @@
 `dataByMatch[matchId]` 分片、去 persist、`buildSnapshot` 過濾幽靈站位）**前端 `#145` 已 merge 進 main**
 （commit `d18f69e`），三症狀（跨場汙染／幽靈站位／activeProjectId 誤覆寫）都有 `useTacticsBoard.test.ts`
 釘住、整套驗證過 → **`#119` 已關**。PO 決策已定案：去 persist ⇒ 硬重整不還原「未存排版」（決策 4「只有
-存檔才算數」）。M1 實作項只剩 `#44`（暫停/timeout）＋ `#147`。**本 session 另修 `#147`**（戰術布置
-Ctrl+Z 一次退兩步）：根因是每個動作「先記歷史再改狀態」，`history[historyIndex]` 比畫面慢一拍、與 undo 的
-`historyIndex-1` 約定對不上；改成「先改後記」＋補回歸測試（commit `98e7a6d`，**在 `claude/catch-up-pa5s6a`
-分支、未進 main、待開 PR**）。此 bug 自 `#79` 就存在、與 `#145` 分片重構無關。\_
+存檔才算數」）。**本 session 也修掉 `#147`**（戰術布置 Ctrl+Z 一次退兩步）：根因是每個動作「先記歷史
+再改狀態」，`history[historyIndex]` 比畫面慢一拍、與 undo 的 `historyIndex-1` 約定對不上；改成「先改後記」
+＋補回歸測試，**PR #149 已 merge（commit `3abb312`）→ `#147` 已關**（那條 stranded 的 `claude/catch-up-pa5s6a`
+分支靠 catch-up 撿回、補開 PR）。此 bug 自 `#79` 就存在、與 `#145` 分片重構無關。**M1 實作項現在只剩
+`#44`（暫停/timeout）。**\_
 
 **戰術板視覺（`#134`）進行中，PO 已拍板四點方向**：球場地板毛玻璃、邊緣線條光（含放寬 design-spec §6
 「動效輕量」→「每頁最多一個環境級動效，須慢且低亮度」）、球員標記重設計、對手隊色 `#EF4444`→暖珊瑚橘
-`#FF8A5C`（跟錯誤紅分家、錯誤狀態仍用紅）。tang 的 Track B 材質強化在 **PR #140**（`design/tactics-board-bg-v2`，
-已口頭 approve、**等 tang 從 main rebase 解 index.css/design-spec 衝突後自合**）。`#131`（其他頁面套深色）
-剩計分表／分析頁／資料夾內頁，仍排在 `#134` 之後——若結論動到 spec，剩餘頁面以更新後的 spec 為準。
+`#FF8A5C`（跟錯誤紅分家、錯誤狀態仍用紅）。tang 的 Track B 材質強化（置中字標／低調光影／玻璃卡片加深）
+**PR #140 已 merge（commit `72a3670`）**；#134 其餘方向續留 issue、保持 open。另外 tang 的**品牌 logo mark
+已定案並 merge**（旋轉排球：三叉旋渦弧線＋發光外環，`public/favicon.svg`，**PR #148**），design-spec 新增
+「品牌標誌」段——但品牌名稱未定、字標仍 `VOLLEY/BOARD` 佔位（spec 寫 `stroke-width 6.5`、實檔用 `9`，
+已在 #148 留言請 tang 對齊）。`#131`（其他頁面套深色）剩計分表／分析頁／資料夾內頁，仍排在 `#134` 之後
+——若結論動到 spec，剩餘頁面以更新後的 spec 為準。
 
-**協作流程規範可能要改**：**PR #141**（`claude/catch-up-3l3c3e`）提議把「跨領域 PR 要等對方 approve」硬關卡
-拿掉、改成合併前 @ 知會一聲即可——**尚未 merge、等 tang approve**，所以目前生效的仍是舊的 approve-gate 規則
-（住 CONTRIBUTING.md「協作與溝通」＋ CLAUDE.md「Team & collaboration rules」＋ ship Step 7）。\_
+**協作流程規範已放寬**：**PR #141 已 merge（commit `fa4e908`）**——把「跨領域 PR 要等對方 approve」硬關卡
+拿掉、改成合併前 @ 知會一聲即可（notification 不是 blocker）。**現行生效的就是知會制**，規範本體住
+CONTRIBUTING.md「協作與溝通」＋ CLAUDE.md「Team & collaboration rules」＋ ship 的協作確認步驟——細節以
+那三處現行內容為準。「對方的 issue 不單方面關」的保護仍在。\_
 
 ## Current state
 
@@ -74,15 +79,17 @@ lives in git log + the issues named):
   （#51/#21/#44）或教練待確認項（到位門檻 `quality>=2`、嗆司定義，皆有預設在跑、不擋實作——
   07-12 起兩項預設皆有外部標準出處：VIS 官方門檻背書／DV Freeball 候選定義，見該 spec
   〈外部標準對照〉一節，schema 設計亦獲 VIS/DV 慣例驗證）。
-- **設計規範已落地兩頁（首頁＋戰術板），手繪風確定全退役**（`docs/design-spec.md`，PR #129/#135）：
-  深色儀表板語言（`#0a0b07` 底＋萊姆綠 `#C6F135`＋玻璃卡片＋Space Grotesk/JetBrains Mono）。
-  剩計分表（`ScoreSheetCourt`/`RadialMenu`）、數據分析頁、資料夾內頁三處仍是手繪風，由 #131 追蹤，
-  但**排在 #134（戰術板視覺定案，needs-plan）之後**——#134 可能改動 spec 本身。#132（首頁 review
-  收尾）獨立進行。**寫 UI 前先讀 design-spec.md**；實作數值以該檔「實作微調」「實作決定」註記為準
+- **設計規範已落地兩頁（首頁＋戰術板），手繪風確定全退役**（`docs/design-spec.md`，PR #129/#135/#140）：
+  深色儀表板語言（`#0a0b07` 底＋萊姆綠 `#C6F135`＋玻璃卡片＋Space Grotesk/JetBrains Mono）。戰術板再加
+  材質強化（#134 Track B，PR #140），品牌 logo mark 已定案（`public/favicon.svg`，PR #148），design-spec
+  多了「品牌標誌」段。剩計分表（`ScoreSheetCourt`/`RadialMenu`）、數據分析頁、資料夾內頁三處仍是手繪風，
+  由 #131 追蹤，但**排在 #134（戰術板視覺定案，needs-plan）之後**——#134 可能改動 spec 本身。#132（首頁
+  review 收尾）獨立進行。**寫 UI 前先讀 design-spec.md**；實作數值以該檔「實作微調」「實作決定」註記為準
   （背景 `#0a0b07`、邊框 `white/[0.12]`～`[0.26]`、球場深青漸層——非原始的 `#121310`/暖木色）。
-- **兩人協作流程已上線**（PR #137，tang approve）：討論分流／關 issue 規則／跨領域 review 住
-  CONTRIBUTING.md「協作與溝通」，Claude 要主動把關的版本住 CLAUDE.md「Team & collaboration
-  rules」，ship Step 7 會在 merge 前做跨領域確認。改協作規範＝開 PR 動那些檔案並請對方 review。
+- **兩人協作流程已上線並放寬**（PR #137 立、PR #141 放寬）：討論分流／關 issue 規則住 CONTRIBUTING.md
+  「協作與溝通」，Claude 要主動把關的版本住 CLAUDE.md「Team & collaboration rules」。跨領域 PR **不再需要
+  對方 approve**、只要合併前 @ 知會一聲（#141 拆掉 approve 硬關卡）；「對方的 issue 不單方面關」仍在。
+  改協作規範＝開 PR 動那些檔案。
 - **需求層的 pattern-language 分析住 `docs/requirements-pattern-language.md`**（Alexander 式，P1–P7）：
   把「為什麼要做這些功能／背後哪兩股力在打架」講清楚，是 product-vision（定位）／recording-cost-budget
   （記錄成本）／event-grammar-spec（統計可推導）三份 spec 的上位框架。每個 pattern 的「落點」都標了
@@ -100,11 +107,10 @@ gh issue list --state open                   # 全部
 ```
 
 M1 收尾焦點：**全域 store 去汙染家族已收官**——#115/#117/#118/#119 全數 CLOSED（三條不變量的落地
-記錄見各 issue＋git log）。**M1 實作項現在只剩兩個**：**#44**（暫停/timeout，唯一舊 open 項）＋
-**#147**（戰術布置 undo 一次退兩步——修正已在 `claude/catch-up-pa5s6a`／commit `98e7a6d`、含回歸測試，
-**待開 PR / merge 後才關**）。另 #120（純展示唯讀站位視圖）依賴 #119 定案的分片形狀、暫不排期；
-#64（背景寫入失敗不 reconcile，關聯部署 #26／離線契約 #75）、**#127（後端沒驗 tournamentId 擁有權，
-真 auth 後補）** 仍 open。
+記錄見各 issue＋git log）；#147（undo 一次退兩步）也已修完關閉（PR #149）。**M1 實作項現在只剩 #44**
+（暫停/timeout，唯一舊 open 項）＝下一步。另 #120（純展示唯讀站位視圖）依賴 #119 定案的分片形狀、暫不排期；
+#40（undo/redo 不涵蓋輪轉拖曳，與 #147 同塊邏輯但不同 store）、#64（背景寫入失敗不 reconcile，關聯部署
+#26／離線契約 #75）、**#127（後端沒驗 tournamentId 擁有權，真 auth 後補）** 仍 open。
 進階版差異化（M4）：#51 動作子分類、#21 球線座標、#99 站位快照——同屬 advanced tier，可一起設計。
 
 ## Recently closed (past ~week)
@@ -115,11 +121,19 @@ M1 收尾焦點：**全域 store 去汙染家族已收官**——#115/#117/#118/
   activeProjectId 誤覆寫）有 `useTacticsBoard.test.ts` 釘住、整套綠 → 驗證後關閉。跨 store 全域 subscribe
   換成 `RotationSwitcher` 明確呼叫 `syncRotationChange`。型別坑：`matches.id` 是 `serial`（整數）不是 uuid，
   FK 要跟著用 integer。
+- **PR #149**（**Closes #147**）— 修戰術板 undo 一次退兩步（commit `3abb312`，07-18）。根因：每個 action
+  「先記歷史再改狀態」，`history[historyIndex]` 慢一拍、與 undo 的 `historyIndex-1` 對不上；改成「先改後記」
+  ＋回歸測試。那條修好卻沒開 PR 的 stranded 分支靠 catch-up 撿回。
+- **PR #148**（無對應 issue）— tang 的品牌 logo mark（旋轉排球）＋ design-spec「品牌標誌」段（commit
+  `e920ac1`，07-18）。品牌名稱未定、字標佔位；spec `stroke-width 6.5` vs 實檔 `9` 已在 PR 留言請對齊。
+- **PR #141**（無對應 issue）— 拿掉跨領域 PR 的 approve 硬關卡、改「合併前 @ 知會一聲」（commit `fa4e908`,
+  07-18）。放寬先前 PR #137 立的規則，動 CLAUDE.md/CONTRIBUTING.md/ship skill；現行生效即知會制。
+- **PR #140**（#134 Track B，**#134 保持 open**）— 戰術板材質強化：置中字標、低調光影、玻璃卡片加深
+  （commit `72a3670`，07-18）。#134 微 3D／版面呼吸等其餘方向續留 issue。
 - **PR #142**（無對應 issue）— 需求層 pattern-language 分析文件（commit `c4e843f`，07-17）。
-- **PR #137**（無對應 issue）— 兩人協作流程規範（commit `ab626b1`，07-16）。CONTRIBUTING.md
-  「協作與溝通」＋ CLAUDE.md「Team & collaboration rules」＋ ship Step 7 ＋ wrap-up 對方 issue 保護。
-  ⚠ **PR #141 進行中，提議把這裡的 approve-gate 改成知會制**——未 merge 前舊規則仍生效。ship skill
-  瘦身門檻＝超過 ~350 行時把 Step 6 坑史移去 `ship/reference.md`（先不動）。
+- **PR #137**（無對應 issue）— 兩人協作流程規範（commit `ab626b1`，07-16）。CONTRIBUTING.md「協作與溝通」
+  ＋ CLAUDE.md「Team & collaboration rules」＋ ship 協作確認步驟。**已於 PR #141 放寬成知會制**（見上）。
+  ship skill 瘦身門檻＝超過 ~350 行時把 Step 6 坑史移去 `ship/reference.md`（先不動）。
 - **PR #135 / #129**（#131 部分進度，該 issue 保持 open）— 戰術板＋首頁套深色語言、手繪風全退役、
   球場改深青漸層（commit `0d63ee3`／`bef0e14`）。方法論教訓（review 夥伴 PR 用）：落後 main 又同檔的
   PR，git 自動合併無衝突**不等於合對**，要讀合併後檔案確認雙方改動都活著；fork PR 的 CI 預設不跑、
