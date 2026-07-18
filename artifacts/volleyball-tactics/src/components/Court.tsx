@@ -89,6 +89,8 @@ export default function Court() {
   const activeTool = useTacticsBoard((s) => s.activeTool);
   const isLayoutMode = useTacticsBoard((s) => s.isLayoutMode);
   const courtView = useTacticsBoard((s) => s.courtView);
+  // 唯讀檢視已存戰術時，畫面完全來自這張凍結快照（issue #154 PR B），不回輪轉表/名單查任何東西。
+  const viewingScene = useTacticsBoard((s) => s.viewingScene);
   const setActiveTool = useTacticsBoard((s) => s.setActiveTool);
   const setSelectedObjectId = useTacticsBoard((s) => s.setSelectedObjectId);
   const addMarker = useTacticsBoard((s) => s.addMarker);
@@ -560,45 +562,68 @@ export default function Court() {
 
             {/* 畫筆標記與防守範圍只在「戰術視圖」模式下顯示，
               輪轉視圖只看站位圓圈，避免標記干擾判斷球員站哪裡。 */}
-            {courtView === "tactics" && (
-              <>
-                {rotationTactics.defenseRanges.map((dr) => (
-                  <DefenseRange key={dr.id} range={dr} />
-                ))}
-                {rotationTactics.markers.map((m) => (
-                  <Markers key={m.id} marker={m} />
-                ))}
-              </>
-            )}
+            {courtView === "tactics" &&
+              (() => {
+                // 檢視已存戰術時畫筆/防守範圍來自那張快照（viewingScene），即時布置時來自
+                // 當前輪次的 rotationTactics——兩者 markers/defenseRanges 欄位形狀相同。
+                const drawings = viewingScene ?? rotationTactics;
+                return (
+                  <>
+                    {drawings.defenseRanges.map((dr) => (
+                      <DefenseRange key={dr.id} range={dr} />
+                    ))}
+                    {drawings.markers.map((m) => (
+                      <Markers key={m.id} marker={m} />
+                    ))}
+                  </>
+                );
+              })()}
 
             {/* Render Players
               輪轉視圖：用 positions（格子吸附站位，來自輪轉表，即時資料）。
-              戰術視圖：用 tacticPositions（進入戰術布置那一刻從輪轉表拍的快照，之後
-              完全獨立編輯，見 useTacticsBoard.ts 的 enterTacticsLayout）——不需要
-              再跟輪轉表的即時站位合併，快照本身就是完整的一份。 */}
-            {(() => {
-              const displayPositions =
-                courtView === "rotation"
+              戰術視圖 + 即時布置：用 tacticPositions（進入戰術布置那一刻從輪轉表拍的快照）。
+              戰術視圖 + 檢視已存戰術：用 viewingScene.snapshot.players（凍結快照，issue #154
+              PR B）——這裡是「反正規化」的 SnapshotPlayer，姓名/背號/位置都已凍在快照裡，
+              刻意「不」回 roster 查，所以名單怎麼改（刪人/改名）都動不到這張照片。 */}
+            {courtView === "tactics" && viewingScene
+              ? viewingScene.snapshot.players.map((sp, i) => {
+                  // SnapshotPlayer 沒有現成的 MatchPlayer/PlayerPosition 物件，就地組出 PlayerNode
+                  // 需要的兩個 prop。sourcePlayerId 可能是 null（當初就查無此人），用合成 id 當 key
+                  // 就好——檢視是唯讀，這個 id 不會被拿去寫任何東西。
+                  const id = sp.sourcePlayerId ?? `snap-${i}`;
+                  const player = { id, name: sp.name, number: sp.number, role: sp.role };
+                  const position = { playerId: id, x: sp.x, y: sp.y };
+                  const isFrontRow = sp.y > 0.5 && sp.y < 0.75;
+                  return (
+                    <PlayerNode
+                      key={id}
+                      player={player}
+                      position={position}
+                      isFrontRow={isFrontRow}
+                      isLibero={sp.isLibero}
+                      courtRef={courtRef}
+                    />
+                  );
+                })
+              : (courtView === "rotation"
                   ? rotationPositions.positions
-                  : rotationTactics.tacticPositions;
-
-              return displayPositions.map((pos) => {
-                const player = roster.find((p) => p.id === pos.playerId);
-                if (!player) return null;
-                const isLibero = player.role === "L";
-                const isFrontRow = pos.y > 0.5 && pos.y < 0.75;
-                return (
-                  <PlayerNode
-                    key={pos.playerId}
-                    player={player}
-                    position={pos}
-                    isFrontRow={isFrontRow}
-                    isLibero={isLibero}
-                    courtRef={courtRef}
-                  />
-                );
-              });
-            })()}
+                  : rotationTactics.tacticPositions
+                ).map((pos) => {
+                  const player = roster.find((p) => p.id === pos.playerId);
+                  if (!player) return null;
+                  const isLibero = player.role === "L";
+                  const isFrontRow = pos.y > 0.5 && pos.y < 0.75;
+                  return (
+                    <PlayerNode
+                      key={pos.playerId}
+                      player={player}
+                      position={pos}
+                      isFrontRow={isFrontRow}
+                      isLibero={isLibero}
+                      courtRef={courtRef}
+                    />
+                  );
+                })}
           </svg>
 
           {/* L 備位圓圈（issue #18）：只在輪轉視圖顯示——這是「先發 L 還沒上場」這個
