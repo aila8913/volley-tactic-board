@@ -425,6 +425,45 @@ export const DeleteSubstitutionParams = zod.object({
 
 
 /**
+ * @summary List all timeouts for a match (across all its sets), for rebuilding the scoresheet
+ */
+export const ListMatchTimeoutsParams = zod.object({
+  "matchId": zod.coerce.number()
+})
+
+export const ListMatchTimeoutsResponseItem = zod.object({
+  "id": zod.number(),
+  "setId": zod.number(),
+  "homeScore": zod.number(),
+  "awayScore": zod.number(),
+  "side": zod.enum(['home', 'away'])
+})
+export const ListMatchTimeoutsResponse = zod.array(ListMatchTimeoutsResponseItem)
+
+
+/**
+ * @summary Record one timeout within a set
+ */
+export const CreateTimeoutParams = zod.object({
+  "setId": zod.coerce.number()
+})
+
+export const CreateTimeoutBody = zod.object({
+  "homeScore": zod.number(),
+  "awayScore": zod.number(),
+  "side": zod.enum(['home', 'away'])
+})
+
+
+/**
+ * @summary Delete a timeout (e.g. undo the last timeout action)
+ */
+export const DeleteTimeoutParams = zod.object({
+  "timeoutId": zod.coerce.number()
+})
+
+
+/**
  * @summary List all starting lineups for a match (one per set), for rebuilding the scoresheet
  */
 export const ListMatchLineupsParams = zod.object({

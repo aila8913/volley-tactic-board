@@ -158,6 +158,28 @@ export interface NewSubstitution {
   kind: SubstitutionKind;
 }
 
+export type TimeoutSide = typeof TimeoutSide[keyof typeof TimeoutSide];
+
+
+export const TimeoutSide = {
+  home: 'home',
+  away: 'away',
+} as const;
+
+export interface Timeout {
+  id: number;
+  setId: number;
+  homeScore: number;
+  awayScore: number;
+  side: TimeoutSide;
+}
+
+export interface NewTimeout {
+  homeScore: number;
+  awayScore: number;
+  side: TimeoutSide;
+}
+
 export interface Lineup {
   id: number;
   setId: number;

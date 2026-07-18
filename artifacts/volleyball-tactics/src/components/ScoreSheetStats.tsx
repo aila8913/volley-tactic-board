@@ -12,6 +12,8 @@ interface Props {
   record: ScoreSheetState | undefined;
   currentSetSubCount?: number;
   totalSubCount?: number;
+  currentSetTimeoutCount?: number;
+  totalTimeoutCount?: number;
 }
 
 export default function ScoreSheetStats({
@@ -19,6 +21,8 @@ export default function ScoreSheetStats({
   record,
   currentSetSubCount = 0,
   totalSubCount = 0,
+  currentSetTimeoutCount = 0,
+  totalTimeoutCount = 0,
 }: Props) {
   const currentSet = record?.currentSet;
   const completedSets = record?.completedSets ?? [];
@@ -135,6 +139,24 @@ export default function ScoreSheetStats({
           </div>
         </div>
         <p className="mt-1 text-[11px] text-muted-foreground">僅計入一般換人（不含自由球員）。</p>
+      </section>
+
+      {/* ── 暫停紀錄（issue #44）── */}
+      <section>
+        <h2 className="mb-1.5 text-sm font-bold text-gray-700">暫停紀錄</h2>
+        <div className="flex gap-5 text-sm">
+          <div className="flex flex-col items-center gap-0.5">
+            <span className="text-xl font-bold tabular-nums">{currentSetTimeoutCount}</span>
+            <span className="text-xs text-muted-foreground">本局（雙方）</span>
+          </div>
+          <div className="flex flex-col items-center gap-0.5">
+            <span className="text-xl font-bold tabular-nums">{totalTimeoutCount}</span>
+            <span className="text-xs text-muted-foreground">全場累計</span>
+          </div>
+        </div>
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          每隊每局上限 2 次；分隊次數見計分區。
+        </p>
       </section>
 
       {/* ── 球員動作統計表 ── */}

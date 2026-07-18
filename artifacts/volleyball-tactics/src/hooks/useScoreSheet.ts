@@ -12,6 +12,9 @@ import {
   useDeleteRally,
   useCreateSubstitution,
   useDeleteSubstitution,
+  useListMatchTimeouts,
+  useCreateTimeout,
+  useDeleteTimeout,
   useListMatchLineups,
   usePutSetLineup,
   listRallies,
@@ -24,6 +27,7 @@ import {
   pointRecordToEvent,
   reconstructRecording,
   regularSubToApi,
+  timeoutToApi,
   lineupSnapshotToApi,
   makeEmptySet,
   emptyRecord,
@@ -69,6 +73,9 @@ interface ScoreSheetStore {
   // 一般換人（issue #42 Phase B）：跟 setLiberoSubstitution 一樣是純 reducer，瞬間更新畫面；
   // 真正寫進後端由 controller 的 substitute() 在背景做（跟 scorePoint/score() 是同一套分工）。
   recordRegularSub: (matchId: string, outPlayerId: string, inPlayerId: string) => void;
+  // 暫停（issue #44）：純 reducer，把一筆暫停 append 進當前這一局；背景寫入由 controller 的
+  // callTimeout() 負責（同 recordRegularSub / substitute 的分工）。
+  recordTimeout: (matchId: string, side: Side) => void;
 }
 
 const getOrInitRecord = (
@@ -94,6 +101,7 @@ export const useScoreSheet = create<ScoreSheetStore>()((set) => ({
         currentSet: record.currentSet,
         regularSubs: record.regularSubs,
         liberoSubstitution: record.liberoSubstitution,
+        timeouts: record.timeouts,
         backendKind,
       };
       const stack = state.undoStacksByMatch[matchId] ?? [];
@@ -166,6 +174,7 @@ export const useScoreSheet = create<ScoreSheetStore>()((set) => ({
             currentSet: entry.currentSet,
             regularSubs: entry.regularSubs,
             liberoSubstitution: entry.liberoSubstitution,
+            timeouts: entry.timeouts,
           },
         },
         undoStacksByMatch: {
@@ -209,6 +218,9 @@ export const useScoreSheet = create<ScoreSheetStore>()((set) => ({
             // 讓 store 自己對這兩個欄位的一致性負責，不用 UI 元件記得同步做兩件事。
             subCountsHistory: [...record.subCountsHistory, record.regularSubs.length],
             regularSubs: [],
+            // 暫停跟換人同一套跨局交接（issue #44）：把這一局的暫停次數收進歷史，新的一局歸零。
+            timeoutCountsHistory: [...record.timeoutCountsHistory, record.timeouts.length],
+            timeouts: [],
           },
         },
       };
@@ -253,6 +265,21 @@ export const useScoreSheet = create<ScoreSheetStore>()((set) => ({
         },
       };
     }),
+
+  recordTimeout: (matchId, side) =>
+    set((state) => {
+      const record = getOrInitRecord(state.recordingsByMatch, matchId);
+      // 暫停沒有換人那種去重（見 types/scoresheet.ts 的 TimeoutRecord 註解），單純 append 一筆。
+      return {
+        recordingsByMatch: {
+          ...state.recordingsByMatch,
+          [matchId]: {
+            ...record,
+            timeouts: [...record.timeouts, { side }],
+          },
+        },
+      };
+    }),
 }));
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -278,6 +305,8 @@ export function useScoreSheetController(matchId: string) {
   const deleteRally = useDeleteRally();
   const createSubstitution = useCreateSubstitution();
   const deleteSubstitution = useDeleteSubstitution();
+  const createTimeout = useCreateTimeout();
+  const deleteTimeout = useDeleteTimeout();
   const putLineup = usePutSetLineup();
 
   // 持久化記帳（見上方說明）。用 ref 因為它們只影響背景寫入、不該觸發重繪。
@@ -287,6 +316,9 @@ export function useScoreSheetController(matchId: string) {
   // 「復原」退掉一個換人動作時 pop 出最後一個、DELETE 掉它。序列化佇列保證 create 一定
   // 先於 delete 跑完（id 已進堆疊），所以 pop 到的就是要刪的那一筆。
   const subIdsRef = useRef<number[]>([]);
+  // 暫停 row id 的堆疊，跟 subIdsRef 完全同一套路：暫停成功 POST 後把 id 推進來，「復原」退掉
+  // 一個暫停動作時 pop 出最後一個、DELETE 掉它（issue #44）。
+  const timeoutIdsRef = useRef<number[]>([]);
   const queueRef = useRef<Promise<unknown>>(Promise.resolve());
 
   // 把一個後端寫入工作排進序列化佇列。本地優先：寫入失敗只記 log、不回滾畫面
@@ -314,6 +346,9 @@ export function useScoreSheetController(matchId: string) {
   // 整場所有一般換人紀錄一次抓（跟 events 同一種 bulk endpoint 理由：避免對每個 set
   // 各發一次請求）。issue #42 Phase B：重建 regularSubs/subCountsHistory 靠它。
   const subsQuery = useListMatchSubstitutions(numericMatchId);
+  // 整場所有暫停紀錄一次抓（同 bulk endpoint 理由，issue #44）。reload 後重建各局的
+  // timeouts / timeoutCountsHistory 靠它。
+  const timeoutsQuery = useListMatchTimeouts(numericMatchId);
   // 整場所有局的先發一次抓（同 bulk endpoint 理由）。issue #115：reload 後把先發快照讀回，
   // 計分表才不會又退回去讀（可能被別場/存檔污染的）全域 store。
   const lineupsQuery = useListMatchLineups(numericMatchId);
@@ -322,16 +357,22 @@ export function useScoreSheetController(matchId: string) {
   const ralliesReady = ralliesQueries.every((q) => q.isSuccess);
   const eventsReady = eventsQuery.isSuccess;
   const subsReady = subsQuery.isSuccess;
+  const timeoutsReady = timeoutsQuery.isSuccess;
   const lineupsReady = lineupsQuery.isSuccess;
   const isHydrating =
-    !setsReady || !eventsReady || !subsReady || !lineupsReady || (sets.length > 0 && !ralliesReady);
+    !setsReady ||
+    !eventsReady ||
+    !subsReady ||
+    !timeoutsReady ||
+    !lineupsReady ||
+    (sets.length > 0 && !ralliesReady);
 
   // 只在資料第一次備妥時重建一次，之後不再覆蓋（避免把使用者當下的即時編輯洗掉）。
   // matchId 變了就允許再重建一次。
   const hydratedMatchRef = useRef<string | null>(null);
   useEffect(() => {
     if (hydratedMatchRef.current === matchId) return;
-    if (!setsReady || !eventsReady || !subsReady || !lineupsReady) return;
+    if (!setsReady || !eventsReady || !subsReady || !timeoutsReady || !lineupsReady) return;
     if (sets.length > 0 && !ralliesReady) return;
 
     // 「資料到位後怎麼組成 ScoreSheetState」這段純計算已抽到 reconstructRecording
@@ -346,6 +387,7 @@ export function useScoreSheetController(matchId: string) {
       eventsQuery.data ?? [],
       subsQuery.data ?? [],
       lineupsQuery.data ?? [],
+      timeoutsQuery.data ?? [],
     );
 
     // seed 記帳 ref，讓重建後接著記分/復原能對得上後端 id。
@@ -357,12 +399,23 @@ export function useScoreSheetController(matchId: string) {
     // 不重建），所以 reload 前的換人不會被 undo 退掉、也就不需要它們的 id；只累積本次進頁後
     // 新記的換人 id 即可。
     subIdsRef.current = [];
+    // 暫停 id 堆疊同理歸零（issue #44）：reload 前的暫停不會被 undo 退掉，只累積本次進頁後新記的。
+    timeoutIdsRef.current = [];
 
     hydrate(matchId, state);
     hydratedMatchRef.current = matchId;
     // ralliesQueries / eventsQuery.data 每次 render 重建，放進依賴會抖動；用 *Ready 旗標即可。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [matchId, setsReady, ralliesReady, eventsReady, subsReady, lineupsReady, sets.length]);
+  }, [
+    matchId,
+    setsReady,
+    ralliesReady,
+    eventsReady,
+    subsReady,
+    timeoutsReady,
+    lineupsReady,
+    sets.length,
+  ]);
 
   // ── 動作（本地即時 + 背景持久化）──
 
@@ -481,9 +534,17 @@ export function useScoreSheetController(matchId: string) {
           await deleteSubstitution.mutateAsync({ substitutionId });
         }
       });
+    } else if (top.backendKind === "timeout") {
+      enqueue(async () => {
+        // 跟換人同理（issue #44）：序列化佇列保證這筆暫停的 POST 已先跑完、id 已進 timeoutIdsRef。
+        const timeoutId = timeoutIdsRef.current.pop();
+        if (timeoutId !== undefined) {
+          await deleteTimeout.mutateAsync({ timeoutId });
+        }
+      });
     }
     // backendKind === null（手動 libero 上/下場）：純本地狀態，undoLast 已還原畫面，後端沒東西要刪。
-  }, [matchId, enqueue, deleteRally, deleteSubstitution]);
+  }, [matchId, enqueue, deleteRally, deleteSubstitution, deleteTimeout]);
 
   const goNextSet = useCallback(() => {
     const pre = useScoreSheet.getState().recordingsByMatch[matchId]?.currentSet;
@@ -544,5 +605,37 @@ export function useScoreSheetController(matchId: string) {
     [matchId, enqueue, createSubstitution],
   );
 
-  return { isHydrating, start, score, undo, goNextSet, substitute };
+  // 暫停（issue #44）。跟 substitute() 是同一套結構，只是更單純（沒有球員、沒有淨疊加）：
+  //   1) 先同步擷取「叫暫停當下」的比分快照（暫停跟換人一樣不掛在某個 rally 底下，記的是發生時的比分）。
+  //   2) 本地 reducer 立刻更新畫面（recordTimeout，零延遲）。
+  //   3) 背景把這筆暫停 POST 到目前這一局的 setId 底下，成功後把 id 推進 timeoutIdsRef（復原要用它 DELETE）。
+  const callTimeout = useCallback(
+    (side: Side) => {
+      const pre = useScoreSheet.getState().recordingsByMatch[matchId]?.currentSet;
+      if (!pre || pre.serving === null) return;
+
+      const homeScore = pre.ourScore;
+      const awayScore = pre.opponentScore;
+
+      // 0) 先存一份「叫這次暫停之前」的快照，讓「復原」能單獨退掉這個暫停動作（issue #41）。
+      useScoreSheet.getState().snapshotForUndo(matchId, "timeout");
+
+      // 1) 本地即時更新（畫面零延遲）
+      useScoreSheet.getState().recordTimeout(matchId, side);
+
+      // 2) 背景持久化：POST 到目前這一局底下，成功後把 row id 推進 timeoutIdsRef。
+      enqueue(async () => {
+        const setId = currentSetIdRef.current;
+        if (setId === undefined) return; // 理論上 start 一定先跑過；防呆
+        const created = await createTimeout.mutateAsync({
+          setId,
+          data: timeoutToApi(side, homeScore, awayScore),
+        });
+        timeoutIdsRef.current.push(created.id);
+      });
+    },
+    [matchId, enqueue, createTimeout],
+  );
+
+  return { isHydrating, start, score, undo, goNextSet, substitute, callTimeout };
 }

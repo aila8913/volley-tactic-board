@@ -16,6 +16,8 @@ import type {
   NewEvent,
   Substitution,
   NewSubstitution,
+  Timeout,
+  NewTimeout,
   Lineup,
   NewLineup,
 } from "@workspace/api-client-react";
@@ -25,6 +27,7 @@ import type {
   PlayAction,
   SetRecordingState,
   RegularSub,
+  TimeoutRecord,
   ScoreSheetState,
   CompletedSet,
   LineupSnapshot,
@@ -231,6 +234,25 @@ export function reconstructRegularSubs(subs: Substitution[]): RegularSub[] {
   return result;
 }
 
+// ── TimeoutRecord → 暫停 API body（issue #44）──
+// 跟 regularSubToApi 同一套：時機記的是「這次操作當下的比分快照」（homeScore/awayScore），
+// 不是掛在某個 rally 底下——暫停可能發生在兩個 rally 之間（下一球還沒開始），那時下一個
+// rally 的 id 還不存在。side 從前端 us/opponent 翻成後端 home/away。
+export function timeoutToApi(side: Side, homeScore: number, awayScore: number): NewTimeout {
+  return {
+    homeScore,
+    awayScore,
+    side: sideToApi(side),
+  };
+}
+
+// ── 後端 timeout rows → 前端 timeouts 清單（timeoutToApi 的反向、重建用）──
+// 暫停沒有換人那種「淨疊加去重」，每筆都是獨立事件，所以重建就是照後端回來的順序
+// （呼叫端已依 homeScore/awayScore 排序＝時間順序）逐筆把 side 翻回 us/opponent。
+export function reconstructTimeouts(timeouts: Timeout[]): TimeoutRecord[] {
+  return timeouts.map((t) => ({ side: apiToSide(t.side) }));
+}
+
 // ── LineupSnapshot ↔ 後端 lineups DTO（issue #115）──
 // 先發快照（號位 1~6 → 球員 id 字串）跟後端 lineups 表（zone1~6PlayerId 字串 uuid）之間的轉換。
 // 前後端球員 id 現在都是字串 uuid（見 lib/db/src/schema/players.ts 的改動），型別一致，
@@ -281,6 +303,8 @@ export const emptyRecord = (): ScoreSheetState => ({
   liberoSubstitution: null,
   regularSubs: [],
   subCountsHistory: [],
+  timeouts: [],
+  timeoutCountsHistory: [],
 });
 
 // ── 從後端整場資料重建完整的 ScoreSheetState ──
@@ -311,6 +335,9 @@ export function reconstructRecording(
   // 讀回來，才不會又退回去讀（可能被污染的）全域 store。選填、預設空陣列——分析頁
   // （useMatchRecording）跟舊測試不帶它也能用，只是重建出來的 lineup 會是 null。
   lineups: Lineup[] = [],
+  // 整場所有暫停紀錄（GET /matches/:id/timeouts，issue #44）。同樣選填、預設空陣列，讓
+  // 分析頁與舊測試不帶它也能用（重建出來的 timeouts / timeoutCountsHistory 會是空的）。
+  timeouts: Timeout[] = [],
 ): ScoreSheetState {
   // 把整場的 event 依 rallyId 分組，餵給 reconstruct 還原每一分的動作/球員。
   // endpoint 已依 rallyId、sequence 排序，所以同一組內是照 sequence 排好的。
@@ -329,6 +356,15 @@ export function reconstructRecording(
     const list = subsBySetId.get(sub.setId);
     if (list) list.push(sub);
     else subsBySetId.set(sub.setId, [sub]);
+  }
+
+  // 暫停也依 setId 分組，重建各局的 timeouts（issue #44）。後端 GET 已依 (setId, homeScore,
+  // awayScore, id) 排序，同一組內就是發生的先後順序，可直接丟給 reconstructTimeouts。
+  const timeoutsBySetId = new Map<number, Timeout[]>();
+  for (const t of timeouts) {
+    const list = timeoutsBySetId.get(t.setId);
+    if (list) list.push(t);
+    else timeoutsBySetId.set(t.setId, [t]);
   }
 
   if (sets.length === 0) {
@@ -358,6 +394,10 @@ export function reconstructRecording(
   const subCountsHistory: number[] = sets
     .slice(0, -1)
     .map((s) => reconstructRegularSubs(subsBySetId.get(s.id) ?? []).length);
+  // 已結束各局的暫停次數，對齊 subCountsHistory 的作法：對每個已結束的 set 數它的暫停筆數。
+  const timeoutCountsHistory: number[] = sets
+    .slice(0, -1)
+    .map((s) => (timeoutsBySetId.get(s.id) ?? []).length);
   const lastIdx = sets.length - 1;
   const currentSet = reconstructSetFromRallies(
     sets[lastIdx],
@@ -366,6 +406,8 @@ export function reconstructRecording(
   );
   // 進行中這一局的換人淨疊加清單，直接重放這一局的換人紀錄即可。
   const regularSubs = reconstructRegularSubs(subsBySetId.get(sets[lastIdx].id) ?? []);
+  // 進行中這一局的暫停清單（issue #44），直接把這一局的暫停紀錄翻回前端形狀。
+  const currentTimeouts = reconstructTimeouts(timeoutsBySetId.get(sets[lastIdx].id) ?? []);
 
   // 先發快照：一 row 一局（setId），只認「目前這一局自己的」先發（先發每局可不同，不沿用別局）。
   // 進行中這一局若已有先發（已選過先發方）就讀回它；若還沒（例如剛按下一局、firstServer=null 的
@@ -383,5 +425,7 @@ export function reconstructRecording(
     liberoSubstitution: null,
     regularSubs,
     subCountsHistory,
+    timeouts: currentTimeouts,
+    timeoutCountsHistory,
   };
 }

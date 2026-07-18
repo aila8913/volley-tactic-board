@@ -9,6 +9,8 @@ import {
   isSetComplete,
   regularSubToApi,
   reconstructRegularSubs,
+  timeoutToApi,
+  reconstructTimeouts,
   reconstructRecording,
   disabledActions,
   lineupSnapshotToApi,
@@ -20,6 +22,7 @@ import type {
   Rally,
   MatchEvent,
   Substitution,
+  Timeout,
   Lineup,
 } from "@workspace/api-client-react";
 
@@ -356,6 +359,8 @@ describe("reconstructRecording", () => {
       liberoSubstitution: null,
       regularSubs: [],
       subCountsHistory: [],
+      timeouts: [],
+      timeoutCountsHistory: [],
     });
   });
 
@@ -628,5 +633,26 @@ describe("reconstructRegularSubs", () => {
       makeSub({ playerOutId: null, playerInId: "2", homeScore: 4, awayScore: 1 }),
     ];
     expect(reconstructRegularSubs(subs)).toEqual([]);
+  });
+});
+
+// ── 暫停（issue #44）──
+describe("timeout mapping", () => {
+  it("maps side us/opponent → home/away in the API body, carrying the score snapshot", () => {
+    expect(timeoutToApi("us", 5, 3)).toEqual({ homeScore: 5, awayScore: 3, side: "home" });
+    expect(timeoutToApi("opponent", 8, 10)).toEqual({ homeScore: 8, awayScore: 10, side: "away" });
+  });
+
+  it("reconstructs timeouts back to front-end side, preserving order (no dedup)", () => {
+    const rows: Timeout[] = [
+      { id: 1, setId: 7, homeScore: 4, awayScore: 2, side: "home" },
+      { id: 2, setId: 7, homeScore: 4, awayScore: 8, side: "away" },
+      { id: 3, setId: 7, homeScore: 20, awayScore: 15, side: "home" },
+    ];
+    expect(reconstructTimeouts(rows)).toEqual([
+      { side: "us" },
+      { side: "opponent" },
+      { side: "us" },
+    ]);
   });
 });
