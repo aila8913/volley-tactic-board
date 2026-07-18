@@ -17,28 +17,24 @@
 > promote it first, then drop it. Read this file + `gh issue list --state open` + recent
 > `git log` at the start of a session instead of re-exploring the codebase.
 
-\_Last updated: 2026-07-17（晚）— **#119 去汙染家族推進**：schema/API 前置 **#143（tactics 加 matchId
-外鍵＋列表 `?matchId=` 過濾）已 merge 進 main**（commit `e905844`，PO 拍板不等 tang review——純後端、
-非其設計範圍）；**前端半段開在 #145**（base=main、CI 綠、等 merge）——兩 store（`useRotationTable`/
-`useTacticsBoard`）從全域單例改成 `dataByMatch[matchId]` 分片、每個 action 收 matchId，`activeProjectId`
-進分片（解症狀 C）、`buildSnapshot` 出口過濾幽靈 `tacticPositions`（解症狀 B）、拿掉 persist、移除跨 store
-全域 subscribe 改 `RotationSwitcher` 明確呼叫 `syncRotationChange`、新增 `useTacticsBoard.test.ts`。
-**待 PO 拍板一點**：拿掉 persist ⇒ 硬重整不再還原「未存的排版」（＝決策 4「只有存檔才算數」的直接後果；
-輪轉表站位也一起去 persist，若要活過重整可改 byMatch-keyed persist、幾行可退）。踩到 stacked-PR 坑：
-#143 squash-merge＋刪 base 分支連帶關掉原本疊在上面的 #144，已把前端 diff rebase 到 main、改開 #145
-（#144 留言記錄替代關係）。上一輪（07-17 早）背景：需求層 pattern-language 分析（`docs/requirements-pattern-language.md`，
-PR #142）；再上一輪（07-16）：戰術板深色語言（PR #135）＋兩人協作流程上線（PR #137）。\_
+\_Last updated: 2026-07-18 — **全域 store 去汙染家族收官**：`#119`（戰術板/輪轉表兩 store 改
+`dataByMatch[matchId]` 分片、去 persist、`buildSnapshot` 過濾幽靈站位）**前端 `#145` 已 merge 進 main**
+（commit `d18f69e`），三症狀（跨場汙染／幽靈站位／activeProjectId 誤覆寫）都有 `useTacticsBoard.test.ts`
+釘住、整套驗證過 → **`#119` 已關**。PO 決策已定案：去 persist ⇒ 硬重整不還原「未存排版」（決策 4「只有
+存檔才算數」）。M1 實作項只剩 `#44`（暫停/timeout）＋ `#147`。**本 session 另修 `#147`**（戰術布置
+Ctrl+Z 一次退兩步）：根因是每個動作「先記歷史再改狀態」，`history[historyIndex]` 比畫面慢一拍、與 undo 的
+`historyIndex-1` 約定對不上；改成「先改後記」＋補回歸測試（commit `98e7a6d`，**在 `claude/catch-up-pa5s6a`
+分支、未進 main、待開 PR**）。此 bug 自 `#79` 就存在、與 `#145` 分片重構無關。\_
 
-**#131 原本卡的 PO 決定已拍板：手繪風全拿掉**——戰術板已退役 `wobbly-border`/手繪字體，球場底色
-改深青漸層（**非** spec 原始的暖木色 `#C9A25D`，理由記在 design-spec.md 第 5 節「實作決定」）。
-#131 剩計分表／數據分析頁／資料夾內頁三處，但**先等 #134（戰術板視覺定案：微 3D／材質／版面呼吸，
-needs-plan）討論定案**——若 #134 的結論動到 design-spec 本身（尤其第 6 節「動效輕量」），剩餘頁面
-以更新後的 spec 為準，別急著套舊規範。
+**戰術板視覺（`#134`）進行中，PO 已拍板四點方向**：球場地板毛玻璃、邊緣線條光（含放寬 design-spec §6
+「動效輕量」→「每頁最多一個環境級動效，須慢且低亮度」）、球員標記重設計、對手隊色 `#EF4444`→暖珊瑚橘
+`#FF8A5C`（跟錯誤紅分家、錯誤狀態仍用紅）。tang 的 Track B 材質強化在 **PR #140**（`design/tactics-board-bg-v2`，
+已口頭 approve、**等 tang 從 main rebase 解 index.css/design-spec 衝突後自合**）。`#131`（其他頁面套深色）
+剩計分表／分析頁／資料夾內頁，仍排在 `#134` 之後——若結論動到 spec，剩餘頁面以更新後的 spec 為準。
 
-**協作流程（PR #137）**：tang（@tangyi1025）review + approve 後合併——這張 PR 本身就是新流程的
-第一次完整演練（跨領域 PR → 加 reviewer → @ 留言 → 等 approve → PO 確認才 merge）。規範本體住
-CONTRIBUTING.md「協作與溝通」＋ CLAUDE.md「Team & collaboration rules」，ship skill 多了 Step 7
-協作確認、wrap-up 多了「對方的 issue 不單方面關」——這裡只留指標，細節看那四個檔案。\_
+**協作流程規範可能要改**：**PR #141**（`claude/catch-up-3l3c3e`）提議把「跨領域 PR 要等對方 approve」硬關卡
+拿掉、改成合併前 @ 知會一聲即可——**尚未 merge、等 tang approve**，所以目前生效的仍是舊的 approve-gate 規則
+（住 CONTRIBUTING.md「協作與溝通」＋ CLAUDE.md「Team & collaboration rules」＋ ship Step 7）。\_
 
 ## Current state
 
@@ -52,6 +48,10 @@ lives in git log + the issues named):
   localStorage、進 DB**（#117 完整版已合併）——`matches.tournamentId` 是帶 `onDelete: cascade`
   的 uuid FK，刪資料夾自動連帶刪比賽、不再有孤兒。Design + phased history in
   `docs/backend-architecture.md`；#58 closed。
+- **前端 store 已全面 per-match 分片、去汙染。** 計分表（`useScoreSheet`，#115）、戰術板／輪轉表
+  （`useTacticsBoard`／`useRotationTable`，#119）都改成 `dataByMatch[matchId]` 分片，A 場的編輯不會污染
+  B 場；戰術板/輪轉表工作狀態**不再 persist**（PO 決策：只有存成戰術才算數，硬重整不還原未存排版）。
+  切輪次的跨 store 同步走 `RotationSwitcher → syncRotationChange` 明確呼叫，不再靠全域 subscribe。
 - **Schema foundations for stats are in place:** `lineups`（起始先發，一局一 row）、
   `substitutions`（換人，存比分快照）、`events.outcome`（得/失/球續 enum）、`people`＋`teams`
   （跨場跨隊身分／分組標籤，`players.personId`/`matches.teamId` nullable FK、`onDelete: set null`
@@ -99,50 +99,30 @@ gh issue list --milestone "M1 簡易版收尾"   # 當前階段
 gh issue list --state open                   # 全部
 ```
 
-M1 收尾焦點：**全域 store 去汙染家族 #117/#118/#119**（#115 已修先發那條、CLOSED；同根因仍在別處——
-見 #117 錨點留言的三條不變量與落地順序）。順序＝(1) ✅ #117-最小止血（#122 已 merge）；
-(2) schema 換季（趁部署前可丟資料窗口）三刀，可拆 PR：**✅ players.id→uuid（#118 schema 部分，PR #124
-已 merge，commit `a40cb59`）**／**✅ tournaments 表 uuid PK+cascade+API（#117 完整版，PR #128 已 merge，
-commit `241a7eb`）**／**✅ tactics 加 matchId（#119 前置，PR #143 已 merge，commit `e905844`）**；
-**(3) ✅ #118 前端半段（#118 全案關閉）**；(4) **🔵 #119 兩 store byMatch 分片+去 persist——前端已完成，
-開在 PR #145（base=main、CI 綠），等 merge＋PO 對「未存排版不活過重整」拍板**；(5) #120 純展示唯讀站位
-視圖（依賴 #119 形狀定案）。另 #64（背景寫入失敗不 reconcile，關聯部署 #26／離線契約 #75）、
-#44（暫停/timeout，M1 唯一舊 open 項）、**#127（後端沒驗 tournamentId 擁有權，真 auth 後補）**。
-#120 純 UI、依賴 #119，暫不排期。**M1：#119 前端已在 #145 待合，合完只剩 #44。**
-（#118/#115/#41/#50 本週關閉；#20/#63/#74 先前已關閉。）
+M1 收尾焦點：**全域 store 去汙染家族已收官**——#115/#117/#118/#119 全數 CLOSED（三條不變量的落地
+記錄見各 issue＋git log）。**M1 實作項現在只剩兩個**：**#44**（暫停/timeout，唯一舊 open 項）＋
+**#147**（戰術布置 undo 一次退兩步——修正已在 `claude/catch-up-pa5s6a`／commit `98e7a6d`、含回歸測試，
+**待開 PR / merge 後才關**）。另 #120（純展示唯讀站位視圖）依賴 #119 定案的分片形狀、暫不排期；
+#64（背景寫入失敗不 reconcile，關聯部署 #26／離線契約 #75）、**#127（後端沒驗 tournamentId 擁有權，
+真 auth 後補）** 仍 open。
 進階版差異化（M4）：#51 動作子分類、#21 球線座標、#99 站位快照——同屬 advanced tier，可一起設計。
 
 ## Recently closed (past ~week)
 
-- **PR #143**（#119 前置，**#119 保持 open**）— `tactics` 表加 `matchId` integer FK（`onDelete: cascade`、
-  nullable 向後相容）＋ `GET /tactics?matchId=` 過濾＋ openapi/codegen 重生（commit `e905844`，07-17）。
-  戰術庫 per-match 的後端地基；前端消費在 PR #145。型別坑：`matches.id` 是 `serial`（整數）不是 uuid，
-  FK 型別要跟著用 integer。PO 拍板不等 tang review（純後端、非其範圍）。
+- **#119**（本 session 關）— 戰術板/輪轉表兩 store 改 `dataByMatch[matchId]` 分片、去 persist、
+  `buildSnapshot` 過濾幽靈站位。前端 **PR #145 已 merge**（commit `d18f69e`），後端前置 **PR #143**
+  （`tactics` 加 `matchId` integer FK＋`?matchId=` 過濾，commit `e905844`）。三症狀（跨場汙染／幽靈站位／
+  activeProjectId 誤覆寫）有 `useTacticsBoard.test.ts` 釘住、整套綠 → 驗證後關閉。跨 store 全域 subscribe
+  換成 `RotationSwitcher` 明確呼叫 `syncRotationChange`。型別坑：`matches.id` 是 `serial`（整數）不是 uuid，
+  FK 要跟著用 integer。
 - **PR #142**（無對應 issue）— 需求層 pattern-language 分析文件（commit `c4e843f`，07-17）。
 - **PR #137**（無對應 issue）— 兩人協作流程規範（commit `ab626b1`，07-16）。CONTRIBUTING.md
-  「協作與溝通」＋ CLAUDE.md「Team & collaboration rules」＋ ship Step 7 ＋ wrap-up 對方 issue
-  保護。tang review + approve，新流程用自己完成第一次演練。順帶評估過 ship skill 瘦身：**先不動**
-  （Step 6 坑史是規則的威懾力來源），門檻＝超過 ~350 行或單一步驟一眼掃不完時，把 Step 6 的坑史
-  ／通則移去 `ship/reference.md`（比照 wrap-up 的模式）。
-- **PR #135**（#131 部分進度，該 issue 保持 open）— 戰術板套深色語言（commit `0d63ee3`，07-16）。
-  手繪風全拿掉拍板、球場改深青漸層；進度與剩餘頁面記錄在 #131 body。後續視覺提案收斂進 #134。
-- **#118** — 名單編輯新增球員的同人兩套 id（前端半段收尾）。`diffRoster` 送出前端鑄的 uuid
-  ＋`RotationTable` 的名單回寫改 await＋失敗 toast。schema 半段是 PR #124；I3「一個實體一套 id
-  只鑄造一次」到此在名單這條路徑上成立。「全域 store 去汙染」家族只剩 #119。
-- **PR #129**（無對應 issue）— 首頁深色改版＋`docs/design-spec.md`（commit `bef0e14`）。**夥伴
-  @tangyi1025 的第一個 PR**。review 四點未處理即合併→已由 **#132** 接住；其他頁面跟上→**#131**。
-  方法論教訓（留給未來 review 夥伴 PR 時用）：落後 main 又同檔的 PR，git 自動合併無衝突**不等於
-  合對**，要讀合併後的檔案確認雙方改動都活著；fork PR 的 CI 預設不跑、要手動核准 workflow，
-  「本機跑過」不是綠燈。
-- **#117** — 資料夾（tournaments）進 DB：uuid PK + cascade FK（PR #128，commit 241a7eb）。`tournaments`
-  表 client-mintable uuid PK、`matches.tournamentId` text→uuid FK `onDelete: cascade`（刪資料夾＝連同
-  比賽刪，PO 拍板下沉到 DB）；前端 `useTournaments` 從 Zustand+persist 改成 API adapter。#122 的孤兒
-  fallback 一併拆除（cascade 保證孤兒結構上不可能）。留下 #127（tournamentId 擁有權未驗）。
-- **#115** — 計分表擁有自己逐局的先發快照，與戰術板/輪轉表全域 store 解耦（PR #121，commit ce5c9f5）。
-  這是「全域 store 去汙染」家族第一條落地；暴露的同根因兄弟 #117/#118/#119 見上方焦點與 #117 錨點留言。
-- **#41** — 計分表復原改**逐動作 undo**（PR #113，commit a21afce）：動作快照堆疊，得分/換人/libero
-  各為一步連按往回；後端加 `DELETE /substitutions/:id` 撤銷已寫入的換人。堆疊純記憶體不跨 reload。
-- **#50** — 計分表動作選單情境過濾（規則面窮舉完畢，commit 33a21c3）：規則#1（發球/接發互斥）改
-  「反灰不刪」。C8 構想依 Data Volley 慣例作廢；完整對帳記錄在 #50 留言。
-- （更早的 #74/#63/#20/#73/#102/#42/#93 已修剪——記錄住在各自的 issue 留言、
-  `docs/recording-cost-budget.md`/`docs/event-grammar-spec.md`、git log。）
+  「協作與溝通」＋ CLAUDE.md「Team & collaboration rules」＋ ship Step 7 ＋ wrap-up 對方 issue 保護。
+  ⚠ **PR #141 進行中，提議把這裡的 approve-gate 改成知會制**——未 merge 前舊規則仍生效。ship skill
+  瘦身門檻＝超過 ~350 行時把 Step 6 坑史移去 `ship/reference.md`（先不動）。
+- **PR #135 / #129**（#131 部分進度，該 issue 保持 open）— 戰術板＋首頁套深色語言、手繪風全退役、
+  球場改深青漸層（commit `0d63ee3`／`bef0e14`）。方法論教訓（review 夥伴 PR 用）：落後 main 又同檔的
+  PR，git 自動合併無衝突**不等於合對**，要讀合併後檔案確認雙方改動都活著；fork PR 的 CI 預設不跑、
+  要手動核准。
+- （更早的 #118/#117/#115/#41/#50/#74/#73/#63/#20 等已修剪——記錄住在各自 issue 留言、
+  `docs/*-spec.md`、git log。）

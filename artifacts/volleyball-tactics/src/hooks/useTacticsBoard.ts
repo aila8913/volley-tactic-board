@@ -170,11 +170,16 @@ export const useTacticsBoard = create<TacticsBoardStore>()((set, get) => ({
       })),
     ),
 
+  // 把「動作完成後的當前輪次狀態」存進 undo 歷史。關鍵約定（issue #147 的修正）：每個動作
+  // 都是「先 set 改狀態、再 pushHistory」，所以 history[historyIndex] 永遠等於畫面現況；undo
+  // 只要往回退一格、redo 往前一格就正好差一步。之前是「先 push 再改」，history 存的是動作『前』
+  // 的狀態、比現況慢一拍，於是第一次 Ctrl+Z 會一次跳回兩步——那就是 #147。
   pushHistory: (matchId) =>
     set((state) => {
       const r = currentRotationOf(matchId);
       const currentRotState = state.dataByMatch[matchId]?.tacticsByRotation[r];
       if (!currentRotState) return state;
+      // 砍掉 redo 分支：如果剛 undo 過又畫了新東西，被退掉的未來就不該還留著。
       const newHistory = state.history.slice(0, state.historyIndex + 1);
       newHistory.push(JSON.parse(JSON.stringify(currentRotState)));
       if (newHistory.length > 30) newHistory.shift();
@@ -241,7 +246,6 @@ export const useTacticsBoard = create<TacticsBoardStore>()((set, get) => ({
   },
 
   placePlayerFree: (matchId, playerId, x, y) => {
-    get().pushHistory(matchId);
     // 戰術布置是自由畫布，自由球員在這裡跟一般球員一視同仁——只改這張快照的
     // tacticPositions，不檢查「只能站後排」（那是輪轉表的比賽規則），也不寫回 startingLiberoId。
     set((state) =>
@@ -250,10 +254,10 @@ export const useTacticsBoard = create<TacticsBoardStore>()((set, get) => ({
         return { ...rot, tacticPositions: [...filtered, { playerId, x, y }] };
       }),
     );
+    get().pushHistory(matchId); // 先改後記：見 pushHistory 的約定說明（#147）。
   },
 
   addDefenseRange: (matchId, range) => {
-    get().pushHistory(matchId);
     set((state) => ({
       activeTool: "select",
       ...updateCurrentRotation(state, matchId, (rot) => ({
@@ -261,20 +265,20 @@ export const useTacticsBoard = create<TacticsBoardStore>()((set, get) => ({
         defenseRanges: [...rot.defenseRanges, { ...range, id: uuidv4() }],
       })),
     }));
+    get().pushHistory(matchId);
   },
 
   updateDefenseRange: (matchId, id, updates) => {
-    get().pushHistory(matchId);
     set((state) =>
       updateCurrentRotation(state, matchId, (rot) => ({
         ...rot,
         defenseRanges: rot.defenseRanges.map((dr) => (dr.id === id ? { ...dr, ...updates } : dr)),
       })),
     );
+    get().pushHistory(matchId);
   },
 
   removeDefenseRange: (matchId, id) => {
-    get().pushHistory(matchId);
     set((state) => ({
       selectedObjectId: null,
       ...updateCurrentRotation(state, matchId, (rot) => ({
@@ -282,10 +286,10 @@ export const useTacticsBoard = create<TacticsBoardStore>()((set, get) => ({
         defenseRanges: rot.defenseRanges.filter((dr) => dr.id !== id),
       })),
     }));
+    get().pushHistory(matchId);
   },
 
   addMarker: (matchId, marker) => {
-    get().pushHistory(matchId);
     const id = uuidv4();
     set((state) => ({
       selectedObjectId: id,
@@ -294,6 +298,7 @@ export const useTacticsBoard = create<TacticsBoardStore>()((set, get) => ({
         markers: [...rot.markers, { ...marker, id }],
       })),
     }));
+    get().pushHistory(matchId);
   },
 
   updateMarker: (matchId, id, updates) =>
@@ -305,7 +310,6 @@ export const useTacticsBoard = create<TacticsBoardStore>()((set, get) => ({
     ),
 
   removeMarker: (matchId, id) => {
-    get().pushHistory(matchId);
     set((state) => ({
       selectedObjectId: null,
       ...updateCurrentRotation(state, matchId, (rot) => ({
@@ -313,10 +317,10 @@ export const useTacticsBoard = create<TacticsBoardStore>()((set, get) => ({
         markers: rot.markers.filter((m) => m.id !== id),
       })),
     }));
+    get().pushHistory(matchId);
   },
 
   clearMarkers: (matchId) => {
-    get().pushHistory(matchId);
     set((state) => ({
       selectedObjectId: null,
       ...updateCurrentRotation(state, matchId, (rot) => ({
@@ -325,10 +329,10 @@ export const useTacticsBoard = create<TacticsBoardStore>()((set, get) => ({
         defenseRanges: [],
       })),
     }));
+    get().pushHistory(matchId);
   },
 
   resetCurrentRotationTactics: (matchId) => {
-    get().pushHistory(matchId);
     set((state) => ({
       selectedObjectId: null,
       ...updateCurrentRotation(state, matchId, () => ({
@@ -337,6 +341,7 @@ export const useTacticsBoard = create<TacticsBoardStore>()((set, get) => ({
         defenseRanges: [],
       })),
     }));
+    get().pushHistory(matchId);
   },
 
   removePlayerFromTacticView: (matchId, playerId) =>
