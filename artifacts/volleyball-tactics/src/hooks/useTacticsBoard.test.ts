@@ -63,6 +63,37 @@ describe("跨場隔離（issue #119）", () => {
   });
 });
 
+describe("undo/redo 一次只走一步（issue #147）", () => {
+  // 回歸 #147：戰術布置按 Ctrl+Z 一次回復兩個操作。根因是「先記歷史、再改狀態」，
+  // 使 history[historyIndex] 比畫面現況慢一拍；修法改成「先改、再記」。這裡連放三個站位，
+  // 第一次 undo 只能退掉最後一個（p3），p1/p2 要留著——舊的錯誤版會一次退掉 p2+p3。
+  const ids = () => tb().dataByMatch[A].tacticsByRotation[0].tacticPositions.map((p) => p.playerId);
+
+  it("連放三步後，每次 undo 只退一步", () => {
+    tb().placePlayerFree(A, "p1", 0.1, 0.1);
+    tb().placePlayerFree(A, "p2", 0.2, 0.2);
+    tb().placePlayerFree(A, "p3", 0.3, 0.3);
+    expect(ids()).toEqual(["p1", "p2", "p3"]);
+
+    tb().undo(A);
+    expect(ids()).toEqual(["p1", "p2"]); // 只退掉 p3，不是連 p2 一起退
+
+    tb().undo(A);
+    expect(ids()).toEqual(["p1"]);
+  });
+
+  it("undo 後 redo 把剛退掉的那一步原樣還原", () => {
+    tb().placePlayerFree(A, "p1", 0.1, 0.1);
+    tb().placePlayerFree(A, "p2", 0.2, 0.2);
+
+    tb().undo(A);
+    expect(ids()).toEqual(["p1"]);
+
+    tb().redo(A);
+    expect(ids()).toEqual(["p1", "p2"]);
+  });
+});
+
 describe("buildSnapshot 幽靈站位過濾（issue #119 症狀 B）", () => {
   it("只保留名單裡還存在的球員的 tacticPositions", () => {
     rt().setRoster(A, [player("p1")]);
