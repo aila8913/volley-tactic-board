@@ -133,7 +133,16 @@ numbers.
      an orphan on the floor.
    - **Don't duplicate the backlog.** "Known gaps" points at `gh issue list` / Milestones
      with a one-line current-phase summary — it does not re-list every open issue's detail.
-   - Update the `_Last updated_` date/summary line.
+   - **Keep the owner sub-sections separate (#146).** `Current state` and `Recently closed`
+     are each split into **開發進度 (aila)** and **設計進度 (tang)** sub-headings. When you
+     wrap up, edit **only your own owner's sub-section** and leave the other's block untouched
+     — that's the whole point: parallel wrap-up PRs then land on different line ranges and git
+     auto-merges them instead of conflicting. Put a design/UX/`area:design` bullet under
+     設計; everything backend/frontend/db/infra/product under 開發. Don't collapse the two
+     back into one flat list.
+   - Update the `_Last updated_` date/summary line — keep it to **one short line** (date +
+     owner + what changed); it's the one shared line both owners touch, so don't let it grow
+     back into a multi-paragraph blob.
 
 7. **Refresh `docs/flow-diagrams.html` if the interaction flows changed this session.**
    This is the 輪轉表/戰術板/計分表 operation-flow + state-machine reference (originally
