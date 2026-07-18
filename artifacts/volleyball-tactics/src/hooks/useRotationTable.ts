@@ -1,7 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import {
-  RotationTableData,
   PerMatchRotationState,
   RotationPositions,
   PlayerPosition,
@@ -114,10 +113,9 @@ interface RotationTableStore {
   // 自己的資料，由畫面上的按鈕一次呼叫兩邊，這就是「資料用傳輸的」實際做法）。
   resetCurrentRotationPositions: (matchId: string) => void;
 
-  // 戰術存檔/讀檔用：整批載入輪轉表資料，不動戰術板自己的畫筆/防守範圍
-  // （那份資料由 useTacticsBoard 自己的 loadProject 負責）。circleLabel 是全域欄位，
-  // 這裡順手把載入資料裡的 circleLabel 套到全域，其餘存進這一場的分片。
-  loadRotationData: (matchId: string, data: RotationTableData) => void;
+  // 註：舊的 loadRotationData（整批把存檔覆蓋回輪轉表）已在 #154 PR B 移除。載入已存戰術
+  // 改成唯讀檢視、不再反向寫回輪轉表，所以輪轉表不需要、也刻意不提供這個「被別人整包覆蓋」
+  // 的入口——反向寫回的能力從型別上就不存在了。
   resetAll: (matchId: string) => void;
 }
 
@@ -319,19 +317,6 @@ export const useRotationTable = create<RotationTableStore>()(
             return { ...m, rotations: newRotations };
           }),
         ),
-
-      loadRotationData: (matchId, data) =>
-        set((state) => ({
-          // circleLabel 是全域欄位，載入戰術時把當時存的顯示偏好套回全域。
-          circleLabel: data.circleLabel,
-          // 其餘（名單/站位/輪次/先發 L）進這一場的分片。
-          ...updateMatch(state, matchId, () => ({
-            roster: data.roster,
-            rotations: data.rotations,
-            currentRotation: data.currentRotation,
-            startingLiberoId: data.startingLiberoId,
-          })),
-        })),
 
       resetAll: (matchId) => set((state) => updateMatch(state, matchId, () => emptyPerMatch())),
     }),

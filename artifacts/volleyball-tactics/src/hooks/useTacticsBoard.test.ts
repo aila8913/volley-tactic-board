@@ -28,9 +28,25 @@ beforeEach(() => {
     historyIndex: -1,
     isLayoutMode: false,
     courtView: "rotation",
+    viewingScene: null,
     selectedObjectId: null,
     activeTool: "select",
   });
+});
+
+// 一份「舊格式」戰術存檔（legacy SavedTacticData）。roster 內嵌在檔案裡（這正是舊格式的特徵，
+// 也是 denormalize 能相容舊檔的關鍵），站位放進第 0 輪的 positions。
+const legacySave = (roster: MatchPlayer[]) => ({
+  roster,
+  currentRotation: 0,
+  circleLabel: "name" as const,
+  labelToggles: { zone: false },
+  rotations: [
+    {
+      positions: roster.map((p, i) => ({ playerId: p.id, x: 0.1 * (i + 1), y: 0.5 })),
+      liberoReplacement: null,
+    },
+  ],
 });
 
 const rt = () => useRotationTable.getState();
@@ -91,6 +107,48 @@ describe("undo/redo 一次只走一步（issue #147）", () => {
 
     tb().redo(A);
     expect(ids()).toEqual(["p1", "p2"]);
+  });
+});
+
+describe("載入已存戰術＝唯讀檢視（issue #154 PR B）", () => {
+  it("loadProject 不覆寫輪轉表的名單/站位，只改成檢視快照（bug 1/2）", () => {
+    // 先在輪轉表放一份「現在的」名單（站位真相來源）。
+    rt().setRoster(A, [player("live1"), player("live2")]);
+    const liveRosterBefore = rt().dataByMatch[A].roster;
+
+    // 載入一份存檔——存檔內嵌的是完全不同的名單。
+    tb().loadProject(A, legacySave([player("saved1"), player("saved2")]), "tid", "接發強發");
+
+    // 核心：輪轉表分片原封不動（連參照都沒變）——反向寫回那道門已焊死，bug 1/2 從架構上消失。
+    expect(rt().dataByMatch[A].roster).toBe(liveRosterBefore);
+    expect(rt().dataByMatch[A].roster.map((p) => p.id)).toEqual(["live1", "live2"]);
+
+    // 畫面改成唯讀檢視存檔那張快照。
+    const scene = tb().viewingScene;
+    expect(scene).not.toBeNull();
+    expect(scene?.snapshot.players.map((p) => p.name)).toEqual(["saved1", "saved2"]);
+    expect(tb().courtView).toBe("tactics");
+    expect(tb().isLayoutMode).toBe(false);
+    expect(tb().dataByMatch[A].activeProjectId).toBe("tid");
+  });
+
+  it("舊快照 denormalize：名單刪掉的人，照片裡仍在（bug 3）", () => {
+    // 現在的 live 名單只剩 p1（p2 已被刪），但存檔當時名單有 p1、p2 兩個人。
+    rt().setRoster(A, [player("p1")]);
+    tb().loadProject(A, legacySave([player("p1"), player("p2")]), "tid", "x");
+
+    // 快照 join 的是存檔內嵌的 roster（不是現在的 live 名單），所以 p2 沒有跟著消失。
+    const names = tb().viewingScene?.snapshot.players.map((p) => p.name) ?? [];
+    expect(names).toContain("p2");
+  });
+
+  it("翻回輪轉視圖會清掉檢視中的快照", () => {
+    rt().setRoster(A, [player("p1")]);
+    tb().loadProject(A, legacySave([player("p1")]), "tid", "x");
+    expect(tb().viewingScene).not.toBeNull();
+
+    tb().setCourtView("rotation");
+    expect(tb().viewingScene).toBeNull();
   });
 });
 

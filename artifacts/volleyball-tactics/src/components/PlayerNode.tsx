@@ -153,8 +153,10 @@ export default function PlayerNode({
   };
 
   // 右鍵刪除：L 球員只移除目前輪次並還原被替換的人；一般球員從全部 6 輪移除。
+  // 唯讀情境（檢視已存戰術，issue #154 PR B）canDrag 為 false，右鍵也一律不刪——唯讀就是唯讀。
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
+    if (!canDrag) return;
     removeFromCourt(position.playerId);
   };
 

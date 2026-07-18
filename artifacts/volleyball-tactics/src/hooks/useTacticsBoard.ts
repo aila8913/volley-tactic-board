@@ -8,6 +8,8 @@ import {
   SituationTag,
   SavedTacticData,
 } from "../types/tacticsBoard";
+import { TacticScene } from "../types/courtSnapshot";
+import { parseSavedTactic } from "../lib/courtSnapshot";
 import { useRotationTable } from "./useRotationTable";
 
 export type ToolType =
@@ -55,6 +57,12 @@ interface TacticsBoardStore {
   selectedObjectId: string | null;
   isLayoutMode: boolean;
   courtView: "rotation" | "tactics";
+  // ── 唯讀檢視已存戰術用的暫時狀態（issue #154 PR B）──
+  // 戰術板單向化後，「載入已存戰術」不再把資料寫回輪轉表/戰術分片，而是純粹「看一張凍結的
+  // 照片」。viewingScene 就是當下正在看的那一景（一張 CourtSnapshot + 畫在上面的 markers/
+  // defenseRanges）；null 代表現在沒在看已存戰術（在看輪轉/即時布置）。它是全域、暫時性的
+  // 畫面狀態，不隨 match 分片、也不持久化——跟 history/isLayoutMode 同一類。
+  viewingScene: TacticScene | null;
   // undo/redo 只管戰術板自己畫的東西（畫筆、防守範圍、戰術視圖自由站位），不管輪轉表的
   // 站位。歷史堆疊是「當前正在編的那一輪」的快照，切輪次/切場都會重置（見 syncRotationChange）。
   history: RotationTactics[];
@@ -102,9 +110,13 @@ interface TacticsBoardStore {
   removePlayerFromTacticView: (matchId: string, playerId: string) => void;
 
   setActiveProjectId: (matchId: string, id: string | null) => void;
-  // 把 API 回傳的已存戰術資料載入編輯器，同時分派給輪轉表 + 戰術板兩個 store。
-  loadProject: (matchId: string, data: SavedTacticData, id: string, name: string) => void;
-  importState: (matchId: string, data: SavedTacticData) => void;
+  // 載入已存戰術＝唯讀檢視（issue #154 PR B）：把存檔（可能是舊格式，也可能是未來的 v2）
+  // 用 parseSavedTactic 轉成單景快照塞進 viewingScene，畫面切到戰術視圖唯讀顯示。
+  // 刻意「不」寫回輪轉表/戰術分片——這正是 #154 那個「載入會覆蓋名單/站位且回不去」的 bug
+  // 的門，這裡把它焊死。data 型別是 unknown：實際傳進來的是 API 的 Tactic.data，內容格式
+  // 沒有編譯期保證，交給 parseSavedTactic 在執行期用 zod 驗證（見 lib/courtSnapshot.ts）。
+  loadProject: (matchId: string, data: unknown, id: string, name: string) => void;
+  importState: (matchId: string, data: unknown) => void;
   // 把輪轉表 + 戰術板兩份資料合併成可以存檔/匯出的單一 JSON（跟拆分 store 之前的
   // 格式一樣，這樣資料庫裡舊的已存戰術才能繼續正常讀取）。
   buildSnapshot: (matchId: string) => SavedTacticData;
@@ -141,6 +153,7 @@ export const useTacticsBoard = create<TacticsBoardStore>()((set, get) => ({
   selectedObjectId: null,
   isLayoutMode: false,
   courtView: "rotation",
+  viewingScene: null,
   history: [],
   historyIndex: -1,
 
@@ -148,13 +161,17 @@ export const useTacticsBoard = create<TacticsBoardStore>()((set, get) => ({
   setSelectedObjectId: (id) => set({ selectedObjectId: id }),
   setLayoutMode: (value) =>
     set({ isLayoutMode: value, activeTool: "select", selectedObjectId: null }),
-  setCourtView: (v) => set({ courtView: v }),
+  // 翻回輪轉視圖就代表離開「看已存戰術」的檢視，順手把 viewingScene 清空，避免下次進戰術
+  // 視圖時還殘留上一張看過的照片。（切到 tactics 不清，因為即時布置也用 tactics 視圖。）
+  setCourtView: (v) =>
+    set(v === "rotation" ? { courtView: v, viewingScene: null } : { courtView: v }),
   resetBoardView: () =>
     set({
       history: [],
       historyIndex: -1,
       isLayoutMode: false,
       courtView: "rotation",
+      viewingScene: null,
       selectedObjectId: null,
       activeTool: "select",
     }),
@@ -237,6 +254,8 @@ export const useTacticsBoard = create<TacticsBoardStore>()((set, get) => ({
         ...patch,
         isLayoutMode: true,
         courtView: "tactics",
+        // 開始一段新的即時布置＝離開「看已存戰術」的檢視，清掉殘留的照片。
+        viewingScene: null,
         activeTool: "select",
         selectedObjectId: null,
         history: [newRotState],
@@ -356,71 +375,42 @@ export const useTacticsBoard = create<TacticsBoardStore>()((set, get) => ({
   setActiveProjectId: (matchId, id) =>
     set((state) => updateMatch(state, matchId, (m) => ({ ...m, activeProjectId: id }))),
 
-  // data 來自 API 回傳的 Tactic.data，分派給輪轉表 + 戰術板兩個 store。
-  // 舊存檔可能沒有 tacticPositions/markers/defenseRanges，加 ?? [] 做向後相容。
+  // 載入已存戰術＝唯讀檢視（issue #154 PR B）。data 是 API 回傳的 Tactic.data（unknown）。
+  // 關鍵改動：以前這裡會呼叫 useRotationTable.loadRotationData 把 roster + 六輪站位整包覆蓋回
+  // 輪轉表（破壞性反向寫回，就是 #154 的病根）——現在完全不碰輪轉表，只把存檔轉成一張凍結的
+  // 快照放進 viewingScene，畫面切到戰術視圖唯讀顯示。parseSavedTactic 會用 zod 驗證並把舊格式
+  // 轉成單景 v2（見 lib/courtSnapshot.ts）；解析失敗會 throw，交給呼叫端 try/catch 提示。
   loadProject: (matchId, data, id, name) => {
-    useRotationTable.getState().loadRotationData(matchId, {
-      roster: data.roster,
-      currentRotation: data.currentRotation ?? 0,
-      circleLabel: data.circleLabel ?? "name",
-      rotations: data.rotations.map((r) => ({
-        positions: r.positions,
-        liberoReplacement: r.liberoReplacement ?? null,
-      })),
-      // 載入戰術時重新推算先發 L（以名單第一個 L 為預設）
-      startingLiberoId: data.roster.find((p) => p.role === "L")?.id ?? null,
-    });
-    const tacticsByRotation = data.rotations.map((r) => ({
-      tacticPositions: r.tacticPositions ?? [],
-      markers: r.markers ?? [],
-      defenseRanges: r.defenseRanges ?? [],
-    }));
+    const scene = parseSavedTactic(data).scenes[0] ?? null;
     set((state) => ({
-      history: [tacticsByRotation[data.currentRotation ?? 0]],
-      historyIndex: 0,
+      // 檢視是唯讀，沒有 undo 需求，歷史清空即可。
+      history: [],
+      historyIndex: -1,
       selectedObjectId: null,
-      // 點已儲存戰術是「檢視」，不是自動進入編輯——中間球場切去戰術視圖顯示這張
-      // 快照，但先保持唯讀；要編輯的話再按「編輯」。
       isLayoutMode: false,
       courtView: "tactics",
+      viewingScene: scene,
+      // 只更新顯示用的欄位（名稱、正在看哪筆的 id），不動 tacticsByRotation/輪轉表站位。
       ...updateMatch(state, matchId, (m) => ({
         ...m,
-        tacticsByRotation,
-        labelToggles: data.labelToggles ?? { zone: false },
         projectSituation: name,
         activeProjectId: id,
       })),
     }));
   },
 
+  // 匯入 JSON 也是唯讀檢視，跟 loadProject 同一條路，只是沒有 server id/name（匯入的檔案
+  // 不屬於任何一筆已存戰術），所以不設 activeProjectId。
   importState: (matchId, data) => {
-    useRotationTable.getState().loadRotationData(matchId, {
-      roster: data.roster,
-      currentRotation: data.currentRotation ?? 0,
-      circleLabel: data.circleLabel ?? "name",
-      rotations: data.rotations.map((r) => ({
-        positions: r.positions,
-        liberoReplacement: r.liberoReplacement ?? null,
-      })),
-      startingLiberoId: data.roster.find((p) => p.role === "L")?.id ?? null,
-    });
-    const tacticsByRotation = data.rotations.map((r) => ({
-      tacticPositions: r.tacticPositions ?? [],
-      markers: r.markers ?? [],
-      defenseRanges: r.defenseRanges ?? [],
-    }));
-    set((state) => ({
-      history: [tacticsByRotation[data.currentRotation ?? 0]],
-      historyIndex: 0,
+    const scene = parseSavedTactic(data).scenes[0] ?? null;
+    set({
+      history: [],
+      historyIndex: -1,
       selectedObjectId: null,
       isLayoutMode: false,
       courtView: "tactics",
-      ...updateMatch(state, matchId, (m) => ({
-        ...m,
-        tacticsByRotation,
-        labelToggles: data.labelToggles ?? { zone: false },
-      })),
-    }));
+      viewingScene: scene,
+    });
   },
 
   buildSnapshot: (matchId) => {

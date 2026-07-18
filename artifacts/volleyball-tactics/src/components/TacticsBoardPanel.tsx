@@ -10,7 +10,7 @@ import {
 } from "@workspace/api-client-react";
 import { useTacticsBoard, ToolType } from "../hooks/useTacticsBoard";
 import { useRotationTable } from "../hooks/useRotationTable";
-import { SavedTacticData, RotationTactics } from "../types/tacticsBoard";
+import { RotationTactics } from "../types/tacticsBoard";
 import { exportCourtAsPng, exportStateAsJson, importStateFromJson } from "../lib/exportUtils";
 import { Toaster } from "@/components/ui/toaster";
 import { useToast } from "@/hooks/use-toast";
@@ -178,10 +178,9 @@ export default function TacticsBoardPanel() {
     if (!file) return;
     try {
       const data = await importStateFromJson(file);
-      // importStateFromJson 現在誠實回傳 unknown（JSON 檔內容沒有驗證），這裡先用
-      // 斷言相信它是 SavedTacticData——格式錯誤時 importState 內部讀不到欄位會拋錯，
-      // 落到下面的 catch 顯示「匯入失敗」。之後若要更嚴謹，可以用 zod 在這裡驗證。
-      importState(matchId, data as SavedTacticData);
+      // importStateFromJson 回傳 unknown（JSON 檔內容沒驗證），直接交給 importState——
+      // 它內部走 parseSavedTactic 用 zod 驗證，格式錯誤會拋錯、落到下面的 catch 顯示「匯入失敗」。
+      importState(matchId, data);
       toast({ title: "匯入成功", description: "戰術板已更新" });
     } catch {
       toast({ title: "匯入失敗", description: "檔案格式錯誤", variant: "destructive" });
@@ -265,8 +264,18 @@ export default function TacticsBoardPanel() {
                 <span
                   className="flex-1 cursor-pointer truncate hover:underline"
                   onClick={() => {
-                    loadProject(matchId, t.data as unknown as SavedTacticData, t.id, t.name);
-                    toast({ title: "專案已載入" });
+                    // loadProject 現在走 parseSavedTactic（zod 驗證），格式無法辨識會 throw，
+                    // 包起來給使用者明確提示，而不是整個畫面炸掉。
+                    try {
+                      loadProject(matchId, t.data, t.id, t.name);
+                      toast({ title: "專案已載入" });
+                    } catch {
+                      toast({
+                        title: "載入失敗",
+                        description: "戰術格式無法辨識",
+                        variant: "destructive",
+                      });
+                    }
                   }}
                 >
                   {t.name}
@@ -313,7 +322,8 @@ export default function TacticsBoardPanel() {
             <section>
               <h2 className="mb-2 text-[15px] font-bold">戰術布置</h2>
               <p className="mb-2 text-[10px] text-[#a9b096]">
-                「戰術布置」用輪轉表現在的站位重新編排一個戰術。想修改已儲存的戰術，先在下面清單點一個載入，「編輯」才會亮起。
+                「戰術布置」用輪轉表現在的站位重新編排一個戰術。點下面清單的已儲存戰術是「唯讀檢視」（看一張凍結的快照），編輯功能整修中（#154
+                PR C）。
               </p>
               <button
                 onClick={() => enterTacticsLayout(matchId)}
@@ -323,15 +333,12 @@ export default function TacticsBoardPanel() {
                 戰術布置
               </button>
               <button
-                onClick={() => {
-                  setLayoutMode(true);
-                  setCourtView("tactics");
-                }}
-                disabled={!activeProjectId}
+                disabled
+                title="編輯功能整修中（#154 PR C）"
                 className={`mt-1.5 w-full py-1.5 text-xs font-bold disabled:opacity-40 ${SECONDARY_BTN_CLASS}`}
                 data-testid="button-edit-current"
               >
-                編輯
+                編輯（整修中）
               </button>
             </section>
             <TacticsList maxHeight="160px" />
