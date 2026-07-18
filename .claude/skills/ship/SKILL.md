@@ -195,34 +195,33 @@ Print the returned PR URL so the user can click through to GitHub.
 
 ---
 
-## Step 7 — 協作確認（跨領域的 PR 要對方 review）
+## Step 7 — 協作確認（跨領域的 PR 知會對方一聲）
 
 這個專案是兩人協作（分工表和完整規則見 `CONTRIBUTING.md` 的「協作與溝通」章節）。
-開完 PR、merge 之前，先檢查這次的 diff 有沒有踩到「需要對方確認」的範圍：
+**我們不設 approve 關卡**——所有 PR 都可以自己 merge，不用等對方看過。跨領域的 PR
+只要在合併前**知會對方一聲**就好：
 
 1. `git diff main...HEAD --name-only` 列出這個 PR 改到的所有檔案。
-2. 對照兩類「要對方看過」的情況：
+2. 對照兩類「要知會對方」的情況：
    - **動到對方主要負責的範圍**——例如 aila 動了視覺設計/UX，或 tang 動了
      backend／db／build 設定。
    - **動到共用約定檔**：`CLAUDE.md`、`CONTRIBUTING.md`、`.claude/skills/`、
      `docs/design-spec.md`、`lib/api-spec/openapi.yaml`、`lib/db/src/schema/`。
-     這些是雙方（和雙方的 Claude）共同遵守的規範或介面契約，單方面改掉等於
-     偷改了對方的工作規則。
-3. **有踩到** → 把對方加成 reviewer，並在 PR 留言 @ 對方、說明重點看哪裡：
+     這些是雙方（和雙方的 Claude）共同遵守的規範或介面契約，改到了要讓對方知道。
+3. **有踩到** → 在 PR 留言 @ 對方、說明重點看哪裡，讓對方能非同步追上：
 
    ```
-   gh pr edit <PR-number> --add-reviewer <對方帳號>
-   gh pr comment <PR-number> --body "@<對方帳號> <一句話說明這個 PR 動到你的範圍的哪裡>"
+   gh pr comment <PR-number> --body "@<對方帳號> <一句話說明這個 PR 動到你的範圍/共用約定的哪裡>"
    ```
 
-   然後**停在這裡，等對方 approve 或回覆之後才進 Step 8**——這種 PR 不自己 merge。
-   （等待期間可以先去做別的事，不用掛著。）
+   這只是通知，**不是關卡**——貼完就直接進 Step 8 merge，不用等對方回覆。
+   （對方之後看到有意見，再開一張 follow-up PR 或在這張留言即可。）
 
-4. **沒踩到**（純粹自己範圍內的改動）→ 直接進 Step 8，照常自己 merge。
+4. **沒踩到**（純粹自己範圍內的改動）→ 連知會都不用，直接進 Step 8。
 
-Explain: 「reviewer 機制是 GitHub 內建的『請對方看過再合併』流程。用它取代訊息軟體
-來回，是因為意見會直接留在 PR 上、跟程式碼綁在一起，未來翻記錄時看得到當時為什麼
-這樣決定；訊息軟體只拿來提醒對方『有 PR 等你看』。」
+Explain: 「知會用的是 @提及，把通知送到對方的 GitHub 鈴鐺/email。改成『合併前知會』
+而不是『合併前等 approve』，是因為兩人小專案硬性的 approve 關卡會在有人沒空時卡住進度；
+留一句 @ 讓對方非同步追上，既留了記錄又不擋人。」
 
 ---
 

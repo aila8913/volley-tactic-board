@@ -99,11 +99,14 @@ Two-person team: `aila8913` (owner, full-stack — backend/db/infra/product) and
 conventions live in CONTRIBUTING.md's「協作與溝通」section; the rules Claude must actively
 enforce are:
 
-- **Cross-area PRs need the partner as reviewer before merge.** If a diff touches the other
-  member's area, or any shared-convention file (`CLAUDE.md`, `CONTRIBUTING.md`,
+- **No approval gate — self-merge freely, just leave the partner a heads-up.** Anyone can
+  merge their own PR without waiting on the other person, including PRs that touch the other
+  member's area or a shared-convention file (`CLAUDE.md`, `CONTRIBUTING.md`,
   `.claude/skills/`, `docs/design-spec.md`, `lib/api-spec/openapi.yaml`,
-  `lib/db/src/schema/`), add the partner via `gh pr edit --add-reviewer` and do NOT
-  squash-merge until they've responded. The `ship` skill has a dedicated step for this.
+  `lib/db/src/schema/`). When a diff touches those, drop a heads-up `@`-mention on the PR so
+  the partner can catch up async — it's a notification, never a blocker, and nobody waits on
+  it. (Two-person learning project: a hard "wait for approval" gate mostly just stalls
+  progress when someone's away.) The `ship` skill's 協作確認 step reflects this.
 - **Never close an issue silently.** Prefer `Closes #n` in a PR body; a manual close must
   carry a comment explaining why (done by which commit/PR, or "not planned because…").
   Closing an issue the partner opened needs their @-mentioned confirmation first, unless a
@@ -113,8 +116,9 @@ enforce are:
   user relays a decision made over chat, offer to record the conclusion on the relevant
   issue/PR.
 - **Conventions for the partner's Claude are communicated by editing the shared config files
-  themselves** (CLAUDE.md / CONTRIBUTING.md / `.claude/skills/`) via a reviewed PR — never
-  assume the other Claude "was told" something that isn't written here.
+  themselves** (CLAUDE.md / CONTRIBUTING.md / `.claude/skills/`) via a PR (heads-up the
+  partner per the rule above) — never assume the other Claude "was told" something that
+  isn't written here.
 
 ## Collaboration style
 
