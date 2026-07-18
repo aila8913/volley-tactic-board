@@ -95,6 +95,7 @@ export default function Court() {
   const setSelectedObjectId = useTacticsBoard((s) => s.setSelectedObjectId);
   const addMarker = useTacticsBoard((s) => s.addMarker);
   const updateMarker = useTacticsBoard((s) => s.updateMarker);
+  const pushHistory = useTacticsBoard((s) => s.pushHistory);
   const addDefenseRange = useTacticsBoard((s) => s.addDefenseRange);
   const undo = useTacticsBoard((s) => s.undo);
   const redo = useTacticsBoard((s) => s.redo);
@@ -173,16 +174,22 @@ export default function Court() {
         // But since we can't synchronously get the ID easily without modifying addMarker,
         // we'll just set a drawing mode and update the *last* marker.
         // Actually, we can just dispatch addMarker, then in pointerMove we update the last marker.
-        addMarker(matchId, {
-          // Array.includes() 不會幫 TS 自動收窄型別（TS 只看得懂 === 比較），
-          // 上面的 includes 已經保證只剩這三種，這裡用明確的字面量聯集斷言取代 any——
-          // 好處是若未來 Marker 的 type 聯集改了，這行會直接編譯錯誤，any 則會默默放行。
-          type: activeTool as "arrow" | "dashed" | "attack",
-          points: [
-            { x: pt.x, y: pt.y },
-            { x: pt.x, y: pt.y },
-          ],
-        });
+        addMarker(
+          matchId,
+          {
+            // Array.includes() 不會幫 TS 自動收窄型別（TS 只看得懂 === 比較），
+            // 上面的 includes 已經保證只剩這三種，這裡用明確的字面量聯集斷言取代 any——
+            // 好處是若未來 Marker 的 type 聯集改了，這行會直接編譯錯誤，any 則會默默放行。
+            type: activeTool as "arrow" | "dashed" | "attack",
+            points: [
+              { x: pt.x, y: pt.y },
+              { x: pt.x, y: pt.y },
+            ],
+          },
+          // 拖曳畫線：pointerDown 只放起點，先別記歷史，等 pointerUp 線畫完才記一次完整的線。
+          // 否則 undo 只會退回「起點＝終點」的殘缺線頭（#147 殘留的畫線分支）。
+          { skipHistory: true },
+        );
         // We will set a flag so pointerMove knows we are drawing
         setDrawingMarkerId("drawing");
       } else if (isLayoutMode && (activeTool === "text" || activeTool === "volleyball")) {
@@ -235,6 +242,9 @@ export default function Court() {
 
   const handlePointerUp = () => {
     if (drawingMarkerId) {
+      // 線畫完了（放開滑鼠）：這時終點已被 pointerMove 更新到最終位置，記一次歷史就是
+      // 一條完整的線＝一個 undo 步驟。addMarker 當初刻意跳過歷史，就是為了在這裡補記（#147）。
+      if (matchId) pushHistory(matchId);
       setDrawingMarkerId(null);
       setActiveTool("select");
     }

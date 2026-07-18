@@ -102,7 +102,17 @@ interface TacticsBoardStore {
   addDefenseRange: (matchId: string, range: Omit<DefenseRange, "id">) => void;
   updateDefenseRange: (matchId: string, id: string, updates: Partial<DefenseRange>) => void;
   removeDefenseRange: (matchId: string, id: string) => void;
-  addMarker: (matchId: string, marker: Omit<Marker, "id">) => void;
+  // options.skipHistory：畫線類工具（arrow/dashed/attack）用「拖曳」畫，pointerDown 只是放下
+  // 起點、終點要靠 pointerMove 一路更新到放開為止。若在 pointerDown 就 pushHistory，記進歷史的
+  // 只會是「起點＝終點」的殘缺線，完成後的終點永遠不進歷史——那正是 #147 殘留的病灶（Ctrl+Z
+  // 會把上一條線退成只剩線頭）。所以拖曳畫線時傳 skipHistory:true，改由 Court 在 pointerUp
+  // 線畫完後才呼叫一次 pushHistory，記下完整的線。點擊型標記（text/volleyball）不傳，維持原本
+  // 「新增即記歷史」的行為。
+  addMarker: (
+    matchId: string,
+    marker: Omit<Marker, "id">,
+    options?: { skipHistory?: boolean },
+  ) => void;
   updateMarker: (matchId: string, id: string, updates: Partial<Marker>) => void;
   removeMarker: (matchId: string, id: string) => void;
   clearMarkers: (matchId: string) => void;
@@ -308,7 +318,7 @@ export const useTacticsBoard = create<TacticsBoardStore>()((set, get) => ({
     get().pushHistory(matchId);
   },
 
-  addMarker: (matchId, marker) => {
+  addMarker: (matchId, marker, options) => {
     const id = uuidv4();
     set((state) => ({
       selectedObjectId: id,
@@ -317,7 +327,8 @@ export const useTacticsBoard = create<TacticsBoardStore>()((set, get) => ({
         markers: [...rot.markers, { ...marker, id }],
       })),
     }));
-    get().pushHistory(matchId);
+    // 拖曳畫線時跳過，改在 pointerUp 才記一次完整的線（見型別宣告處的 skipHistory 說明，#147）。
+    if (!options?.skipHistory) get().pushHistory(matchId);
   },
 
   updateMarker: (matchId, id, updates) =>

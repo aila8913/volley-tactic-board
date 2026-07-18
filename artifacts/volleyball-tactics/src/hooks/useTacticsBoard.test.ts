@@ -98,6 +98,55 @@ describe("undo/redo 一次只走一步（issue #147）", () => {
     expect(ids()).toEqual(["p1"]);
   });
 
+  // 回歸 #147 殘留的「畫線」分支：線是拖曳畫的（pointerDown 放起點、pointerMove 更新終點、
+  // pointerUp 放開）。舊寫法在 pointerDown 就 pushHistory，記進去的是「起點＝終點」的殘缺線、
+  // 完成後的終點永不進歷史，於是畫兩條線後按一次 undo，會把最後一條整條刪掉、前一條退成只剩
+  // 起點線頭。修法：addMarker 傳 skipHistory，改在 pointerUp（畫完）才記一次完整的線。
+  const markers = () => tb().dataByMatch[A].tacticsByRotation[0].markers;
+  // 模擬一次完整的「拖曳畫線」：放起點 → 拖到終點 → 放開時記一次歷史。
+  const drawLine = (from: [number, number], to: [number, number]) => {
+    tb().addMarker(
+      A,
+      {
+        type: "arrow",
+        points: [
+          { x: from[0], y: from[1] },
+          { x: from[0], y: from[1] },
+        ],
+      },
+      { skipHistory: true },
+    );
+    const ms = markers();
+    const id = ms[ms.length - 1].id;
+    tb().updateMarker(A, id, {
+      points: [
+        { x: from[0], y: from[1] },
+        { x: to[0], y: to[1] },
+      ],
+    });
+    tb().pushHistory(A); // pointerUp
+  };
+
+  it("拖曳畫兩條線後，一次 undo 只退掉最後一條完整的線（不留線頭）", () => {
+    rt().setRoster(A, []);
+    tb().enterTacticsLayout(A); // 種入起始空白快照當歷史第 0 格（跟真實進入布置一樣）
+
+    drawLine([1, 1], [2, 2]);
+    drawLine([5, 5], [6, 6]);
+    expect(markers()).toHaveLength(2);
+
+    tb().undo(A);
+    // 第二條線整條消失，只剩第一條——而且第一條是「完整」的線（終點不等於起點），不是殘缺線頭。
+    expect(markers()).toHaveLength(1);
+    expect(markers()[0].points).toEqual([
+      { x: 1, y: 1 },
+      { x: 2, y: 2 },
+    ]);
+
+    tb().undo(A);
+    expect(markers()).toHaveLength(0); // 再退一步回到空白起點
+  });
+
   it("undo 後 redo 把剛退掉的那一步原樣還原", () => {
     tb().placePlayerFree(A, "p1", 0.1, 0.1);
     tb().placePlayerFree(A, "p2", 0.2, 0.2);
