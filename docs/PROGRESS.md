@@ -22,9 +22,9 @@
 > 平行 PR 就落在不同行段、git 幾乎都能自動合併，不用真的把檔案拆兩份、也保住一眼 catch-up。
 > 上面的 `_Last updated_` 是共用一行摘要（誰更新了什麼），保持精簡、別長成段落。
 
-\_Last updated: 2026-07-18 (aila) — 修 #147 殘留：畫線拖曳的 undo 分支（#149 只修了站位拖曳），畫線改在
-pointerUp 才記一次歷史＋補回歸測試，#147 重開待此 PR `Closes`。前一輪 #154 戰術板單向化 PR A（#155）／
-PR B（載入改唯讀檢視、砍反向寫回，#157）已落、#44 暫停/timeout 全棧落地、M1 實作項清空。\_
+\_Last updated: 2026-07-19 (aila) — 戰術板 UI 大改版方向定案（#160：頁面＋快照快速入口，overlay 作廢，
+依 PO Figma 稿；結論記在 #154 07-19 comment）。上一輪待 ship 項全落地：PR #157/#158 已 merge，
+#154 三 bug 本體修復完、#147/#44 關閉。\_
 
 ## Current state
 
@@ -44,12 +44,14 @@ lives in git log + the issues named).
   （`useTacticsBoard`／`useRotationTable`，#119）都改成 `dataByMatch[matchId]` 分片，A 場的編輯不會污染
   B 場；戰術板/輪轉表工作狀態**不再 persist**（PO 決策：只有存成戰術才算數，硬重整不還原未存排版）。
   切輪次的跨 store 同步走 `RotationSwitcher → syncRotationChange` 明確呼叫，不再靠全域 subscribe。
-- **戰術板單向化重構（#154）進行中。** PO 拍板把戰術板從「會回寫輪轉表的完整狀態包」降級成「唯讀
-  快照＋暫時白板」，資料流嚴格單向（設計展開＋PR 切分 A–E 都在 #154 留言）。**PR A（#155，denormalized
-  `CourtSnapshot` 型別＋`parseSavedTactic` 舊檔轉接層＋擷取純函式，零 UI）已開 PR**；**PR B（載入已存
-  戰術改唯讀檢視、砍掉 `loadRotationData` 反向寫回、Court 渲染改吃 `SnapshotPlayer` 快照）本 session
-  完成、待送 PR**——#154 三個 bug（新增球員消失／站位被覆蓋回不去／刪名單舊快照對不上人）的本體修復。
-  PR B 暫時停用「編輯已存戰術」鈕；可編輯 session＋側邊滑出白板 UI 留給 PR C。
+- **戰術板單向化（#154）bug 本體修復完成；UI 改版移至 #160。** PR A（#155，denormalized
+  `CourtSnapshot` 型別＋`parseSavedTactic` 舊檔轉接層＋擷取純函式）與 PR B（#157，載入已存戰術改
+  唯讀檢視、砍掉 `loadRotationData` 反向寫回、Court 渲染改吃 `SnapshotPlayer` 快照）**均已 merge**——
+  三個 bug（新增球員消失／站位被覆蓋回不去／刪名單舊快照對不上人）架構性解決；「編輯已存戰術」鈕
+  暫停用、待 #160。**07-19 PO 依自繪 Figma 稿拍板 UI 新方向**：戰術板＝左欄底部降級工具頁（列表＋
+  新增選來源＋佈陣→確定→編輯）＋各頁右 panel 快照快速入口（一鍵抓當下站位直落編輯）——原 overlay
+  方案（含原 PR C 側邊白板）作廢，#17 第 1 節同步作廢。完整權衡在 #154 07-19 comment，落地追蹤
+  #160（needs-plan，Plan 後拆 PR）。
 - **Schema foundations for stats are in place:** `lineups`（起始先發，一局一 row）、
   `substitutions`（換人，存比分快照）、`events.outcome`（得/失/球續 enum）、`people`＋`teams`
   （跨場跨隊身分／分組標籤，`players.personId`/`matches.teamId` nullable FK、`onDelete: set null`
@@ -109,9 +111,9 @@ gh issue list --state open                   # 全部
 ```
 
 M1 收尾焦點：**M1 實作項已清空**——全域 store 去汙染家族（#115/#117/#118/#119）、undo 一次退兩步
-（#147：#149 修站位拖曳分支、本 session 再修畫線拖曳分支——`addMarker` 拖曳畫線改跳過歷史、由 Court
-在 pointerUp 才記一次完整的線，待 ship 的 PR `Closes #147`）、暫停/timeout（#44）全數落地。**M1 收尾實質完成，
-下一步是 PO 決定 M2 起點**（部署 #26／離線契約 #75 屬 priority:essential，是自然接續）。另 #120（純展示唯讀
+（#147，兩條分支分別由 PR #149/#158 修完關閉）、暫停/timeout（#44）全數落地。**下一階段起點已定：
+PO 拍板插入 M1.5「戰術板 UI 大改版」（#160）於 M1 與 M2 之間**——milestone 本體待 PO 在網頁建立後
+掛上（MCP 工具建不了 milestone）；部署 #26／離線契約 #75 仍屬 priority:essential 的自然接續。另 #120（純展示唯讀
 站位視圖）依賴 #119 定案的分片形狀、暫不排期；#40（undo/redo 不涵蓋輪轉拖曳，與 #147 同塊邏輯但不同 store）、
 #64（背景寫入失敗不 reconcile，關聯部署 #26／離線契約 #75）、**#127（後端沒驗 tournamentId 擁有權，真 auth
 後補）** 仍 open。
@@ -121,10 +123,12 @@ M1 收尾焦點：**M1 實作項已清空**——全域 store 去汙染家族（
 
 ### 開發 (aila)
 
-- **#44**（本 session，待 ship 的 PR 帶 `Closes #44`）— 暫停/timeout 全棧：`lib/db/src/schema/timeouts.ts`
+- **#44**（PR #153，commit `27a6a26`，07-18）— 暫停/timeout 全棧：`lib/db/src/schema/timeouts.ts`
   ＋`routes/timeouts.ts`＋`timeoutBelongsToUser`＋openapi/codegen＋前端 `useScoreSheet`（reducer/controller/
   reconstruct/undo）＋計分頁按鈕＋統計欄。形狀早在 `docs/event-grammar-spec.md` G 群定案；範圍（純記錄事件、
-  不記時長）由 PO 本 session 拍板。typecheck/85 test（+2 新）/lint/prettier 全綠，全棧 CRUD happy-path 驗過。
+  不記時長）由 PO 拍板。
+- **#147**（PR #158，commit `4ff53ac`，07-19）— 修畫線拖曳的 undo 殘留分支（#149 只修了站位拖曳）：
+  `addMarker` 拖曳畫線改跳過歷史、由 Court 在 pointerUp 才記一次完整的線＋回歸測試。#147 就此關閉。
 - **#146**（上一 session）— PROGRESS.md 改單檔＋開發／設計分區（本結構），並新增 `workflow` 標籤。
 - **#119**（上一 session 關）— 戰術板/輪轉表兩 store 改 `dataByMatch[matchId]` 分片、去 persist、
   `buildSnapshot` 過濾幽靈站位。前端 **PR #145 已 merge**（commit `d18f69e`），後端前置 **PR #143**
