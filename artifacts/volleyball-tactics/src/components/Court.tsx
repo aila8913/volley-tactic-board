@@ -4,8 +4,8 @@ import { useRotationTable } from "../hooks/useRotationTable";
 import { useTacticsBoard } from "../hooks/useTacticsBoard";
 import { findNearestZone } from "../lib/rotationLogic";
 import type { RotationPositions } from "../types/rotationTable";
-import type { RotationTactics } from "../types/tacticsBoard";
 import type { MatchPlayer } from "../types/match";
+import type { SnapshotPlayer } from "../types/courtSnapshot";
 import PlayerNode from "./PlayerNode";
 import Markers from "./Markers";
 import DefenseRange from "./DefenseRange";
@@ -15,10 +15,6 @@ const EMPTY_ROSTER: MatchPlayer[] = [];
 const EMPTY_ROTATIONS: RotationPositions[] = Array(6)
   .fill(null)
   .map(() => ({ positions: [], liberoReplacement: null }));
-const EMPTY_TACTICS: RotationTactics[] = Array(6)
-  .fill(null)
-  .map(() => ({ tacticPositions: [], markers: [], defenseRanges: [] }));
-const DEFAULT_LABEL_TOGGLES = { zone: false };
 
 // 球場「真正比賽用」的座標範圍，永遠固定 0~100 / 0~200——格子吸附、界外判斷、
 // 6 個站位格全部都認這組數字，不會因為旁邊要多留 L 備位空間就跟著變動。
@@ -82,15 +78,15 @@ export default function Court() {
   const setStartingLiberoId = useRotationTable((s) => s.setStartingLiberoId);
   const placePlayerOnCourt = useRotationTable((s) => s.placePlayerOnCourt);
 
-  const tacticsData = useTacticsBoard((s) => (matchId ? s.dataByMatch[matchId] : undefined));
-  const tacticsByRotation = tacticsData?.tacticsByRotation ?? EMPTY_TACTICS;
-  const labelToggles = tacticsData?.labelToggles ?? DEFAULT_LABEL_TOGGLES;
-  // 這些是全域、暫時性的畫面狀態（不隨 match 走），個別選取。
-  const activeTool = useTacticsBoard((s) => s.activeTool);
-  const isLayoutMode = useTacticsBoard((s) => s.isLayoutMode);
-  const courtView = useTacticsBoard((s) => s.courtView);
-  // 唯讀檢視已存戰術時，畫面完全來自這張凍結快照（issue #154 PR B），不回輪轉表/名單查任何東西。
+  // 戰術白板改成單景 session 後（issue #154 PR C），畫筆/防守範圍/場上球員都住在
+  // session 裡（可編輯）或 viewingScene 裡（唯讀檢視已存戰術）。isLayoutMode 這個常駐布林
+  // 拿掉了，改用「session !== null」直接推導：有 session＝正在即時布置。
+  const session = useTacticsBoard((s) => s.session);
   const viewingScene = useTacticsBoard((s) => s.viewingScene);
+  const isLayoutMode = session !== null;
+  const labelToggles = useTacticsBoard((s) => s.labelToggles);
+  const activeTool = useTacticsBoard((s) => s.activeTool);
+  const courtView = useTacticsBoard((s) => s.courtView);
   const setActiveTool = useTacticsBoard((s) => s.setActiveTool);
   const setSelectedObjectId = useTacticsBoard((s) => s.setSelectedObjectId);
   const addMarker = useTacticsBoard((s) => s.addMarker);
@@ -99,7 +95,7 @@ export default function Court() {
   const addDefenseRange = useTacticsBoard((s) => s.addDefenseRange);
   const undo = useTacticsBoard((s) => s.undo);
   const redo = useTacticsBoard((s) => s.redo);
-  const placePlayerFree = useTacticsBoard((s) => s.placePlayerFree);
+  const placeSessionPlayer = useTacticsBoard((s) => s.placeSessionPlayer);
 
   const courtRef = useRef<SVGSVGElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -131,11 +127,11 @@ export default function Court() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "z") {
         e.preventDefault();
-        if (e.shiftKey) redo(matchId);
-        else undo(matchId);
+        if (e.shiftKey) redo();
+        else undo();
       } else if ((e.ctrlKey || e.metaKey) && e.key === "y") {
         e.preventDefault();
-        redo(matchId);
+        redo();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -143,8 +139,7 @@ export default function Court() {
   }, [matchId, undo, redo]);
 
   const rotationPositions = rotations[currentRotation];
-  const rotationTactics = tacticsByRotation[currentRotation];
-  if (!rotationPositions || !rotationTactics) return null;
+  if (!rotationPositions) return null;
 
   const getSvgPoint = (e: React.PointerEvent) => {
     if (!courtRef.current) return { x: 50, y: 100 };
@@ -175,7 +170,6 @@ export default function Court() {
         // we'll just set a drawing mode and update the *last* marker.
         // Actually, we can just dispatch addMarker, then in pointerMove we update the last marker.
         addMarker(
-          matchId,
           {
             // Array.includes() 不會幫 TS 自動收窄型別（TS 只看得懂 === 比較），
             // 上面的 includes 已經保證只剩這三種，這裡用明確的字面量聯集斷言取代 any——
@@ -193,7 +187,7 @@ export default function Court() {
         // We will set a flag so pointerMove knows we are drawing
         setDrawingMarkerId("drawing");
       } else if (isLayoutMode && (activeTool === "text" || activeTool === "volleyball")) {
-        addMarker(matchId, {
+        addMarker({
           // 這裡不用斷言：上面的條件是直接的 === 比較，TS 已把 activeTool
           // 自動收窄成 "text" | "volleyball"。
           type: activeTool,
@@ -203,7 +197,7 @@ export default function Court() {
         });
         setActiveTool("select");
       } else if (isLayoutMode && ["circle", "ellipse", "fan"].includes(activeTool)) {
-        addDefenseRange(matchId, {
+        addDefenseRange({
           playerId: "",
           // 同上：includes 保證了範圍，用字面量聯集斷言（對應 DefenseRange 的 type）取代 any。
           type: activeTool as "circle" | "ellipse" | "fan",
@@ -227,12 +221,13 @@ export default function Court() {
     if (!matchId) return;
     if (drawingMarkerId === "drawing") {
       const pt = getSvgPoint(e);
-      // We assume the last marker added is the one being drawn
-      const markers = rotationTactics.markers;
+      // We assume the last marker added is the one being drawn.
+      // 畫筆現在住在 session 裡（沒有 session 就不可能在畫線，但仍防呆一下）。
+      const markers = session?.markers ?? [];
       if (markers.length > 0) {
         const lastMarker = markers[markers.length - 1];
         if (lastMarker.points && lastMarker.points.length === 2) {
-          updateMarker(matchId, lastMarker.id, {
+          updateMarker(lastMarker.id, {
             points: [lastMarker.points[0], { x: pt.x, y: pt.y }],
           });
         }
@@ -244,7 +239,7 @@ export default function Court() {
     if (drawingMarkerId) {
       // 線畫完了（放開滑鼠）：這時終點已被 pointerMove 更新到最終位置，記一次歷史就是
       // 一條完整的線＝一個 undo 步驟。addMarker 當初刻意跳過歷史，就是為了在這裡補記（#147）。
-      if (matchId) pushHistory(matchId);
+      pushHistory();
       setDrawingMarkerId(null);
       setActiveTool("select");
     }
@@ -282,11 +277,26 @@ export default function Court() {
         // 輪轉視圖：吸附到最近格子，自動推算全部 6 個輪次
         placePlayerOnCourt(matchId, playerId, findNearestZone(rawX / 100, rawY / 200));
       }
-    } else if (courtView === "tactics" && isLayoutMode) {
-      // 戰術視圖 + 布置模式：自由座標放置，只影響目前輪次的 tacticPositions
-      placePlayerFree(matchId, playerId, rawX / 100, rawY / 200);
+    } else if (courtView === "tactics" && session) {
+      // 戰術視圖 + 有 session：從名單把一位球員拖進白板。session 的球員是反正規化的
+      // SnapshotPlayer（姓名/背號/位置都凍在裡面），所以這裡在「元件層」用輪轉表的 roster
+      // 把 id 查成一筆完整身分再傳值進去（placeSessionPlayer 以 sourcePlayerId upsert）——
+      // store 本身不碰 roster，維持單向。查不到（幽靈 id）就什麼都不做。
+      const p = roster.find((rp) => rp.id === playerId);
+      if (p) {
+        const sp: SnapshotPlayer = {
+          sourcePlayerId: p.id,
+          name: p.name,
+          number: p.number,
+          role: p.role,
+          x: rawX / 100,
+          y: rawY / 200,
+          isLibero: p.role === "L",
+        };
+        placeSessionPlayer(sp);
+      }
     }
-    // 戰術視圖 + 非布置模式：不接受拖曳（唯讀）
+    // 戰術視圖 + 非布置模式（唯讀檢視）：不接受拖曳
   };
 
   // 輪轉視圖中，指定先發的 L 球員不在場上時顯示在備位區。
@@ -574,9 +584,10 @@ export default function Court() {
               輪轉視圖只看站位圓圈，避免標記干擾判斷球員站哪裡。 */}
             {courtView === "tactics" &&
               (() => {
-                // 檢視已存戰術時畫筆/防守範圍來自那張快照（viewingScene），即時布置時來自
-                // 當前輪次的 rotationTactics——兩者 markers/defenseRanges 欄位形狀相同。
-                const drawings = viewingScene ?? rotationTactics;
+                // 即時布置時畫筆/防守範圍來自 session（可編輯），檢視已存戰術時來自 viewingScene
+                //（唯讀）——兩者 markers/defenseRanges 欄位形狀相同；都沒有就不畫。
+                const drawings = session ?? viewingScene;
+                if (!drawings) return null;
                 return (
                   <>
                     {drawings.defenseRanges.map((dr) => (
@@ -590,16 +601,15 @@ export default function Court() {
               })()}
 
             {/* Render Players
-              輪轉視圖：用 positions（格子吸附站位，來自輪轉表，即時資料）。
-              戰術視圖 + 即時布置：用 tacticPositions（進入戰術布置那一刻從輪轉表拍的快照）。
-              戰術視圖 + 檢視已存戰術：用 viewingScene.snapshot.players（凍結快照，issue #154
-              PR B）——這裡是「反正規化」的 SnapshotPlayer，姓名/背號/位置都已凍在快照裡，
-              刻意「不」回 roster 查，所以名單怎麼改（刪人/改名）都動不到這張照片。 */}
-            {courtView === "tactics" && viewingScene
-              ? viewingScene.snapshot.players.map((sp, i) => {
+              戰術視圖：一律渲染「反正規化」的 SnapshotPlayer——即時布置吃 session.snapshot.players
+              （可拖曳），檢視已存戰術吃 viewingScene.snapshot.players（唯讀，issue #154 PR B）。
+              兩者姓名/背號/位置都凍在快照裡，刻意「不」回 roster 查，所以名單怎麼改都動不到畫面。
+              輪轉視圖：用 positions（格子吸附站位，來自輪轉表即時資料）＋ roster join。 */}
+            {courtView === "tactics"
+              ? (session?.snapshot.players ?? viewingScene?.snapshot.players ?? []).map((sp, i) => {
                   // SnapshotPlayer 沒有現成的 MatchPlayer/PlayerPosition 物件，就地組出 PlayerNode
-                  // 需要的兩個 prop。sourcePlayerId 可能是 null（當初就查無此人），用合成 id 當 key
-                  // 就好——檢視是唯讀，這個 id 不會被拿去寫任何東西。
+                  // 需要的兩個 prop。session 的球員 sourcePlayerId 必為非 null（拖曳/移除要靠它當
+                  // 識別）；viewingScene 可能有 null（當初就查無此人），唯讀情境用合成 id 當 key 即可。
                   const id = sp.sourcePlayerId ?? `snap-${i}`;
                   const player = { id, name: sp.name, number: sp.number, role: sp.role };
                   const position = { playerId: id, x: sp.x, y: sp.y };
@@ -615,10 +625,7 @@ export default function Court() {
                     />
                   );
                 })
-              : (courtView === "rotation"
-                  ? rotationPositions.positions
-                  : rotationTactics.tacticPositions
-                ).map((pos) => {
+              : rotationPositions.positions.map((pos) => {
                   const player = roster.find((p) => p.id === pos.playerId);
                   if (!player) return null;
                   const isLibero = player.role === "L";

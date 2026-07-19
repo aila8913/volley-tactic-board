@@ -37,8 +37,11 @@ export default function RotationTable() {
   const resetCurrentRotationPositions = useRotationTable(
     (state) => state.resetCurrentRotationPositions,
   );
-  const resetCurrentRotationTactics = useTacticsBoard((state) => state.resetCurrentRotationTactics);
-  const clearMarkers = useTacticsBoard((state) => state.clearMarkers);
+  // 戰術白板改成單景 session 後（issue #154 PR C），沒有「常駐的第 N 輪畫筆」可清了：
+  // 畫筆只在編輯中的 session 裡存在，所以「清除畫筆」改成清掉當前 session 的畫筆/防守範圍，
+  // 沒在編輯（無 session）時停用。
+  const session = useTacticsBoard((state) => state.session);
+  const clearDrawings = useTacticsBoard((state) => state.clearDrawings);
   // 伺服器目前的名單，當作「儲存名單」時算差異（新增/修改/刪除哪些球員）的基準。
   const { players: serverRoster } = useRoster(Number(matchId));
   const saveRoster = useSaveRoster();
@@ -76,16 +79,14 @@ export default function RotationTable() {
   // 目前輪次場上的球員 id，用來在名單上標示「已上場」。
   const onCourtIds = new Set(rotations[currentRotation].positions.map((p) => p.playerId));
 
-  // 「重置站位」要同時清空輪轉表（站位）跟戰術板（這個輪次的畫筆/自由站位）——
-  // 兩個 store 各自只管自己的資料，由按下按鈕的這一刻各自呼叫一次，這就是我們說好的
-  // 「資料用傳輸的」：不是互相偷看對方內部，而是外層明確呼叫兩邊。
+  // 「重置站位」清空輪轉表這一輪的站位。戰術白板單向化後（issue #154 PR C）已跟輪轉表脫鉤、
+  // 也沒有常駐的每輪畫筆，所以這裡只動輪轉表自己的站位真相，不再連帶清白板。
   // 這個動作沒有 undo，點錯會直接清空——用瀏覽器內建的 window.confirm() 擋一下，
   // 跟 MatchList.tsx / TournamentDetail.tsx 刪除比賽/賽事時用的是同一套簡單彈窗模式。
   const handleResetRotation = () => {
     if (!matchId) return;
     if (!window.confirm("確定要重置目前輪次的站位嗎？此動作無法復原。")) return;
     resetCurrentRotationPositions(matchId);
-    resetCurrentRotationTactics(matchId);
   };
 
   return (
@@ -157,10 +158,14 @@ export default function RotationTable() {
                 重置站位
               </button>
               <button
-                onClick={() => matchId && clearMarkers(matchId)}
+                onClick={() => clearDrawings()}
+                disabled={!session}
+                title={session ? "清除白板上的畫筆與防守範圍" : "沒有正在編輯的戰術"}
                 className="flex-1 rounded-lg border border-white/[0.26] bg-white/[0.05] px-2 py-1
                   text-xs font-bold text-[#a9b096] transition hover:border-[#ef4444]
-                  hover:bg-[#ef4444]/10 hover:text-[#ef4444]"
+                  hover:bg-[#ef4444]/10 hover:text-[#ef4444] disabled:opacity-40
+                  disabled:hover:border-white/[0.26] disabled:hover:bg-white/[0.05]
+                  disabled:hover:text-[#a9b096]"
               >
                 清除畫筆
               </button>

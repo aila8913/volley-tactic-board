@@ -83,6 +83,27 @@ export default tseslint.config(
       "react/prop-types": "off",
     },
   },
+  {
+    // issue #154 PR C：把戰術白板的「單向依賴」焊進 CI。白板 store 是站位真相的「消費者」，
+    // 一旦它 import 了輪轉表/計分表 store，就有能力反向寫回——那正是 #154 一系列 bug 的病根。
+    // 擷取一律在 UI 邊界以「值」傳入（captureFromRotation → startSession），store 本身永遠不碰
+    // 那兩個 store。依賴方向＝import 方向，用 lint 規則檢查比寫在註解裡可靠（PR 一改就會紅）。
+    files: ["artifacts/volleyball-tactics/src/hooks/useTacticsBoard.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["**/useRotationTable", "**/useScoreSheet"],
+              message:
+                "戰術白板必須維持單向：不得 import 輪轉表/計分表 store（會有能力反向寫回，正是 #154 病根）。擷取請在 UI 層用 captureFromRotation 以值傳入 startSession。",
+            },
+          ],
+        },
+      ],
+    },
+  },
   // Must be last: turns off any ESLint rule that would conflict with Prettier's
   // formatting (Prettier handles style, ESLint handles correctness).
   eslintConfigPrettier,

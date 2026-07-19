@@ -25,21 +25,24 @@ export default function PlayerNode({
   // circleLabel 是全域顯示偏好（不隨 match 走），留在 store 頂層直接讀。站位動作則帶 matchId。
   const { placePlayerOnCourt, removePlayerFromCourt, circleLabel } = useRotationTable();
   const {
-    placePlayerFree,
+    session,
+    moveSessionPlayer,
+    removeSessionPlayer,
     selectedObjectId,
     setSelectedObjectId,
     activeTool,
-    isLayoutMode,
     courtView,
-    removePlayerFromTacticView,
   } = useTacticsBoard();
-  // 輪轉視圖跟戰術視圖的「移除」現在是兩件完全獨立的事：輪轉視圖動的是輪轉表的
-  // 即時站位，戰術視圖只動這張快照（tacticPositions），彼此不影響對方。
+  // 戰術白板改成 session 後（issue #154 PR C），isLayoutMode 這個常駐布林拿掉了，
+  // 改由「session !== null」推導：有 session＝正在即時布置、可編輯。
+  const isLayoutMode = session !== null;
+  // 輪轉視圖跟戰術視圖的「移除」是兩件完全獨立的事：輪轉視圖動的是輪轉表的即時站位，
+  // 戰術視圖只動這張 session 快照裡的球員，彼此互不影響。
   const removeFromCourt = (playerId: string) => {
-    if (!matchId) return;
     if (courtView === "tactics") {
-      removePlayerFromTacticView(matchId, playerId);
+      removeSessionPlayer(playerId);
     } else {
+      if (!matchId) return;
       removePlayerFromCourt(matchId, playerId);
     }
   };
@@ -140,8 +143,9 @@ export default function PlayerNode({
         // 拖出球場下緣＝送回備位、不上場，等同右鍵移除，只是換一個拖曳手勢完成。
         removeFromCourt(position.playerId);
       } else {
-        // 戰術視圖：自由座標存進 tacticPositions
-        placePlayerFree(matchId, position.playerId, dragPos.x / 100, dragPos.y / 200);
+        // 戰術視圖：自由座標更新這位球員在 session 快照裡的位置（position.playerId 就是
+        // SnapshotPlayer 的 sourcePlayerId）。
+        moveSessionPlayer(position.playerId, dragPos.x / 100, dragPos.y / 200);
       }
       setDragPos(null);
       setIsOverBench(false);

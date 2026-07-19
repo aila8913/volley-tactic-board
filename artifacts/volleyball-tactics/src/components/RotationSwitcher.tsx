@@ -14,16 +14,23 @@ export default function RotationSwitcher() {
     matchId ? (state.dataByMatch[matchId]?.currentRotation ?? 0) : 0,
   );
   const setCurrentRotation = useRotationTable((state) => state.setCurrentRotation);
-  const syncRotationChange = useTacticsBoard((state) => state.syncRotationChange);
+  const session = useTacticsBoard((state) => state.session);
+  const discardSession = useTacticsBoard((state) => state.discardSession);
+  const setCourtView = useTacticsBoard((state) => state.setCourtView);
 
-  // 切輪次是「先改輪轉表的 currentRotation、再叫戰術板同步一次」兩步：以前第二步靠一個全域
-  // subscribe 自動觸發，但 currentRotation 現在存在 per-match 分片裡，全域 subscribe 分不清是
-  // 哪一場變了，所以改成在這裡明確呼叫（issue #119）。matchId 理論上一定存在（這個元件只在
-  // /matches/:id/board 底下渲染），防呆一下不動作。
+  // 切輪次（issue #154 PR C）：戰術白板改成單景 session 後，白板跟輪次已脫鉤——一個 session
+  // 是「某一刻擷取的一張獨立照片」，不再是「第 N 輪的畫」。所以切輪次時：
+  //   - 正在編一個有未存內容的 session → 先確認捨棄（唯一還會弄丟東西的動作，§4）。
+  //   - 確認後結束 session、切回輪轉視圖，再改輪轉表的 currentRotation。
+  // matchId 理論上一定存在（這個元件只在 /matches/:id/board 底下渲染），防呆一下不動作。
   const go = (index: number) => {
     if (!matchId) return;
+    const dirty = session !== null && session.history.length > 1;
+    if (dirty && !window.confirm("未儲存的戰術內容將會捨棄，確定要切換輪次嗎？")) return;
+    // 丟掉 session / 清掉唯讀檢視、回到輪轉視圖，再切輪次——避免帶著白板狀態切到別輪。
+    if (session) discardSession();
+    else setCourtView("rotation");
     setCurrentRotation(matchId, index);
-    syncRotationChange(matchId);
   };
 
   const goPrev = () => go((currentRotation + 5) % 6);
