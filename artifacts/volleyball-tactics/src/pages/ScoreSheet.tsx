@@ -3,6 +3,7 @@ import type { PointerEvent as ReactPointerEvent } from "react";
 import { useParams, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import BackToMatchListButton from "@/components/BackToMatchListButton";
+import MatchNavRail, { matchBackHref } from "@/components/MatchNavRail";
 import { useMatchWithRoster } from "@/hooks/useMatches";
 import { useRotationTable } from "@/hooks/useRotationTable";
 import { useScoreSheet, useScoreSheetController } from "@/hooks/useScoreSheet";
@@ -182,6 +183,10 @@ export default function ScoreSheet() {
   // 留到 Phase 3b-ii（連同 events 讀回、球員矩陣重建）一起做。
   const statsMatches = [match];
 
+  // 左側導覽軌（issue #160）的「比」按鈕要導回去的頁面。規則本身寫在 matchBackHref
+  // 裡，三個 match-scoped 頁面共用同一個函式，「回列表」的行為才不會各頁飄掉。
+  const backHref = matchBackHref(match.tournamentId);
+
   const handlePlayerTouch = (target: TouchedTarget) => {
     if (selectedBenchPlayer && target.side === "us" && target.playerId) {
       handleRegularSub(selectedBenchPlayer, target.playerId);
@@ -281,241 +286,247 @@ export default function ScoreSheet() {
   };
 
   return (
-    <div className="flex h-screen w-full flex-col bg-white">
-      <header className="flex items-center justify-between border-b-2 border-[#111] px-4 py-3 shrink-0">
-        <BackToMatchListButton />
-        <h1 className="text-lg font-bold">vs {match.opponent}</h1>
-        <Button asChild variant="outline" size="sm">
-          <Link href={`/matches/${id}/board`}>戰術板</Link>
-        </Button>
-      </header>
+    // 外層改成 flex h-screen（橫向排），把共用導覽軌 MatchNavRail 放在最左邊，右側
+    // 才是這一頁原本的內容（flex-1 min-w-0 撐滿剩下的寬度）。以前的「回列表」
+    // 「戰術板」連結是這個頁面 header 自己刻的，現在統一交給 MatchNavRail（issue #160）。
+    <div className="flex h-screen w-full">
+      <MatchNavRail matchId={id} backHref={backHref} active="record" />
+      <div className="flex min-w-0 flex-1 flex-col bg-white">
+        <header className="flex items-center justify-center border-b-2 border-[#111] px-4 py-3 shrink-0">
+          <h1 className="text-lg font-bold">vs {match.opponent}</h1>
+        </header>
 
-      <div className="flex flex-1 min-h-0">
-        {/* ── 左欄：計分表 ── */}
-        <div className="flex flex-1 flex-col min-h-0 border-r-2 border-[#111]">
-          {!hasLineup ? (
-            <div className="flex flex-1 flex-col items-center justify-center gap-4 px-4 text-center">
-              <p className="text-muted-foreground">請先到戰術板把先發球員拖上場，才能開始記錄。</p>
-              <Button asChild variant="outline">
-                <Link href={`/matches/${id}/board`}>前往戰術板</Link>
-              </Button>
-            </div>
-          ) : (
-            <div className="flex flex-1 flex-col items-center gap-2 px-4 py-3 overflow-y-auto">
-              {/* 局數 label + 局分小計（有結束的局才顯示） */}
-              <div className="flex items-center gap-3">
-                <span className="text-sm font-bold text-gray-700">
-                  第 {currentSet?.setNumber ?? 1} 局
-                </span>
-                {completedSets.length > 0 && (
-                  <span className="text-xs text-gray-400">
-                    局數&nbsp;
-                    <span
-                      className={ourSetsWon > opponentSetsWon ? "font-bold text-green-600" : ""}
-                    >
-                      {ourSetsWon}
-                    </span>
-                    :
-                    <span className={opponentSetsWon > ourSetsWon ? "font-bold text-red-500" : ""}>
-                      {opponentSetsWon}
-                    </span>
+        <div className="flex flex-1 min-h-0">
+          {/* ── 左欄：計分表 ── */}
+          <div className="flex flex-1 flex-col min-h-0 border-r-2 border-[#111]">
+            {!hasLineup ? (
+              <div className="flex flex-1 flex-col items-center justify-center gap-4 px-4 text-center">
+                <p className="text-muted-foreground">
+                  請先到戰術板把先發球員拖上場，才能開始記錄。
+                </p>
+                <Button asChild variant="outline">
+                  <Link href={`/matches/${id}/board`}>前往戰術板</Link>
+                </Button>
+              </div>
+            ) : (
+              <div className="flex flex-1 flex-col items-center gap-2 px-4 py-3 overflow-y-auto">
+                {/* 局數 label + 局分小計（有結束的局才顯示） */}
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-bold text-gray-700">
+                    第 {currentSet?.setNumber ?? 1} 局
                   </span>
-                )}
-              </div>
+                  {completedSets.length > 0 && (
+                    <span className="text-xs text-gray-400">
+                      局數&nbsp;
+                      <span
+                        className={ourSetsWon > opponentSetsWon ? "font-bold text-green-600" : ""}
+                      >
+                        {ourSetsWon}
+                      </span>
+                      :
+                      <span
+                        className={opponentSetsWon > ourSetsWon ? "font-bold text-red-500" : ""}
+                      >
+                        {opponentSetsWon}
+                      </span>
+                    </span>
+                  )}
+                </div>
 
-              {/* 大分數 */}
-              <div className="flex items-center gap-6 text-5xl font-bold tabular-nums">
-                <span className="flex items-center gap-1">
-                  {currentSet?.serving === "us" && <span className="text-2xl">🏐</span>}
-                  {currentSet?.ourScore ?? 0}
-                </span>
-                <span className="text-gray-300">:</span>
-                <span className="flex items-center gap-1">
-                  {currentSet?.opponentScore ?? 0}
-                  {currentSet?.serving === "opponent" && <span className="text-2xl">🏐</span>}
-                </span>
-              </div>
-              <div className="flex gap-12 text-xs font-semibold text-gray-400">
-                <span>我方</span>
-                <span>對手</span>
-              </div>
+                {/* 大分數 */}
+                <div className="flex items-center gap-6 text-5xl font-bold tabular-nums">
+                  <span className="flex items-center gap-1">
+                    {currentSet?.serving === "us" && <span className="text-2xl">🏐</span>}
+                    {currentSet?.ourScore ?? 0}
+                  </span>
+                  <span className="text-gray-300">:</span>
+                  <span className="flex items-center gap-1">
+                    {currentSet?.opponentScore ?? 0}
+                    {currentSet?.serving === "opponent" && <span className="text-2xl">🏐</span>}
+                  </span>
+                </div>
+                <div className="flex gap-12 text-xs font-semibold text-gray-400">
+                  <span>我方</span>
+                  <span>對手</span>
+                </div>
 
-              {!currentSet || currentSet.serving === null ? (
-                <div className="flex flex-1 flex-col items-center justify-center gap-3">
-                  <p className="text-sm font-bold">這局由誰先發球？</p>
-                  <div className="flex gap-3">
-                    <Button onClick={() => start("us", activeLineup)}>我方先發</Button>
-                    <Button variant="outline" onClick={() => start("opponent", activeLineup)}>
-                      對手先發
-                    </Button>
-                  </div>
-                  {/* 先發是「每局可不同」的（issue #115）：選先發方那一刻，會把當下輪轉表的站位凍結成
+                {!currentSet || currentSet.serving === null ? (
+                  <div className="flex flex-1 flex-col items-center justify-center gap-3">
+                    <p className="text-sm font-bold">這局由誰先發球？</p>
+                    <div className="flex gap-3">
+                      <Button onClick={() => start("us", activeLineup)}>我方先發</Button>
+                      <Button variant="outline" onClick={() => start("opponent", activeLineup)}>
+                        對手先發
+                      </Button>
+                    </div>
+                    {/* 先發是「每局可不同」的（issue #115）：選先發方那一刻，會把當下輪轉表的站位凍結成
                       這一局的先發。所以要換這一局的陣，得先回戰術板重排輪轉、再回來選先發方——這裡給
                       一句提示引導，避免使用者以為「下一局自動換陣」或「陣容改不了」。 */}
-                  <p className="mt-1 text-center text-xs text-gray-400">
-                    這一局會用目前輪轉表的先發。想換陣？先到
-                    <Link href={`/matches/${id}/board`} className="mx-0.5 underline">
-                      戰術板
-                    </Link>
-                    重排輪轉，再回來選先發方。
-                  </p>
-                </div>
-              ) : (
-                <>
-                  {selectedBenchPlayer ? (
-                    <div className="flex w-full items-center justify-between rounded-lg border border-blue-300 bg-blue-50 px-3 py-1.5 text-sm">
-                      <span className="font-semibold text-blue-700">
-                        換人模式：點球場上的球員換下
-                      </span>
-                      <button
-                        onClick={() => setSelectedBenchPlayer(null)}
-                        className="text-xs text-blue-500 underline"
-                      >
-                        取消
-                      </button>
-                    </div>
-                  ) : (
-                    <p className="text-xs text-gray-500">在球場上畫線連到球員，記錄這一球</p>
-                  )}
-
-                  <div className="flex min-h-0 w-full flex-1 items-center justify-center">
-                    <ScoreSheetCourt
-                      ourPositions={ourPositions}
-                      roster={match.players}
-                      opponentRotation={currentSet.opponentRotation}
-                      serving={currentSet.serving}
-                      interactive={gesture === null}
-                      onPlayerTouch={handlePlayerTouch}
-                      onLiberoSubstitute={handleLiberoSubstitute}
-                      regularSubs={regularSubs}
-                      selectedBenchPlayer={selectedBenchPlayer}
-                      onBenchPlayerSelect={setSelectedBenchPlayer}
-                      liberoSubstitution={liberoSubstitution}
-                    />
+                    <p className="mt-1 text-center text-xs text-gray-400">
+                      這一局會用目前輪轉表的先發。想換陣？先到
+                      <Link href={`/matches/${id}/board`} className="mx-0.5 underline">
+                        戰術板
+                      </Link>
+                      重排輪轉，再回來選先發方。
+                    </p>
                   </div>
+                ) : (
+                  <>
+                    {selectedBenchPlayer ? (
+                      <div className="flex w-full items-center justify-between rounded-lg border border-blue-300 bg-blue-50 px-3 py-1.5 text-sm">
+                        <span className="font-semibold text-blue-700">
+                          換人模式：點球場上的球員換下
+                        </span>
+                        <button
+                          onClick={() => setSelectedBenchPlayer(null)}
+                          className="text-xs text-blue-500 underline"
+                        >
+                          取消
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-gray-500">在球場上畫線連到球員，記錄這一球</p>
+                    )}
 
-                  {/* 暫停（issue #44）：每一方一顆鈕，標籤帶「已用/上限」，達到 2 次就反灰
+                    <div className="flex min-h-0 w-full flex-1 items-center justify-center">
+                      <ScoreSheetCourt
+                        ourPositions={ourPositions}
+                        roster={match.players}
+                        opponentRotation={currentSet.opponentRotation}
+                        serving={currentSet.serving}
+                        interactive={gesture === null}
+                        onPlayerTouch={handlePlayerTouch}
+                        onLiberoSubstitute={handleLiberoSubstitute}
+                        regularSubs={regularSubs}
+                        selectedBenchPlayer={selectedBenchPlayer}
+                        onBenchPlayerSelect={setSelectedBenchPlayer}
+                        liberoSubstitution={liberoSubstitution}
+                      />
+                    </div>
+
+                    {/* 暫停（issue #44）：每一方一顆鈕，標籤帶「已用/上限」，達到 2 次就反灰
                       （MAX_TIMEOUTS_PER_SET，理由見常數註解）。叫暫停跟得分/換人一樣走
                       controller 的 callTimeout：本地即時記一筆、背景寫進後端、可被「復原」退掉。 */}
-                  <div className="flex gap-3">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={ourTimeoutCount >= MAX_TIMEOUTS_PER_SET}
-                      onClick={() => callTimeout("us")}
-                    >
-                      我方暫停 {ourTimeoutCount}/{MAX_TIMEOUTS_PER_SET}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={opponentTimeoutCount >= MAX_TIMEOUTS_PER_SET}
-                      onClick={() => callTimeout("opponent")}
-                    >
-                      對手暫停 {opponentTimeoutCount}/{MAX_TIMEOUTS_PER_SET}
-                    </Button>
-                  </div>
+                    <div className="flex gap-3">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={ourTimeoutCount >= MAX_TIMEOUTS_PER_SET}
+                        onClick={() => callTimeout("us")}
+                      >
+                        我方暫停 {ourTimeoutCount}/{MAX_TIMEOUTS_PER_SET}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={opponentTimeoutCount >= MAX_TIMEOUTS_PER_SET}
+                        onClick={() => callTimeout("opponent")}
+                      >
+                        對手暫停 {opponentTimeoutCount}/{MAX_TIMEOUTS_PER_SET}
+                      </Button>
+                    </div>
 
-                  <div className="flex gap-3 pb-2">
-                    {/* 一顆「復原」鈕，一次退最近一個動作（得分／一般換人／手動 libero／暫停），
+                    <div className="flex gap-3 pb-2">
+                      {/* 一顆「復原」鈕，一次退最近一個動作（得分／一般換人／手動 libero／暫停），
                         連按就一路往回（issue #41）。可用與否看復原堆疊深度，不是只看記了幾顆球
                         ——這樣剛換完人、還沒記下一球時也退得掉那次換人。 */}
-                    <Button variant="ghost" disabled={undoDepth === 0} onClick={handleUndo}>
-                      復原
-                    </Button>
-                    <Button variant="ghost" onPointerDown={handleNoSight}>
-                      沒看到
-                    </Button>
-                    <Button variant="ghost" onClick={handleNextSet}>
-                      下一局
-                    </Button>
-                    {/* 結束比賽（issue #20）：不是「刪除/封存」動作，只是導去賽後統計頁
+                      <Button variant="ghost" disabled={undoDepth === 0} onClick={handleUndo}>
+                        復原
+                      </Button>
+                      <Button variant="ghost" onPointerDown={handleNoSight}>
+                        沒看到
+                      </Button>
+                      <Button variant="ghost" onClick={handleNextSet}>
+                        下一局
+                      </Button>
+                      {/* 結束比賽（issue #20）：不是「刪除/封存」動作，只是導去賽後統計頁
                         （MatchAnalytics，路由已存在），所以用 asChild + Link 而不是 onClick，
                         跟上面「前往戰術板」是同一種寫法。 */}
-                    <Button asChild variant="ghost">
-                      <Link href={`/matches/${id}/analytics`}>結束比賽</Link>
-                    </Button>
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* ── 右欄：統計（水平 snap scroll，可左右滑看其他場） ── */}
-        <div className="w-72 flex-none flex flex-col min-h-0">
-          <div className="px-3 py-2 border-b text-xs font-bold text-gray-600 flex items-center justify-between shrink-0">
-            <span>比賽統計</span>
-            {statsMatches.length > 1 && (
-              <span className="text-gray-400 font-normal">← 滑動看其他場</span>
+                      <Button asChild variant="ghost">
+                        <Link href={`/matches/${id}/analytics`}>結束比賽</Link>
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </div>
             )}
           </div>
 
-          {/* 每個 snap pane 是一場比賽的統計；CSS scroll-snap 不需要任何 JS */}
-          <div className="flex-1 flex overflow-x-auto snap-x snap-mandatory min-h-0 [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
-            {statsMatches.map((m, i) => (
-              <div key={m.id} className="w-72 flex-none snap-center flex flex-col min-h-0">
-                <div className="shrink-0 bg-white border-b px-3 py-1.5 flex items-center gap-2">
-                  <span className="text-xs font-bold truncate">vs {m.opponent}</span>
-                  {m.id === id && (
-                    <span className="text-[10px] bg-blue-50 text-blue-600 px-1 rounded shrink-0">
-                      本場
+          {/* ── 右欄：統計（水平 snap scroll，可左右滑看其他場） ── */}
+          <div className="w-72 flex-none flex flex-col min-h-0">
+            <div className="px-3 py-2 border-b text-xs font-bold text-gray-600 flex items-center justify-between shrink-0">
+              <span>比賽統計</span>
+              {statsMatches.length > 1 && (
+                <span className="text-gray-400 font-normal">← 滑動看其他場</span>
+              )}
+            </div>
+
+            {/* 每個 snap pane 是一場比賽的統計；CSS scroll-snap 不需要任何 JS */}
+            <div className="flex-1 flex overflow-x-auto snap-x snap-mandatory min-h-0 [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
+              {statsMatches.map((m, i) => (
+                <div key={m.id} className="w-72 flex-none snap-center flex flex-col min-h-0">
+                  <div className="shrink-0 bg-white border-b px-3 py-1.5 flex items-center gap-2">
+                    <span className="text-xs font-bold truncate">vs {m.opponent}</span>
+                    {m.id === id && (
+                      <span className="text-[10px] bg-blue-50 text-blue-600 px-1 rounded shrink-0">
+                        本場
+                      </span>
+                    )}
+                    <span className="text-[10px] text-gray-400 ml-auto shrink-0">
+                      {i + 1}/{statsMatches.length}
                     </span>
-                  )}
-                  <span className="text-[10px] text-gray-400 ml-auto shrink-0">
-                    {i + 1}/{statsMatches.length}
-                  </span>
+                  </div>
+                  <div className="flex-1 overflow-y-auto">
+                    <ScoreSheetStats
+                      players={m.players}
+                      record={m.id === id ? record : undefined}
+                      currentSetSubCount={m.id === id ? currentSubCount : undefined}
+                      totalSubCount={m.id === id ? totalSubCount : undefined}
+                      currentSetTimeoutCount={m.id === id ? currentTimeoutCount : undefined}
+                      totalTimeoutCount={m.id === id ? totalTimeoutCount : undefined}
+                    />
+                  </div>
                 </div>
-                <div className="flex-1 overflow-y-auto">
-                  <ScoreSheetStats
-                    players={m.players}
-                    record={m.id === id ? record : undefined}
-                    currentSetSubCount={m.id === id ? currentSubCount : undefined}
-                    totalSubCount={m.id === id ? totalSubCount : undefined}
-                    currentSetTimeoutCount={m.id === id ? currentTimeoutCount : undefined}
-                    totalTimeoutCount={m.id === id ? totalTimeoutCount : undefined}
-                  />
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
-      </div>
 
-      {gesture?.step === "action" && (
-        <RadialMenu
-          center={{ x: gesture.target.screenX, y: gesture.target.screenY }}
-          // #50：六顆動作永遠留在固定方位（肌肉記憶），只把當下不可能的那顆「反灰」（不是
-          // 拿掉）。disabledActions 依 發球方/動作方 算出要反灰的動作（規則#1 發球/接發互斥，
-          // 恰好一顆）。選項數固定 6 個，RadialMenu 的環狀角度不會因為反灰而跑掉。
-          options={ACTION_OPTIONS.map((o) => ({
-            ...o,
-            disabled: disabledActions(currentSet?.serving ?? null, gesture.target.side).includes(
-              o.value,
-            ),
-          }))}
-          onSelect={handleActionSelect}
-          onCancel={() => setGesture(null)}
-        />
-      )}
-      {gesture?.step === "outcome" && (
-        <RadialMenu
-          center={{ x: gesture.target.screenX, y: gesture.target.screenY }}
-          options={OUTCOME_OPTIONS}
-          onSelect={handleOutcomeSelect}
-          onCancel={() => setGesture(null)}
-          startAngle={180}
-        />
-      )}
-      {gesture?.step === "outcome-only" && (
-        <RadialMenu
-          center={{ x: gesture.screenX, y: gesture.screenY }}
-          options={OUTCOME_OPTIONS}
-          onSelect={handleOutcomeSelect}
-          onCancel={() => setGesture(null)}
-          startAngle={180}
-        />
-      )}
+        {gesture?.step === "action" && (
+          <RadialMenu
+            center={{ x: gesture.target.screenX, y: gesture.target.screenY }}
+            // #50：六顆動作永遠留在固定方位（肌肉記憶），只把當下不可能的那顆「反灰」（不是
+            // 拿掉）。disabledActions 依 發球方/動作方 算出要反灰的動作（規則#1 發球/接發互斥，
+            // 恰好一顆）。選項數固定 6 個，RadialMenu 的環狀角度不會因為反灰而跑掉。
+            options={ACTION_OPTIONS.map((o) => ({
+              ...o,
+              disabled: disabledActions(currentSet?.serving ?? null, gesture.target.side).includes(
+                o.value,
+              ),
+            }))}
+            onSelect={handleActionSelect}
+            onCancel={() => setGesture(null)}
+          />
+        )}
+        {gesture?.step === "outcome" && (
+          <RadialMenu
+            center={{ x: gesture.target.screenX, y: gesture.target.screenY }}
+            options={OUTCOME_OPTIONS}
+            onSelect={handleOutcomeSelect}
+            onCancel={() => setGesture(null)}
+            startAngle={180}
+          />
+        )}
+        {gesture?.step === "outcome-only" && (
+          <RadialMenu
+            center={{ x: gesture.screenX, y: gesture.screenY }}
+            options={OUTCOME_OPTIONS}
+            onSelect={handleOutcomeSelect}
+            onCancel={() => setGesture(null)}
+            startAngle={180}
+          />
+        )}
+      </div>
     </div>
   );
 }

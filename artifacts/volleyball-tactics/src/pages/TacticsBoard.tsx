@@ -1,6 +1,6 @@
 import React, { useEffect } from "react";
-import { useParams, Link } from "wouter";
-import BackToMatchListButton from "../components/BackToMatchListButton";
+import { useParams } from "wouter";
+import MatchNavRail, { matchBackHref } from "../components/MatchNavRail";
 import RotationTable from "../components/RotationTable";
 import TacticsBoardPanel from "../components/TacticsBoardPanel";
 import Court from "../components/Court";
@@ -32,7 +32,7 @@ export default function TacticsBoard() {
   }, [match, id, setRoster]);
 
   // tournamentId 存在時返回該資料夾頁，否則返回根列表。
-  const backHref = match?.tournamentId ? `/tournaments/${match.tournamentId}` : "/";
+  const backHref = matchBackHref(match?.tournamentId);
 
   return (
     // 整頁共用一張材質更豐富的背景（兩顆柔光暈疊底層斜切漸層，呼應球場的螢光綠強調色
@@ -76,20 +76,15 @@ export default function TacticsBoard() {
         <div className="tb-mark-caption">Tactics Board · Est. 2026</div>
       </div>
 
-      <header className="relative z-10 flex shrink-0 items-center justify-between border-b border-white/[0.08] bg-white/[0.02] px-4 py-3 backdrop-blur-sm">
-        <BackToMatchListButton href={backHref} />
+      <header className="relative z-10 flex shrink-0 items-center justify-center border-b border-white/[0.08] bg-white/[0.02] px-4 py-3 backdrop-blur-sm">
         <h1 className="text-lg font-bold">{match ? `vs ${match.opponent}` : "戰術板"}</h1>
-        <Link
-          href={`/matches/${id}/record`}
-          className="inline-flex h-9 items-center rounded-full border border-white/[0.26] px-4
-            text-[13px] font-semibold text-[#f5f5f0] transition hover:border-[#c6f135]
-            hover:text-[#c6f135]"
-        >
-          計分表
-        </Link>
       </header>
 
       <div className="relative z-10 flex min-h-0 flex-1 overflow-hidden">
+        {/* 共用左側導覽軌（issue #160）：以前「回列表」「計分表」是這個 header 自己的
+            <BackToMatchListButton> / <Link>，跟另外兩個match-scoped頁面各刻各的、樣式
+            不統一。現在三個頁共用同一個 MatchNavRail，導覽只在一個地方定義。 */}
+        <MatchNavRail matchId={id ?? ""} backHref={backHref} active="board" />
         <div className="flex w-[260px] flex-shrink-0 flex-col border-r border-white/[0.08] bg-white/[0.02] backdrop-blur-sm">
           <RotationTable />
         </div>
