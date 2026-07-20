@@ -430,7 +430,10 @@
       這份文件原本只涵蓋計分表，現在補上輪轉表跟戰術板兩張小圖，外加一張大圖串起三個頁面怎麼跳轉、各自用哪些資料。程式碼命名已經照重構後的實際狀態更新（RotationTable
       / TacticsBoardPanel / ScoreSheet）。
     </p>
-    <p class="meta">對照 commit f3f2b7d（三方拆分重構，PR #28）</p>
+    <p class="meta">
+      最後同步：2026-07-20（issue #163）· 對照 commit f4b5743 · 涵蓋 #154 戰術板單向化與 #160 UI
+      大改版（C1 導覽軌／C2 兩模式狀態機／C3 快照快速入口）後的實際行為
+    </p>
   </header>
 
   <nav class="toc">
@@ -452,19 +455,21 @@
     <div class="diagram-shell">
       <pre class="mermaid">
 flowchart LR
-    ML["比賽列表<br/>MatchList.tsx · route /<br/>useMatches<br/>每張 MatchCard 有兩顆按鈕：「戰術板」／「計分表」"]
+    ML["比賽列表<br/>MatchList.tsx · route /<br/>useMatches<br/>每張 MatchCard 有按鈕通往各 match-scoped 頁"]
     TB["輪轉表／戰術板頁<br/>TacticsBoard.tsx · route /matches/:id/board<br/>輪轉表 = RotationTable + useRotationTable<br/>戰術板 = TacticsBoardPanel + useTacticsBoard<br/>共用 Court.tsx 畫球場（外層頁面本身沒改名，刻意保留）"]
     SS["計分表頁<br/>ScoreSheet.tsx · route /matches/:id/record<br/>useScoreSheet（讀寫，keyed by matchId）<br/>useRotationTable（只讀站位/roster）"]
+    MA["數據分析頁<br/>MatchAnalytics.tsx · route /matches/:id/analytics<br/>由 events/rallies 讀回推導統計（issue #65 視圖一）"]
 
-    ML -->|"點 MatchCard「戰術板」"| TB
-    TB -.->|"← 比賽列表"| ML
-    ML -->|"點 MatchCard「計分表」"| SS
-    SS -.->|"← 比賽列表"| ML
-    TB ==>|"頁首「計分表」按鈕"| SS
-    SS -.->|"頁首「戰術板」／hasLineup=false 時的導引"| TB
+    ML -->|"點 MatchCard 進任一 match-scoped 頁"| TB
+    ML --> SS
+    TB <-->|"MatchNavRail"| SS
+    SS <-->|"MatchNavRail"| MA
+    TB <-->|"MatchNavRail"| MA
+    TB -.->|"導覽軌「返回」<br/>matchBackHref()：有 tournamentId 回資料夾頁，否則回根列表"| ML
+    SS ==>|"右欄底部「快速戰術板」：captureFromScoreSheet(activeLineup)<br/>→ startSession() → 導航（issue #160 C3）"| TB
 
     classDef page fill:#242a2e,stroke:#98a29a,color:#edeae2;
-    class ML,TB,SS page;
+    class ML,TB,SS,MA page;
       </pre>
     </div>
 
@@ -492,19 +497,28 @@ flowchart LR
             <td>比賽列表</td>
             <td class="code">/</td>
             <td class="code">useMatches</td>
-            <td>入口頁，每場比賽兩個按鈕</td>
+            <td>入口頁；比賽可歸在資料夾（tournaments）底下</td>
           </tr>
           <tr>
             <td>輪轉表／戰術板頁</td>
             <td class="code">/matches/:id/board</td>
             <td class="code">useRotationTable + useTacticsBoard</td>
-            <td>兩個獨立 store，戰術板單向依賴輪轉表</td>
+            <td>
+              兩個獨立 store，戰術板<b>嚴格單向</b>：只在 UI 邊界擷取純值快照，store 本身不准 import
+              另一邊（ESLint no-restricted-imports，issue #154）
+            </td>
           </tr>
           <tr>
             <td>計分表頁</td>
             <td class="code">/matches/:id/record</td>
             <td class="code">useScoreSheet（讀寫）+ useRotationTable（唯讀）</td>
-            <td>受 hasLineup guard 保護</td>
+            <td>受 hasLineup guard 保護；站位真相在自己的逐局 lineup 快照（issue #115）</td>
+          </tr>
+          <tr>
+            <td>數據分析頁</td>
+            <td class="code">/matches/:id/analytics</td>
+            <td class="code">由後端 events/rallies 讀回推導</td>
+            <td>issue #65 視圖一；比率統計與球線熱區目前是誠實空狀態</td>
           </tr>
         </tbody>
       </table>
@@ -589,39 +603,40 @@ flowchart LR
           </div>
         </div>
 
-        <div class="lane red">
-          <div class="lane-label"><span class="dot red"></span>C3 · 移除球員（跨 store）</div>
+        <div class="lane">
+          <div class="lane-label"><span class="dot muted"></span>C3 · 移除球員</div>
           <div class="step-row">
             <div class="step">右鍵球員 / L 拖出球場下緣</div>
             <div class="arrow">→</div>
-            <div class="step commit">
-              removePlayerFromCourt()（輪轉表）+ removePlayerTacticPositions()（戰術板）
-            </div>
-            <span class="warn">⚠ R2</span>
+            <div class="step commit">removePlayerFromCourt()（只動輪轉表，issue #154）</div>
           </div>
         </div>
 
         <div class="lane">
           <div class="lane-label"><span class="dot muted"></span>C4 · 切換輪次</div>
           <div class="step-row">
-            <div class="step">點 6 個縮圖之一</div>
+            <div class="step">點「‹ 上一輪」／「下一輪 ›」</div>
             <div class="arrow">→</div>
-            <div class="step commit">setCurrentRotation(i)</div>
+            <div class="step">若正在編未存的 session，先確認捨棄</div>
             <div class="arrow">→</div>
-            <div class="step">（背景）戰術板訂閱這個變化，重置自己的 undo 歷史/選取/視圖</div>
+            <div class="step commit">
+              discardSession() 或 setCourtView("rotation") → setCurrentRotation(i)
+            </div>
           </div>
+          <p class="phase-note" style="margin-top: 0.4rem">
+            兩處已變：UI 從 6 個輪次縮圖改成「上一輪／下一輪」兩顆按鈕（issue
+            #17）；而且這<b>不再是「戰術板訂閱輪轉表變化」的背景同步</b>——那條全域 subscribe 在
+            issue #119 拿掉了，現在由切換元件自己明確呼叫兩邊，呼叫點就在
+            <code>components/RotationSwitcher.tsx · go()</code>，看得到、追得到。
+          </p>
         </div>
 
-        <div class="lane red">
-          <div class="lane-label"><span class="dot red"></span>C5 · 重置站位（跨 store）</div>
+        <div class="lane">
+          <div class="lane-label"><span class="dot muted"></span>C5 · 重置站位</div>
           <div class="step-row">
             <div class="step">點「重置站位」</div>
             <div class="arrow">→</div>
-            <div class="step commit">
-              resetCurrentRotationPositions()（輪轉表）+
-              resetCurrentRotationTactics()（戰術板）一次呼叫兩邊
-            </div>
-            <span class="warn">⚠ R3</span>
+            <div class="step commit">resetCurrentRotationPositions()（只動輪轉表，issue #154）</div>
           </div>
         </div>
 
@@ -653,10 +668,9 @@ flowchart LR
       <span><span class="swatch" style="background: var(--amber)"></span>一般球員站位</span>
       <span><span class="swatch" style="background: var(--green)"></span>自由球員</span>
       <span
-        ><span class="swatch" style="background: var(--red)"></span>跨 store
-        呼叫（戰術板也要跟著動）</span
+        ><span class="swatch" style="background: var(--muted)"></span>導覽 / 切換 / 取消 /
+        移除</span
       >
-      <span><span class="swatch" style="background: var(--muted)"></span>導覽 / 切換 / 取消</span>
     </div>
     <pre class="mermaid">
 stateDiagram-v2
@@ -669,9 +683,9 @@ stateDiagram-v2
     B --> C: 拖曳排陣命中
     C --> C: 拖曳/換位（C1）
     C --> C: 自由球員上場（C2）
-    C --> C: 移除球員（C3）⚠R2
+    C --> C: 移除球員（C3）
     C --> C: 切換輪次（C4）
-    C --> C: 重置站位（C5）⚠R3
+    C --> C: 重置站位（C5）
 
     note right of C
         C1~C6 都是離開再回來的自迴圈，沒有子選單
@@ -717,19 +731,19 @@ stateDiagram-v2
             <td>C 編輯中</td>
             <td class="code">移除球員（C3）</td>
             <td>C 編輯中</td>
-            <td>需同時清輪轉表+戰術板兩邊<span class="warn">⚠R2</span></td>
+            <td>只動輪轉表（issue #154 起）</td>
           </tr>
           <tr>
             <td>C 編輯中</td>
             <td class="code">切換輪次（C4）</td>
             <td>C 編輯中</td>
-            <td>觸發戰術板的訂閱同步</td>
+            <td>RotationSwitcher 明確呼叫兩邊，非背景訂閱</td>
           </tr>
           <tr>
             <td>C 編輯中</td>
             <td class="code">重置站位（C5）</td>
             <td>C 編輯中</td>
-            <td>同時清輪轉表+戰術板兩邊<span class="warn">⚠R3</span></td>
+            <td>只動輪轉表（issue #154 起）</td>
           </tr>
         </tbody>
       </table>
@@ -756,22 +770,28 @@ stateDiagram-v2
       <div class="bug">
         <div class="bug-num">R2</div>
         <div class="bug-body">
-          <b>移除球員是兩個 store 各自的動作</b
+          <b>（不再適用）移除球員是兩個 store 各自的動作</b
           ><span
-            >右鍵刪除/拖出下緣，會同時呼叫輪轉表的 removePlayerFromCourt 跟戰術板的
-            removePlayerTacticPositions。這兩個呼叫寫在同一個元件裡目前沒問題，但如果之後有第三個地方也要「移除球員」，很容易漏呼叫其中一個，留下殘影。</span
-          ><br /><span class="ref">components/PlayerNode.tsx · removeFromCourt() · issue #36</span>
+            >2026-07-20 更新：issue #154
+            把戰術板改成「用完即丟的單景快照」之後，戰術板不再持有任何以 playerId
+            為鍵的常駐站位，<code>removePlayerTacticPositions()</code> 這個 action 已整個刪除。現在
+            <code>PlayerNode.tsx</code> 只呼叫輪轉表的
+            <code>removePlayerFromCourt()</code>，沒有第二邊可以漏掉——問題連同成因一起消失。</span
+          ><br /><span class="ref">components/PlayerNode.tsx · issue #36 · #154</span>
         </div>
       </div>
       <div class="bug">
         <div class="bug-num">R3</div>
         <div class="bug-body">
-          <b>「重置站位」按鈕放在輪轉表面板，實際操作兩個 store</b
+          <b>（不再適用）「重置站位」按鈕放在輪轉表面板，實際操作兩個 store</b
           ><span
-            >目前只有「全部清空」跟「不清」兩個選項，沒有「只清站位、保留畫筆」這種中間選項。</span
+            >2026-07-20 更新：同 R2，<code>resetCurrentRotationTactics()</code> 已隨 issue #154
+            刪除。「重置站位」現在只呼叫 <code>resetCurrentRotationPositions()</code>，語意跟按鈕
+            名稱一致（就是清站位），而「保留畫筆與否」不再是問題——畫筆住在當下的白板 session
+            裡，跟輪轉表站位本來就是兩件事。</span
           ><br /><span class="ref"
-            >components/RotationTable.tsx · handleResetRotation() · 確認彈窗已在 issue #29
-            修正</span
+            >components/RotationTable.tsx · handleResetRotation() · 確認彈窗已在 issue #29 修正 ·
+            #154</span
           >
         </div>
       </div>
@@ -794,46 +814,55 @@ stateDiagram-v2
     <h2>戰術板 — 操作流程與狀態機</h2>
 
     <div class="callout">
-      <b>自上次更新以來的變化（2026-07-03）：</b
-      >戰術板從「讀輪轉表即時站位當背景」改成「進入戰術布置那一刻拍一張快照，之後完全獨立」——下面內文提到「讀輪轉表站位當背景」的地方已經不準確，實際行為是：點「戰術布置」→
-      `enterTacticsLayout()` 複製一份站位 →
-      之後編輯不再寫回輪轉表。自由球員在戰術布置裡也不再檢查「只能站後排」，變成一般標記。連帶：入口按鈕改成「戰術布置」（用輪轉表重拍）/「編輯」（沿用已載入的已儲存戰術，需先點清單才會亮起）；布置模式底部是「取消／儲存／另存新檔」；畫筆物件（箭頭/文字/排球）原本不能拖曳移動的
-      bug 已修正。舊的「已知問題」清單裡 T3、T5 已經因為這次改動而不再適用，見下方標註。
+      <b>自上次更新以來的變化（2026-07-20）：</b>戰術板經過 issue #154 與 #160 C2/C3 兩輪重構，
+      舊描述裡的 <code>isLayoutMode</code>、<code>enterTacticsLayout()</code>、以及「布置模式會寫回
+      /清掉輪轉表資料」等機制<b>已經不存在</b>（不只是過期，是被刪掉了）。現在的形狀是：戰術板持有
+      一個「用完即丟的單景 session」，session 裡的球員是<b>反正規化的快照</b>（姓名/背號/位置在擷取
+      當下就凍進去，沒有指回 roster 的外鍵），所以「不會寫回輪轉表」不再靠自律，而是型別上根本沒有
+      能寫回去的東西（capture by value）。這條單向性由 ESLint
+      <code>no-restricted-imports</code> 焊進 CI——<code>useTacticsBoard.ts</code> 不准 import
+      <code>useRotationTable</code> / <code>useScoreSheet</code>。
     </div>
 
     <p class="section-intro">
-      戰術板只有兩種模式：唯讀檢視、跟戰術布置。大部分操作只在布置模式裡才能做，進入布置時會把輪轉表當下的站位拍一張快照，之後編輯完全獨立，不會寫回輪轉表。
+      戰術板有三種模式，但<b>沒有任何 <code>mode</code> / <code>phase</code> 欄位</b>——模式是從
+      store 既有的兩個欄位推導出來的（見 <code>TacticsBoardPanel.tsx</code>）：
+      <code>session !== null</code> → 編輯；<code>viewingScene !== null</code>（且無 session）→
+      唯讀檢視；兩者皆 null → 瀏覽。刻意不加中間的「排列中」狀態：輸入一張快照、開始編輯，這件事
+      本身就是 <code>startSession()</code> 一次做完的。
     </p>
 
     <div class="phase-list">
       <div class="phase-card">
         <div class="phase-head">
           <span class="phase-tag">A</span>
-          <h3>唯讀檢視（預設）</h3>
+          <h3>browse · 戰術庫瀏覽（預設）</h3>
         </div>
         <p class="phase-note">
-          條件：<code>isLayoutMode === false</code
-          >。可以切輪轉/戰術視圖，但不能新增/選取/拖曳任何標記。
+          條件：<code>session === null &amp;&amp; viewingScene === null</code>。面板 =
+          <code>TacticsBrowsePanel</code>：這一場的已儲存戰術清單（<code>TacticsList</code>， issue
+          #119 起帶 <code>matchId</code> 過濾，看不到別場的）＋「新增戰術」按鈕。
         </p>
         <div class="step-row">
-          <div class="step">顯示「戰術布置」＋「編輯」（預設鎖住）＋已儲存戰術列表</div>
+          <div class="step">點「新增戰術」</div>
           <div class="arrow">→</div>
-          <div class="step">點已存清單裡的某個戰術</div>
-          <div class="arrow">→</div>
-          <div class="step commit">loadProject() 載入該戰術（唯讀檢視），「編輯」按鈕解鎖</div>
-        </div>
-        <div class="step-row" style="margin-top: 0.4rem">
-          <div class="step">點「戰術布置」</div>
+          <div class="step"><code>NewTacticDialog</code> 選來源：擷取現在輪轉位 / 空站位</div>
           <div class="arrow">→</div>
           <div class="step commit">
-            enterTacticsLayout()：用輪轉表現在的站位重新拍照 → 進入 B（蓋掉目前顯示的內容）
+            captureFromRotation() / captureBlank() → startSession(snapshot) → 進入 C
           </div>
         </div>
         <div class="step-row" style="margin-top: 0.4rem">
-          <div class="step">點「編輯」（需先載入過一個已儲存戰術才會亮起）</div>
+          <div class="step">點清單裡某一筆已存戰術</div>
           <div class="arrow">→</div>
-          <div class="step commit">setLayoutMode(true) → 進入 B，沿用剛載入的那份，不重新拍照</div>
+          <div class="step commit">loadProject()（走 parseSavedTactic 做 zod 驗證＋舊檔轉接）</div>
+          <div class="arrow">→</div>
+          <div class="step">進入 B（唯讀檢視）</div>
         </div>
+        <p class="phase-note" style="margin-top: 0.4rem">
+          擷取一律發生在 <b>UI 邊界</b>：是面板的 click handler 自己去讀輪轉表 state、呼叫純函式
+          算出快照、再把純值傳進 <code>startSession()</code>。store 本身完全不認識輪轉表。
+        </p>
       </div>
 
       <div class="phase-connector">↓</div>
@@ -841,58 +870,96 @@ stateDiagram-v2
       <div class="phase-card">
         <div class="phase-head">
           <span class="phase-tag">B</span>
-          <h3>戰術布置模式 — 主要工作狀態</h3>
+          <h3>viewing · 唯讀檢視已存戰術</h3>
         </div>
         <p class="phase-note">
-          條件：<code>isLayoutMode === true</code>。畫面換成畫筆工具 / 防守範圍 / 戰術管理。
+          條件：<code>viewingScene !== null</code> 且沒有 session。面板 =
+          <code>TacticsViewingPanel</code>：顯示戰術名稱 ＋「編輯」「返回」。看的是一張凍結的照片，
+          不能改任何東西。
+        </p>
+        <div class="step-row">
+          <div class="step">點「編輯」</div>
+          <div class="arrow">→</div>
+          <div class="step commit">
+            enterEditFromViewing()：用那張 scene 開一個可改的 session，帶回原本的 serverId/name
+          </div>
+          <div class="arrow">→</div>
+          <div class="step">進入 C</div>
+        </div>
+        <div class="step-row" style="margin-top: 0.4rem">
+          <div class="step">點「返回」</div>
+          <div class="arrow">→</div>
+          <div class="step commit">
+            setCourtView("rotation") — 順手清掉 viewingScene/viewingTacticId/Name，回到 A
+          </div>
+        </div>
+      </div>
+
+      <div class="phase-connector">↓</div>
+
+      <div class="phase-card">
+        <div class="phase-head">
+          <span class="phase-tag">C</span>
+          <h3>edit · 編輯 session — 主要工作狀態</h3>
+        </div>
+        <p class="phase-note">
+          條件：<code>session !== null</code>。面板 = <code>TacticsEditPanel</code>（畫筆工具／防守
+          範圍／存檔列）＋常駐的 <code>TacticsRosterPanel</code> 球員名單。「有未存內容」的判準是
+          <code>session.history.length &gt; 1</code>——session 一建立就種了一格起始歷史，長度超過 1
+          就代表使用者動過東西。
         </p>
 
         <div class="lane amber">
           <div class="lane-label">
-            <span class="dot amber"></span>B1 · 畫線工具（箭頭/虛線/攻擊線）
+            <span class="dot amber"></span>C1 · 畫線工具（箭頭/虛線/攻擊線）
           </div>
           <div class="step-row">
             <div class="step">選工具</div>
             <div class="arrow">→</div>
-            <div class="step">在球場空白處按下</div>
+            <div class="step">在球場空白處按下（addMarker 帶 skipHistory）</div>
             <div class="arrow">→</div>
             <div class="step">拖曳中持續更新終點</div>
             <div class="arrow">→</div>
-            <div class="step commit">鬆開 → addMarker() 定案，自動切回選取</div>
+            <div class="step commit">pointerUp 才記一次完整的線進歷史（issue #147）</div>
           </div>
         </div>
 
         <div class="lane amber">
-          <div class="lane-label"><span class="dot amber"></span>B2 · 文字／排球／防守範圍工具</div>
+          <div class="lane-label"><span class="dot amber"></span>C2 · 文字／排球／防守範圍工具</div>
           <div class="step-row">
             <div class="step">選工具</div>
             <div class="arrow">→</div>
             <div class="step">點一下球場</div>
             <div class="arrow">→</div>
-            <div class="step commit">addMarker() / addDefenseRange()，立刻切回選取</div>
+            <div class="step commit">addMarker() / addDefenseRange()，新增即記歷史，切回選取</div>
           </div>
         </div>
 
         <div class="lane blue">
-          <div class="lane-label"><span class="dot blue"></span>B3 · 戰術視圖自由拖曳站位</div>
+          <div class="lane-label"><span class="dot blue"></span>C3 · 站位拖曳（session 內）</div>
           <div class="step-row">
-            <div class="step">拖球員（名單或場上）</div>
+            <div class="step">拖場上球員</div>
             <div class="arrow">→</div>
-            <div class="step">鬆開</div>
-            <div class="arrow">→</div>
-            <div class="step commit">placePlayerFree()——一般球員只寫自己的 tacticPositions</div>
+            <div class="step commit">moveSessionPlayer(sourcePlayerId, x, y)</div>
           </div>
           <div class="step-row" style="margin-top: 0.4rem">
-            <div class="step">若是自由球員</div>
+            <div class="step">從常駐名單面板把人拖進球場</div>
             <div class="arrow">→</div>
-            <div class="step commit">
-              （2026-07-03 起）跟一般球員一樣，只是普通標記，不檢查後排、不寫回輪轉表
-            </div>
+            <div class="step commit">placeSessionPlayer()（upsert）</div>
           </div>
+          <div class="step-row" style="margin-top: 0.4rem">
+            <div class="step">把人拖出去 / 移除</div>
+            <div class="arrow">→</div>
+            <div class="step commit">removeSessionPlayer() — 只動 session，輪轉表毫髮無傷</div>
+          </div>
+          <p class="phase-note" style="margin-top: 0.4rem">
+            自由球員在這裡跟一般球員完全一樣，只是個標記——不檢查「只能站後排」，因為這是張自由塗鴉
+            用的快照，不是真的輪轉合法性檢查。
+          </p>
         </div>
 
         <div class="lane">
-          <div class="lane-label"><span class="dot muted"></span>B4 · 選取／刪除／undo</div>
+          <div class="lane-label"><span class="dot muted"></span>C4 · 選取／刪除／undo</div>
           <div class="step-row">
             <div class="step">點某個標記/防守範圍</div>
             <div class="arrow">→</div>
@@ -904,24 +971,28 @@ stateDiagram-v2
         </div>
 
         <div class="lane green">
-          <div class="lane-label"><span class="dot green"></span>B5 · 取消 / 儲存 / 另存新檔</div>
+          <div class="lane-label"><span class="dot green"></span>C5 · 取消 / 儲存 / 另存新檔</div>
           <div class="step-row">
-            <div class="step">「取消」</div>
+            <div class="step">「取消」（有未存內容先跳確認）</div>
             <div class="arrow">→</div>
-            <div class="step commit">不呼叫存檔 API，直接回 A（輪轉表）</div>
+            <div class="step commit">discardSession() → 回 A</div>
           </div>
           <div class="step-row" style="margin-top: 0.4rem">
-            <div class="step">「儲存」（有 activeProjectId 就覆寫，沒有就新建）</div>
+            <div class="step">「儲存」（session.serverId 有就覆寫，沒有就新建）</div>
             <div class="arrow">→</div>
-            <div class="step commit">buildSnapshot() 合併兩邊資料 → create/updateTactic</div>
+            <div class="step commit">buildSavedTactic()（v2 單景快照）→ create/updateTactic</div>
             <div class="arrow">→</div>
-            <div class="step">回到 A（輪轉表）</div>
+            <div class="step">成功後 discardSession()，回 A</div>
           </div>
           <div class="step-row" style="margin-top: 0.4rem">
             <div class="step">「另存新檔」</div>
             <div class="arrow">→</div>
-            <div class="step commit">buildSnapshot() → 永遠 createTactic（複製一份新的）</div>
+            <div class="step commit">buildSavedTactic() → 永遠 createTactic（複製一份新的）</div>
           </div>
+          <p class="phase-note" style="margin-top: 0.4rem">
+            存完就結束 session：白板是暫時工具，用完即丟，內容已經進資料庫。存檔一律寫 v2 格式
+            （<code>SavedTacticDataV2</code>）——反正規化之後舊格式已經無法忠實重建。
+          </p>
         </div>
       </div>
 
@@ -930,12 +1001,37 @@ stateDiagram-v2
       <div class="phase-card">
         <div class="phase-head">
           <span class="phase-tag">·</span>
-          <h3>分享匯出（兩種模式都看得到）</h3>
+          <h3>外部入口 · 從計分頁直落編輯（issue #160 C3）</h3>
+        </div>
+        <p class="phase-note">
+          計分頁右欄底部有一顆「快速戰術板」，不經過 A 就直接把使用者送進 C。
+        </p>
+        <div class="step-row">
+          <div class="step">計分頁點「快速戰術板」</div>
+          <div class="arrow">→</div>
+          <div class="step">captureFromScoreSheet(activeLineup, ourRotation, players)</div>
+          <div class="arrow">→</div>
+          <div class="step commit">startSession() → setLocation(/matches/:id/board)</div>
+        </div>
+        <p class="phase-note" style="margin-top: 0.4rem">
+          兩個容易踩的細節：<b>(1)</b> 站位來源是計分表自己的 <code>activeLineup</code>（逐局先發
+          快照），不是全域輪轉表 store——後者會把 issue #115 解掉的耦合又接回來。<b>(2)</b>
+          交棒方式是「A 頁先 startSession() 再導航」，而不是 query param 到站再擷取；後者會逼戰術板
+          去 import 計分表 store，直接撞上焊進 CI 的那道 import 牆。連帶
+          <code>resetBoardView(matchId)</code> 也改成分辨跨場與同場：跨場才清 session，同場（例如
+          剛交棒過來）保留。
+        </p>
+      </div>
+
+      <div class="phase-card">
+        <div class="phase-head">
+          <span class="phase-tag">·</span>
+          <h3>分享匯出（三種模式都看得到）</h3>
         </div>
         <div class="step-row">
           <div class="step">匯出 PNG</div>
-          <div class="step">匯出 JSON（buildSnapshot 直接輸出）</div>
-          <div class="step">匯入 JSON（importState 分派給兩個 store）</div>
+          <div class="step">匯出 JSON（buildSavedTactic 輸出 v2）</div>
+          <div class="step">匯入 JSON（importState → parseSavedTactic → 落在唯讀檢視 B）</div>
         </div>
       </div>
     </div>
@@ -944,31 +1040,29 @@ stateDiagram-v2
   <div class="diagram-shell" style="margin-top: 1.5rem">
     <div class="legend" style="margin-top: 0">
       <span><span class="swatch" style="background: var(--amber)"></span>畫筆/防守範圍</span>
-      <span
-        ><span class="swatch" style="background: var(--blue)"></span
-        >自由站位（含自由球員，一般標記）</span
-      >
+      <span><span class="swatch" style="background: var(--blue)"></span>session 內站位拖曳</span>
       <span><span class="swatch" style="background: var(--muted)"></span>選取/刪除/undo</span>
       <span><span class="swatch" style="background: var(--green)"></span>模式切換/存檔</span>
-      <span><span class="swatch" style="background: var(--red)"></span>背景同步（來自輪轉表）</span>
     </div>
     <pre class="mermaid">
 stateDiagram-v2
-    A: A · 唯讀（isLayoutMode === false）
-    B: B · 戰術布置（isLayoutMode === true）
+    A: A · browse（session === null 且 viewingScene === null）
+    B: B · viewing（viewingScene !== null，唯讀）
+    C: C · edit（session !== null）
 
     [*] --> A
-    A --> B: 進入戰術布置（setLayoutMode(true)）
-    B --> B: 畫筆/防守範圍（B1,B2）
-    B --> B: 戰術視圖自由站位（B3）
-    B --> B: 選取/刪除/undo（B4）⚠T4
-    B --> A: 儲存/另存/新建 → 回唯讀
+    A --> C: 新增戰術 → 選來源 → startSession()
+    A --> B: 點清單某筆 → loadProject()
+    B --> C: 「編輯」→ enterEditFromViewing()
+    B --> A: 「返回」→ setCourtView("rotation")
+    C --> C: 畫筆/防守範圍（C1,C2）
+    C --> C: session 內站位拖曳（C3）
+    C --> C: 選取/刪除/undo（C4）⚠T4
+    C --> A: 取消/儲存/另存（C5）→ discardSession()
+    [*] --> C: 計分頁「快速戰術板」直落編輯（#160 C3）
 
-    note left of A
-        輪轉切換 → 重置 undo/選取（背景，跨 store 訂閱）
-    end note
-    note right of B
-        B1~B5 都是自迴圈
+    note right of C
+        C1~C4 都是自迴圈；模式是推導值，store 沒有 mode 欄位
     end note
     </pre>
 
@@ -984,40 +1078,64 @@ stateDiagram-v2
         </thead>
         <tbody>
           <tr>
-            <td>A 唯讀</td>
-            <td class="code">setLayoutMode(true)</td>
-            <td>B 戰術布置</td>
-            <td>—</td>
+            <td>A browse</td>
+            <td class="code">新增戰術 → startSession()</td>
+            <td>C edit</td>
+            <td>來源二選一：擷取現在輪轉位 / 空站位</td>
           </tr>
           <tr>
-            <td>B 戰術布置</td>
-            <td class="code">畫筆/防守範圍工具（B1,B2）</td>
-            <td>B 戰術布置</td>
-            <td>用完自動切回選取</td>
+            <td>A browse</td>
+            <td class="code">loadProject()</td>
+            <td>B viewing</td>
+            <td>zod 驗證失敗會 toast「戰術格式無法辨識」</td>
           </tr>
           <tr>
-            <td>B 戰術布置</td>
-            <td class="code">自由站位（B3）</td>
-            <td>B 戰術布置</td>
-            <td>一般標記，不檢查後排、不寫回輪轉表</td>
+            <td>B viewing</td>
+            <td class="code">enterEditFromViewing()</td>
+            <td>C edit</td>
+            <td>帶回原 serverId，之後「儲存」是覆寫</td>
           </tr>
           <tr>
-            <td>B 戰術布置</td>
-            <td class="code">選取/刪除/undo（B4）</td>
-            <td>B 戰術布置</td>
-            <td>只管畫筆，不管站位<span class="warn">⚠T4</span></td>
+            <td>B viewing</td>
+            <td class="code">setCourtView("rotation")</td>
+            <td>A browse</td>
+            <td>順手清掉 viewingScene 系列欄位</td>
           </tr>
           <tr>
-            <td>B 戰術布置</td>
-            <td class="code">儲存/另存/新建</td>
-            <td>A 唯讀</td>
-            <td>—</td>
+            <td>C edit</td>
+            <td class="code">畫筆/防守範圍（C1,C2）</td>
+            <td>C edit</td>
+            <td>畫線 pointerUp 才記歷史；點擊型新增即記</td>
           </tr>
           <tr>
-            <td>A / B（任一）</td>
-            <td class="code">輪轉表 currentRotation 變動（背景）</td>
-            <td>同一狀態</td>
-            <td>重置 undo 歷史/選取/視圖，跨 store 訂閱</td>
+            <td>C edit</td>
+            <td class="code">站位拖曳（C3）</td>
+            <td>C edit</td>
+            <td>只動 session 快照，不寫回輪轉表</td>
+          </tr>
+          <tr>
+            <td>C edit</td>
+            <td class="code">選取/刪除/undo（C4）</td>
+            <td>C edit</td>
+            <td>只管 session 內容<span class="warn">⚠T4</span></td>
+          </tr>
+          <tr>
+            <td>C edit</td>
+            <td class="code">取消/儲存/另存（C5）</td>
+            <td>A browse</td>
+            <td>三條路都以 discardSession() 收尾</td>
+          </tr>
+          <tr>
+            <td>C edit</td>
+            <td class="code">切輪次（RotationSwitcher）</td>
+            <td>A browse</td>
+            <td>有未存內容先確認捨棄；session 與輪次已脫鉤</td>
+          </tr>
+          <tr>
+            <td>任一</td>
+            <td class="code">切到別場（resetBoardView 收到不同 matchId）</td>
+            <td>A browse</td>
+            <td>同場交棒不清，跨場才清（issue #160 C3）</td>
           </tr>
         </tbody>
       </table>
@@ -1029,14 +1147,28 @@ stateDiagram-v2
     <h2>戰術板 — 已知問題與缺口</h2>
     <div class="bug-list">
       <div class="bug">
+        <div class="bug-num">T4</div>
+        <div class="bug-body">
+          <b>undo/redo 不涵蓋輪轉視圖的站位拖曳</b
+          ><span
+            >Ctrl+Z 只復原白板 session 內的畫筆/防守範圍/站位，不會復原剛在輪轉表拖錯的站位——
+            那是另一個 store 的資料，兩邊各自有各自的歷史（或者說，輪轉表根本沒有歷史）。</span
+          ><br /><span class="ref"
+            >hooks/useTacticsBoard.ts · undo()/redo() · issue #40（open）</span
+          >
+        </div>
+      </div>
+      <div class="bug">
         <div class="bug-num">T2</div>
         <div class="bug-body">
-          <b>存檔格式仍是「輪轉表+戰術板」綁在一起的單一快照</b
+          <b>（已解決）存檔格式是「輪轉表+戰術板」綁在一起的單一快照</b
           ><span
-            >buildSnapshot/loadProject 把兩個 store 的資料攤平成同一份
-            JSON（沿用拆分前的格式，確保舊存檔還讀得到）。如果之後想讓兩邊分開存檔，目前的 API
-            沒有對應的資料結構。</span
-          ><br /><span class="ref">types/tacticsBoard.ts · SavedTacticData · issue #39</span>
+            >2026-07-20 更新：issue #39 已關閉。存檔改成 <code>SavedTacticDataV2</code> 的單景
+            denormalize 快照——一份戰術就是一張獨立的照片，不再攤平兩個 store 的資料。舊檔由
+            <code>parseSavedTactic()</code> 的轉接層讀進來，不會壞。</span
+          ><br /><span class="ref"
+            >types/courtSnapshot.ts · lib/courtSnapshot.ts · issue #39（closed）· #154</span
+          >
         </div>
       </div>
       <div class="bug">
@@ -1044,19 +1176,11 @@ stateDiagram-v2
         <div class="bug-body">
           <b>（不再適用）「新建空白戰術」會把輪轉表也清空</b
           ><span
-            >2026-07-03 更新：「＋新建空白戰術」按鈕已經整個移除，`newProject()` 這個 action
-            也刪掉了——這個問題連同它的成因一起消失，不是被修好，是被拿掉了。</span
+            >2026-07-03 更新：「＋新建空白戰術」按鈕已經整個移除，<code>newProject()</code> 這個
+            action 也刪掉了——這個問題連同它的成因一起消失，不是被修好，是被拿掉了。（#160 C2 之後
+            「空站位」以純函式 <code>captureBlank()</code> 的形式回來，但它只產生一張快照，碰不到
+            輪轉表。）</span
           >
-        </div>
-      </div>
-      <div class="bug">
-        <div class="bug-num">T4</div>
-        <div class="bug-body">
-          <b>undo/redo 不涵蓋輪轉視圖的站位拖曳</b
-          ><span
-            >這是這次重構刻意的行為改變——拆分前兩者共用一條 undo 記錄，現在 Ctrl+Z
-            只復原畫筆/防守範圍/戰術視圖自由站位，不會復原剛拖錯的站位。</span
-          ><br /><span class="ref">hooks/useTacticsBoard.ts · undo()/redo() · issue #40</span>
         </div>
       </div>
       <div class="bug">
@@ -1064,8 +1188,8 @@ stateDiagram-v2
         <div class="bug-body">
           <b>（不再適用）自由球員自由拖曳沒有失敗提示</b
           ><span
-            >2026-07-03 更新：戰術布置現在完全獨立於輪轉表，自由球員不再檢查「只能站後排」，
-            拖到哪裡都會成功——這個「合法性檢查沒有提示」的問題連同檢查本身一起消失了。</span
+            >2026-07-03 更新：戰術板完全獨立於輪轉表，自由球員不再檢查「只能站後排」，拖到哪裡都會
+            成功——這個「合法性檢查沒有提示」的問題連同檢查本身一起消失了。</span
           >
         </div>
       </div>
@@ -1078,7 +1202,10 @@ stateDiagram-v2
     <h2>計分表 — 操作流程與狀態機</h2>
 
     <div class="callout">
-      <b>自上次更新以來的變化（2026-07-12）：</b>C1
+      <b>自上次更新以來的變化（2026-07-20）：</b>新增暫停（C2b，issue #44，S5
+      因此不再是缺口）＋右欄底部「快速戰術板」入口（C5，issue #160
+      C3）；頁面左側的「回列表／戰術板」連結換成三頁共用的 <code>MatchNavRail</code> 導覽軌（issue
+      #160 C1），不再是這頁 header 自己刻的。 更早（2026-07-12）：C1
       動作選單依目前發球方過濾「發球↔接發」互斥（發球方看不到「接發」、接發方看不到「發球」，其餘四動作保留，#50）。
       更早（2026-07-04）：記一球的手勢從「拖曳畫線」改成「直接點選」（放開時一樣是找命中誤差半徑內最近的目標，點跟拖曳結果相同，只是不強迫使用者拖曳）；動作選單從
       4 大類（發球/防守/攻擊/擋網）擴充成 6 大類（發球/接發/舉球/攻擊/攔網/防守），對齊 `events`
@@ -1171,8 +1298,21 @@ stateDiagram-v2
             <div class="step">「復原」按鈕（復原堆疊為空時鎖住）</div>
             <div class="arrow">→</div>
             <div class="step commit">
-              undoLast() — 一次退最近一個動作（得分／一般換人／手動 libero），連按往回
+              undoLast() — 一次退最近一個動作（得分／一般換人／手動 libero／暫停），連按往回
             </div>
+          </div>
+        </div>
+
+        <div class="lane">
+          <div class="lane-label"><span class="dot muted"></span>C2b · 暫停（issue #44）</div>
+          <div class="step-row">
+            <div class="step">點「我方暫停 n/2」或「對手暫停 n/2」</div>
+            <div class="arrow">→</div>
+            <div class="step commit">
+              記一筆 timeout（setId ＋ 當下比分快照 ＋ side），本地優先＋背景寫入
+            </div>
+            <div class="arrow">→</div>
+            <div class="step">達 2 次該側按鈕反灰（硬規則，無例外）</div>
           </div>
         </div>
 
@@ -1207,6 +1347,25 @@ stateDiagram-v2
             <div class="arrow">→</div>
             <div class="step commit">自動歸位或换回上一個覆蓋對象</div>
           </div>
+        </div>
+
+        <div class="lane green">
+          <div class="lane-label">
+            <span class="dot green"></span>C5 · 快速戰術板（離開本頁，issue #160 C3）
+          </div>
+          <div class="step-row">
+            <div class="step">右欄底部點「快速戰術板」</div>
+            <div class="arrow">→</div>
+            <div class="step">captureFromScoreSheet(activeLineup, ourRotation, players)</div>
+            <div class="arrow">→</div>
+            <div class="step commit">
+              startSession() → 導航到 /matches/:id/board，直接落在編輯模式
+            </div>
+          </div>
+          <p class="phase-note" style="margin-top: 0.4rem">
+            站位來源是計分表自己的 <code>activeLineup</code>（逐局先發快照），不是全域輪轉表
+            store——詳見 Part 2「外部入口」那張卡。
+          </p>
         </div>
       </div>
 
@@ -1428,11 +1587,15 @@ stateDiagram-v2
       <div class="bug">
         <div class="bug-num">S5</div>
         <div class="bug-body">
-          <b>沒有暫停功能</b
+          <b>（已解決）沒有暫停功能</b
           ><span
-            >整個 codebase 完全沒有 timeout 概念 —
-            沒有按鈕、沒有欄位、沒有型別。不是「還沒接上」，是根本不存在。</span
-          ><br /><span class="ref">issue #44</span>
+            >2026-07-20 更新：issue #44 已全棧落地並關閉。<code>timeouts</code> 表（setId ＋ 比分
+            快照 ＋ side）＋ REST ＋ 前端記錄/復原都在，計分頁每方一顆暫停鈕。範圍是 PO 定的「純記錄
+            事件」：只記次數與時機，不記時長、不綁球員。每局每方上限 2 次，達標直接反灰——跟換人
+            「只提醒不擋」不同，因為 2 次是沒有合法例外的硬規則。</span
+          ><br /><span class="ref"
+            >lib/db/src/schema/timeouts.ts · hooks/useScoreSheet.ts · issue #44（closed）</span
+          >
         </div>
       </div>
       <div class="bug">

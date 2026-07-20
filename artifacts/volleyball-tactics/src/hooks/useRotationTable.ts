@@ -108,9 +108,9 @@ interface RotationTableStore {
   ) => void;
   // 把球員從所有 6 個輪次的站位裡移除（右鍵刪除、3×2 格子的「×」按鈕用這個）。
   removePlayerFromCourt: (matchId: string, playerId: string) => void;
-  // 只清空目前輪次的站位（LeftPanel「重置站位」按鈕的一部分——按鈕還會另外呼叫
-  // useTacticsBoard 的 resetCurrentRotationTactics 把畫筆也清掉，兩個 store 各自負責
-  // 自己的資料，由畫面上的按鈕一次呼叫兩邊，這就是「資料用傳輸的」實際做法）。
+  // 只清空目前輪次的站位（RotationTable「重置站位」按鈕）。註：這顆按鈕以前還會順便呼叫
+  // useTacticsBoard 的 resetCurrentRotationTactics 把畫筆也清掉，但那個 action 已隨 #154
+  // 刪除——畫筆現在住在用完即丟的白板 session 裡，跟輪轉表站位是兩件事，不需要一起清。
   resetCurrentRotationPositions: (matchId: string) => void;
 
   // 註：舊的 loadRotationData（整批把存檔覆蓋回輪轉表）已在 #154 PR B 移除。載入已存戰術

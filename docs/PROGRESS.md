@@ -22,9 +22,8 @@
 > 平行 PR 就落在不同行段、git 幾乎都能自動合併，不用真的把檔案拆兩份、也保住一眼 catch-up。
 > 上面的 `_Last updated_` 是共用一行摘要（誰更新了什麼），保持精簡、別長成段落。
 
-\_Last updated: 2026-07-20 (aila) — #160 戰術板 UI 大改版三顆（C1 導覽軌／C2 兩模式狀態機／C3 計分頁
-快照快速入口）全數落地。C3 的比賽頁按鈕經 PO 決策切給 #120（它依賴的右 panel 尚未存在）。
-剩 Figma 視覺債與 #163 文件同步。\_
+\_Last updated: 2026-07-20 (aila) — #160 三顆全數落地後，#163 把 `docs/flow-diagrams.html`
+同步到 #154／#160 後的實際行為（戰術板三態、跨 store 寫入已刪、暫停已上線）。剩 Figma 視覺債。\_
 
 ## Current state
 
@@ -53,7 +52,8 @@ lives in git log + the issues named).
   方案（含原 PR C 側邊白板）作廢，#17 第 1 節同步作廢。完整權衡在 #154 07-19 comment。
   **UI 改版 #160 已於 07-20 分三顆 PR 全數落地**（C1 導覽軌／C2 兩模式狀態機／C3 計分頁快照快速
   入口，見下方 Recently closed）；`captureFromScoreSheet()`（#154 PR A 就寫好、一直沒有 caller）
-  到 C3 才真正接上。剩下的是 Figma 視覺債與 `docs/flow-diagrams.html` 同步（#163）。
+  到 C3 才真正接上。`docs/flow-diagrams.html` 已於 #163 同步到現況（三態狀態機、跨 store 寫入
+  已刪、暫停已上線），**該檔現在可信**。剩下的是 Figma 視覺債。
 - **Schema foundations for stats are in place:** `lineups`（起始先發，一局一 row）、
   `substitutions`（換人，存比分快照）、`events.outcome`（得/失/球續 enum）、`people`＋`teams`
   （跨場跨隊身分／分組標籤，`players.personId`/`matches.teamId` nullable FK、`onDelete: set null`
@@ -116,6 +116,7 @@ M1 收尾焦點：**M1 實作項已清空**——全域 store 去汙染家族（
 （#147，兩條分支分別由 PR #149/#158 修完關閉）、暫停/timeout（#44）全數落地。**下一階段起點已定：
 PO 拍板插入 M1.5「戰術板 UI 大改版」（#160）於 M1 與 M2 之間**——milestone 本體待 PO 在網頁建立後
 掛上（MCP 工具建不了 milestone）。**#160 的 C1/C2/C3 三顆已全數落地**（見下方 Recently closed）。
+#163（文件同步）亦已收工。
 部署 #26／離線契約 #75 仍屬 priority:essential 的自然接續。**#120（各頁常駐唯讀站位視圖）在 C3
 之後多背了一項：比賽頁的「快速戰術板」按鈕**——它要掛的右 panel（輪轉表＋球員名單）正是 #120 的
 本體，panel 不存在就沒地方放，故整包併入 #120；#40（undo/redo 不涵蓋輪轉拖曳，與 #147 同塊邏輯但不同 store）、
@@ -127,7 +128,18 @@ PO 拍板插入 M1.5「戰術板 UI 大改版」（#160）於 M1 與 M2 之間**
 
 ### 開發 (aila)
 
-- **#160 C3**（本次 PR，07-20）— 計分頁右欄底部「快速戰術板」鈕：擷取當下站位 → `startSession()`
+- **#163**（本次 PR，07-20）— `docs/flow-diagrams.html` 同步到 #154／#160 之後的實際行為。過期的
+  方式會**主動誤導**：它描述的 `isLayoutMode`／`enterTacticsLayout()`／戰術板反寫回輪轉表的
+  `removePlayerTacticPositions()`／`resetCurrentRotationTactics()` 全都不是「舊」而是**已被刪除**，
+  照著讀會實作出一條被 CI 焊死禁止的資料流。改動：Part 2 整段重寫成 browse／viewing／edit 三態
+  （並寫明模式是 `session`/`viewingScene` 的**推導值**、store 裡沒有 mode 欄位）；Part 1 拿掉跨
+  store 呼叫與 ⚠R2／⚠R3；Part 0 大圖補數據分析頁、`MatchNavRail`、C3 快照交棒。**issue 沒列到、
+  盤點時自己找出來的三處**：Part 3 的 S5 還寫「整個 codebase 完全沒有 timeout 概念」（#44 兩天前
+  就上線了）、Part 1 C4 還寫「戰術板訂閱輪轉表變化」（那條全域 subscribe 在 #119 就拿掉、改成
+  `RotationSwitcher.go()` 明確呼叫）、以及 `useRotationTable.ts` 一行同源的過期程式碼註解。
+  **驗證方式值得記**：mermaid 語法錯誤只在瀏覽器渲染時才炸、看 diff 完全看不出來，所以起了臨時
+  http server 實際載入頁面，確認四張圖都產出 SVG、console 無錯，並撈出狀態機節點文字核對內容。
+- **#160 C3**（PR #165，commit `f4b5743`，07-20）— 計分頁右欄底部「快速戰術板」鈕：擷取當下站位 → `startSession()`
   → 導航到戰術板直落編輯模式。**範圍經 PO 決策砍半**：原訂比賽頁也要一顆，但比賽頁的右 panel
   根本還沒建（`MatchList.tsx`/`TournamentDetail.tsx` 都沒有），那個 panel 是 #120 的本體，故該按鈕
   整包併入 #120。站位來源用計分表自己的 `activeLineup`（逐局快照）而非全域 rotation store——這正是
