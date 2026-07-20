@@ -103,7 +103,9 @@ interface TacticsBoardStore {
   setCourtView: (v: "rotation" | "tactics") => void;
   toggleLabel: (key: keyof TacticsBoardStore["labelToggles"]) => void;
   // 切場（換 matchId）時把所有暫時狀態歸零：丟掉 session、清掉唯讀檢視、跳回輪轉視圖。
-  resetBoardView: () => void;
+  // matchId 是選填的「目前要顯示哪一場」——傳了它，resetBoardView 才有辦法分辨「跨場切換」
+  // 跟「同一場內部的一次交棒」（見下面實作的說明）。
+  resetBoardView: (matchId?: string | null) => void;
 
   // ── session 生命週期 ──
   // 進入白板的唯一入口：吃一張「已經在外面擷取好的」純值快照（capture by value）。opts 給
@@ -176,15 +178,35 @@ export const useTacticsBoard = create<TacticsBoardStore>()((set, get) => ({
     ),
   toggleLabel: (key) =>
     set((state) => ({ labelToggles: { ...state.labelToggles, [key]: !state.labelToggles[key] } })),
-  resetBoardView: () =>
-    set({
-      session: null,
-      viewingScene: null,
-      viewingTacticId: null,
-      viewingTacticName: "",
-      courtView: "rotation",
-      selectedObjectId: null,
-      activeTool: "select",
+  // #119 加這道 reset 是為了防「跨場殘留」：全域共用的 undo 歷史/session 如果不歸零，
+  // 從 A 場帶著歷史切到 B 場，再按 Ctrl+Z 會把 A 的快照還原進 B。但病根是「跨場」，不是
+  // 「進頁面就該清空」——原本的寫法沒有分辨這兩種情況，所以連「同一場，但由計分頁先
+  // startSession() 再導航過來」這種正常的交棒，也會被無條件清光（issue #160 C3 踩到）。
+  //
+  // 改法：多收一個 matchId 參數，跟目前 session 的 snapshot.matchId 比對。相符（且不是
+  // null/undefined，代表雙方都明確知道自己是哪一場）就判定為「同一場」，只保留 session、
+  // 其他暫時性畫面狀態（viewingScene、選取物件、工具、視圖）照樣重置成剛進頁面的預設值；
+  // 不符就退回舊行為，session 也一起清掉。嚴格來說這比原本的寫法更正確：舊寫法連「同一場
+  // 重新整理頁面」都會把使用者交棒進來、還沒存檔的東西清掉。
+  resetBoardView: (matchId) =>
+    set((state) => {
+      const keepSession =
+        matchId != null && state.session != null && state.session.snapshot.matchId === matchId;
+      return {
+        session: keepSession ? state.session : null,
+        viewingScene: null,
+        viewingTacticId: null,
+        viewingTacticName: "",
+        // courtView 必須跟著 session 一起保留，不能無條件打回 "rotation"。原因是畫面上
+        // 「看得到 session」這件事同時取決於兩個狀態：Court.tsx 只有在
+        // `courtView === "tactics" && session` 時才畫 session 的球員與筆跡。startSession()
+        // 會把 courtView 設成 "tactics"，若這裡又把它重設回 "rotation"，就會出現
+        // 「session 明明還在、畫面卻空白」的詭異狀態——資料沒掉，但使用者看不到。
+        // 兩個狀態要嘛一起留、要嘛一起清，不能各走各的。
+        courtView: keepSession ? state.courtView : "rotation",
+        selectedObjectId: null,
+        activeTool: "select",
+      };
     }),
 
   startSession: (snapshot, opts) => {

@@ -227,3 +227,39 @@ describe("編輯已存戰術 + 存檔（issue #154 PR C）", () => {
     expect(tb().courtView).toBe("rotation");
   });
 });
+
+// issue #160 C3：計分頁的「快速戰術板」是先 startSession()、再導航到戰術板頁面。戰術板頁面
+// 一 mount 就會呼叫 resetBoardView(id)，所以這道 reset 必須看得懂「跨場切換」跟「同一場內
+// 的一次交棒」的差別，否則剛交棒過去的 session 會在落地當下被清掉。
+describe("跨頁交棒 vs 跨場清空（issue #160 C3 / #119）", () => {
+  it("同一場交棒：session 保留，courtView 也要一起留住", () => {
+    tb().startSession(snapshot([snapPlayer("p1")]), { name: "第 1 局 第 2 輪" });
+
+    // 模擬導航到 /matches/match-A/board 之後，頁面 effect 呼叫 resetBoardView(id)。
+    tb().resetBoardView(A);
+
+    expect(tb().session).not.toBeNull();
+    expect(tb().session?.name).toBe("第 1 局 第 2 輪");
+    // 這一條是重點：Court 只有在 courtView === "tactics" && session 才畫得出東西。
+    // 只留 session、卻把 courtView 打回 "rotation"，畫面會空白（資料在、看不到）。
+    expect(tb().courtView).toBe("tactics");
+  });
+
+  it("跨場切換：session 照樣清掉（#119 的保護不能被 C3 弄鬆）", () => {
+    tb().startSession(snapshot([snapPlayer("p1")]));
+
+    tb().resetBoardView("match-B");
+
+    expect(tb().session).toBeNull();
+    expect(tb().courtView).toBe("rotation");
+  });
+
+  it("沒帶 matchId 時退回舊行為：全部清空", () => {
+    tb().startSession(snapshot([snapPlayer("p1")]));
+
+    tb().resetBoardView();
+
+    expect(tb().session).toBeNull();
+    expect(tb().courtView).toBe("rotation");
+  });
+});

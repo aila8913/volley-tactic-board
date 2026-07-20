@@ -22,9 +22,9 @@
 > 平行 PR 就落在不同行段、git 幾乎都能自動合併，不用真的把檔案拆兩份、也保住一眼 catch-up。
 > 上面的 `_Last updated_` 是共用一行摘要（誰更新了什麼），保持精簡、別長成段落。
 
-\_Last updated: 2026-07-19 (aila) — 戰術板 UI 大改版方向定案（#160：頁面＋快照快速入口，overlay 作廢，
-依 PO Figma 稿；結論記在 #154 07-19 comment）。上一輪待 ship 項全落地：PR #157/#158 已 merge，
-#154 三 bug 本體修復完、#147/#44 關閉。\_
+\_Last updated: 2026-07-20 (aila) — #160 戰術板 UI 大改版三顆（C1 導覽軌／C2 兩模式狀態機／C3 計分頁
+快照快速入口）全數落地。C3 的比賽頁按鈕經 PO 決策切給 #120（它依賴的右 panel 尚未存在）。
+剩 Figma 視覺債與 #163 文件同步。\_
 
 ## Current state
 
@@ -50,8 +50,10 @@ lives in git log + the issues named).
   三個 bug（新增球員消失／站位被覆蓋回不去／刪名單舊快照對不上人）架構性解決；「編輯已存戰術」鈕
   暫停用、待 #160。**07-19 PO 依自繪 Figma 稿拍板 UI 新方向**：戰術板＝左欄底部降級工具頁（列表＋
   新增選來源＋佈陣→確定→編輯）＋各頁右 panel 快照快速入口（一鍵抓當下站位直落編輯）——原 overlay
-  方案（含原 PR C 側邊白板）作廢，#17 第 1 節同步作廢。完整權衡在 #154 07-19 comment，落地追蹤
-  #160（needs-plan，Plan 後拆 PR）。
+  方案（含原 PR C 側邊白板）作廢，#17 第 1 節同步作廢。完整權衡在 #154 07-19 comment。
+  **UI 改版 #160 已於 07-20 分三顆 PR 全數落地**（C1 導覽軌／C2 兩模式狀態機／C3 計分頁快照快速
+  入口，見下方 Recently closed）；`captureFromScoreSheet()`（#154 PR A 就寫好、一直沒有 caller）
+  到 C3 才真正接上。剩下的是 Figma 視覺債與 `docs/flow-diagrams.html` 同步（#163）。
 - **Schema foundations for stats are in place:** `lineups`（起始先發，一局一 row）、
   `substitutions`（換人，存比分快照）、`events.outcome`（得/失/球續 enum）、`people`＋`teams`
   （跨場跨隊身分／分組標籤，`players.personId`/`matches.teamId` nullable FK、`onDelete: set null`
@@ -113,10 +115,10 @@ gh issue list --state open                   # 全部
 M1 收尾焦點：**M1 實作項已清空**——全域 store 去汙染家族（#115/#117/#118/#119）、undo 一次退兩步
 （#147，兩條分支分別由 PR #149/#158 修完關閉）、暫停/timeout（#44）全數落地。**下一階段起點已定：
 PO 拍板插入 M1.5「戰術板 UI 大改版」（#160）於 M1 與 M2 之間**——milestone 本體待 PO 在網頁建立後
-掛上（MCP 工具建不了 milestone）。**#160 已切成 C1/C2/C3 三顆並開工：C1 導覽重排、C2 戰術頁狀態機
-皆已落地（見下方 Recently closed），剩 C3 快照快速入口**（依賴 C2 的編輯模式，硬切不開）。
-部署 #26／離線契約 #75 仍屬 priority:essential 的自然接續。另 #120（純展示唯讀
-站位視圖）依賴 #119 定案的分片形狀、暫不排期；#40（undo/redo 不涵蓋輪轉拖曳，與 #147 同塊邏輯但不同 store）、
+掛上（MCP 工具建不了 milestone）。**#160 的 C1/C2/C3 三顆已全數落地**（見下方 Recently closed）。
+部署 #26／離線契約 #75 仍屬 priority:essential 的自然接續。**#120（各頁常駐唯讀站位視圖）在 C3
+之後多背了一項：比賽頁的「快速戰術板」按鈕**——它要掛的右 panel（輪轉表＋球員名單）正是 #120 的
+本體，panel 不存在就沒地方放，故整包併入 #120；#40（undo/redo 不涵蓋輪轉拖曳，與 #147 同塊邏輯但不同 store）、
 #64（背景寫入失敗不 reconcile，關聯部署 #26／離線契約 #75）、**#127（後端沒驗 tournamentId 擁有權，真 auth
 後補）** 仍 open。
 進階版差異化（M4）：#51 動作子分類、#21 球線座標、#99 站位快照——同屬 advanced tier，可一起設計。
@@ -125,7 +127,19 @@ PO 拍板插入 M1.5「戰術板 UI 大改版」（#160）於 M1 與 M2 之間**
 
 ### 開發 (aila)
 
-- **#160 C2**（本次 PR，07-20，**#160 保持 open**）— 戰術頁狀態機 + 右 panel 拆檔。**規格在動工前經 PO
+- **#160 C3**（本次 PR，07-20）— 計分頁右欄底部「快速戰術板」鈕：擷取當下站位 → `startSession()`
+  → 導航到戰術板直落編輯模式。**範圍經 PO 決策砍半**：原訂比賽頁也要一顆，但比賽頁的右 panel
+  根本還沒建（`MatchList.tsx`/`TournamentDetail.tsx` 都沒有），那個 panel 是 #120 的本體，故該按鈕
+  整包併入 #120。站位來源用計分表自己的 `activeLineup`（逐局快照）而非全域 rotation store——這正是
+  #115 解掉、#160 needs-plan 明文禁止拉回的耦合。跨頁交棒走「A 頁 `startSession()` → 導航」而不是
+  query param + 到站再擷取，後者會逼戰術板去 import 計分表 store、撞上 #154 焊進 CI 的
+  `no-restricted-imports` 牆。連帶改 `resetBoardView(matchId?)`：戰術板一 mount 就 reset，原本無條件
+  清空會把剛交棒的 session 殺掉，改成「跨場才清、同場保留」（#119 的跨場保護原封不動，同場重整不再
+  誤刪未存工作）。**review 抓到一個四項檢查全綠也照樣漏掉的行為 bug**：session 保留了但 `courtView`
+  仍被打回 `"rotation"`，而 `Court.tsx` 是 `courtView === "tactics" && session` 才畫東西 → 會落地在
+  「資料完好、畫面全白」。兩個欄位各自都合法，錯的是它們之間的隱含關係，型別檢查看不出來；已改成
+  兩者同進同退＋三個回歸測試（暫時退掉修正確認測試真的會紅）。
+- **#160 C2**（PR #164，commit `63eedcd`，07-20）— 戰術頁狀態機 + 右 panel 拆檔。**規格在動工前經 PO
   修正：原訂「瀏覽→佈陣→編輯」三模式改成兩模式**（[修正留言](https://github.com/aila8913/volley-tactic-board/issues/160#issuecomment-5021652106)）
   ——球員名單在比賽列表就已填好，故名單「常駐右 panel」隨時可拖進拖出，佈陣不再是獨立階段。
   連帶好處：少一組轉場，undo 歷史不用處理跨階段語意（單一 session 單一歷史）。
