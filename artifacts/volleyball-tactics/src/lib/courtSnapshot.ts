@@ -72,6 +72,21 @@ export function captureFromScoreSheet(
   };
 }
 
+// 「空站位」擷取：issue #160 C2 新增戰術的第二種來源。跟 captureFromRotation /
+// captureFromScoreSheet 同一個家族——一樣是純函式、一樣回傳「以值」構成的 CourtSnapshot——
+// 差別只是 players 固定給空陣列，不查任何 positions/roster。之所以獨立寫一個函式而不是
+// 讓呼叫端直接手刻一個字面量物件：這樣「空快照長什麼樣子」只有一個定義來源，以後如果
+// CourtSnapshot 的形狀改了（例如多一個必填欄位），只要改這裡，呼叫端不用跟著改。
+export function captureBlank(meta: { matchId: string | null }): CourtSnapshot {
+  return {
+    source: "blank",
+    matchId: meta.matchId,
+    rotation: 0,
+    capturedAt: new Date().toISOString(),
+    players: [],
+  };
+}
+
 // ── zod schema：舊版（legacy）SavedTacticData 與新版（v2）SavedTacticDataV2 ──
 // 用 zod 而不是單純用 TypeScript 型別「假裝」讀進來的 JSON 一定符合形狀：這份資料是從
 // 後端 /tactics API 讀回來的，實際內容可能是任何時期存進去的舊格式、或未來手動改壞的資料，
