@@ -11,6 +11,7 @@ import { useTacticsBoard } from "@/hooks/useTacticsBoard";
 import ScoreSheetCourt, { TouchedTarget } from "@/components/ScoreSheetCourt";
 import RadialMenu, { RadialMenuOption } from "@/components/RadialMenu";
 import ScoreSheetStats from "@/components/ScoreSheetStats";
+import ScoreSheetRotationPanel from "@/components/ScoreSheetRotationPanel";
 import { PlayAction } from "@/types/scoresheet";
 import { isSetComplete, disabledActions } from "@/lib/scoreSheetMapping";
 import { captureLineupFromRotations, lineupToPositions } from "@/lib/rotationLogic";
@@ -481,12 +482,26 @@ export default function ScoreSheet() {
             )}
           </div>
 
-          {/* ── 右欄：統計（水平 snap scroll，可左右滑看其他場） ── */}
-          <div className="w-72 flex-none flex flex-col min-h-0">
-            <div className="px-3 py-2 border-b text-xs font-bold text-gray-600 flex items-center justify-between shrink-0">
+          {/* ── 右欄：站位／統計／快速戰術板（深色玻璃，跟中間白底計分區切開） ──
+            這輪（issue #120 第一階段）只把這整條 w-72 換成深色玻璃，色票照
+            docs/design-spec.md 第 2 節；中間計分區維持白底不動（整頁改版是另外的
+            design 工作）。border-l 收在這一側，交界只留一條邊框，不會有突兀的白邊。 */}
+          <div className="w-72 flex-none flex flex-col min-h-0 border-l border-white/[0.10] bg-[#121310] font-dash text-[#F5F5F0]">
+            {/* ── 站位面板（issue #120）── 純參照用，資料源用 ourPositions（計分表自己
+              的逐局先發快照換算出來的，不是讀 useRotationTable，見 CourtReadOnlyView 的
+              說明）。currentSet 還沒選先發方時 ourPositions 本來就是空陣列，
+              ScoreSheetRotationPanel → CourtReadOnlyView 會自己顯示「尚未排先發」，
+              這裡不用另外判斷要不要渲染。 */}
+            <ScoreSheetRotationPanel
+              positions={ourPositions}
+              roster={match.players}
+              rotation={currentSet?.ourRotation ?? 0}
+            />
+
+            <div className="px-3 py-2 border-b border-white/[0.10] text-xs font-bold text-[#9AA08C] flex items-center justify-between shrink-0">
               <span>比賽統計</span>
               {statsMatches.length > 1 && (
-                <span className="text-gray-400 font-normal">← 滑動看其他場</span>
+                <span className="text-[#9AA08C]/70 font-normal">← 滑動看其他場</span>
               )}
             </div>
 
@@ -494,14 +509,14 @@ export default function ScoreSheet() {
             <div className="flex-1 flex overflow-x-auto snap-x snap-mandatory min-h-0 [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
               {statsMatches.map((m, i) => (
                 <div key={m.id} className="w-72 flex-none snap-center flex flex-col min-h-0">
-                  <div className="shrink-0 bg-white border-b px-3 py-1.5 flex items-center gap-2">
+                  <div className="shrink-0 bg-white/[0.03] border-b border-white/[0.10] px-3 py-1.5 flex items-center gap-2">
                     <span className="text-xs font-bold truncate">vs {m.opponent}</span>
                     {m.id === id && (
-                      <span className="text-[10px] bg-blue-50 text-blue-600 px-1 rounded shrink-0">
+                      <span className="text-[10px] bg-[#C6F135]/15 text-[#C6F135] px-1 rounded shrink-0">
                         本場
                       </span>
                     )}
-                    <span className="text-[10px] text-gray-400 ml-auto shrink-0">
+                    <span className="text-[10px] text-[#9AA08C] ml-auto shrink-0">
                       {i + 1}/{statsMatches.length}
                     </span>
                   </div>
@@ -520,17 +535,20 @@ export default function ScoreSheet() {
             </div>
 
             {/* 快速戰術板入口（issue #160 C3）：shrink-0 讓它固定在右欄底部，不會跟著上面
-              snap-scroll 的統計區塊一起橫向滑動；加上邊框跟統計區隔開。 */}
-            <div className="shrink-0 border-t px-3 py-2">
-              <Button
-                variant="outline"
-                className="w-full"
+              snap-scroll 的統計區塊一起橫向滑動；加上邊框跟統計區隔開。按鈕改用跟
+              RotationTable.tsx PANEL_BUTTON_CLASS 同一套深色玻璃次要按鈕語言（而不是
+              shadcn Button variant="outline" 預設的淺色邊框），放在深底上才看得清楚。 */}
+            <div className="shrink-0 border-t border-white/[0.10] px-3 py-2">
+              <button
                 disabled={!activeLineup || !currentSet}
                 onClick={handleQuickTacticsBoard}
+                className="w-full rounded-lg border border-white/[0.26] bg-white/[0.05] px-2 py-1.5 text-xs
+                  font-bold text-[#F5F5F0] transition hover:border-[#C6F135] hover:text-[#C6F135]
+                  disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-white/[0.26] disabled:hover:text-[#F5F5F0]"
               >
                 快速戰術板
-              </Button>
-              <p className="mt-1 text-center text-[11px] text-gray-400">擷取目前站位</p>
+              </button>
+              <p className="mt-1 text-center text-[11px] text-[#9AA08C]">擷取目前站位</p>
             </div>
           </div>
         </div>
