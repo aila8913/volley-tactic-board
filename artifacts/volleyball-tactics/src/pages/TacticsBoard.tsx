@@ -17,9 +17,12 @@ export default function TacticsBoard() {
 
   // 切換到某一場戰術板時，把全域、暫時性的畫面狀態（undo 歷史、布置模式、視圖）歸零
   //（issue #119）：這些是全域共用、但戰術資料是 per-match，不歸零的話從 A 場帶著歷史
-  // 切到 B 場再按 Ctrl+Z 會把 A 的快照還原進 B。只在 matchId 變動時跑一次。
+  // 切到 B 場再按 Ctrl+Z 會把 A 的快照還原進 B。
+  // 傳入 id 之後，resetBoardView 會分辨「跨場」跟「同一場內的交棒」——只有 matchId 真的
+  // 變動（跨場）才會清掉 session；同一場（例如從計分頁的「快速戰術板」按鈕先 startSession()
+  // 再導航過來，見 ScoreSheet.tsx）進來時，交棒的 session 會被保留（issue #160 C3）。
   useEffect(() => {
-    resetBoardView();
+    resetBoardView(id);
   }, [id, resetBoardView]);
 
   // 進入戰術板時，把這場比賽名單帶進來，這樣球員設定才會跟外面比賽列表輸入的資訊一致。

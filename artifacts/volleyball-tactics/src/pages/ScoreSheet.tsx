@@ -1,18 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
-import { useParams, Link } from "wouter";
+import { useParams, useLocation, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import BackToMatchListButton from "@/components/BackToMatchListButton";
 import MatchNavRail, { matchBackHref } from "@/components/MatchNavRail";
 import { useMatchWithRoster } from "@/hooks/useMatches";
 import { useRotationTable } from "@/hooks/useRotationTable";
 import { useScoreSheet, useScoreSheetController } from "@/hooks/useScoreSheet";
+import { useTacticsBoard } from "@/hooks/useTacticsBoard";
 import ScoreSheetCourt, { TouchedTarget } from "@/components/ScoreSheetCourt";
 import RadialMenu, { RadialMenuOption } from "@/components/RadialMenu";
 import ScoreSheetStats from "@/components/ScoreSheetStats";
 import { PlayAction } from "@/types/scoresheet";
 import { isSetComplete, disabledActions } from "@/lib/scoreSheetMapping";
 import { captureLineupFromRotations, lineupToPositions } from "@/lib/rotationLogic";
+import { captureFromScoreSheet } from "@/lib/courtSnapshot";
 
 // 6 大類跟 lib/db/src/schema/events.ts 的 eventActionEnum 對齊（見
 // types/scoresheet.ts 的說明）。陣列順序就是 RadialMenu 從正上方順時針排列的順序，
@@ -54,6 +56,9 @@ type Gesture =
 export default function ScoreSheet() {
   const { id } = useParams<{ id: string }>();
   const { match, isLoading: isMatchLoading } = useMatchWithRoster(Number(id));
+  // wouter 的 useLocation 回傳 [目前路徑, 導航函式]；這裡只要導航，不用讀目前路徑，
+  // 用逗號跳過第一個回傳值。
+  const [, setLocation] = useLocation();
 
   // 只讀輪轉表這一場的 rotations，用來「擷取」計分表自己的先發快照——擷取一次之後，計分表就
   // 完全讀自己的快照、不再碰輪轉表（issue #115）。輪轉表現在用 matchId 分片（issue #119），所以
@@ -285,6 +290,30 @@ export default function ScoreSheet() {
     setSelectedBenchPlayer(null);
   };
 
+  // 快速戰術板入口（issue #160 C3）：把「目前這一輪」的站位直接帶去戰術板開一個可編輯的
+  // session，省掉使用者自己切到戰術板、再手動從輪轉表擷取的來回。
+  //
+  // 站位來源刻意用 activeLineup（計分表自己的逐局先發快照）而不是回頭去讀全域的輪轉表
+  // store：計分表的站位真相本來就在自己這份快照裡（#115 把這條耦合解掉、改成後端
+  // usePutSetLineup/useListMatchLineups 持久化），從這裡抓才是「單一真相來源」；如果改讀
+  // 全域 rotation store，一來會把 #115 好不容易解掉的耦合又接回來，二來語意上這裡要的本來
+  // 就是「這一場、這一局」的站位，直接用 activeLineup 最短，不用多繞一手。
+  const handleQuickTacticsBoard = () => {
+    if (!activeLineup || !currentSet || !id) return;
+    const snapshot = captureFromScoreSheet(activeLineup, currentSet.ourRotation, match.players, {
+      matchId: id,
+    });
+    // 這裡用 useTacticsBoard.getState() 而不是元件最上面用 useTacticsBoard((s) => ...) 那種
+    // hook 訂閱寫法：getState() 只在這個 click handler 執行的當下讀一次 store 現況、呼叫完
+    // 動作就結束，不會讓這個元件訂閱戰術 store 的變化。如果改用 hook 訂閱，戰術 store 裡任何
+    // 一次拖曳/畫線都會讓這個跟戰術板無關的計分頁元件重新 render，白白浪費效能——這是
+    // Zustand「在事件 handler 裡讀/寫但不訂閱」的慣用法。
+    useTacticsBoard.getState().startSession(snapshot, {
+      name: `第 ${currentSet.setNumber} 局 第 ${currentSet.ourRotation} 輪`,
+    });
+    setLocation(`/matches/${id}/board`);
+  };
+
   return (
     // 外層改成 flex h-screen（橫向排），把共用導覽軌 MatchNavRail 放在最左邊，右側
     // 才是這一頁原本的內容（flex-1 min-w-0 撐滿剩下的寬度）。以前的「回列表」
@@ -488,6 +517,20 @@ export default function ScoreSheet() {
                   </div>
                 </div>
               ))}
+            </div>
+
+            {/* 快速戰術板入口（issue #160 C3）：shrink-0 讓它固定在右欄底部，不會跟著上面
+              snap-scroll 的統計區塊一起橫向滑動；加上邊框跟統計區隔開。 */}
+            <div className="shrink-0 border-t px-3 py-2">
+              <Button
+                variant="outline"
+                className="w-full"
+                disabled={!activeLineup || !currentSet}
+                onClick={handleQuickTacticsBoard}
+              >
+                快速戰術板
+              </Button>
+              <p className="mt-1 text-center text-[11px] text-gray-400">擷取目前站位</p>
             </div>
           </div>
         </div>
