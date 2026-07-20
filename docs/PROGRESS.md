@@ -113,7 +113,9 @@ gh issue list --state open                   # 全部
 M1 收尾焦點：**M1 實作項已清空**——全域 store 去汙染家族（#115/#117/#118/#119）、undo 一次退兩步
 （#147，兩條分支分別由 PR #149/#158 修完關閉）、暫停/timeout（#44）全數落地。**下一階段起點已定：
 PO 拍板插入 M1.5「戰術板 UI 大改版」（#160）於 M1 與 M2 之間**——milestone 本體待 PO 在網頁建立後
-掛上（MCP 工具建不了 milestone）；部署 #26／離線契約 #75 仍屬 priority:essential 的自然接續。另 #120（純展示唯讀
+掛上（MCP 工具建不了 milestone）。**#160 已切成 C1/C2/C3 三顆並開工：C1 導覽重排、C2 戰術頁狀態機
+皆已落地（見下方 Recently closed），剩 C3 快照快速入口**（依賴 C2 的編輯模式，硬切不開）。
+部署 #26／離線契約 #75 仍屬 priority:essential 的自然接續。另 #120（純展示唯讀
 站位視圖）依賴 #119 定案的分片形狀、暫不排期；#40（undo/redo 不涵蓋輪轉拖曳，與 #147 同塊邏輯但不同 store）、
 #64（背景寫入失敗不 reconcile，關聯部署 #26／離線契約 #75）、**#127（後端沒驗 tournamentId 擁有權，真 auth
 後補）** 仍 open。
@@ -123,6 +125,23 @@ PO 拍板插入 M1.5「戰術板 UI 大改版」（#160）於 M1 與 M2 之間**
 
 ### 開發 (aila)
 
+- **#160 C2**（本次 PR，07-20，**#160 保持 open**）— 戰術頁狀態機 + 右 panel 拆檔。**規格在動工前經 PO
+  修正：原訂「瀏覽→佈陣→編輯」三模式改成兩模式**（[修正留言](https://github.com/aila8913/volley-tactic-board/issues/160#issuecomment-5021652106)）
+  ——球員名單在比賽列表就已填好，故名單「常駐右 panel」隨時可拖進拖出，佈陣不再是獨立階段。
+  連帶好處：少一組轉場，undo 歷史不用處理跨階段語意（單一 session 單一歷史）。
+  實作：`TacticsBoardPanel` 724→290 行變成薄殼，拆出 `TacticsBrowsePanel`/`TacticsViewingPanel`/
+  `TacticsEditPanel`/`TacticsRosterPanel`/`TacticsList`/`NewTacticDialog`＋`lib/tacticsBoardStyles.ts`；
+  新增戰術改走 Dialog 選來源（擷取現在輪轉位／空站位）。**`useTacticsBoard.ts` 一行未動**——模式純由
+  既有的 `session`/`viewingScene` 推導，不加 `phase` 欄位，#154 焊進 CI 的單向性防線原封不動；
+  「空站位」只在 `lib/courtSnapshot.ts` 加純函式 `captureBlank()`（`source: "blank"` 是 #154 就預留的值）。
+  拖放重用 Court 既有的 `dataTransfer` `text/plain` 協定，Court.tsx 未動。
+  review 抓到兩處修掉：selector 裡寫 `?? []` 每次生新參照會害 Zustand 每次都重繪（React 18 的
+  `useSyncExternalStore` 會直接噴 getSnapshot 未快取），改成模組層級常數；殼元件的整包解構訂閱改逐欄位 selector。
+- **#160 C1**（PR #162，commit `c675b07`，07-20，**#160 保持 open**）— 導覽重排：抽共用
+  `MatchNavRail` 左側導覽軌，戰術板／計分表／數據分析三頁 match-scoped 換上，取代各頁自刻、樣式不一的
+  header 連結；`matchBackHref()` 收掉三頁重複的返回目的地判斷。戰術入口依 #160 產品決策用 `mt-auto`
+  壓到軌底（降級成次要入口）。待補的外觀債已在 PR 知會 tang：導覽軌目前掛在各頁 header 底下而非通頂滿版、
+  Figma 的 hover 展開文字標籤未做。
 - **#44**（PR #153，commit `27a6a26`，07-18）— 暫停/timeout 全棧：`lib/db/src/schema/timeouts.ts`
   ＋`routes/timeouts.ts`＋`timeoutBelongsToUser`＋openapi/codegen＋前端 `useScoreSheet`（reducer/controller/
   reconstruct/undo）＋計分頁按鈕＋統計欄。形狀早在 `docs/event-grammar-spec.md` G 群定案；範圍（純記錄事件、
