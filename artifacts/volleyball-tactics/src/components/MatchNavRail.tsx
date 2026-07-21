@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Link } from "wouter";
 
 // 這場比賽底下三個分頁（戰術板／計分表／數據分析）+「回列表」共用的左側導覽軌。
@@ -16,6 +17,12 @@ type MatchNavRailProps = {
   matchId: string;
   backHref: string;
   active: ActivePage;
+  // issue #160 C3：計分頁要把「戰」按鈕換成一個會展開飛出選單（列出已存戰術＋新增戰術）的
+  // 觸發器，而不是單純跳頁的連結。這個元件本身刻意維持 dumb（見檔案開頭的說明），不知道
+  // 「戰術選單長什麼樣、要接哪些 API」，所以把整塊內容當一個 React 節點從外面傳進來——
+  // 有傳就渲染呼叫端給的東西取代原本的 <Link>，沒傳（TacticsBoard.tsx / MatchAnalytics.tsx
+  // 這兩個呼叫端）就完全維持原本「戰」是純導覽連結的行為，不會有任何差異。
+  boardSlot?: ReactNode;
 };
 
 // 為什麼 active 是外面傳進來的 prop、不是這個元件自己讀路由去判斷？
@@ -46,7 +53,7 @@ export function matchBackHref(tournamentId: string | null | undefined): string {
   return tournamentId ? `/tournaments/${tournamentId}` : "/";
 }
 
-export default function MatchNavRail({ matchId, backHref, active }: MatchNavRailProps) {
+export default function MatchNavRail({ matchId, backHref, active, boardSlot }: MatchNavRailProps) {
   // 上半群組：回列表、計分表、數據分析——這三個是「常態」入口。
   const topItems: NavItemDef[] = [
     { key: "back", glyph: "比", label: "比賽列表", href: backHref },
@@ -81,9 +88,12 @@ export default function MatchNavRail({ matchId, backHref, active }: MatchNavRail
         ))}
       </div>
       {/* mt-auto：在 flex-column 容器裡把自己推到最底——這是「戰」被壓到 rail
-          最下方、跟上面三個拉開距離的關鍵，不用另外算 margin 數字。 */}
+          最下方、跟上面三個拉開距離的關鍵，不用另外算 margin 數字。
+          boardSlot 有傳（目前只有 ScoreSheet.tsx）就整個取代下面的 <NavRailItem>——飛出
+          選單的觸發按鈕長得跟 NavRailItem 很像，但它自己內部還要接一片絕對定位的選單、
+          管開關狀態，這些邏輯不屬於這個 dumb rail，所以整塊交給呼叫端決定要放什麼。 */}
       <div className="mt-auto flex flex-col items-center gap-1 py-3">
-        <NavRailItem item={boardItem} isActive={boardItem.key === active} />
+        {boardSlot ?? <NavRailItem item={boardItem} isActive={boardItem.key === active} />}
       </div>
     </nav>
   );

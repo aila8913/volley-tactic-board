@@ -1,20 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
-import { useParams, useLocation, Link } from "wouter";
+import { useParams, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import BackToMatchListButton from "@/components/BackToMatchListButton";
 import MatchNavRail, { matchBackHref } from "@/components/MatchNavRail";
+import TacticsRailMenu from "@/components/TacticsRailMenu";
 import { useMatchWithRoster } from "@/hooks/useMatches";
 import { useRotationTable } from "@/hooks/useRotationTable";
 import { useScoreSheet, useScoreSheetController } from "@/hooks/useScoreSheet";
-import { useTacticsBoard } from "@/hooks/useTacticsBoard";
 import ScoreSheetCourt, { TouchedTarget } from "@/components/ScoreSheetCourt";
 import RadialMenu, { RadialMenuOption } from "@/components/RadialMenu";
 import ScoreSheetStats from "@/components/ScoreSheetStats";
+import ScoreSheetRotationPanel from "@/components/ScoreSheetRotationPanel";
 import { PlayAction } from "@/types/scoresheet";
 import { isSetComplete, disabledActions } from "@/lib/scoreSheetMapping";
 import { captureLineupFromRotations, lineupToPositions } from "@/lib/rotationLogic";
-import { captureFromScoreSheet } from "@/lib/courtSnapshot";
+import { captureFromScoreSheet, captureBlank } from "@/lib/courtSnapshot";
 
 // 6 大類跟 lib/db/src/schema/events.ts 的 eventActionEnum 對齊（見
 // types/scoresheet.ts 的說明）。陣列順序就是 RadialMenu 從正上方順時針排列的順序，
@@ -56,9 +57,6 @@ type Gesture =
 export default function ScoreSheet() {
   const { id } = useParams<{ id: string }>();
   const { match, isLoading: isMatchLoading } = useMatchWithRoster(Number(id));
-  // wouter 的 useLocation 回傳 [目前路徑, 導航函式]；這裡只要導航，不用讀目前路徑，
-  // 用逗號跳過第一個回傳值。
-  const [, setLocation] = useLocation();
 
   // 只讀輪轉表這一場的 rotations，用來「擷取」計分表自己的先發快照——擷取一次之後，計分表就
   // 完全讀自己的快照、不再碰輪轉表（issue #115）。輪轉表現在用 matchId 分片（issue #119），所以
@@ -290,28 +288,23 @@ export default function ScoreSheet() {
     setSelectedBenchPlayer(null);
   };
 
-  // 快速戰術板入口（issue #160 C3）：把「目前這一輪」的站位直接帶去戰術板開一個可編輯的
-  // session，省掉使用者自己切到戰術板、再手動從輪轉表擷取的來回。
-  //
-  // 站位來源刻意用 activeLineup（計分表自己的逐局先發快照）而不是回頭去讀全域的輪轉表
-  // store：計分表的站位真相本來就在自己這份快照裡（#115 把這條耦合解掉、改成後端
-  // usePutSetLineup/useListMatchLineups 持久化），從這裡抓才是「單一真相來源」；如果改讀
-  // 全域 rotation store，一來會把 #115 好不容易解掉的耦合又接回來，二來語意上這裡要的本來
-  // 就是「這一場、這一局」的站位，直接用 activeLineup 最短，不用多繞一手。
-  const handleQuickTacticsBoard = () => {
-    if (!activeLineup || !currentSet || !id) return;
-    const snapshot = captureFromScoreSheet(activeLineup, currentSet.ourRotation, match.players, {
+  // 左側導覽軌「戰」按鈕的飛出選單（issue #160 C3）：TacticsRailMenu 自己管開關/清單/彈窗，
+  // 這裡只需要告訴它「計分頁的『現在站位』要怎麼查」——見 NewTacticDialog.tsx 開頭那段
+  // 「為什麼擷取來源要由呼叫端注入」的說明。計分頁的現在站位＝activeLineup（計分表自己的
+  // 逐局先發快照），不是全域輪轉表 store，理由跟以前 handleQuickTacticsBoard 一樣：
+  // 計分表的站位真相本來就在自己這份快照裡（issue #115 把這條耦合解掉），從這裡抓才是
+  // 「單一真相來源」；如果改讀全域 rotation store 會把 #115 好不容易解掉的耦合又接回來。
+  const captureCurrentForBoard = () => {
+    if (!activeLineup || !currentSet) {
+      // 理論上不會被呼叫到——TacticsRailMenu 在 captureDisabled 為真時，會把「擷取
+      // 目前站位」這個選項停用，使用者按不到這裡。但 captureCurrent 的型別要求永遠回傳一張
+      // CourtSnapshot（不能是 null/undefined），所以保底給一張空站位，純粹滿足型別、不會
+      // 真的被用到。
+      return captureBlank({ matchId: id });
+    }
+    return captureFromScoreSheet(activeLineup, currentSet.ourRotation, match.players, {
       matchId: id,
     });
-    // 這裡用 useTacticsBoard.getState() 而不是元件最上面用 useTacticsBoard((s) => ...) 那種
-    // hook 訂閱寫法：getState() 只在這個 click handler 執行的當下讀一次 store 現況、呼叫完
-    // 動作就結束，不會讓這個元件訂閱戰術 store 的變化。如果改用 hook 訂閱，戰術 store 裡任何
-    // 一次拖曳/畫線都會讓這個跟戰術板無關的計分頁元件重新 render，白白浪費效能——這是
-    // Zustand「在事件 handler 裡讀/寫但不訂閱」的慣用法。
-    useTacticsBoard.getState().startSession(snapshot, {
-      name: `第 ${currentSet.setNumber} 局 第 ${currentSet.ourRotation} 輪`,
-    });
-    setLocation(`/matches/${id}/board`);
   };
 
   return (
@@ -319,7 +312,22 @@ export default function ScoreSheet() {
     // 才是這一頁原本的內容（flex-1 min-w-0 撐滿剩下的寬度）。以前的「回列表」
     // 「戰術板」連結是這個頁面 header 自己刻的，現在統一交給 MatchNavRail（issue #160）。
     <div className="flex h-screen w-full">
-      <MatchNavRail matchId={id} backHref={backHref} active="record" />
+      <MatchNavRail
+        matchId={id}
+        backHref={backHref}
+        active="record"
+        // issue #160 C3：計分頁的「戰」按鈕改成飛出選單（列出已存戰術＋新增戰術），取代原本
+        // 右欄底部單獨一顆「快速戰術板」按鈕——兩者是同一個功能，收進選單的「+」之後那顆
+        // 按鈕就沒有存在必要了（見下面右欄，那個區塊已整段移除）。
+        boardSlot={
+          <TacticsRailMenu
+            matchId={id}
+            captureCurrent={captureCurrentForBoard}
+            captureLabel="擷取目前計分站位"
+            captureDisabled={!activeLineup || !currentSet}
+          />
+        }
+      />
       <div className="flex min-w-0 flex-1 flex-col bg-white">
         <header className="flex items-center justify-center border-b-2 border-[#111] px-4 py-3 shrink-0">
           <h1 className="text-lg font-bold">vs {match.opponent}</h1>
@@ -481,12 +489,26 @@ export default function ScoreSheet() {
             )}
           </div>
 
-          {/* ── 右欄：統計（水平 snap scroll，可左右滑看其他場） ── */}
-          <div className="w-72 flex-none flex flex-col min-h-0">
-            <div className="px-3 py-2 border-b text-xs font-bold text-gray-600 flex items-center justify-between shrink-0">
+          {/* ── 右欄：站位／統計／快速戰術板（深色玻璃，跟中間白底計分區切開） ──
+            這輪（issue #120 第一階段）只把這整條 w-72 換成深色玻璃，色票照
+            docs/design-spec.md 第 2 節；中間計分區維持白底不動（整頁改版是另外的
+            design 工作）。border-l 收在這一側，交界只留一條邊框，不會有突兀的白邊。 */}
+          <div className="w-72 flex-none flex flex-col min-h-0 border-l border-white/[0.10] bg-[#121310] font-dash text-[#F5F5F0]">
+            {/* ── 站位面板（issue #120）── 純參照用，資料源用 ourPositions（計分表自己
+              的逐局先發快照換算出來的，不是讀 useRotationTable，見 CourtReadOnlyView 的
+              說明）。currentSet 還沒選先發方時 ourPositions 本來就是空陣列，
+              ScoreSheetRotationPanel → CourtReadOnlyView 會自己顯示「尚未排先發」，
+              這裡不用另外判斷要不要渲染。 */}
+            <ScoreSheetRotationPanel
+              positions={ourPositions}
+              roster={match.players}
+              rotation={currentSet?.ourRotation ?? 0}
+            />
+
+            <div className="px-3 py-2 border-b border-white/[0.10] text-xs font-bold text-[#9AA08C] flex items-center justify-between shrink-0">
               <span>比賽統計</span>
               {statsMatches.length > 1 && (
-                <span className="text-gray-400 font-normal">← 滑動看其他場</span>
+                <span className="text-[#9AA08C]/70 font-normal">← 滑動看其他場</span>
               )}
             </div>
 
@@ -494,14 +516,14 @@ export default function ScoreSheet() {
             <div className="flex-1 flex overflow-x-auto snap-x snap-mandatory min-h-0 [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
               {statsMatches.map((m, i) => (
                 <div key={m.id} className="w-72 flex-none snap-center flex flex-col min-h-0">
-                  <div className="shrink-0 bg-white border-b px-3 py-1.5 flex items-center gap-2">
+                  <div className="shrink-0 bg-white/[0.03] border-b border-white/[0.10] px-3 py-1.5 flex items-center gap-2">
                     <span className="text-xs font-bold truncate">vs {m.opponent}</span>
                     {m.id === id && (
-                      <span className="text-[10px] bg-blue-50 text-blue-600 px-1 rounded shrink-0">
+                      <span className="text-[10px] bg-[#C6F135]/15 text-[#C6F135] px-1 rounded shrink-0">
                         本場
                       </span>
                     )}
-                    <span className="text-[10px] text-gray-400 ml-auto shrink-0">
+                    <span className="text-[10px] text-[#9AA08C] ml-auto shrink-0">
                       {i + 1}/{statsMatches.length}
                     </span>
                   </div>
@@ -517,20 +539,6 @@ export default function ScoreSheet() {
                   </div>
                 </div>
               ))}
-            </div>
-
-            {/* 快速戰術板入口（issue #160 C3）：shrink-0 讓它固定在右欄底部，不會跟著上面
-              snap-scroll 的統計區塊一起橫向滑動；加上邊框跟統計區隔開。 */}
-            <div className="shrink-0 border-t px-3 py-2">
-              <Button
-                variant="outline"
-                className="w-full"
-                disabled={!activeLineup || !currentSet}
-                onClick={handleQuickTacticsBoard}
-              >
-                快速戰術板
-              </Button>
-              <p className="mt-1 text-center text-[11px] text-gray-400">擷取目前站位</p>
             </div>
           </div>
         </div>

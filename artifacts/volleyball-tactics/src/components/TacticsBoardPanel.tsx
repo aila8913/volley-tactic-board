@@ -9,9 +9,10 @@ import {
   useDeleteTactic,
   getListTacticsQueryKey,
 } from "@workspace/api-client-react";
-import { useTacticsBoard } from "../hooks/useTacticsBoard";
+import { useTacticsBoard, isSessionDirty, DISCARD_MSG } from "../hooks/useTacticsBoard";
 import { useRotationTable } from "../hooks/useRotationTable";
 import { exportCourtAsPng, exportStateAsJson, importStateFromJson } from "../lib/exportUtils";
+import { captureFromRotation } from "../lib/courtSnapshot";
 import { Toaster } from "@/components/ui/toaster";
 import { useToast } from "@/hooks/use-toast";
 import TacticsBrowsePanel from "./TacticsBrowsePanel";
@@ -22,7 +23,8 @@ import { SECONDARY_BTN_CLASS } from "../lib/tacticsBoardStyles";
 
 // 未存內容捨棄前的確認訊息（issue #154 PR C）：白板單向化後，唯一還會「弄丟東西」的動作
 // 就是捨棄一個編到一半、還沒存的 session——所以確認彈窗集中留在這裡（取代舊的載入覆蓋確認）。
-const DISCARD_MSG = "未儲存的戰術內容將會捨棄，確定嗎？";
+// 判準（isSessionDirty）與訊息（DISCARD_MSG）本身住在 hooks/useTacticsBoard.ts，這裡只是
+// 使用者之一：飛出選單 TacticsRailMenu、切輪次的 RotationSwitcher 也走同一條路。
 
 // ── issue #160 C2：戰術頁狀態機 + 面板拆檔 ──
 //
@@ -55,9 +57,8 @@ export default function TacticsBoardPanel() {
   const buildSavedTactic = useTacticsBoard((s) => s.buildSavedTactic);
   const discardSession = useTacticsBoard((s) => s.discardSession);
 
-  // 「有未存內容」判準：session 一開始就種了一格起始歷史（history[0]），只要使用者動過任何
-  // 東西就會 push 成第 1 格以後，所以 length > 1 剛好等於「編過、還沒存」——切走前要先確認。
-  const isDirty = session !== null && session.history.length > 1;
+  // 「有未存內容」判準抽到 store 檔案共用（三個元件都要用），理由見 isSessionDirty 的說明。
+  const isDirty = isSessionDirty(session);
 
   // 三選一模式：見上面「戰術頁狀態機」的說明，純粹用 session / viewingScene 兩個既有欄位推導。
   const mode: "browse" | "viewing" | "edit" = session
@@ -182,6 +183,21 @@ export default function TacticsBoardPanel() {
     deleteTactic.mutate({ tacticId });
   };
 
+  // 「新增戰術」彈窗的擷取來源（issue #160 C3：NewTacticDialog 改成擷取邏輯由呼叫端注入，見
+  // 該檔案開頭註解）。戰術頁的「現在站位」＝輪轉表當下排的站位——這段邏輯就是原本寫死在
+  // NewTacticDialog 內部的 handleCaptureRotation，原封不動搬過來，只是現在以「函式值」
+  // 的形式傳給彈窗，彈窗本身不再知道「輪轉表」這個字怎麼拼。
+  const captureCurrentFromRotation = () => {
+    // 讀「現在」站位只能發生一次、發生在使用者按下按鈕的當下——用 getState() 而不是 hook
+    // 訂閱值，理由跟原本 NewTacticDialog 內的註解一樣：這裡要的是「按下去那一刻」的快照，
+    // 不該隨輪轉表變動重新執行（那樣就不是「擷取」，是「即時綁定」）。
+    const rt = useRotationTable.getState().dataByMatch[matchId];
+    const r = rt?.currentRotation ?? 0;
+    const positions = rt?.rotations[r]?.positions ?? [];
+    const roster = rt?.roster ?? [];
+    return captureFromRotation(positions, roster, { matchId, rotation: r });
+  };
+
   // 儲存：session 有 serverId → 覆寫那一筆；沒有（草稿）→ 新建。buildSavedTactic() 回傳 v2 物件，
   // cast 成 Record<string, unknown> 是為了滿足 codegen 從 additionalProperties:true 生成的
   // NewTacticData 型別要求（實際就是把整包當 JSON 送）。
@@ -284,6 +300,8 @@ export default function TacticsBoardPanel() {
         open={newTacticDialogOpen}
         onOpenChange={setNewTacticDialogOpen}
         matchId={matchId}
+        captureCurrent={captureCurrentFromRotation}
+        captureLabel={`將複製第 ${currentRotation + 1} 輪`}
       />
       <Toaster />
     </div>

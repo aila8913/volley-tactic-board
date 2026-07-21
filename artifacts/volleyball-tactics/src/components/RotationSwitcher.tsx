@@ -1,6 +1,6 @@
 import { useParams } from "wouter";
 import { useRotationTable } from "../hooks/useRotationTable";
-import { useTacticsBoard } from "../hooks/useTacticsBoard";
+import { useTacticsBoard, isSessionDirty } from "../hooks/useTacticsBoard";
 
 // 輪次切換：原本是 6 個輪次的球場小縮圖（舊的 RotationThumbnails），視覺較雜亂，
 // 改成「上一輪 / 下一輪」兩個按鈕 + 中間顯示目前第幾輪（呼應 issue #17 想簡化輪次選擇）。
@@ -25,7 +25,7 @@ export default function RotationSwitcher() {
   // matchId 理論上一定存在（這個元件只在 /matches/:id/board 底下渲染），防呆一下不動作。
   const go = (index: number) => {
     if (!matchId) return;
-    const dirty = session !== null && session.history.length > 1;
+    const dirty = isSessionDirty(session);
     if (dirty && !window.confirm("未儲存的戰術內容將會捨棄，確定要切換輪次嗎？")) return;
     // 丟掉 session / 清掉唯讀檢視、回到輪轉視圖，再切輪次——避免帶著白板狀態切到別輪。
     if (session) discardSession();
