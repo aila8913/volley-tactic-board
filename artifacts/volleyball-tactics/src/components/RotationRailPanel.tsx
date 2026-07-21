@@ -27,10 +27,6 @@ interface RotationRailPanelProps {
   // 「為什麼沒有 draft/確定鈕」的說明。readOnly 時不會用到，但呼叫端必須在 !readOnly
   // 時提供，否則點了球員也沒有任何效果。
   onLineupChange?: (next: LineupSnapshot) => void;
-  // 有傳才顯示輪次切換 stepper。戰術板現在改用 RotationSwitcher（帶著白板 session 的
-  // 副作用邏輯）當唯一的輪次控制、透過 footer 插入，所以戰術板呼叫這個元件時**不會**傳
-  // onRotationChange，讓面板自己的 stepper保持隱藏，畫面上才不會出現兩顆輪次切換鈕打架。
-  onRotationChange?: (next: number) => void;
   // 標題文字，預設「場上站位」。
   title?: string;
   // 頁面各自想加在三個區塊下面的額外內容（戰術板放球員設定/輪次選擇/提示；
@@ -51,7 +47,6 @@ export default function RotationRailPanel({
   rotation,
   readOnly = false,
   onLineupChange,
-  onRotationChange,
   title = "場上站位",
   footer,
 }: RotationRailPanelProps) {
@@ -89,10 +84,19 @@ export default function RotationRailPanel({
       className={`shrink-0 border-b border-white/[0.10] px-3 py-3 ${readOnly ? "opacity-90" : ""}`}
       data-testid="rotation-rail-panel"
     >
-      <div className="mb-2 flex items-center justify-between">
+      <div className="mb-2 flex items-center justify-between gap-2">
         <h2 className="text-sm font-bold text-[#F5F5F0]">{title}</h2>
-        {/* 唯讀時不顯示 {filled}/6——那是「還差幾人」的編輯進度提示，看戲的人不需要。 */}
-        {!readOnly && <span className="text-xs text-[#9AA08C]">{filledCount}/6</span>}
+        <div className="flex items-center gap-2">
+          {/* 「第 N 輪」永遠顯示，唯讀或可編輯都一樣。這是 #120 第一階段的核心補強——
+            在此之前計分頁整頁沒有任何地方顯示 currentSet.ourRotation，教練看得到誰站哪，
+            卻不知道現在輪到第幾轉。它是純資訊、不是控制項：計分頁的輪次由得分自動推進，
+            戰術板的輪次由 RotationSwitcher 切（那顆帶白板 session 副作用，見 RotationTable）。 */}
+          <span className="text-xs font-bold tabular-nums text-[#F5F5F0]">
+            第 {rotation + 1} 輪
+          </span>
+          {/* 唯讀時不顯示 {filled}/6——那是「還差幾人」的編輯進度提示，看戲的人不需要。 */}
+          {!readOnly && <span className="text-xs text-[#9AA08C]">{filledCount}/6</span>}
+        </div>
       </div>
 
       {/* ① 輪轉表（layout-spec §4.1）：六宮格本身就是站位表。可編輯時點格子選號位；
@@ -137,30 +141,12 @@ export default function RotationRailPanel({
         })}
       </div>
 
-      {/* ② 輪次切換列（layout-spec §4.2）：spec 寫明「是 stepper 不是下拉選單」。
-        只有呼叫端傳了 onRotationChange 才顯示——戰術板不傳，改在 footer 塞入
-        RotationSwitcher（它還帶著白板 session 的副作用邏輯，見 RotationTable.tsx）。 */}
-      {onRotationChange && (
-        <div className="mt-2 flex items-center gap-2">
-          <button
-            onClick={() => onRotationChange((rotation + 5) % 6)}
-            disabled={readOnly}
-            className="flex-1 rounded-lg border border-white/[0.12] bg-white/[0.04] px-2 py-1.5 text-xs text-[#F5F5F0] transition hover:border-white/[0.30] disabled:opacity-40"
-          >
-            ‹ 上一輪
-          </button>
-          <span className="w-16 text-center text-xs font-bold text-[#F5F5F0]">
-            第 {rotation + 1} 輪
-          </span>
-          <button
-            onClick={() => onRotationChange((rotation + 1) % 6)}
-            disabled={readOnly}
-            className="flex-1 rounded-lg border border-white/[0.12] bg-white/[0.04] px-2 py-1.5 text-xs text-[#F5F5F0] transition hover:border-white/[0.30] disabled:opacity-40"
-          >
-            下一輪 ›
-          </button>
-        </div>
-      )}
+      {/* layout-spec §4.2 的「輪次切換 stepper」目前刻意不做：兩個呼叫端都不需要它——
+        計分頁的輪次由得分自動推進，戰術板用 RotationSwitcher（帶白板 session 副作用）。
+        當初照 spec 先寫了一顆，結果沒有任何呼叫端傳 onRotationChange，等於死碼，還把
+        「第 N 輪」的顯示一起藏起來（已移到標題列，永遠顯示）。等真的有頁面需要在這裡
+        切輪次時再加回來——比賽列表右欄（#170）要的是切「局」不是切「輪」，語意不同，
+        不要直接套用這個。 */}
 
       {!readOnly && (
         <p className="mt-2 text-[11px] leading-snug text-[#9AA08C]">
