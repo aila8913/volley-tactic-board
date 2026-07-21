@@ -7,8 +7,15 @@ import {
   LiberoReplacement,
   CircleLabelType,
 } from "../types/rotationTable";
-import { findNearestZone, getZoneCoords, rotateZone, BACK_ROW_ZONES } from "../lib/rotationLogic";
+import {
+  findNearestZone,
+  getZoneCoords,
+  rotateZone,
+  BACK_ROW_ZONES,
+  lineupToPositions,
+} from "../lib/rotationLogic";
 import type { MatchPlayer } from "../types/match";
+import type { LineupSnapshot } from "../types/scoresheet";
 
 // 把目前場上的站位轉成「哪個格子站了誰」，方便用格子（1~6 號位）做吸附/換位/
 // 推算其他輪次的邏輯，而不用每次都跟 x/y 浮點數打交道。
@@ -112,6 +119,21 @@ interface RotationTableStore {
   // useTacticsBoard 的 resetCurrentRotationTactics 把畫筆也清掉，但那個 action 已隨 #154
   // 刪除——畫筆現在住在用完即丟的白板 session 裡，跟輪轉表站位是兩件事，不需要一起清。
   resetCurrentRotationPositions: (matchId: string) => void;
+
+  // 計分頁右欄（issue #120 第二階段）editing 共用真相用的入口：教練在計分頁排先發，
+  // 排的其實就是這裡的 rotations——輪轉表跟計分頁本來就該是「同一份站位」，不是各自
+  // 保管一份副本（PO 決策：見本次任務說明）。
+  //
+  // 這裡收的是 LineupSnapshot（zone → playerId 的號位對照表，人看得懂的格式），但
+  // dataByMatch 存的是 RotationPositions[]（座標陣列，球場渲染用的格式）——兩者是同一件
+  // 事的兩種呈現：座標版是給 Court.tsx 畫圖用的「機器格式」，號位版是教練排陣時心裡
+  // 想的「人類格式」。所以這個 action 要做的事，就是把一份號位快照「展開」回全部 6 個
+  // 輪次的座標：lineup 記的是「起始（第 0 輪）站在哪個號位」，用 lineupToPositions
+  // 分別算出轉 0~5 輪之後每個人實際落在哪個號位、換算成座標，寫回 rotations[0..5]。
+  // liberoReplacement 一律清成 null：LineupSnapshot 本來就不記自由球員（見
+  // types/scoresheet.ts 說明），這裡等於是「先發只排六個非自由球員」，L 上場另外走
+  // placePlayerOnCourt。
+  setLineupFromSnapshot: (matchId: string, lineup: LineupSnapshot) => void;
 
   // 註：舊的 loadRotationData（整批把存檔覆蓋回輪轉表）已在 #154 PR B 移除。載入已存戰術
   // 改成唯讀檢視、不再反向寫回輪轉表，所以輪轉表不需要、也刻意不提供這個「被別人整包覆蓋」
@@ -319,6 +341,17 @@ export const useRotationTable = create<RotationTableStore>()(
         ),
 
       resetAll: (matchId) => set((state) => updateMatch(state, matchId, () => emptyPerMatch())),
+
+      setLineupFromSnapshot: (matchId, lineup) =>
+        set((state) =>
+          updateMatch(state, matchId, (m) => ({
+            ...m,
+            rotations: Array.from({ length: 6 }, (_, rotationIndex) => ({
+              positions: lineupToPositions(lineup, rotationIndex),
+              liberoReplacement: null,
+            })),
+          })),
+        ),
     }),
     {
       name: "volleyboard_rotationtable",

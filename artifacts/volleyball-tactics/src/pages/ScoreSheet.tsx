@@ -11,9 +11,8 @@ import { useScoreSheet, useScoreSheetController } from "@/hooks/useScoreSheet";
 import ScoreSheetCourt, { TouchedTarget } from "@/components/ScoreSheetCourt";
 import RadialMenu, { RadialMenuOption } from "@/components/RadialMenu";
 import ScoreSheetStats from "@/components/ScoreSheetStats";
-import ScoreSheetRotationPanel from "@/components/ScoreSheetRotationPanel";
-import ScoreSheetLineupEditor, { LineupEditorMode } from "@/components/ScoreSheetLineupEditor";
-import { LineupSnapshot, PlayAction } from "@/types/scoresheet";
+import RotationRailPanel from "@/components/RotationRailPanel";
+import { PlayAction } from "@/types/scoresheet";
 import { isSetComplete, disabledActions } from "@/lib/scoreSheetMapping";
 import { captureLineupFromRotations, lineupToPositions } from "@/lib/rotationLogic";
 import { captureFromScoreSheet, captureBlank } from "@/lib/courtSnapshot";
@@ -66,12 +65,12 @@ export default function ScoreSheet() {
   const rotations = useRotationTable((state) =>
     id ? state.dataByMatch[id]?.rotations : undefined,
   );
+  // 開局前，右欄的先發編輯就是直接改這份共用真相（PO 決策：輪轉/先發是跨頁共用的一份，
+  // 不是計分頁自己再存一份副本）——教練在計分頁排先發，戰術板也要立刻看到同一份結果。
+  const setLineupFromSnapshot = useRotationTable((state) => state.setLineupFromSnapshot);
 
   const record = useScoreSheet((state) => (id ? state.recordingsByMatch[id] : undefined));
   const setLiberoSubstitution = useScoreSheet((state) => state.setLiberoSubstitution);
-  // 換局換輪視窗（issue #120）要用的 setLineup：跟 setLiberoSubstitution 一樣直接從 store
-  // 取這顆純 reducer 動作，寫的是計分表自己那份 per-set 先發快照，不碰全域輪轉表。
-  const setLineup = useScoreSheet((state) => state.setLineup);
   // 「復原」堆疊的深度：>0 才有東西可退（issue #41）。手動 libero 上/下場沒有對應的
   // 後端動作，也要能被復原，所以按鈕的可用與否看這個深度，而不是只看記了幾顆球。
   const undoDepth = useScoreSheet((state) => (id ? (state.undoStacksByMatch[id]?.length ?? 0) : 0));
@@ -96,10 +95,6 @@ export default function ScoreSheet() {
   const timeoutCountsHistory = record?.timeoutCountsHistory ?? [];
 
   const [gesture, setGesture] = useState<Gesture | null>(null);
-  // 右欄先發編輯器的狀態（issue #120）。null＝右欄顯示唯讀站位面板；有值＝右欄那一塊
-  // 換成 ScoreSheetLineupEditor。刻意做成「右欄換人」而不是彈窗：計分表本身不該被蓋住，
-  // 而且右欄本來就有站位視圖，再開一個彈窗等於同一件事做兩遍（見編輯器檔頭說明）。
-  const [lineupEditor, setLineupEditor] = useState<LineupEditorMode | null>(null);
 
   // ── 自由球員替換記憶 ──
   // useRef 讓 useEffect 讀到最新值，避免陳舊閉包（stale closure）。
@@ -176,12 +171,11 @@ export default function ScoreSheet() {
   // 「輪轉表當下能擷取出一份完整先發」（activeLineup 非 null）就放行。門檻仍是「滿 6 個號位」
   // （captureLineupFromRotations 內建，跟舊的 isLineupComplete 同一條規則，見 issue #37）。
   const hasLineup = activeLineup !== null;
-  // 右欄現在要顯示唯讀面板還是編輯器。除了使用者主動觸發（按「改」或「下一局」）之外，
-  // 「這場根本還沒有先發」會自動進 initial 模式——以前這種情況是把使用者踢去戰術板排，
-  // 現在直接在右欄排完就能開始記錄，不用為了排六個人跳出計分頁再跳回來（PO 指示）。
-  const editorMode: LineupEditorMode | null = lineupEditor ?? (hasLineup ? null : "initial");
-  // 先發只有在「這一局還沒開打」時能改（局中凍結，見 hooks/useScoreSheet.ts 的 start()）：
-  // 開賽後改先發會讓已經記進去的球對不上站位，那時要動陣容得走換人。
+  // 先發只有在「這一局還沒開打」時能改（開局凍結，見 hooks/useScoreSheet.ts 的 start()）：
+  // 開賽前右欄顯示的是共用真相（capturableLineup），可以直接編輯、每一次改動都即時生效
+  // （setLineupFromSnapshot 直接寫回 useRotationTable）；開賽後已經記進去的球是綁著
+  // record.lineup 這份凍結快照的，這時候改站位會讓歷史對不上，所以只能看不能改，
+  // 要動陣容得走換人。
   const canEditLineup = !currentSet || currentSet.serving === null;
   // 球場要畫的「這一輪我方 6 人座標」，從快照即時換算（不再讀全域 rotations）。
   const ourPositions =
@@ -295,38 +289,14 @@ export default function ScoreSheet() {
       );
       if (!ok) return;
     }
-    // 通過勝局確認後，不再直接呼叫 goNextSet()：真正推進到下一局，改成交給右欄編輯器的
-    // 「確定」按鈕觸發（issue #120），這裡只負責把右欄切成編輯模式。這樣教練有機會在換局
-    // 前決定新一局要用什麼先發，而不是照舊沿用戰術頁當下的輪轉表站位。
-    setLineupEditor("next-set");
-  };
-
-  // 右欄編輯器按下「確定」才會呼叫這裡（issue #120）。
-  //
-  // 呼叫順序不能顛倒：goNextSet() 底層的 nextSet 動作會把 record.lineup 清成 null
-  // （見 hooks/useScoreSheet.ts 的 nextSet 註解——先發是「每局可不同」，換新的一局要先
-  // 清空舊局的快照），如果先 setLineup 再 goNextSet，剛寫進去的快照會被這次清空蓋掉、
-  // 白寫一次。所以要先讓 goNextSet 把 lineup 歸零，緊接著再用這一局教練選好的快照覆蓋回去。
-  //
-  // 這裡不用另外呼叫任何後端 API：controller 的 start()（教練接著按「我方先發／對手先發」
-  // 時才會跑）本來就是讀 `existingLineup ?? lineup`，existingLineup 就是 record.lineup——
-  // 我們在這裡 setLineup 寫進去的正是它。等教練選好先發方，start() 會把這份快照當作
-  // effectiveLineup PUT 上去（一局一 row，PUT 是 idempotent upsert），不需要這裡另外
-  // 呼叫 putLineup 之類的 mutation。
-  const handleConfirmNextSetLineup = (chosen: LineupSnapshot) => {
+    // goNextSet() 底層的 nextSet 動作已經會把 record.lineup 清成 null（見
+    // hooks/useScoreSheet.ts 的 nextSet 註解——先發是「每局可不同」，換新的一局要先清空
+    // 舊局的快照），清空之後 activeLineup 自然改讀 capturableLineup（共用真相現在長什麼樣），
+    // 右欄也就自動變回「開賽前、可編輯」的樣子——不需要另外一套「right rail 進編輯模式」
+    // 的狀態機來銜接這一步。
     goNextSet();
-    setLineup(id, chosen);
     setPreviousLiberoTarget(null);
     setSelectedBenchPlayer(null);
-    setLineupEditor(null);
-  };
-
-  // 開賽前（第 1 局，或按了「改」重排目前這一局）按確定：這裡**不能**呼叫 goNextSet——
-  // 沒有要換局，只是把這一局的先發快照寫下來。寫進去之後 activeLineup 就改讀這份凍結的
-  // 快照（lineup ?? capturableLineup 的前者），不再受輪轉表影響。
-  const handleConfirmCurrentLineup = (chosen: LineupSnapshot) => {
-    setLineup(id, chosen);
-    setLineupEditor(null);
   };
 
   // 左側導覽軌「戰」按鈕的飛出選單（issue #160 C3）：TacticsRailMenu 自己管開關/清單/彈窗，
@@ -378,13 +348,14 @@ export default function ScoreSheet() {
           {/* ── 左欄：計分表 ── */}
           <div className="flex flex-1 flex-col min-h-0 border-r-2 border-[#111]">
             {!hasLineup ? (
-              // 這場還沒有先發。以前這裡是一顆「前往戰術板」把使用者踢出計分頁，現在右欄
-              // 已經自動進入 initial 編輯模式（見 editorMode），排完六個人就地開始記錄，
-              // 所以這裡只留一句指路，不再提供離開這一頁的入口（PO 指示）。
+              // 這場還沒有先發。以前這裡是一顆「前往戰術板」把使用者踢出計分頁，現在右欄的
+              // 站位面板在開賽前本來就是可編輯的（不用另外切換模式），所以這裡只留一句指路，
+              // 不再提供離開這一頁的入口（PO 指示），也不連去戰術板——戰術板現在是唯讀的白板，
+              // 不是排先發的地方（issue #154）。
               <div className="flex flex-1 flex-col items-center justify-center gap-2 px-4 text-center">
                 <p className="text-muted-foreground">還沒排先發。</p>
                 <p className="text-sm text-muted-foreground">
-                  在右邊的「排第 1 局先發」點號位、再點球員，湊滿 6 人就能開始記錄。
+                  在右邊的「場上站位」點號位、再點球員，湊滿 6 人就能開始記錄。
                 </p>
               </div>
             ) : (
@@ -429,16 +400,6 @@ export default function ScoreSheet() {
                   <span>對手</span>
                 </div>
 
-                {/* 換局中的指路條：按了「下一局」之後，真正推進要等右欄按確定，這中間
-                  計分表看起來完全沒變（分數還是上一局的），沒有這條提示使用者會以為
-                  按鈕壞了。這也是「不用彈窗」要付的代價——彈窗會自己搶注意力，改成
-                  右欄換人就得在這裡主動指路。 */}
-                {editorMode === "next-set" && (
-                  <div className="w-full rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-center text-xs text-amber-800">
-                    正在決定第 {(currentSet?.setNumber ?? 1) + 1} 局先發 → 請在右欄排好後按「確定」
-                  </div>
-                )}
-
                 {!currentSet || currentSet.serving === null ? (
                   <div className="flex flex-1 flex-col items-center justify-center gap-3">
                     <p className="text-sm font-bold">這局由誰先發球？</p>
@@ -449,10 +410,10 @@ export default function ScoreSheet() {
                       </Button>
                     </div>
                     {/* 先發是「每局可不同」的（issue #115）：選先發方那一刻，會把當下的站位凍結成
-                      這一局的先發。以前想換陣得回戰術板重排輪轉再回來，現在直接在右欄按「改」就地
-                      調整——這句提示是為了避免使用者以為「陣容改不了」或「下一局會自動換陣」。 */}
+                      這一局的先發（開局凍結）。開賽前右欄的站位面板本來就是可以直接編輯的——
+                      不用另外按「改」切換模式，改了立刻生效。 */}
                     <p className="mt-1 text-center text-xs text-gray-400">
-                      這一局會用右欄目前的站位。想換陣？按右欄「場上站位」旁邊的「改」。
+                      這一局會用右欄目前的站位，隨時可以直接在右欄改。
                     </p>
                   </div>
                 ) : (
@@ -542,42 +503,21 @@ export default function ScoreSheet() {
             docs/design-spec.md 第 2 節；中間計分區維持白底不動（整頁改版是另外的
             design 工作）。border-l 收在這一側，交界只留一條邊框，不會有突兀的白邊。 */}
           <div className="w-72 flex-none flex flex-col min-h-0 border-l border-white/[0.10] bg-[#121310] font-dash text-[#F5F5F0]">
-            {/* ── 站位面板（issue #120）── 純參照用，資料源用 ourPositions（計分表自己
-              的逐局先發快照換算出來的，不是讀 useRotationTable，見 CourtReadOnlyView 的
-              說明）。currentSet 還沒選先發方時 ourPositions 本來就是空陣列，
-              ScoreSheetRotationPanel → CourtReadOnlyView 會自己顯示「尚未排先發」，
-              這裡不用另外判斷要不要渲染。 */}
-            {editorMode ? (
-              <ScoreSheetLineupEditor
-                mode={editorMode}
-                // next-set 時要排的是「下一局」，所以 +1；initial 排的就是當前這一局。
-                setNumber={
-                  editorMode === "next-set"
-                    ? (currentSet?.setNumber ?? 1) + 1
-                    : (currentSet?.setNumber ?? 1)
-                }
-                // 種子站位一律用 activeLineup：這時 goNextSet() 都還沒被呼叫，它讀到的仍是
-                // 「目前這一局」的先發快照——正好是 next-set 的「照上一局」要複製的來源；
-                // initial 模式下它會是 capturableLineup（輪轉表擷取出來的），沒排過就是 null。
-                seedLineup={activeLineup}
-                roster={match.players}
-                onConfirm={
-                  editorMode === "next-set"
-                    ? handleConfirmNextSetLineup
-                    : handleConfirmCurrentLineup
-                }
-                // initial 模式不給取消：先發沒排就開不了局，一顆按了等於卡住的鈕沒有意義。
-                // next-set 的取消＝不換局、維持現狀，留給教練反悔的空間。
-                onCancel={editorMode === "next-set" ? () => setLineupEditor(null) : undefined}
-              />
-            ) : (
-              <ScoreSheetRotationPanel
-                positions={ourPositions}
-                roster={match.players}
-                rotation={currentSet?.ourRotation ?? 0}
-                onEdit={canEditLineup ? () => setLineupEditor("initial") : undefined}
-              />
-            )}
+            {/* ── 站位面板（issue #120，共用真相版）──
+              開賽前（canEditLineup）：lineup 讀的是 activeLineup，此時等於
+              capturableLineup——輪轉表當下的共用真相，可以直接編輯；onLineupChange
+              呼叫 setLineupFromSnapshot 把改動寫回 useRotationTable，跟戰術板讀的是
+              同一份資料，改這裡戰術板也會立刻看到。
+              開賽後：record.lineup 已經凍結（開局凍結，見 hooks/useScoreSheet.ts 的
+              start()），這時 activeLineup 讀到的就是那份凍結快照，readOnly 鎖住不給改——
+              已經記進去的球是綁著這份站位算的，中途改會讓歷史跟站位對不上。 */}
+            <RotationRailPanel
+              lineup={activeLineup}
+              roster={match.players}
+              rotation={currentSet?.ourRotation ?? 0}
+              readOnly={!canEditLineup}
+              onLineupChange={canEditLineup ? (next) => setLineupFromSnapshot(id, next) : undefined}
+            />
 
             <div className="px-3 py-2 border-b border-white/[0.10] text-xs font-bold text-[#9AA08C] flex items-center justify-between shrink-0">
               <span>比賽統計</span>
