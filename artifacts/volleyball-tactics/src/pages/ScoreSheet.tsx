@@ -12,7 +12,8 @@ import ScoreSheetCourt, { TouchedTarget } from "@/components/ScoreSheetCourt";
 import RadialMenu, { RadialMenuOption } from "@/components/RadialMenu";
 import ScoreSheetStats from "@/components/ScoreSheetStats";
 import ScoreSheetRotationPanel from "@/components/ScoreSheetRotationPanel";
-import { PlayAction } from "@/types/scoresheet";
+import SetLineupDialog from "@/components/SetLineupDialog";
+import { LineupSnapshot, PlayAction } from "@/types/scoresheet";
 import { isSetComplete, disabledActions } from "@/lib/scoreSheetMapping";
 import { captureLineupFromRotations, lineupToPositions } from "@/lib/rotationLogic";
 import { captureFromScoreSheet, captureBlank } from "@/lib/courtSnapshot";
@@ -68,6 +69,9 @@ export default function ScoreSheet() {
 
   const record = useScoreSheet((state) => (id ? state.recordingsByMatch[id] : undefined));
   const setLiberoSubstitution = useScoreSheet((state) => state.setLiberoSubstitution);
+  // 換局換輪視窗（issue #120）要用的 setLineup：跟 setLiberoSubstitution 一樣直接從 store
+  // 取這顆純 reducer 動作，寫的是計分表自己那份 per-set 先發快照，不碰全域輪轉表。
+  const setLineup = useScoreSheet((state) => state.setLineup);
   // 「復原」堆疊的深度：>0 才有東西可退（issue #41）。手動 libero 上/下場沒有對應的
   // 後端動作，也要能被復原，所以按鈕的可用與否看這個深度，而不是只看記了幾顆球。
   const undoDepth = useScoreSheet((state) => (id ? (state.undoStacksByMatch[id]?.length ?? 0) : 0));
@@ -92,6 +96,9 @@ export default function ScoreSheet() {
   const timeoutCountsHistory = record?.timeoutCountsHistory ?? [];
 
   const [gesture, setGesture] = useState<Gesture | null>(null);
+  // 換局換輪視窗（issue #120）開關狀態。按「下一局」通過勝局確認之後不再直接 goNextSet()，
+  // 改成先打開這個視窗，真正推進到下一局要等視窗裡按「確定」（見 handleConfirmNextSetLineup）。
+  const [lineupDialogOpen, setLineupDialogOpen] = useState(false);
 
   // ── 自由球員替換記憶 ──
   // useRef 讓 useEffect 讀到最新值，避免陳舊閉包（stale closure）。
@@ -280,10 +287,27 @@ export default function ScoreSheet() {
       );
       if (!ok) return;
     }
-    // goNextSet 底層的 nextSet 現在就會把 liberoSubstitution 歸零、把 regularSubs 的次數
-    // 收進 subCountsHistory 再清空（見 hooks/useScoreSheet.ts 的 nextSet 動作），
-    // 這裡不用再手動同步這兩件事。
+    // 通過勝局確認後，不再直接呼叫 goNextSet()：真正推進到下一局，改成交給換局換輪視窗
+    // 的「確定」按鈕觸發（issue #120），這裡只負責打開它。這樣教練有機會在換局前決定
+    // 這一局要用什麼先發，而不是照舊直接沿用戰術頁當下的輪轉表站位。
+    setLineupDialogOpen(true);
+  };
+
+  // 換局換輪視窗按下「確定」才會呼叫這裡（issue #120）。
+  //
+  // 呼叫順序不能顛倒：goNextSet() 底層的 nextSet 動作會把 record.lineup 清成 null
+  // （見 hooks/useScoreSheet.ts 的 nextSet 註解——先發是「每局可不同」，換新的一局要先
+  // 清空舊局的快照），如果先 setLineup 再 goNextSet，剛寫進去的快照會被這次清空蓋掉、
+  // 白寫一次。所以要先讓 goNextSet 把 lineup 歸零，緊接著再用這一局教練選好的快照覆蓋回去。
+  //
+  // 這裡不用另外呼叫任何後端 API：controller 的 start()（教練接著按「我方先發／對手先發」
+  // 時才會跑）本來就是讀 `existingLineup ?? lineup`，existingLineup 就是 record.lineup——
+  // 我們在這裡 setLineup 寫進去的正是它。等教練選好先發方，start() 會把這份快照當作
+  // effectiveLineup PUT 上去（一局一 row，PUT 是 idempotent upsert），不需要這裡另外
+  // 呼叫 putLineup 之類的 mutation。
+  const handleConfirmNextSetLineup = (chosen: LineupSnapshot) => {
     goNextSet();
+    setLineup(id, chosen);
     setPreviousLiberoTarget(null);
     setSelectedBenchPlayer(null);
   };
@@ -577,6 +601,20 @@ export default function ScoreSheet() {
             startAngle={180}
           />
         )}
+
+        {/* 換局換輪視窗（issue #120）：previousLineup 傳 activeLineup，是因為這裡渲染的
+          當下 goNextSet() 都還沒被呼叫，activeLineup 讀到的仍是「剛結束那一局」的先發
+          快照——正好是視窗「照上次」按鈕要複製的來源。取消（Esc／點外面）不會呼叫
+          onConfirm，這是刻意的：維持現狀、不換局，讓教練有反悔的空間（見
+          SetLineupDialog 內部關於「按確定才生效」的說明）。 */}
+        <SetLineupDialog
+          open={lineupDialogOpen}
+          onOpenChange={setLineupDialogOpen}
+          setNumber={(currentSet?.setNumber ?? 1) + 1}
+          previousLineup={activeLineup}
+          roster={match.players}
+          onConfirm={handleConfirmNextSetLineup}
+        />
       </div>
     </div>
   );

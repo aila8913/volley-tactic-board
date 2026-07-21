@@ -110,6 +110,70 @@ export function getZoneCoords(zone: number): { x: number; y: number } {
   return zoneCoords[zone as keyof typeof zoneCoords];
 }
 
+// 換局換輪視窗（issue #120）用：把一整組先發快照整個轉 step 格，回傳一份新的快照。
+//
+// 為什麼是「搬 key」而不是「搬 value」：LineupSnapshot 的 key 是「起始號位」——這一局
+// 第一顆球開始時，某個球員站在哪個號位。轉一格的意思是「每個人的起始號位都往後移一格」，
+// 例如原本在 1 號位發球的人，轉一輪之後應該變成從 6 號位開局（照 rotateZone 的
+// 1→6→5→4→3→2→1 逆時針規則）。所以要動的是「這個人記在哪一個 key 底下」，人（value）
+// 本身沒有變，只是他的號位標籤變了——這正是「搬 key」的意思。
+//
+// 不用自己另外處理 step 是負數的情況（例如「上一輪」會傳 -1）：rotateZone 內部已經用
+// `((currentIndex + rotation) % 6 + 6) % 6` 處理過負數取模，這裡把 step 原封不動丟給它、
+// 讓它負責「轉出界要怎麼繞回來」即可，不用在這裡重複寫一次取模邏輯。
+export function rotateLineup(lineup: LineupSnapshot, step: number): LineupSnapshot {
+  const result: LineupSnapshot = {};
+  for (const [zoneStr, playerId] of Object.entries(lineup)) {
+    const startZone = Number(zoneStr);
+    result[rotateZone(startZone, step)] = playerId;
+  }
+  return result;
+}
+
+// 換局換輪視窗「重新排位」用（issue #120）：把 playerId 指派到 zone 號位，回傳新的快照。
+//
+// 為什麼這段要抽成純函式、而不是留在 SetLineupDialog 裡面：它其實是**領域規則**（六人佈陣
+// 怎麼調整才合法），不是 UI 細節。留在元件裡的話，要驗證它就得先能渲染元件、模擬點擊，
+// 而這個專案目前還沒有 @testing-library/react（見 issue #168）——結果就是最容易寫錯的
+// 這段反而測不到。抽出來之後它跟 rotateLineup 一樣只是「吃一份快照、吐一份新快照」，
+// 可以直接用單元測試把四種分支釘死。
+//
+// 為什麼「這個人原本在別的號位」要用**互換**而不是「把他從原位移除、留一個空格」：
+// LineupSnapshot 永遠是六人滿編（六個號位、六個不同的人），互換能天然維持這個不變條件，
+// 不會在畫面上留下「這格沒人」的破洞讓教練還得再補一次；而且「把 A、B 兩人對調」是實際
+// 排陣最常見的操作，互換讓它只要點兩下就完成。
+export function assignPlayerToZone(
+  lineup: LineupSnapshot,
+  zone: number,
+  playerId: string,
+): LineupSnapshot {
+  const next: LineupSnapshot = { ...lineup };
+  const fromEntry = Object.entries(next).find(([, pid]) => pid === playerId);
+
+  if (fromEntry) {
+    const fromZone = Number(fromEntry[0]);
+    // 點了自己原本就站著的格子＝沒有任何變化，原樣回傳（不要回傳同一個物件參照以外的
+    // 副作用，呼叫端的 setState 收到值相等的新物件也只是多 render 一次，無害）。
+    if (fromZone === zone) return next;
+
+    const occupantOfTarget = next[zone];
+    if (occupantOfTarget !== undefined) {
+      // 目標格有人 → 真正的互換：那個人搬去這個人騰出來的號位。
+      next[fromZone] = occupantOfTarget;
+    } else {
+      // 目標格是空的（六人還沒湊滿的中途狀態）→ 這個人單純換位，原本的號位要清掉，
+      // 不能留一個「他還站在那裡」的假資料。
+      delete next[fromZone];
+    }
+  }
+
+  // 走到這裡有兩種情況：(a) 上面互換/搬移完，把人放進目標格；(b) 這個人本來不在場上
+  // （板凳球員），直接塞進目標格、原本站那裡的人被頂掉——這就是「換人上場」的語意，
+  // 被頂掉的人回到板凳、不需要另外安置，所以六個號位依然滿編。
+  next[zone] = playerId;
+  return next;
+}
+
 // 球員從球員設定拖到球場上、或在場上重新拖曳時，放開滑鼠的座標不會剛好落在 6 個
 // 格子的正中心，所以要找「離哪個格子最近」來吸附。x/y 跟 zoneCoords 一樣是 0~1 normalized。
 export function findNearestZone(x: number, y: number): number {
