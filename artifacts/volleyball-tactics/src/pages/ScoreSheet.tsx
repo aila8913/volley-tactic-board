@@ -58,8 +58,10 @@ export default function ScoreSheet() {
   const { id } = useParams<{ id: string }>();
   const { match, isLoading: isMatchLoading } = useMatchWithRoster(Number(id));
 
-  // 只讀輪轉表這一場的 rotations，用來「擷取」計分表自己的先發快照——擷取一次之後，計分表就
-  // 完全讀自己的快照、不再碰輪轉表（issue #115）。輪轉表現在用 matchId 分片（issue #119），所以
+  // 讀輪轉表這一場的 rotations——它是全站共用的「目前站位」真相（#120 PO 定案）。開賽前，右欄
+  // 顯示並直接編輯它；開賽那一刻擷取成該局的凍結快照，之後這一局就改讀快照。
+  // （注意：這裡不再是「擷取完就不碰輪轉表」了——那是 #115 的舊解耦模型，已作廢，見 #115 留言。）
+  // 輪轉表用 matchId 分片（issue #119），所以
   // 讀 dataByMatch[id] 這一場自己的站位；那場還沒排就 undefined，capturableLineup 會算成 null。
   // 這其實比以前讀全域 state.rotations 更正確——舊寫法會讀到「最後開的那場」的站位（#119 的污染源）。
   const rotations = useRotationTable((state) =>
@@ -302,9 +304,9 @@ export default function ScoreSheet() {
   // 左側導覽軌「戰」按鈕的飛出選單（issue #160 C3）：TacticsRailMenu 自己管開關/清單/彈窗，
   // 這裡只需要告訴它「計分頁的『現在站位』要怎麼查」——見 NewTacticDialog.tsx 開頭那段
   // 「為什麼擷取來源要由呼叫端注入」的說明。計分頁的現在站位＝activeLineup（計分表自己的
-  // 逐局先發快照），不是全域輪轉表 store，理由跟以前 handleQuickTacticsBoard 一樣：
-  // 計分表的站位真相本來就在自己這份快照裡（issue #115 把這條耦合解掉），從這裡抓才是
-  // 「單一真相來源」；如果改讀全域 rotation store 會把 #115 好不容易解掉的耦合又接回來。
+  // 逐局先發快照）。為什麼不直接讀全域輪轉表 store：activeLineup 已經幫我們處理好「開賽前讀
+  // 共用站位、開賽後讀該局凍結快照」的分岔，而戰術板要的是「計分頁此刻畫面上那一份」——
+  // 第 3 局進行中時，共用站位可能已經被改成第 4 局的先發了，直接讀 store 會抓到未來的陣容。
   const captureCurrentForBoard = () => {
     if (!activeLineup || !currentSet) {
       // 理論上不會被呼叫到——TacticsRailMenu 在 captureDisabled 為真時，會把「擷取

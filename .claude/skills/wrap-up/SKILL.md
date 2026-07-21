@@ -144,14 +144,19 @@ numbers.
      owner + what changed); it's the one shared line both owners touch, so don't let it grow
      back into a multi-paragraph blob.
 
-7. **Refresh `docs/flow-diagrams.html` if the interaction flows changed this session.**
-   This is the 輪轉表/戰術板/計分表 operation-flow + state-machine reference (originally
-   built as a Claude Artifact, copied into the repo on 2026-07-03 so it survives offline
-   instead of living only at a claude.ai URL). Same "snapshot, not changelog" rule as
-   `docs/PROGRESS.md`: if the file has a "recent changes" note, **overwrite it with only
-   what changed since the last wrap-up** — don't accumulate a growing per-session log
-   inside it. If nothing about the flows/screens/state machines changed this session,
-   leave the file untouched.
+7. **Don't recreate a "current behaviour" doc.** `docs/flow-diagrams.html` (操作流程＋狀態機
+   reference) was **deleted on 2026-07-21** by PO decision, and this step used to say
+   "keep it in sync". The distinction that killed it is worth keeping:
+   - **Decisional docs** (`docs/*-spec.md`, issue comments) record _why_ a choice was
+     made. That reasoning exists nowhere else — worth maintaining.
+   - **Derived docs** record _what the code currently does_. The code is always the more
+     accurate copy, so these only ever fall behind — and a stale one **actively misleads**
+     (#163 was an entire issue spent fixing exactly that: the doc described deleted
+     functions, so following it produced a data flow that CI hard-blocks).
+
+   So: when this session changed behaviour, update the **code comments** (this repo
+   comments unusually densely on purpose — see CLAUDE.md「Collaboration style」) and the
+   relevant issue. Don't start a new file that narrates how the app works.
 
 8. **Remind, don't act.** If there are still uncommitted changes after all this, remind
    the user to commit — don't commit on their behalf unless they ask.
