@@ -361,8 +361,8 @@ export default function Court() {
           ref={wrapperRef}
           className={
             courtView === "tactics"
-              ? "h-full w-full relative drop-shadow-sm"
-              : "h-full w-auto max-w-full relative drop-shadow-sm"
+              ? "h-full w-full relative drop-shadow-sm court-glass"
+              : "h-full w-auto max-w-full relative drop-shadow-sm court-glass"
           }
           style={
             courtView === "tactics"
@@ -370,6 +370,9 @@ export default function Court() {
               : { aspectRatio: `${COURT_CANVAS_WIDTH} / ${COURT_CANVAS_HEIGHT}` }
           }
         >
+          {/* 邊緣繞行光（issue #134）：獨立於 SVG 之外的一層，蓋在整個 wrapper 外框，
+              見 index.css 的 .court-edge-light 說明。 */}
+          <div className="court-edge-light" />
           <svg
             id="court-svg"
             ref={courtRef}
@@ -390,9 +393,12 @@ export default function Court() {
                   比暖木色更貼近整體深色 UI，冷色調對己方萊姆綠跟對方珊瑚紅球員點都是安全的
                   對比組合。 */}
               <linearGradient id="court-gradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#12403f" />
-                <stop offset="50%" stopColor="#1c5654" />
-                <stop offset="100%" stopColor="#2a6e6a" />
+                {/* stopOpacity 不是 100%：球場毛玻璃地板（.court-glass）本身要讓
+                    wrapper 後面被模糊的背景光暈透一點出來，底色若完全不透明，
+                    毛玻璃的模糊效果會被完全蓋住、等於白做。 */}
+                <stop offset="0%" stopColor="#12403f" stopOpacity="0.42" />
+                <stop offset="50%" stopColor="#1c5654" stopOpacity="0.38" />
+                <stop offset="100%" stopColor="#2a6e6a" stopOpacity="0.42" />
               </linearGradient>
               <marker
                 id="arrowhead"
@@ -670,7 +676,7 @@ export default function Court() {
                     // 右鍵點備位區 L = 取消先發設定，備位區變空白
                     if (matchId) setStartingLiberoId(matchId, null);
                   }}
-                  className="w-7 h-7 rounded-full bg-red-100 border-2 border-red-300 flex items-center justify-center text-[10px] font-bold cursor-grab active:cursor-grabbing select-none"
+                  className="w-7 h-7 rounded-full bg-[#0a0b07]/55 border-2 border-[#FF6B00] text-[#FF6B00] flex items-center justify-center text-[10px] font-bold cursor-grab active:cursor-grabbing select-none backdrop-blur-sm"
                   title={`${p.name} #${p.number} — 拖到後排（1/5/6）上場；右鍵取消先發`}
                 >
                   #{p.number}

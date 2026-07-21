@@ -22,8 +22,11 @@ export default function PlayerNode({
   courtRef,
 }: PlayerNodeProps) {
   const { id: matchId } = useParams<{ id: string }>();
-  // circleLabel 是全域顯示偏好（不隨 match 走），留在 store 頂層直接讀。站位動作則帶 matchId。
-  const { placePlayerOnCourt, removePlayerFromCourt, circleLabel } = useRotationTable();
+  // circleLabel（名字/背號/角色三選一）目前沒有任何 UI 能切換它，永遠停在預設值，
+  // 是個實質上的死開關（見 issue #134 調查）。玻璃圓片改版直接固定「背號在圈裡、
+  // 名字在圈下方小字」的雙行顯示，不再讀這個欄位——但 store 本身先不動它，
+  // 避免影響 ScoreSheetCourt.tsx 那邊還在用同一個欄位的顯示邏輯。
+  const { placePlayerOnCourt, removePlayerFromCourt } = useRotationTable();
   const {
     session,
     moveSessionPlayer,
@@ -59,7 +62,10 @@ export default function PlayerNode({
 
   const nodeRef = useRef<SVGGElement>(null);
   const isSelected = selectedObjectId === position.playerId;
-  const bgColor = isOverBench
+  // 前排/後排/Libero/備位（over-bench）這套判斷邏輯完全不動——只是把原本「整顆圓實色
+  // 填滿」的配色，改成「深色玻璃圓片 + 這個顏色當邊框」（issue #134 材質改版），
+  // 顏色本身仍是唯一的狀態指示，邏輯不變。
+  const stateColor = isOverBench
     ? "#999999"
     : isLibero
       ? "#FF6B00"
@@ -176,26 +182,38 @@ export default function PlayerNode({
       className={`cursor-grab touch-none ${isDragging ? "cursor-grabbing" : ""}`}
       style={{ transition: isDragging ? "none" : "transform 0.1s ease-out" }}
     >
+      {/* 玻璃圓片（issue #134）：深色半透明底 + 狀態色細邊框，呼應球場毛玻璃地板/
+          外層面板同一套材質語言，取代原本「整顆實色圓」的樣式。選取時邊框加粗
+          （原本 1.5 太粗，改成 2，仍比未選取的 1.2 明顯）並加一圈跟狀態色同色的
+          發光，作為選取態的視覺回饋。 */}
       <circle
         r={isSelected ? radius + 1.5 : radius}
-        fill={bgColor}
-        stroke="#111111"
-        strokeWidth={isSelected ? "1.5" : "1"}
+        fill="rgba(10, 11, 7, 0.62)"
+        stroke={stateColor}
+        strokeWidth={isSelected ? "2" : "1.2"}
+        style={isSelected ? { filter: `drop-shadow(0 0 3px ${stateColor})` } : undefined}
       />
-      {/* circleLabel 三選一，所以圈圈裡固定只畫一行文字；名字比較長，字級調小一點才塞得進去。 */}
+      {/* 圈裡固定顯示背號（辨識度最高、字數最少最不擠），圈下方小字顯示姓名——
+          使用者明確要求的雙行格式，不再套用 circleLabel 三選一。 */}
       <text
-        y="2"
-        fontSize={circleLabel === "name" ? "3" : "4"}
+        y="1.6"
+        fontSize="4.5"
         fontWeight="bold"
-        fill="#111"
+        fill="#F5F5F0"
         textAnchor="middle"
         className="font-sans pointer-events-none"
       >
-        {circleLabel === "name"
-          ? player.name || player.role
-          : circleLabel === "number"
-            ? player.number
-            : player.role}
+        {player.number}
+      </text>
+      <text
+        y={radius + 5.5}
+        fontSize="3.2"
+        fill="#F5F5F0"
+        fillOpacity="0.75"
+        textAnchor="middle"
+        className="font-sans pointer-events-none"
+      >
+        {player.name || player.role}
       </text>
     </g>
   );
