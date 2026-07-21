@@ -5,48 +5,76 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { useRotationTable } from "../hooks/useRotationTable";
 import { useTacticsBoard } from "../hooks/useTacticsBoard";
-import { captureFromRotation, captureBlank } from "../lib/courtSnapshot";
+import { captureBlank } from "../lib/courtSnapshot";
 import { SECONDARY_BTN_CLASS } from "../lib/tacticsBoardStyles";
+import type { CourtSnapshot } from "../types/courtSnapshot";
 
-// 「新增戰術」彈窗——issue #160 C2。browse 模式按「新增戰術」開這個彈窗，選一個起點：
-//   1. 擷取現在輪轉位：複製輪轉表「現在」排的站位當起點（沿用舊版 handleEnterLayout 那條邏輯）。
+// 「新增戰術」彈窗——issue #160 C2 開的、C3 改過擷取來源注入方式。browse 模式（或計分頁的
+// 戰術選單）按「新增戰術」開這個彈窗，選一個起點：
+//   1. 擷取目前站位：複製呼叫端指定的「現在站位」當起點。
 //   2. 空站位：完全空白的球場，球員全部從右側名單面板自己拖上去。
 //
-// 兩個選項最後都是「在元件層組出一張純值 CourtSnapshot，再傳給 startSession」——
-// 這正是 #154 單向化重構的邊界：store（useTacticsBoard）永遠不 import useRotationTable，
-// 「查輪轉表現在站位」這件事只能發生在 UI 層，查完就把結果「以值」交出去，之後 store
-// 改怎麼編輯這張快照都碰不到輪轉表。這個彈窗元件就是那個 UI 邊界之一（另一個是 Court.tsx
-// 的拖放 handler）。
+// 為什麼「擷取目前站位」不再自己內部呼叫 useRotationTable.getState()，改成收一個
+// captureCurrent 函式 prop？因為「現在站位」這個詞在不同頁面意思不一樣：戰術頁的「現在」
+// 指輪轉表當下排的站位，計分頁的「現在」指計分表自己逐局凍結的先發快照（issue #115 把
+// 這兩份資料的耦合切開、#154 又用 ESLint no-restricted-imports 把「戰術白板單向依賴」焊進
+// CI）。如果這個彈窗寫死呼叫 useRotationTable，未來計分頁想開同一個彈窗時，要嘛得引入
+// useRotationTable（違反單向依賴、讀到錯的資料——計分頁的站位真相在 activeLineup，不在
+// 輪轉表），要嘛得複製一份幾乎一樣的彈窗。所以把「怎麼查現在站位」整段挪到呼叫端決定，
+// 這個彈窗只管「拿到 snapshot 之後怎麼開 session」，不管 snapshot 從哪來。
+//
+// captureCurrent 故意設計成 required（沒有預設值）：如果給一個預設值（例如預設走輪轉表），
+// 未來新的呼叫端很容易偷懶不傳、不小心繼承到「讀輪轉表」這個對計分頁來說是錯的行為——
+// 這正是 #115/#154 想根除的耦合。required prop 逼每個呼叫端都得明確想清楚「我的現在站位
+// 從哪來」，寫錯了 TypeScript 編譯期就會擋下來，而不是等到執行期才發現資料來源接錯。
 interface NewTacticDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   matchId: string;
+  // 使用者「真的選了一個起點」（擷取現在站位／空站位）時呼叫，session 已經開好才觸發。
+  //
+  // 為什麼需要這個、不能讓呼叫端自己從 onOpenChange(false) 推：彈窗關閉有兩種原因——
+  // 「選了起點」跟「按 Esc／點外面取消」——兩者都只會觸發 onOpenChange(false)，光看關閉
+  // 這件事分不出來。呼叫端如果改去偷看 store 裡「有沒有 session」來推測，會在「這場本來
+  // 就有一個編到一半的 session」時誤判成使用者剛選了起點（明明是按取消，卻被帶去戰術頁）。
+  // 讓彈窗自己明講「我開了一個新 session」，比讓外面猜可靠得多——這是「明確的事件」勝過
+  // 「從狀態反推意圖」的典型例子。
+  onStarted?: () => void;
+  // 呼叫端提供「現在站位」的擷取邏輯：按下按鈕的當下呼叫一次，回傳一張純值快照。跟
+  // NewTacticDialog 內部原本 getState() 的用法同一個道理——只在使用者按下去那一刻讀一次，
+  // 不是即時訂閱，才符合「擷取」（capture）的語意。
+  captureCurrent: () => CourtSnapshot;
+  // 「擷取目前站位」按鈕下方的說明文字，例如戰術頁的「將複製第 N 輪」、計分頁的
+  // 「擷取目前計分站位」——文字內容跟資料來源綁在一起，交給知道來源是什麼的呼叫端決定。
+  captureLabel: string;
+  // 擷取來源目前是否可用（例如計分頁還沒排出完整先發時 activeLineup 是 null）。可選、預設
+  // false（可用）——這只是控制按鈕能不能按的 UI 旗標，不像 captureCurrent 本身背負「读錯
+  // store」的風險，給預設值沒有前面那段擔心的副作用。
+  captureDisabled?: boolean;
 }
 
-export default function NewTacticDialog({ open, onOpenChange, matchId }: NewTacticDialogProps) {
+export default function NewTacticDialog({
+  open,
+  onOpenChange,
+  matchId,
+  onStarted,
+  captureCurrent,
+  captureLabel,
+  captureDisabled = false,
+}: NewTacticDialogProps) {
   const startSession = useTacticsBoard((s) => s.startSession);
-  // 用來即時顯示「將複製第 N 輪」——訂閱 store（而不是像 handleCaptureRotation 內部那樣
-  // 用 getState() 一次性讀值），這樣輪轉表如果在彈窗開著的時候變動（理論上不會，但保險），
-  // 畫面上的文字也會跟著更新，不會顯示一個過期的輪次數字。
-  const currentRotation = useRotationTable((s) => s.dataByMatch[matchId]?.currentRotation ?? 0);
 
-  const handleCaptureRotation = () => {
-    // 讀「現在」站位這件事只能發生一次、發生在使用者按下按鈕的當下——用 getState() 而不是
-    // hook 訂閱值，是因為這裡要的是「按下去那一刻」的快照，不需要、也不應該讓這段程式碼
-    // 隨輪轉表變動重新執行（那樣就不是「擷取」了，是「即時綁定」，違背快照的定義）。
-    const rt = useRotationTable.getState().dataByMatch[matchId];
-    const r = rt?.currentRotation ?? 0;
-    const positions = rt?.rotations[r]?.positions ?? [];
-    const roster = rt?.roster ?? [];
-    const snapshot = captureFromRotation(positions, roster, { matchId, rotation: r });
+  const handleCaptureCurrent = () => {
+    const snapshot = captureCurrent();
     startSession(snapshot);
+    onStarted?.();
     onOpenChange(false);
   };
 
   const handleBlank = () => {
     startSession(captureBlank({ matchId }));
+    onStarted?.();
     onOpenChange(false);
   };
 
@@ -61,14 +89,13 @@ export default function NewTacticDialog({ open, onOpenChange, matchId }: NewTact
         </DialogHeader>
         <div className="flex flex-col gap-2 pt-2">
           <button
-            onClick={handleCaptureRotation}
-            className={`rounded-lg p-3 text-left text-xs font-bold ${SECONDARY_BTN_CLASS}`}
+            onClick={handleCaptureCurrent}
+            disabled={captureDisabled}
+            className={`rounded-lg p-3 text-left text-xs font-bold ${SECONDARY_BTN_CLASS} disabled:cursor-not-allowed disabled:opacity-40`}
             data-testid="button-new-tactic-from-rotation"
           >
-            擷取現在輪轉位
-            <div className="mt-1 text-[10px] font-normal text-[#a9b096]">
-              將複製第 {currentRotation + 1} 輪
-            </div>
+            擷取目前站位
+            <div className="mt-1 text-[10px] font-normal text-[#a9b096]">{captureLabel}</div>
           </button>
           <button
             onClick={handleBlank}

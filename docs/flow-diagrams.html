@@ -466,7 +466,8 @@ flowchart LR
     SS <-->|"MatchNavRail"| MA
     TB <-->|"MatchNavRail"| MA
     TB -.->|"導覽軌「返回」<br/>matchBackHref()：有 tournamentId 回資料夾頁，否則回根列表"| ML
-    SS ==>|"右欄底部「快速戰術板」：captureFromScoreSheet(activeLineup)<br/>→ startSession() → 導航（issue #160 C3）"| TB
+    SS ==>|"導覽軌「戰」飛出選單 →「+ 新增戰術」→ 擷取現在站位<br/>captureFromScoreSheet(activeLineup) → startSession() → 導航（#120）"| TB
+    SS -.->|"導覽軌「戰」飛出選單 → 點已存戰術<br/>loadProject() → 唯讀檢視 → 導航（#120）"| TB
 
     classDef page fill:#242a2e,stroke:#98a29a,color:#edeae2;
     class ML,TB,SS,MA page;
@@ -1001,13 +1002,17 @@ stateDiagram-v2
       <div class="phase-card">
         <div class="phase-head">
           <span class="phase-tag">·</span>
-          <h3>外部入口 · 從計分頁直落編輯（issue #160 C3）</h3>
+          <h3>外部入口 · 從計分頁直落編輯（issue #160 C3，入口動線於 #120 改版）</h3>
         </div>
         <p class="phase-note">
-          計分頁右欄底部有一顆「快速戰術板」，不經過 A 就直接把使用者送進 C。
+          計分頁進戰術板的入口全部收在左側導覽軌的「戰」上：點「戰」<strong>不再跳頁</strong>，
+          而是展開飛出選單（第一行「+ 新增戰術」，下面是這場已存的戰術）。選「+」→ 選來源
+          （擷取現在站位／空站位）→ 不經過 A 直接送進 C。
+          （原本右欄底部那顆「快速戰術板」按鈕已移除——兩個入口分處畫面左下與右下，
+          使用者分不出差別。）
         </p>
         <div class="step-row">
-          <div class="step">計分頁點「快速戰術板」</div>
+          <div class="step">導覽軌「戰」→「+ 新增戰術」→「擷取目前站位」</div>
           <div class="arrow">→</div>
           <div class="step">captureFromScoreSheet(activeLineup, ourRotation, players)</div>
           <div class="arrow">→</div>
@@ -1059,7 +1064,7 @@ stateDiagram-v2
     C --> C: session 內站位拖曳（C3）
     C --> C: 選取/刪除/undo（C4）⚠T4
     C --> A: 取消/儲存/另存（C5）→ discardSession()
-    [*] --> C: 計分頁「快速戰術板」直落編輯（#160 C3）
+    [*] --> C: 計分頁導覽軌「戰」→「+」→ 擷取現在站位，直落編輯（#160 C3／#120）
 
     note right of C
         C1~C4 都是自迴圈；模式是推導值，store 沒有 mode 欄位
@@ -1202,10 +1207,16 @@ stateDiagram-v2
     <h2>計分表 — 操作流程與狀態機</h2>
 
     <div class="callout">
-      <b>自上次更新以來的變化（2026-07-20）：</b>新增暫停（C2b，issue #44，S5
-      因此不再是缺口）＋右欄底部「快速戰術板」入口（C5，issue #160
-      C3）；頁面左側的「回列表／戰術板」連結換成三頁共用的 <code>MatchNavRail</code> 導覽軌（issue
-      #160 C1），不再是這頁 header 自己刻的。 更早（2026-07-12）：C1
+      <b>自上次更新以來的變化（2026-07-21）：</b>右欄改成三段式（站位／統計／導覽）並整條換上
+      design-spec 深色玻璃（中間計分區仍白底）——最上段是常駐<strong>唯讀</strong>站位視圖
+      <code>CourtReadOnlyView</code> ＋「第 N 輪」（issue #120 第一階段）。它是純展示元件、
+      <strong>不訂閱任何 store</strong>，資料由頁面餵入既有的
+      <code>ourPositions</code>（計分表自己的 逐局先發快照換算），維持 #115
+      切開的解耦。進戰術板的入口從「右欄底部一顆按鈕」改成
+      <strong>左導覽軌「戰」的飛出選單</strong>（點「戰」不再跳頁，改展開「+
+      新增戰術」＋已存戰術列表）。 更早（2026-07-20）：新增暫停（C2b，issue #44，S5
+      因此不再是缺口）；頁面左側的「回列表／戰術板」 連結換成三頁共用的
+      <code>MatchNavRail</code> 導覽軌（issue #160 C1）。 更早（2026-07-12）：C1
       動作選單依目前發球方過濾「發球↔接發」互斥（發球方看不到「接發」、接發方看不到「發球」，其餘四動作保留，#50）。
       更早（2026-07-04）：記一球的手勢從「拖曳畫線」改成「直接點選」（放開時一樣是找命中誤差半徑內最近的目標，點跟拖曳結果相同，只是不強迫使用者拖曳）；動作選單從
       4 大類（發球/防守/攻擊/擋網）擴充成 6 大類（發球/接發/舉球/攻擊/攔網/防守），對齊 `events`
@@ -1351,10 +1362,11 @@ stateDiagram-v2
 
         <div class="lane green">
           <div class="lane-label">
-            <span class="dot green"></span>C5 · 快速戰術板（離開本頁，issue #160 C3）
+            <span class="dot green"></span>C5 · 導覽軌「戰」飛出選單（離開本頁，#160 C3／入口於 #120
+            改版）
           </div>
           <div class="step-row">
-            <div class="step">右欄底部點「快速戰術板」</div>
+            <div class="step">左導覽軌點「戰」→「+ 新增戰術」→「擷取目前站位」</div>
             <div class="arrow">→</div>
             <div class="step">captureFromScoreSheet(activeLineup, ourRotation, players)</div>
             <div class="arrow">→</div>

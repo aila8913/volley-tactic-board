@@ -49,7 +49,7 @@ interface SceneContent {
 }
 
 // 正在編輯的白板 session。單景（PO 拍板）：只持有一張 snapshot，不做 scenes[] + 輪次切換。
-interface WhiteboardSession {
+export interface WhiteboardSession {
   // 反正規化的當前畫面。snapshot.players 的座標會隨拖曳更新，但每個 player 的身分
   //（name/number/role/sourcePlayerId）從擷取那一刻起就凍住不動。
   snapshot: CourtSnapshot;
@@ -154,6 +154,24 @@ interface TacticsBoardStore {
   // 重建，所以一律寫 v2（issue #154 PR C 把原設計的 PR D「寫 v2」併進來）。
   buildSavedTactic: () => SavedTacticDataV2;
 }
+
+// 「這個 session 有沒有未儲存的內容」的共用判準，跟提示文案放在一起。
+//
+// 為什麼要抽出來：這條判斷式原本在 TacticsBoardPanel、RotationSwitcher、TacticsRailMenu
+// 三個元件各寫一份一模一樣的 `session !== null && session.history.length > 1`。這是典型的
+// Duplicated Code——「什麼叫做動過還沒存」是一條會變的業務規則（例如哪天改成比對內容而不是
+// 看歷史長度），散成三份的話改一處就會有兩處對不上，而且對不上的症狀是「有時候會問你要不要
+// 捨棄、有時候不問」這種很難查的 bug。收斂成一支函式，規則就只有一個家。
+//
+// 為什麼 history.length > 1 就等於「動過」：history 是 undo/redo 的堆疊，session 一開始就會
+// 押入一格「初始狀態」，所以長度 1＝什麼都還沒做，>1＝至少發生過一次會進歷史的編輯。
+export function isSessionDirty(session: WhiteboardSession | null): boolean {
+  return session !== null && session.history.length > 1;
+}
+
+// 捨棄未存內容前的確認文案。跟 isSessionDirty 成對使用，放在一起才不會有人改了判準卻忘了
+// 文案（或反之）。
+export const DISCARD_MSG = "未儲存的戰術內容將會捨棄，確定嗎？";
 
 export const useTacticsBoard = create<TacticsBoardStore>()((set, get) => ({
   session: null,
