@@ -246,3 +246,65 @@
   color: rgba(198, 241, 53, 0.28);
   text-transform: uppercase;
 }
+
+/* 球場毛玻璃地板（issue #134）：#court-wrapper 包住整個 SVG 球場，backdrop-filter
+   會模糊「這個 div 後面」的東西（也就是 TacticsBoard.tsx 那兩層背景光暈 .tb-beam /
+   .tb-mark），球場本身（SVG 子元素）畫在上面維持清晰——這是 backdrop-filter 的特性：
+   模糊背後、不模糊自己。球場的玻璃質感因此不是自己做出來的，是「模糊看穿它後面的
+   環境光」做出來的，跟外層 panel 的玻璃是同一套視覺語言但更霧（見 design-spec.md
+   第 4 節 Glassmorphism 深化說明）。 */
+.court-glass {
+  border-radius: 14px;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow:
+    inset 0 0 0 1px rgba(245, 245, 240, 0.08),
+    0 12px 30px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+
+/* 球場邊緣繞行光：全站唯一一個「環境級動效」（design-spec.md 第 6 節，2026-07-15
+   新增的規則——一頁最多一個環境動效、要慢、要暗，不能搶操作注意力）。用 conic-gradient
+   沿 --court-edge-angle 這個自訂角度旋轉、搭配雙層 mask 只挖出邊框那一圈（mask-composite:
+   exclude：content-box 那層跟整個 border-box 那層互相排除，只留下夾在中間的「框線」），
+   12 秒轉一圈、亮度壓得很低，符合「慢＋暗」的門檻。@property 註冊 --court-edge-angle
+   成 <angle> 型別，瀏覽器才知道怎麼在 keyframes 之間內插這個自訂屬性（不註冊的話只能
+   整數跳變，動畫會頓）。 */
+@property --court-edge-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+.court-edge-light {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  padding: 1.5px;
+  background: conic-gradient(
+    from var(--court-edge-angle),
+    transparent 0%,
+    rgba(198, 241, 53, 0.5) 8%,
+    transparent 18%,
+    transparent 100%
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: court-edge-sweep 12s linear infinite;
+}
+@keyframes court-edge-sweep {
+  to {
+    --court-edge-angle: 360deg;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .court-edge-light {
+    animation: none;
+  }
+}
