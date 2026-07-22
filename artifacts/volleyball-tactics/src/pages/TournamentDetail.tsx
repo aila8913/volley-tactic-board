@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { useParams } from "wouter";
+import { useParams, Link } from "wouter";
+import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import BackToMatchListButton from "@/components/BackToMatchListButton";
@@ -11,6 +12,14 @@ import AppShell from "@/components/AppShell";
 import MatchNavRail from "@/components/MatchNavRail";
 import MatchInfoRail, { MatchListSelection } from "@/components/MatchInfoRail";
 import { Match } from "@/types/match";
+
+// 「找不到資料夾」錯誤畫面的次要按鈕，跟 ScoreSheet.tsx/MatchAnalytics.tsx 同名常數
+// 同一套語言（不透過 shadcn Button，理由見那邊的註解）。這個早期 return 是獨立於下面
+// AppShell 主要 render 路徑（仍是 bg-white，留給 #175）的頁面外殼，先轉不受影響。
+const SECONDARY_BUTTON_CLASS =
+  "inline-flex items-center justify-center rounded-full border border-white/[0.26] " +
+  "bg-white/[0.05] px-5 py-2 text-sm font-bold text-[#f5f5f0] transition " +
+  "hover:border-[#c6f135] hover:text-[#c6f135]";
 
 // 資料夾的內頁——只顯示歸在這個資料夾底下的比賽 (tournamentId 等於這個資料夾的 id)。
 export default function TournamentDetail() {
@@ -49,9 +58,12 @@ export default function TournamentDetail() {
   };
 
   // 還在載資料夾時先別下「找不到」的定論，避免閃錯誤訊息。
+  // 這兩個早期 return 是獨立於下面主要 render 路徑的頁面外殼——AppShell 本身（含中央列表）
+  // 的深色化留給 #175（環 4，中央列表型會整個重寫這塊），這裡只先轉不受那次重寫影響的
+  // loading/error 狀態，避免白工。
   if (tournamentsLoading) {
     return (
-      <div className="flex min-h-screen w-full items-center justify-center bg-white text-muted-foreground">
+      <div className="flex min-h-screen w-full items-center justify-center bg-[#0a0b07] font-dash text-[#a9b096]">
         載入中…
       </div>
     );
@@ -59,9 +71,13 @@ export default function TournamentDetail() {
 
   if (!tournament) {
     return (
-      <div className="flex min-h-screen w-full flex-col items-center justify-center gap-4 bg-white px-4 text-center">
-        <p className="text-muted-foreground">找不到這個資料夾。</p>
-        <BackToMatchListButton />
+      <div className="flex min-h-screen w-full flex-col items-center justify-center gap-4 bg-[#0a0b07] px-4 text-center font-dash text-[#f5f5f0]">
+        <p className="text-[#a9b096]">找不到這個資料夾。</p>
+        {/* 不用共用的 BackToMatchListButton：見 MatchAnalytics.tsx 同名常數的說明。 */}
+        <Link href="/" className={SECONDARY_BUTTON_CLASS}>
+          <ArrowLeft className="mr-1 h-4 w-4" />
+          比賽列表
+        </Link>
       </div>
     );
   }
