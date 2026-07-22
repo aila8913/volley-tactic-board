@@ -3,10 +3,14 @@
 一個給排球教練/球隊用的網頁工具，可以畫戰術布陣、管理輪轉順序、記錄比賽比分。目前是邊做邊學的
 個人專案，架構會持續調整。
 
-**先看這份，秒懂整個 app 在幹嘛：** 打開 [`docs/flow-diagrams.html`](docs/flow-diagrams.html)
-（用瀏覽器直接開，不是純文字檔）——裡面畫了輪轉表 / 戰術板 / 計分表三個畫面怎麼互動、狀態怎麼
-變化。比起讀程式碼，這是最快建立「這個 app 長怎樣、使用者會怎麼操作」的方式，特別推薦做 UI/UX
-的人從這份開始看。
+**想知道這個 app 在幹嘛：** 最快的方式是照 [`docs/onboarding.md`](docs/onboarding.md) 把它跑起來
+點一遍。想知道「為什麼要做這些功能」，讀
+[`docs/requirements-pattern-language.md`](docs/requirements-pattern-language.md)；做 UI/UX 的人
+從 [`docs/design-spec.md`](docs/design-spec.md) 開始。
+
+（曾經有一份 `docs/flow-diagrams.html` 畫三個畫面的操作流程與狀態機，2026-07-21 移除——它描述的是
+「程式碼現在的行為」，而那種衍生文件只會落後、落後時還會主動誤導人實作出已被禁止的資料流。行為以
+程式碼為準，決策理由住在 `docs/*-spec.md` 與 GitHub issue。）
 
 ## 技術棧
 

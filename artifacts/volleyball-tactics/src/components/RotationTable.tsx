@@ -5,8 +5,9 @@ import { useTacticsBoard } from "../hooks/useTacticsBoard";
 import { useRoster, useSaveRoster } from "../hooks/useMatches";
 import { MatchPlayer } from "../types/match";
 import type { RotationPositions } from "../types/rotationTable";
-import { isLineupComplete } from "../lib/rotationLogic";
+import { isLineupComplete, captureLineupFromRotations } from "../lib/rotationLogic";
 import RotationSwitcher from "./RotationSwitcher";
+import RotationRailPanel from "./RotationRailPanel";
 import RosterEditDialog from "./RosterEditDialog";
 import { useToast } from "../hooks/use-toast";
 
@@ -91,87 +92,115 @@ export default function RotationTable() {
 
   return (
     <div className="flex h-full flex-col font-dash">
-      <div className="flex-1 space-y-5 overflow-y-auto p-4">
-        {/* 球員名單：可拖到球場（輪轉視圖吸附格子；戰術視圖+布置模式自由放置） */}
-        <section>
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-[15px] font-bold">球員設定</h2>
-            <button
-              onClick={() => setIsRosterDialogOpen(true)}
-              className={PANEL_BUTTON_CLASS}
-              data-testid="button-edit-roster"
-            >
-              編輯
-            </button>
-          </div>
-          <div className="space-y-1">
-            {roster.length === 0 && (
-              <p className="text-xs text-[#a9b096]">尚未設定球員，點右上角「編輯」新增</p>
-            )}
-            {roster.map((p) => (
-              <div
-                key={p.id}
-                draggable
-                onDragStart={(e) => e.dataTransfer.setData("text/plain", p.id)}
-                className={`roster-row flex cursor-grab items-center gap-2 rounded-lg border px-1.5
-                  py-1 text-sm shadow-sm shadow-black/20 backdrop-blur-lg active:cursor-grabbing ${
-                    p.role === "L"
-                      ? "border-[#ef4444]/40 bg-[#ef4444]/15"
-                      : onCourtIds.has(p.id)
-                        ? "border-[#c6f135]/40 bg-[#c6f135]/15"
-                        : "border-white/[0.18] bg-white/[0.11]"
-                  }`}
-                data-testid={`roster-row-${p.id}`}
-              >
-                {/* L 用紅色區分，其他用灰綠色 */}
-                <span
-                  className={`w-8 text-right text-xs font-bold ${p.role === "L" ? "text-[#ef4444]" : "text-[#a9b096]"}`}
-                >
-                  {p.role}
-                </span>
-                <span className="w-8 text-[#a9b096]">{p.number}</span>
-                <span className="flex-1">{p.name}</span>
-                {/* 狀態顯示跟一般球員統一，不再用按鈕手動切換先發：
-                    已上場（含 L）沿用同一個「已上場」標籤；
-                    L 沒上場但被指定為先發（在球場備位區等待）則顯示「備位」，
-                    要變成先發只要把它拖到球場後排（Court.tsx 的 placePlayerOnCourt 會自動同步 startingLiberoId）。 */}
-                {onCourtIds.has(p.id) ? (
-                  <span className="text-[10px] text-[#a9b096]">已上場</span>
-                ) : (
-                  p.role === "L" &&
-                  p.id === startingLiberoId && (
-                    <span className="text-[10px] font-bold text-[#f5a623]">備位</span>
-                  )
-                )}
-              </div>
-            ))}
-          </div>
-        </section>
+      <div className="flex-1 overflow-y-auto">
+        {/* ── 輪轉表：戰術板改唯讀（issue #154 的「單向不回寫」在 UI 上的具體表現）──
+          RotationRailPanel 是計分頁跟戰術板共用的同一顆元件（issue #120），這裡用
+          readOnly 開它：戰術板是白板，只負責「讀」共用的先發真相來畫球場，不能從這裡
+          「寫」回去——真的要排先發，得去計分頁排（那邊在開賽前是可編輯的）。lineup 用
+          captureLineupFromRotations 從 rotations[0] 現算，不是另外存一份，這樣輪轉表
+          本身（座標版）跟這裡顯示的（號位版）永遠是同一份資料的兩種呈現，不會兜不起來。 */}
+        <RotationRailPanel
+          readOnly
+          lineup={captureLineupFromRotations(rotations, roster)}
+          roster={roster}
+          rotation={currentRotation}
+          footer={
+            <div className="mt-4 space-y-5">
+              {/* 球員名單：可拖到球場（輪轉視圖吸附格子；戰術視圖+布置模式自由放置）。
+                這段拖曳邏輯是 Court.tsx 用 dataTransfer 讀"text/plain"的來源，RotationRailPanel
+                自己的球員清單沒有拖曳能力，所以繼續留在這裡、透過 footer 插進面板下方，
+                不能拿掉，不然球員就沒辦法從名單拖上球場了。 */}
+              <section>
+                <div className="mb-3 flex items-center justify-between">
+                  <h2 className="text-[15px] font-bold">球員設定</h2>
+                  <button
+                    onClick={() => setIsRosterDialogOpen(true)}
+                    className={PANEL_BUTTON_CLASS}
+                    data-testid="button-edit-roster"
+                  >
+                    編輯
+                  </button>
+                </div>
+                <div className="space-y-1">
+                  {roster.length === 0 && (
+                    <p className="text-xs text-[#a9b096]">尚未設定球員，點右上角「編輯」新增</p>
+                  )}
+                  {roster.map((p) => (
+                    <div
+                      key={p.id}
+                      draggable
+                      onDragStart={(e) => e.dataTransfer.setData("text/plain", p.id)}
+                      className={`roster-row flex cursor-grab items-center gap-2 rounded-lg border px-1.5
+                        py-1 text-sm shadow-sm shadow-black/20 backdrop-blur-lg active:cursor-grabbing ${
+                          p.role === "L"
+                            ? "border-[#ef4444]/40 bg-[#ef4444]/15"
+                            : onCourtIds.has(p.id)
+                              ? "border-[#c6f135]/40 bg-[#c6f135]/15"
+                              : "border-white/[0.18] bg-white/[0.11]"
+                        }`}
+                      data-testid={`roster-row-${p.id}`}
+                    >
+                      {/* L 用紅色區分，其他用灰綠色 */}
+                      <span
+                        className={`w-8 text-right text-xs font-bold ${p.role === "L" ? "text-[#ef4444]" : "text-[#a9b096]"}`}
+                      >
+                        {p.role}
+                      </span>
+                      <span className="w-8 text-[#a9b096]">{p.number}</span>
+                      <span className="flex-1">{p.name}</span>
+                      {/* 狀態顯示跟一般球員統一，不再用按鈕手動切換先發：
+                          已上場（含 L）沿用同一個「已上場」標籤；
+                          L 沒上場但被指定為先發（在球場備位區等待）則顯示「備位」，
+                          要變成先發只要把它拖到球場後排（Court.tsx 的 placePlayerOnCourt 會自動同步 startingLiberoId）。 */}
+                      {onCourtIds.has(p.id) ? (
+                        <span className="text-[10px] text-[#a9b096]">已上場</span>
+                      ) : (
+                        p.role === "L" &&
+                        p.id === startingLiberoId && (
+                          <span className="text-[10px] font-bold text-[#f5a623]">備位</span>
+                        )
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </section>
 
-        {/* 輪次選擇：6 個縮圖 + 重置/清除按鈕 */}
-        {hasRotations && (
-          <section>
-            <h2 className="mb-1 text-[15px] font-bold">輪次選擇</h2>
-            <RotationSwitcher />
-            <div className="mt-1 flex gap-2">
-              <button onClick={handleResetRotation} className={`flex-1 ${PANEL_BUTTON_CLASS}`}>
-                重置站位
-              </button>
-              <button
-                onClick={() => clearDrawings()}
-                disabled={!session}
-                title={session ? "清除白板上的畫筆與防守範圍" : "沒有正在編輯的戰術"}
-                className="flex-1 rounded-lg border border-white/[0.26] bg-white/[0.05] px-2 py-1
-                  text-xs font-bold text-[#a9b096] transition hover:border-[#ef4444]
-                  hover:bg-[#ef4444]/10 hover:text-[#ef4444] disabled:opacity-40
-                  disabled:hover:border-white/[0.26] disabled:hover:bg-white/[0.05]
-                  disabled:hover:text-[#a9b096]"
-              >
-                清除畫筆
-              </button>
+              {/* 輪次選擇：RotationSwitcher（不是 RotationRailPanel 自帶的 stepper）。
+                為什麼不把切輪次折進 RotationRailPanel：RotationSwitcher 身上背著「切輪次前
+                若白板 session 有未存內容要先跳確認、確認後 discardSession/setCourtView 再切」
+                這一串戰術白板才懂的副作用（見 RotationSwitcher.tsx），而 RotationRailPanel
+                是純展示的共用元件、不該認識白板 session 是什麼。所以 onRotationChange 不傳給
+                RotationRailPanel（它自己的 stepper 因此保持隱藏），改把既有的 RotationSwitcher
+                原樣放進 footer——畫面上仍然只有一顆輪次切換控制，不會兩顆搶著切。 */}
+              {hasRotations && (
+                <section>
+                  <h2 className="mb-1 text-[15px] font-bold">輪次選擇</h2>
+                  <RotationSwitcher />
+                  <div className="mt-1 flex gap-2">
+                    <button
+                      onClick={handleResetRotation}
+                      className={`flex-1 ${PANEL_BUTTON_CLASS}`}
+                    >
+                      重置站位
+                    </button>
+                    <button
+                      onClick={() => clearDrawings()}
+                      disabled={!session}
+                      title={session ? "清除白板上的畫筆與防守範圍" : "沒有正在編輯的戰術"}
+                      className="flex-1 rounded-lg border border-white/[0.26] bg-white/[0.05] px-2 py-1
+                        text-xs font-bold text-[#a9b096] transition hover:border-[#ef4444]
+                        hover:bg-[#ef4444]/10 hover:text-[#ef4444] disabled:opacity-40
+                        disabled:hover:border-white/[0.26] disabled:hover:bg-white/[0.05]
+                        disabled:hover:text-[#a9b096]"
+                    >
+                      清除畫筆
+                    </button>
+                  </div>
+                </section>
+              )}
             </div>
-          </section>
-        )}
+          }
+        />
       </div>
 
       {/* Tips Section */}

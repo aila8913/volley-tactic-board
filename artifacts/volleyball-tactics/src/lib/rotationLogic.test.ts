@@ -8,9 +8,12 @@ import {
   captureLineupFromRotations,
   lineupToPositions,
   rotateZone,
+  rotateLineup,
+  assignPlayerToZone,
 } from "./rotationLogic";
 import type { RotationPositions } from "../types/rotationTable";
 import type { MatchPlayer } from "../types/match";
+import type { LineupSnapshot } from "../types/scoresheet";
 
 // isBackRowPosition 是自由球員「能不能上這個位置」的共用判定，輪轉表跟計分表都靠它，
 // 所以規則要釘死（issue #43：以前計分表自己寫 y<=0.75，跟輪轉表的 BACK_ROW_ZONES 各判各的）。
@@ -142,5 +145,80 @@ describe("lineupToPositions", () => {
       playerId: "1",
       ...getZoneCoords(rotateZone(1, 1)),
     });
+  });
+});
+
+// rotateLineup 是換局換輪視窗（issue #120）的核心純函式，沒有碰任何 store/網路，
+// 最適合用單元測試把「搬 key 不搬 value」這條行為釘住——這條規則很容易在之後改動時
+// 不小心寫反（例如誤把 value 搬來搬去，變成搬錯人），測試能第一時間抓到。
+describe("rotateLineup", () => {
+  const LINEUP: LineupSnapshot = { 1: "p1", 2: "p2", 3: "p3", 4: "p4", 5: "p5", 6: "p6" };
+
+  it("轉 6 格（一整圈）等於原樣，因為排球輪轉是 6 格一個循環", () => {
+    expect(rotateLineup(LINEUP, 6)).toEqual(LINEUP);
+  });
+
+  it("轉 1 格後，原本站在 1 號位的人會落在 rotateZone(1, 1) 這個號位（也就是 6 號位）", () => {
+    const rotated = rotateLineup(LINEUP, 1);
+    expect(rotateZone(1, 1)).toBe(6);
+    expect(rotated[rotateZone(1, 1)]).toBe("p1");
+  });
+
+  it("轉 +1 再轉 -1，應該完全回到原樣（互為逆運算）", () => {
+    const roundTrip = rotateLineup(rotateLineup(LINEUP, 1), -1);
+    expect(roundTrip).toEqual(LINEUP);
+  });
+
+  it("轉完之後仍然是六個不重複的號位，不會塌成 5 個或更少", () => {
+    const rotated = rotateLineup(LINEUP, 2);
+    const zones = Object.keys(rotated);
+    expect(zones).toHaveLength(6);
+    // 六個號位 key 本身也不重複（Set 去重後長度不變才代表沒有兩個 key 撞在一起）。
+    expect(new Set(zones).size).toBe(6);
+    // 六個球員也都還在，沒有人在轉的過程中憑空消失。
+    expect(new Set(Object.values(rotated)).size).toBe(6);
+  });
+});
+
+// assignPlayerToZone 是「重新排位」實際在做的事，分支比 rotateLineup 多得多（點自己、
+// 目標格有人、目標格空的、板凳球員頂替），是這次最容易出錯的一段。它原本寫在
+// SetLineupDialog 元件裡，抽到這裡才有辦法在沒有 @testing-library/react（issue #168）
+// 的情況下測到——「難測的程式碼通常是放錯地方」的典型例子。
+describe("assignPlayerToZone", () => {
+  const LINEUP: LineupSnapshot = { 1: "p1", 2: "p2", 3: "p3", 4: "p4", 5: "p5", 6: "p6" };
+
+  it("把場上球員指派到別的號位＝兩人互換，不會留下空格", () => {
+    const next = assignPlayerToZone(LINEUP, 3, "p1");
+    expect(next[3]).toBe("p1");
+    // p3 被換到 p1 原本的 1 號位，而不是消失。
+    expect(next[1]).toBe("p3");
+    expect(Object.keys(next)).toHaveLength(6);
+  });
+
+  it("點球員自己原本就站的號位＝沒有變化", () => {
+    expect(assignPlayerToZone(LINEUP, 1, "p1")).toEqual(LINEUP);
+  });
+
+  it("板凳球員指派到有人的號位＝頂替，原本那個人下場、仍維持六人滿編", () => {
+    const next = assignPlayerToZone(LINEUP, 2, "bench");
+    expect(next[2]).toBe("bench");
+    // 被頂掉的 p2 整個離開快照（回板凳），不會被塞到別的號位去。
+    expect(Object.values(next)).not.toContain("p2");
+    expect(Object.keys(next)).toHaveLength(6);
+  });
+
+  it("目標號位是空的時候，場上球員換過去要清掉原號位、不留假資料", () => {
+    // 五人的中途狀態（3 號位空著）：p1 換到 3 號位之後，1 號位必須真的空掉。
+    const partial: LineupSnapshot = { 1: "p1", 2: "p2", 4: "p4", 5: "p5", 6: "p6" };
+    const next = assignPlayerToZone(partial, 3, "p1");
+    expect(next[3]).toBe("p1");
+    expect(next[1]).toBeUndefined();
+    expect(Object.keys(next)).toHaveLength(5);
+  });
+
+  it("不會就地改動傳進來的那份快照（純函式，回傳新物件）", () => {
+    const original = { ...LINEUP };
+    assignPlayerToZone(LINEUP, 3, "p1");
+    expect(LINEUP).toEqual(original);
   });
 });
