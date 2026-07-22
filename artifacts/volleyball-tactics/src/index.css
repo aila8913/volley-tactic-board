@@ -134,13 +134,6 @@
   }
 }
 
-/* 戰術板頁面已經退役這套「手繪白板感」（見 docs/design-spec.md），但 RadialMenu.tsx
-   （計分表在用）還依賴 wobbly-border，先留著；等計分表也套用深色設計語言時再一併移除。 */
-.wobbly-border {
-  border: 2px solid hsl(var(--border));
-  border-radius: 8px 12px 6px 10px / 10px 6px 12px 8px;
-}
-
 /* 球員設定名單的「發光」hover 效果——直接寫成一般 CSS class，不用 Tailwind 的
    hover:shadow-[...] 方括號寫法。方括號裡兩層光暈疊加、每層又各自用 rgba() 帶逗號，
    逗號巢狀容易讓 Tailwind 的任意值解析出錯（class 名字寫上去了，但沒真的產生 CSS

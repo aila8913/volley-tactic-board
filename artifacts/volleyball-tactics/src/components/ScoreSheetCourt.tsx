@@ -305,7 +305,7 @@ export default function ScoreSheetCourt({
     <div className="mx-auto flex h-full w-full max-w-[480px] items-center justify-center gap-2">
       {/* 球場 SVG */}
       <div
-        className="relative flex-shrink-0 rounded-lg border-4 border-[#111111] bg-white shadow-sm"
+        className="relative flex-shrink-0 rounded-lg border-2 border-white/[0.15] shadow-lg shadow-black/30"
         style={{ height: "100%", aspectRatio: "1/2" }}
       >
         <svg
@@ -318,14 +318,32 @@ export default function ScoreSheetCourt({
           onPointerUp={handlePointerUp}
           onPointerLeave={handlePointerLeave}
         >
-          <rect x="0" y="0" width="100" height="200" fill="#fff" />
-          <line x1="0" y1="100" x2="100" y2="100" stroke="#111" strokeWidth="2.5" />
+          <defs>
+            {/* 跟戰術板 Court.tsx 的 court-gradient 同一組深青色階，兩個球場（這裡是
+                比賽時快速記錄用的簡化版）維持一致的「球場長相」，不要一個深青一個純白。 */}
+            <linearGradient id="ss-court-gradient" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#12403f" />
+              <stop offset="50%" stopColor="#1c5654" />
+              <stop offset="100%" stopColor="#2a6e6a" />
+            </linearGradient>
+          </defs>
+          <rect x="0" y="0" width="100" height="200" fill="url(#ss-court-gradient)" />
+          <line
+            x1="0"
+            y1="100"
+            x2="100"
+            y2="100"
+            stroke="#F5F5F0"
+            strokeOpacity="0.6"
+            strokeWidth="2.5"
+          />
           <line
             x1="0"
             y1="66.7"
             x2="100"
             y2="66.7"
-            stroke="#111"
+            stroke="#F5F5F0"
+            strokeOpacity="0.6"
             strokeWidth="1"
             strokeDasharray="3 3"
           />
@@ -334,14 +352,15 @@ export default function ScoreSheetCourt({
             y1="133.3"
             x2="100"
             y2="133.3"
-            stroke="#111"
+            stroke="#F5F5F0"
+            strokeOpacity="0.6"
             strokeWidth="1"
             strokeDasharray="3 3"
           />
-          <text x="50" y="15" fontSize="6" fill="#111" textAnchor="middle">
+          <text x="50" y="15" fontSize="6" fill="#F5F5F0" textAnchor="middle">
             對手
           </text>
-          <text x="50" y="192" fontSize="6" fill="#111" textAnchor="middle">
+          <text x="50" y="192" fontSize="6" fill="#F5F5F0" textAnchor="middle">
             我方
           </text>
 
@@ -353,12 +372,12 @@ export default function ScoreSheetCourt({
               width="20"
               height="12"
               rx="3"
-              fill="#fff"
-              stroke="#999"
+              fill="rgba(10,11,7,0.4)"
+              stroke="#a9b096"
               strokeWidth="1"
               strokeDasharray="2 1"
             />
-            <text y="2" fontSize="3.5" fontWeight="bold" fill="#666" textAnchor="middle">
+            <text y="2" fontSize="3.5" fontWeight="bold" fill="#a9b096" textAnchor="middle">
               對手
             </text>
           </g>
@@ -372,12 +391,12 @@ export default function ScoreSheetCourt({
               <g key={`opp-${slot.zone}`} transform={`translate(${x},${y})`}>
                 <circle
                   r={isServer ? 7.5 : 6}
-                  fill={slot.y < 0.5 ? "#E5E5E5" : "#F5F5F5"}
-                  stroke="#999"
+                  fill={slot.y < 0.5 ? "rgba(245,245,240,0.1)" : "rgba(245,245,240,0.06)"}
+                  stroke="#a9b096"
                   strokeWidth={isServer ? 1.5 : 1}
                   strokeDasharray="2 1"
                 />
-                <text y="2" fontSize="4" fontWeight="bold" fill="#666" textAnchor="middle">
+                <text y="2" fontSize="4" fontWeight="bold" fill="#a9b096" textAnchor="middle">
                   {slot.zone}
                 </text>
                 {isServer && (
@@ -473,14 +492,14 @@ export default function ScoreSheetCourt({
             );
           })}
 
-          {/* 手勢軌跡線 */}
+          {/* 手勢軌跡線：黑色在深色球場上會看不見，改用米白（跟球場線條同一色） */}
           {dragStart && dragCurrent && (
             <line
               x1={dragStart.x}
               y1={dragStart.y}
               x2={dragCurrent.x}
               y2={dragCurrent.y}
-              stroke="#111"
+              stroke="#F5F5F0"
               strokeWidth="1.5"
               strokeDasharray="4 3"
               className="pointer-events-none"
@@ -495,7 +514,7 @@ export default function ScoreSheetCourt({
         style={{ width: SIDELINE_W + 8 }}
       >
         {sidelinePlayers.length === 0 && (
-          <p className="mt-4 text-center text-[9px] text-gray-400">場邊</p>
+          <p className="mt-4 text-center text-[9px] text-[#a9b096]">場邊</p>
         )}
 
         {sidelinePlayers.map((player) => {
@@ -535,8 +554,8 @@ export default function ScoreSheetCourt({
               className={[
                 "relative flex flex-col items-center justify-center rounded-full border-2 font-bold text-xs transition-all",
                 isSelected
-                  ? "border-blue-500 bg-blue-100 text-blue-800 shadow-md scale-110"
-                  : "border-gray-400 bg-white text-gray-700 active:scale-95",
+                  ? "border-[#3b82f6] bg-[#3b82f6]/20 text-[#93c5fd] shadow-md scale-110"
+                  : "border-white/[0.26] bg-white/[0.05] text-[#f5f5f0] active:scale-95",
               ].join(" ")}
               style={{ width: SIDELINE_W, height: SIDELINE_W }}
             >
