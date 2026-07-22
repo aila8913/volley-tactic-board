@@ -37,7 +37,9 @@ export default function RadialMenu<T extends string>({
 }: RadialMenuProps<T>) {
   const step = 360 / options.length;
   return (
-    <div className="fixed inset-0 z-50 bg-black/10" onPointerDown={onCancel}>
+    // bg-black/40：計分表換成深色球場背景後，選單彈出時要跟底下忙碌的球場拉開視覺
+    // 焦距，原本淺色主題用的 bg-black/10 太淡，深色底幾乎看不出「選單開著」的感覺。
+    <div className="fixed inset-0 z-50 bg-black/40" onPointerDown={onCancel}>
       {options.map((opt, i) => {
         const angle = ((startAngle + i * step) * Math.PI) / 180;
         const dx = OFFSET * Math.cos(angle);
@@ -51,11 +53,15 @@ export default function RadialMenu<T extends string>({
               e.stopPropagation();
               if (!opt.disabled) onSelect(opt.value);
             }}
+            // 退役手繪風（wobbly-border + 硬邊陰影），改用跟計分表其餘按鈕同一套
+            // 玻璃圓角語言（見 pages/ScoreSheet.tsx 的 SECONDARY_BUTTON_CLASS）。
+            // 這是全站最後一個還在用 wobbly-border 的地方，換完之後 index.css 那個
+            // class 就沒有消費者了（見清理那一步）。
             className={cn(
-              "absolute -translate-x-1/2 -translate-y-1/2 wobbly-border px-3 py-2 text-sm font-bold shadow-[2px_2px_0_0_#111]",
+              "absolute -translate-x-1/2 -translate-y-1/2 rounded-full px-3 py-2 text-sm font-bold backdrop-blur-md transition active:scale-95",
               opt.disabled
-                ? "cursor-not-allowed bg-neutral-200 text-neutral-400 opacity-60 shadow-none"
-                : "bg-white hover:bg-[#CCFF00] active:translate-x-[1px] active:translate-y-[1px] active:shadow-none",
+                ? "cursor-not-allowed border border-white/[0.08] bg-white/[0.03] text-white/25"
+                : "border border-white/[0.26] bg-white/[0.11] text-[#f5f5f0] shadow-lg shadow-black/30 hover:border-[#c6f135] hover:bg-[#c6f135]/20 hover:text-[#c6f135]",
             )}
             style={{ left: center.x + dx, top: center.y + dy }}
           >
