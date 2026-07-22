@@ -22,8 +22,8 @@
 > 平行 PR 就落在不同行段、git 幾乎都能自動合併，不用真的把檔案拆兩份、也保住一眼 catch-up。
 > 上面的 `_Last updated_` 是共用一行摘要（誰更新了什麼），保持精簡、別長成段落。
 
-\_Last updated: 2026-07-21 (aila) — 站位改為全站共用單一真相（推翻 #115 解耦），戰術板右欄轉唯讀；
-換局換輪視窗作廢。新開 #170（比賽列表右欄）。\_
+\_Last updated: 2026-07-22 (aila) — M1.5 UI 大改版拆成七環（#172–#178）並立 `docs/layout-spec.md`；
+環 1（AppShell 三欄骨架）已合併，環 3 Stage A（列表頁右欄＋局軸）PR #181 待合。\_
 
 ## Current state
 
@@ -78,7 +78,32 @@ lives in git log + the issues named).
   「切輪次要確認捨棄未存戰術」的 session 副作用、後者是 `Court.tsx` 拖放協定的來源。
   **`lib/rotationLogic.ts` 連續兩次 UI 重寫都一行未動**——把領域邏輯抽出元件的回報。
   **換局換輪視窗（commit `844b50d`）作廢**：右欄本來就顯示下一局站位、本來就能改，彈窗是多餘轉場。
-  **剩：分析頁站位列（blocked #76），#120 保持 open。**
+  **剩：分析頁站位列（blocked #76），#120 保持 open。**（比賽列表／資料夾內頁的右欄已由 #174
+  Stage A 補上，見下一則。）
+- **版面規格立法＋七環落地計畫（07-22）。** 新增 `docs/layout-spec.md`：2048×1440 畫布的換算表
+  （nav 105／aside 493／tools 132／中央 `flex-1`，**不要硬寫 px**）、三欄骨架與四種模式
+  （A 列表瀏覽／B 戰術唯讀／C 戰術編輯／D 對手佈陣）、各欄內容規格，並把 M1.5 UI 大改版拆成
+  **環 0–6（issue #172–#178）**，相依鏈 `環1 →（環2 ‖ 環3 ‖ 環4）→ 環5 → 環6`。
+  **分工判準：版面聽 layout-spec.md、視覺聽 design-spec.md。**
+- **環 1（#172）已合併：三欄骨架有主人了。** 在此之前五個頁面各自手刻 `flex h-screen` ＋各自
+  寫死欄寬（`w-16`/`w-72` 散落五處），靠複製貼上維持一致。`components/AppShell.tsx` 成為唯一
+  擁有者，各頁只往插槽（`nav`/`children`/`aside`/`tools`/`backdrop`）塞內容；模式→右欄插槽用
+  查表而非 if 鏈。**兩個刻意不做並寫進註解的決定**：(1) 寬度沿用現況值而非 spec 目標值——搬家
+  與裝潢分開做，畫面出錯才分得出是哪一步；(2) 左欄不隨 mode 變寬——spec §1 表格的「展開 370」
+  依 §2.1 是 hover 暫時態，當成版面寬度會讓滑鼠一移開就整頁 reflow，環 2 應做成浮層。
+  搬家途中撿到真 bug：flex column 子項 `min-height` 預設 `auto`，在 `h-screen + overflow-hidden`
+  骨架裡只寫 `overflow-y-auto` 是**捲不動的**（該層被內容撐高、捲軸不出現、長清單被裁掉），
+  要補 `min-h-0`——與中央欄的 `min-w-0` 是同一個坑的兩個方向。
+- **環 3（#174）Stage A：右欄成為「排先發」的起點**（PR #181，**#174 保持 open**）。實作前發現
+  **規格與資料對不上**：issue 要「滑到已打完的局讀該局凍結快照」，但 `CompletedSet` 根本沒存
+  lineup——`nextSet` 封存時只留分數與 history，快照直接丟掉，後端 `lineups` 每局都有一筆卻只被
+  讀回當前局。已補：`CompletedSet.lineup` ＋ 共用的 `findLineupSnapshotForSet`。
+  `RotationRailPanel` 加 `axis`（rotation/set）與 `onStep` stepper，**元件只回報方向**，「輪是
+  環狀、局是線性有邊界」屬領域規則留在呼叫端；新元件 `MatchInfoRail` 三態（空狀態／資料夾摘要
+  佔位／比賽輪轉表），列表頁與資料夾內頁共用同一顆。選取語意一般化成 `selected { kind, id }`、
+  比賽卡片卡身可單擊選取、**不自動選第一場**（使用者未表達意圖前不該讓站位進可寫狀態）。
+  「已記完」用新純函式 `getMatchWinner` 判**勝隊**而非局數（三戰兩勝 2:0 也可能已結束）。
+  **Stage B（統計格）blocked on M2、跨欄拖曳（DnD）未做，故 #174 不關。**
 - **Schema foundations for stats are in place:** `lineups`（起始先發，一局一 row）、
   `substitutions`（換人，存比分快照）、`events.outcome`（得/失/球續 enum）、`people`＋`teams`
   （跨場跨隊身分／分組標籤，`players.personId`/`matches.teamId` nullable FK、`onDelete: set null`
@@ -144,10 +169,13 @@ PO 拍板插入 M1.5「戰術板 UI 大改版」（#160）於 M1 與 M2 之間**
 #163（文件同步）亦已收工。
 部署 #26／離線契約 #75 仍屬 priority:essential 的自然接續。**#120 已移到 M1.5、計分頁兩階段落地，
 仍 open**：剩分析頁站位列（資訊軸未定，**blocked #76**）。換局換輪視窗已作廢（右欄可就地編輯後成為
-多餘轉場）。**新開 #170：比賽列表／資料夾內頁補右欄**——從 #120 拆出，設計已定案（選取語意一般化成
-`selected: { kind, id }`、右欄依選中項型別與比賽是否記完換內容、輪轉表加「局」軸可左右滑看各局陣容，
-已打完的局讀凍結快照唯讀、未開賽的局可編輯）。Stage A（選取＋切局）現在就能做，Stage B（統計格）
-的欄位內容待 M2 定案。
+多餘轉場）。
+
+**M1.5 的當前形狀＝七環（#172–#178），規格住 `docs/layout-spec.md`、相依鏈
+`環1 →（環2 ‖ 環3 ‖ 環4）→ 環5 → 環6`。** 環 1（#172）已關；環 3（#174）Stage A 已送 PR #181。
+**下一步是三選一，彼此獨立、順序可調**：#173（環 2 左欄 hover 展開）／#175（環 4 中央列表型）／
+#176（環 5 中央球場型＋模式 C，依賴環 1、3、4）。#174 剩 Stage B（統計格，blocked on M2）與跨欄
+拖曳（與 #40「undo/redo 不涵蓋輪轉拖曳」相鄰，動到時留意）。#178（環 7 響應式）需先補線框稿。
 **新開 #168：引入 `@testing-library/react` 補互動測試**——現行 `renderToStaticMarkup` 慣例無法觸發
 事件、讀不到 Radix Portal，飛出選單的行為全無自動測試；這輪就在該盲區抓到一個「四項檢查全綠但
 使用者會遇到」的 bug（用 store 狀態反推使用者意圖），修好了但無回歸測試保護。
@@ -161,7 +189,14 @@ PO 拍板插入 M1.5「戰術板 UI 大改版」（#160）於 M1 與 M2 之間**
 
 ### 開發 (aila)
 
-- **#163**（本次 PR，07-20）— `docs/flow-diagrams.html` 同步到 #154／#160 之後的實際行為。過期的
+- **#172**（PR #180，commit `b130bdb`，07-22）— 環 1／抽出 `AppShell` 三欄骨架，五頁收斂到單一
+  版面元件。細節與兩個「刻意不做」的決定見上方 Current state。**教訓值得記**：四項檢查全綠但
+  **一項都抓不到版面問題**——捲不動、欄被擠爆、scroll-snap 沒對齊，型別全都合法。這正是 #168
+  （引入 `@testing-library/react`）要補的盲區，也是為什麼這類 PR 一定得真的開瀏覽器點過。
+- **PR #179**（commit `ddb3777`，07-22）— `docs/layout-spec.md` ＋ 七環拆解（#172–#178）。
+  這顆一度是 stranded commit（比前一次 squash merge 晚 46 分鐘落在本機 main 上、沒被帶走），
+  由 catch-up 的 drift 比對撿回、cherry-pick 到乾淨分支重送。
+- **#163**（07-20）— `docs/flow-diagrams.html` 同步到 #154／#160 之後的實際行為。過期的
   方式會**主動誤導**：它描述的 `isLayoutMode`／`enterTacticsLayout()`／戰術板反寫回輪轉表的
   `removePlayerTacticPositions()`／`resetCurrentRotationTactics()` 全都不是「舊」而是**已被刪除**，
   照著讀會實作出一條被 CI 焊死禁止的資料流。改動：Part 2 整段重寫成 browse／viewing／edit 三態
@@ -207,22 +242,12 @@ PO 拍板插入 M1.5「戰術板 UI 大改版」（#160）於 M1 與 M2 之間**
   不記時長）由 PO 拍板。
 - **#147**（PR #158，commit `4ff53ac`，07-19）— 修畫線拖曳的 undo 殘留分支（#149 只修了站位拖曳）：
   `addMarker` 拖曳畫線改跳過歷史、由 Court 在 pointerUp 才記一次完整的線＋回歸測試。#147 就此關閉。
-- **#146**（上一 session）— PROGRESS.md 改單檔＋開發／設計分區（本結構），並新增 `workflow` 標籤。
-- **#119**（上一 session 關）— 戰術板/輪轉表兩 store 改 `dataByMatch[matchId]` 分片、去 persist、
-  `buildSnapshot` 過濾幽靈站位。前端 **PR #145 已 merge**（commit `d18f69e`），後端前置 **PR #143**
-  （`tactics` 加 `matchId` integer FK＋`?matchId=` 過濾，commit `e905844`）。三症狀（跨場汙染／幽靈站位／
-  activeProjectId 誤覆寫）有 `useTacticsBoard.test.ts` 釘住、整套綠 → 驗證後關閉。跨 store 全域 subscribe
-  換成 `RotationSwitcher` 明確呼叫 `syncRotationChange`。型別坑：`matches.id` 是 `serial`（整數）不是 uuid，
-  FK 要跟著用 integer。
 - **PR #149**（**Closes #147**）— 修戰術板 undo 一次退兩步（commit `3abb312`，07-18）。根因：每個 action
   「先記歷史再改狀態」，`history[historyIndex]` 慢一拍、與 undo 的 `historyIndex-1` 對不上；改成「先改後記」
   ＋回歸測試。那條修好卻沒開 PR 的 stranded 分支靠 catch-up 撿回。
 - **PR #141**（無對應 issue）— 拿掉跨領域 PR 的 approve 硬關卡、改「合併前 @ 知會一聲」（commit `fa4e908`,
   07-18）。放寬先前 PR #137 立的規則，動 CLAUDE.md/CONTRIBUTING.md/ship skill；現行生效即知會制。
 - **PR #142**（無對應 issue）— 需求層 pattern-language 分析文件（commit `c4e843f`，07-17）。
-- **PR #137**（無對應 issue）— 兩人協作流程規範（commit `ab626b1`，07-16）。CONTRIBUTING.md「協作與溝通」
-  ＋ CLAUDE.md「Team & collaboration rules」＋ ship 協作確認步驟。**已於 PR #141 放寬成知會制**（見上）。
-  ship skill 瘦身門檻＝超過 ~350 行時把 Step 6 坑史移去 `ship/reference.md`（先不動）。
 
 ### 設計 (tang)
 
