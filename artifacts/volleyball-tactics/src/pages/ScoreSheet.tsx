@@ -3,6 +3,7 @@ import type { PointerEvent as ReactPointerEvent } from "react";
 import { useParams, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import BackToMatchListButton from "@/components/BackToMatchListButton";
+import AppShell from "@/components/AppShell";
 import MatchNavRail, { matchBackHref } from "@/components/MatchNavRail";
 import TacticsRailMenu from "@/components/TacticsRailMenu";
 import { useMatchWithRoster } from "@/hooks/useMatches";
@@ -321,27 +322,102 @@ export default function ScoreSheet() {
   };
 
   return (
-    // 外層改成 flex h-screen（橫向排），把共用導覽軌 MatchNavRail 放在最左邊，右側
-    // 才是這一頁原本的內容（flex-1 min-w-0 撐滿剩下的寬度）。以前的「回列表」
-    // 「戰術板」連結是這個頁面 header 自己刻的，現在統一交給 MatchNavRail（issue #160）。
-    <div className="flex h-screen w-full">
-      <MatchNavRail
-        matchId={id}
-        backHref={backHref}
-        active="record"
-        // issue #160 C3：計分頁的「戰」按鈕改成飛出選單（列出已存戰術＋新增戰術），取代原本
-        // 右欄底部單獨一顆「快速戰術板」按鈕——兩者是同一個功能，收進選單的「+」之後那顆
-        // 按鈕就沒有存在必要了（見下面右欄，那個區塊已整段移除）。
-        boardSlot={
-          <TacticsRailMenu
-            matchId={id}
-            captureCurrent={captureCurrentForBoard}
-            captureLabel="擷取目前計分站位"
-            captureDisabled={!activeLineup || !currentSet}
+    // issue #172：三欄骨架交給 AppShell（mode="A"）。以前這裡是自己手刻的
+    // `<div className="flex h-screen w-full">` + MatchNavRail + 一整個 `flex-1` 內容區，
+    // 現在拆成 nav / aside / children 三個插槽——nav 是共用導覽軌（不變）；aside 是原本那塊
+    // `w-72` 深色玻璃右欄（站位面板 + 比賽統計）的「內容」，寬度不再由這個頁面自己寫死
+    // `w-72 flex-none`，改交給 AppShell 的 ASIDE_WIDTH 常數決定（這一環兩者剛好都是
+    // w-72＝288px，數字沒變，只是「誰負責定義這個數字」換人了）；children 是中間白底的
+    // 計分表主區（header + 計分表欄），不變。
+    <AppShell
+      mode="A"
+      nav={
+        <MatchNavRail
+          matchId={id}
+          backHref={backHref}
+          active="record"
+          // issue #160 C3：計分頁的「戰」按鈕改成飛出選單（列出已存戰術＋新增戰術），取代原本
+          // 右欄底部單獨一顆「快速戰術板」按鈕——兩者是同一個功能，收進選單的「+」之後那顆
+          // 按鈕就沒有存在必要了（見下面右欄，那個區塊已整段移除）。
+          boardSlot={
+            <TacticsRailMenu
+              matchId={id}
+              captureCurrent={captureCurrentForBoard}
+              captureLabel="擷取目前計分站位"
+              captureDisabled={!activeLineup || !currentSet}
+            />
+          }
+        />
+      }
+      aside={
+        // ── 右欄：站位／統計／快速戰術板（深色玻璃，跟中間白底計分區切開） ──
+        // 這輪（issue #120 第一階段）只把這整條 w-72 換成深色玻璃，色票照
+        // docs/design-spec.md 第 2 節；中間計分區維持白底不動（整頁改版是另外的
+        // design 工作）。border-l 收在這一側，交界只留一條邊框，不會有突兀的白邊。
+        // 寬度（原本 w-72 flex-none）現在由 AppShell 的 ASIDE_WIDTH 負責，這裡只留視覺
+        // class，加上 h-full 撐滿 AppShell 給的欄位高度。
+        <div className="flex h-full flex-col border-l border-white/[0.10] bg-[#121310] font-dash text-[#F5F5F0]">
+          {/* ── 站位面板（issue #120，共用真相版）──
+            開賽前（canEditLineup）：lineup 讀的是 activeLineup，此時等於
+            capturableLineup——輪轉表當下的共用真相，可以直接編輯；onLineupChange
+            呼叫 setLineupFromSnapshot 把改動寫回 useRotationTable，跟戰術板讀的是
+            同一份資料，改這裡戰術板也會立刻看到。
+            開賽後：record.lineup 已經凍結（開局凍結，見 hooks/useScoreSheet.ts 的
+            start()），這時 activeLineup 讀到的就是那份凍結快照，readOnly 鎖住不給改——
+            已經記進去的球是綁著這份站位算的，中途改會讓歷史跟站位對不上。 */}
+          <RotationRailPanel
+            lineup={activeLineup}
+            roster={match.players}
+            rotation={currentSet?.ourRotation ?? 0}
+            readOnly={!canEditLineup}
+            onLineupChange={canEditLineup ? (next) => setLineupFromSnapshot(id, next) : undefined}
           />
-        }
-      />
-      <div className="flex min-w-0 flex-1 flex-col bg-white">
+
+          <div className="flex shrink-0 items-center justify-between border-b border-white/[0.10] px-3 py-2 text-xs font-bold text-[#9AA08C]">
+            <span>比賽統計</span>
+            {statsMatches.length > 1 && (
+              <span className="font-normal text-[#9AA08C]/70">← 滑動看其他場</span>
+            )}
+          </div>
+
+          {/* 每個 snap pane 是一場比賽的統計；CSS scroll-snap 不需要任何 JS */}
+          <div className="flex min-h-0 flex-1 snap-x snap-mandatory overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {statsMatches.map((m, i) => (
+              // 這一格以前寫死 `w-72`，意思其實是「跟右欄一樣寬」——現在右欄多寬只由
+              // AppShell 的 ASIDE_WIDTH 一處決定，這裡改成 w-full 直接吃滿父層（也就是
+              // aside 插槽）給的寬度，不用在第二個地方重複寫一次同一個數字。如果以後只改
+              // AppShell 的常數、忘記回來改這裡，w-72 寫死的話畫面就會悄悄跟右欄實際寬度
+              // 不一致（scroll-snap 的每一格可能露出下一格一小角）——改成 w-full 之後這種
+              // 情況不可能發生。
+              <div key={m.id} className="flex min-h-0 w-full flex-none snap-center flex-col">
+                <div className="flex shrink-0 items-center gap-2 border-b border-white/[0.10] bg-white/[0.03] px-3 py-1.5">
+                  <span className="truncate text-xs font-bold">vs {m.opponent}</span>
+                  {m.id === id && (
+                    <span className="shrink-0 rounded bg-[#C6F135]/15 px-1 text-[10px] text-[#C6F135]">
+                      本場
+                    </span>
+                  )}
+                  <span className="ml-auto shrink-0 text-[10px] text-[#9AA08C]">
+                    {i + 1}/{statsMatches.length}
+                  </span>
+                </div>
+                <div className="flex-1 overflow-y-auto">
+                  <ScoreSheetStats
+                    players={m.players}
+                    record={m.id === id ? record : undefined}
+                    currentSetSubCount={m.id === id ? currentSubCount : undefined}
+                    totalSubCount={m.id === id ? totalSubCount : undefined}
+                    currentSetTimeoutCount={m.id === id ? currentTimeoutCount : undefined}
+                    totalTimeoutCount={m.id === id ? totalTimeoutCount : undefined}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      }
+    >
+      <div className="flex h-full min-h-0 flex-1 flex-col bg-white">
         <header className="flex items-center justify-center border-b-2 border-[#111] px-4 py-3 shrink-0">
           <h1 className="text-lg font-bold">vs {match.opponent}</h1>
         </header>
@@ -499,64 +575,6 @@ export default function ScoreSheet() {
               </div>
             )}
           </div>
-
-          {/* ── 右欄：站位／統計／快速戰術板（深色玻璃，跟中間白底計分區切開） ──
-            這輪（issue #120 第一階段）只把這整條 w-72 換成深色玻璃，色票照
-            docs/design-spec.md 第 2 節；中間計分區維持白底不動（整頁改版是另外的
-            design 工作）。border-l 收在這一側，交界只留一條邊框，不會有突兀的白邊。 */}
-          <div className="w-72 flex-none flex flex-col min-h-0 border-l border-white/[0.10] bg-[#121310] font-dash text-[#F5F5F0]">
-            {/* ── 站位面板（issue #120，共用真相版）──
-              開賽前（canEditLineup）：lineup 讀的是 activeLineup，此時等於
-              capturableLineup——輪轉表當下的共用真相，可以直接編輯；onLineupChange
-              呼叫 setLineupFromSnapshot 把改動寫回 useRotationTable，跟戰術板讀的是
-              同一份資料，改這裡戰術板也會立刻看到。
-              開賽後：record.lineup 已經凍結（開局凍結，見 hooks/useScoreSheet.ts 的
-              start()），這時 activeLineup 讀到的就是那份凍結快照，readOnly 鎖住不給改——
-              已經記進去的球是綁著這份站位算的，中途改會讓歷史跟站位對不上。 */}
-            <RotationRailPanel
-              lineup={activeLineup}
-              roster={match.players}
-              rotation={currentSet?.ourRotation ?? 0}
-              readOnly={!canEditLineup}
-              onLineupChange={canEditLineup ? (next) => setLineupFromSnapshot(id, next) : undefined}
-            />
-
-            <div className="px-3 py-2 border-b border-white/[0.10] text-xs font-bold text-[#9AA08C] flex items-center justify-between shrink-0">
-              <span>比賽統計</span>
-              {statsMatches.length > 1 && (
-                <span className="text-[#9AA08C]/70 font-normal">← 滑動看其他場</span>
-              )}
-            </div>
-
-            {/* 每個 snap pane 是一場比賽的統計；CSS scroll-snap 不需要任何 JS */}
-            <div className="flex-1 flex overflow-x-auto snap-x snap-mandatory min-h-0 [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
-              {statsMatches.map((m, i) => (
-                <div key={m.id} className="w-72 flex-none snap-center flex flex-col min-h-0">
-                  <div className="shrink-0 bg-white/[0.03] border-b border-white/[0.10] px-3 py-1.5 flex items-center gap-2">
-                    <span className="text-xs font-bold truncate">vs {m.opponent}</span>
-                    {m.id === id && (
-                      <span className="text-[10px] bg-[#C6F135]/15 text-[#C6F135] px-1 rounded shrink-0">
-                        本場
-                      </span>
-                    )}
-                    <span className="text-[10px] text-[#9AA08C] ml-auto shrink-0">
-                      {i + 1}/{statsMatches.length}
-                    </span>
-                  </div>
-                  <div className="flex-1 overflow-y-auto">
-                    <ScoreSheetStats
-                      players={m.players}
-                      record={m.id === id ? record : undefined}
-                      currentSetSubCount={m.id === id ? currentSubCount : undefined}
-                      totalSubCount={m.id === id ? totalSubCount : undefined}
-                      currentSetTimeoutCount={m.id === id ? currentTimeoutCount : undefined}
-                      totalTimeoutCount={m.id === id ? totalTimeoutCount : undefined}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
 
         {gesture?.step === "action" && (
@@ -594,6 +612,6 @@ export default function ScoreSheet() {
           />
         )}
       </div>
-    </div>
+    </AppShell>
   );
 }
