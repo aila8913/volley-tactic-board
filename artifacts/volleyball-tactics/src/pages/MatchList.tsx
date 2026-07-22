@@ -8,6 +8,7 @@ import TournamentFormDialog from "@/components/TournamentFormDialog";
 import MatchCard from "@/components/MatchCard";
 import AppShell from "@/components/AppShell";
 import MatchNavRail from "@/components/MatchNavRail";
+import MatchInfoRail, { MatchListSelection } from "@/components/MatchInfoRail";
 import { Match } from "@/types/match";
 import { Tournament } from "@/types/tournament";
 
@@ -29,7 +30,12 @@ export default function MatchList() {
   const [editingTournament, setEditingTournament] = useState<Tournament | null>(null);
   // 跟作業系統的資料夾一致：單擊只是選取（用來標示「目前點到哪個」），雙擊才真的進去——
   // 不然每次手滑點到資料夾就直接跳轉，很容易誤觸。
-  const [selectedTournamentId, setSelectedTournamentId] = useState<string | null>(null);
+  //
+  // issue #174：選取語意從「只能選資料夾」一般化成「資料夾或比賽都能選」，右欄（aside）
+  // 會依照選中的是哪一種顯示不同內容（見 MatchInfoRail.tsx）。刻意不預設選中第一項——
+  // 進頁面時右欄是空狀態，理由見 MatchInfoRail 空狀態分支的註解：使用者還沒表達意圖前，
+  // 不該把任何一場比賽的站位放進「可編輯」狀態。
+  const [selected, setSelected] = useState<MatchListSelection>(null);
 
   // 「最上層」比賽 = 沒有歸到任何資料夾（tournamentId 為 null）。
   // #117 修好後這裡回到單純判斷 !m.tournamentId：資料夾已進 DB、tournamentId 是帶 cascade 的
@@ -87,8 +93,10 @@ export default function MatchList() {
   return (
     // issue #172：三欄骨架交給 AppShell，這裡只負責「這一頁的視覺」（背景）跟「這一頁要塞進
     // 哪些插槽」。mode="A"（列表瀏覽）、nav 是共用導覽軌（沒有 matchId——這頁本來就不屬於
-    // 任何一場比賽，MatchNavRail 會把「計/數/戰」渲染成停用態）、不傳 aside——右欄資訊欄的
-    // 內容是環 3（#174）的事，這一環還沒有東西可以放，讓右欄整個消失比硬渲染一片空欄更誠實。
+    // 任何一場比賽，MatchNavRail 會把「計/數/戰」渲染成停用態）。
+    // aside（issue #174）：右欄資訊欄，內容完全交給 MatchInfoRail 依 selected 決定要顯示
+    // 空狀態／資料夾摘要／比賽站位——這一頁只負責把「目前選中什麼」傳過去，不自己判斷要
+    // 渲染哪一種畫面。
     //
     // 純色背景會讓 backdrop-blur 白忙一場（模糊純色還是同一個純色，卡片的玻璃感其實沒有真的
     // 產生）。這裡疊一層很淡的斜線網格當「球網紋理」，讓 blur 有東西可以模糊，也呼應排球主題
@@ -98,6 +106,7 @@ export default function MatchList() {
     <AppShell
       mode="A"
       nav={<MatchNavRail backHref="/" active="list" />}
+      aside={<MatchInfoRail selected={selected} />}
       className="bg-[#0a0b07] font-dash text-[#f5f5f0]"
       style={{
         backgroundImage:
@@ -161,11 +170,11 @@ export default function MatchList() {
                 item.kind === "tournament" ? (
                   <article
                     key={item.data.id}
-                    onClick={() => setSelectedTournamentId(item.data.id)}
+                    onClick={() => setSelected({ kind: "tournament", id: item.data.id })}
                     onDoubleClick={() => navigate(`/tournaments/${item.data.id}`)}
                     className={`relative flex cursor-pointer select-none flex-col rounded-2xl border
                     bg-white/[0.07] p-5 shadow-lg shadow-black/35 backdrop-blur-md transition ${
-                      selectedTournamentId === item.data.id
+                      selected?.kind === "tournament" && selected.id === item.data.id
                         ? "border-[#c6f135]/70"
                         : "border-white/[0.12]"
                     }`}
@@ -216,6 +225,8 @@ export default function MatchList() {
                     match={item.data}
                     onEdit={() => openEditMatchDialog(item.data)}
                     onDelete={() => handleDeleteMatch(item.data.id)}
+                    selected={selected?.kind === "match" && selected.id === item.data.id}
+                    onSelect={() => setSelected({ kind: "match", id: item.data.id })}
                   />
                 ),
               )}

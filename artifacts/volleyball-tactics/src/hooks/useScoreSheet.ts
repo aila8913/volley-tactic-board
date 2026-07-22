@@ -202,6 +202,10 @@ export const useScoreSheet = create<ScoreSheetStore>()((set) => ({
                 ourScore: finished.ourScore,
                 opponentScore: finished.opponentScore,
                 history: finished.history,
+                // 封存這一局當下的先發快照（issue #174）：record.lineup 是「這一局」的先發
+                // （下面幾行才會把它歸零成 null，給下一局用），所以要在歸零之前先讀出來存進去，
+                // 順序不能顛倒——不然封存進 completedSets 的會是被清空後的 null。
+                lineup: record.lineup,
               },
             ],
             currentSet: makeEmptySet(finished.setNumber + 1),

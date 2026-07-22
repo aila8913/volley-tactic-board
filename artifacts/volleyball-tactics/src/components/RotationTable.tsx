@@ -5,7 +5,7 @@ import { useTacticsBoard } from "../hooks/useTacticsBoard";
 import { useRoster, useSaveRoster } from "../hooks/useMatches";
 import { MatchPlayer } from "../types/match";
 import type { RotationPositions } from "../types/rotationTable";
-import { isLineupComplete, captureLineupFromRotations } from "../lib/rotationLogic";
+import { captureLineupFromRotations } from "../lib/rotationLogic";
 import RotationSwitcher from "./RotationSwitcher";
 import RotationRailPanel from "./RotationRailPanel";
 import RosterEditDialog from "./RosterEditDialog";
@@ -73,9 +73,6 @@ export default function RotationTable() {
       }
     }
   };
-
-  // 「排好」= 至少一輪站滿 6 人（共用判定，跟計分表 hasLineup 同一條規則，見 issue #37）。
-  const hasRotations = isLineupComplete(rotations);
 
   // 目前輪次場上的球員 id，用來在名單上標示「已上場」。
   const onCourtIds = new Set(rotations[currentRotation].positions.map((p) => p.playerId));
@@ -171,33 +168,41 @@ export default function RotationTable() {
                 這一串戰術白板才懂的副作用（見 RotationSwitcher.tsx），而 RotationRailPanel
                 是純展示的共用元件、不該認識白板 session 是什麼。所以 onRotationChange 不傳給
                 RotationRailPanel（它自己的 stepper 因此保持隱藏），改把既有的 RotationSwitcher
-                原樣放進 footer——畫面上仍然只有一顆輪次切換控制，不會兩顆搶著切。 */}
-              {hasRotations && (
-                <section>
-                  <h2 className="mb-1 text-[15px] font-bold">輪次選擇</h2>
-                  <RotationSwitcher />
-                  <div className="mt-1 flex gap-2">
-                    <button
-                      onClick={handleResetRotation}
-                      className={`flex-1 ${PANEL_BUTTON_CLASS}`}
-                    >
-                      重置站位
-                    </button>
-                    <button
-                      onClick={() => clearDrawings()}
-                      disabled={!session}
-                      title={session ? "清除白板上的畫筆與防守範圍" : "沒有正在編輯的戰術"}
-                      className="flex-1 rounded-lg border border-white/[0.26] bg-white/[0.05] px-2 py-1
-                        text-xs font-bold text-[#a9b096] transition hover:border-[#ef4444]
-                        hover:bg-[#ef4444]/10 hover:text-[#ef4444] disabled:opacity-40
-                        disabled:hover:border-white/[0.26] disabled:hover:bg-white/[0.05]
-                        disabled:hover:text-[#a9b096]"
-                    >
-                      清除畫筆
-                    </button>
-                  </div>
-                </section>
-              )}
+                原樣放進 footer——畫面上仍然只有一顆輪次切換控制，不會兩顆搶著切。
+
+                issue #17 第 2 節：這裡以前包了一層 `{hasRotations && (...)}`，沒排滿 6 人就把
+                整個「輪次選擇」區塊（含 RotationSwitcher）藏起來。解除這個鎖——輪次切換的
+                用途是「預覽/繼續編輯別輪」，排到一半（例如只排了 3 個人）反而更需要切過去
+                看看別輪、或是把還沒排的位置補齊，鎖住只會妨礙排陣過程本身，不是保護什麼。
+                RotationSwitcher 本身也沒有任何「至少要排滿才能切」的前提（它只是改
+                currentRotation 這個純數字），所以永遠渲染不會露出壞掉的畫面。
+
+                「清除畫筆」按鈕：issue #17 原始描述以為它跟著 #154 一起變成死碼（呼叫的是
+                已刪除的 resetCurrentRotationTactics），但實際讀過 useTacticsBoard.ts 後發現
+                不是——它呼叫的是還活著的 clearDrawings（清掉目前白板 session 的 markers +
+                defenseRanges，見該 store），只是沒有 session 時 disabled。所以這裡照實保留，
+                沒有動它，只是跟著整個區塊一起解除外層的 hasRotations 鎖。 */}
+              <section>
+                <h2 className="mb-1 text-[15px] font-bold">輪次選擇</h2>
+                <RotationSwitcher />
+                <div className="mt-1 flex gap-2">
+                  <button onClick={handleResetRotation} className={`flex-1 ${PANEL_BUTTON_CLASS}`}>
+                    重置站位
+                  </button>
+                  <button
+                    onClick={() => clearDrawings()}
+                    disabled={!session}
+                    title={session ? "清除白板上的畫筆與防守範圍" : "沒有正在編輯的戰術"}
+                    className="flex-1 rounded-lg border border-white/[0.26] bg-white/[0.05] px-2 py-1
+                      text-xs font-bold text-[#a9b096] transition hover:border-[#ef4444]
+                      hover:bg-[#ef4444]/10 hover:text-[#ef4444] disabled:opacity-40
+                      disabled:hover:border-white/[0.26] disabled:hover:bg-white/[0.05]
+                      disabled:hover:text-[#a9b096]"
+                  >
+                    清除畫筆
+                  </button>
+                </div>
+              </section>
             </div>
           }
         />

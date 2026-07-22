@@ -9,6 +9,7 @@ import MatchFormDialog from "@/components/MatchFormDialog";
 import MatchCard from "@/components/MatchCard";
 import AppShell from "@/components/AppShell";
 import MatchNavRail from "@/components/MatchNavRail";
+import MatchInfoRail, { MatchListSelection } from "@/components/MatchInfoRail";
 import { Match } from "@/types/match";
 
 // 資料夾的內頁——只顯示歸在這個資料夾底下的比賽 (tournamentId 等於這個資料夾的 id)。
@@ -25,6 +26,11 @@ export default function TournamentDetail() {
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingMatch, setEditingMatch] = useState<Match | null>(null);
+  // issue #174：跟 MatchList.tsx 一樣的右欄選取狀態，只是這裡的選取語意永遠只會是
+  // kind: "match"——資料夾內頁裡不會再出現子資料夾可以選。共用同一個 MatchListSelection
+  // 型別（而不是另外定義一個只收 string 的窄型別），是因為 MatchInfoRail 的 props 契約本來
+  // 就是吃這個型別，兩邊維持同一份型別，日後兩個頁面的行為要保持一致時才不會各自飄掉。
+  const [selected, setSelected] = useState<MatchListSelection>(null);
 
   const openCreateDialog = () => {
     setEditingMatch(null);
@@ -62,10 +68,18 @@ export default function TournamentDetail() {
 
   return (
     // issue #172：跟 MatchList.tsx 一樣改成 AppShell 的 mode="A"，nav 是共用導覽軌（同樣沒有
-    // matchId——這頁是「資料夾」層級，不是某一場比賽），不傳 aside（右欄資訊欄留給環 3）。
+    // matchId——這頁是「資料夾」層級，不是某一場比賽）。
     // 這裡是 tournament 本身的資料，不是「這場比賽」的資料，所以 backHref 固定回最外層列表
     //「/」，跟 matchBackHref() 那條「比賽該回哪個資料夾」的規則是兩回事，不能共用。
-    <AppShell mode="A" nav={<MatchNavRail backHref="/" active="list" />} className="bg-white">
+    // aside（issue #174）：跟 MatchList.tsx 用同一個 MatchInfoRail——issue 原文明講「進資料夾
+    // 後右欄就消失會很突兀」，所以資料夾內頁要有跟頂層列表一致的右欄體驗，不能因為進了資料夾
+    // 就少一塊。
+    <AppShell
+      mode="A"
+      nav={<MatchNavRail backHref="/" active="list" />}
+      aside={<MatchInfoRail selected={selected} />}
+      className="bg-white"
+    >
       {/* 跟 MatchList.tsx 同一個原因：AppShell 中央主區本身不捲動，這頁的比賽清單也可能超過
           一屏高，所以一樣包一層 overflow-y-auto，不然長清單會被裁掉、捲不到下面的項目
           （原本 min-h-screen 的寫法是讓整個瀏覽器視窗捲動，換成 AppShell 的 h-screen 固定
@@ -94,6 +108,8 @@ export default function TournamentDetail() {
                   match={match}
                   onEdit={() => openEditDialog(match)}
                   onDelete={() => handleDelete(match.id)}
+                  selected={selected?.kind === "match" && selected.id === match.id}
+                  onSelect={() => setSelected({ kind: "match", id: match.id })}
                 />
               ))}
             </div>
