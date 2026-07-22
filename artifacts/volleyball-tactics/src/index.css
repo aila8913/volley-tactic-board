@@ -1,8 +1,6 @@
 /* 拆成一家字體一行（原本擠在一行 @import 裡，這次跟 PR #136 剛好撞在同一行——
    拆開之後兩人各自加字體不會再共用同一行、衝突機率大幅降低。代價是多幾個 HTTP
    request，這個專案規模可以接受）。 */
-@import url("https://fonts.googleapis.com/css2?family=Caveat:wght@400..700&display=swap");
-@import url("https://fonts.googleapis.com/css2?family=Permanent+Marker&display=swap");
 @import url("https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap");
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400..700&display=swap");
 @import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400..700&display=swap");
@@ -45,10 +43,9 @@
   --color-destructive-foreground: hsl(var(--destructive-foreground));
 
   --font-sans: "Inter", "Noto Sans TC", sans-serif;
-  --font-display: "Permanent Marker", "Caveat", "Noto Sans TC", cursive;
 
   /* 給「比賽列表」深色儀表板改版用的字體變數。--font-dash 是自訂名字，只在該頁面透過
-     font-dash 這個 class 使用，不影響其他頁面仍在用的 --font-sans / --font-display。
+     font-dash 這個 class 使用，不影響其他頁面仍在用的 --font-sans。
      見 docs/design-spec.md 第 3 節。
      注意：--font-numeric 特意不叫 --font-mono——後者是 Tailwind 內建的 theme key，蓋掉它會讓
      全 app 任何用到 font-mono class 的地方都變成 JetBrains Mono（PR #129 review 抓到的坑）。 */
@@ -134,16 +131,6 @@
 
   body {
     @apply font-sans antialiased bg-background text-foreground;
-  }
-
-  h1,
-  h2,
-  h3,
-  h4,
-  h5,
-  h6,
-  .font-display {
-    font-family: var(--font-display);
   }
 }
 
