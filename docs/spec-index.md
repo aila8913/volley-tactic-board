@@ -9,6 +9,7 @@
 | [db-schema-spec.md](./db-schema-spec.md)                               | 資料表關係總覽                                                    | `lib/db/src/schema/*.ts`（程式碼）    |
 | [api-spec.md](./api-spec.md)                                           | API endpoint 總覽                                                 | `lib/api-spec/openapi.yaml`（程式碼） |
 | [external-openvolley-reference.md](./external-openvolley-reference.md) | 外部參考：openvolley 生態系全景（統計/ML/報表分層＋我們該抄哪層） | 外部（openvolley GitHub 組織）        |
+| [layout-spec.md](./layout-spec.md)                                     | 版面配置：三欄骨架、各欄寬度與收合模式（來源 Figma 線框稿）       | Figma 線框稿                          |
 
 ## 目前進度
 
