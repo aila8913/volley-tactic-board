@@ -11,10 +11,17 @@ import { Link } from "wouter";
 // 改這裡一個地方，三個頁面自動一起變，不會漏改到某一頁。這是很常見的「單一事實來源」
 // （single source of truth）概念：重複的 UI 邏輯散在多處，改一次要記得改 N 次，
 // 遲早會有一次漏改造成三頁不一致。
-type ActivePage = "board" | "record" | "analytics";
+// issue #172：新增 "list" 這個值，代表現在停在比賽列表／資料夾內頁（MatchList.tsx /
+// TournamentDetail.tsx）——這兩頁不屬於任何一場比賽，之前沒有掛這條導覽軌，環 1 把 AppShell
+// 抽出來後順便讓它們也用上共用導覽軌，所以要多一個「現在在列表」的 active 狀態可以標記。
+type ActivePage = "board" | "record" | "analytics" | "list";
 
 type MatchNavRailProps = {
-  matchId: string;
+  // issue #172：改成可選。MatchList.tsx／TournamentDetail.tsx 這兩頁本來就不在「某一場比賽」
+  // 底下（使用者可能還沒選、或正在看的是資料夾而不是單場比賽），沒有 matchId 可傳。
+  // 沒有 matchId 時，「計」「數」「戰」這三個要靠 matchId 組出網址的入口沒有地方可以連過去，
+  // 下面會把它們渲染成停用狀態，而不是硬塞一個假的 matchId 生出一個連過去會 404 的連結。
+  matchId?: string;
   backHref: string;
   active: ActivePage;
   // issue #160 C3：計分頁要把「戰」按鈕換成一個會展開飛出選單（列出已存戰術＋新增戰術）的
@@ -37,6 +44,10 @@ type NavItemDef = {
   glyph: string; // 顯示用的單字（比 / 計 / 數 / 戰）
   label: string; // aria-label / title 用的完整詞（螢幕閱讀器 & 滑鼠 hover 提示用）
   href: string;
+  // issue #172：這個入口需不需要 matchId 才連得過去。「計」「數」「戰」的網址都是
+  // `/matches/${matchId}/...`，沒有 matchId 就沒有合法目的地；「比」永遠回得去列表，
+  // 不需要 matchId。
+  requiresMatch?: boolean;
 };
 
 // 「這場比賽的『回上一層』該回哪裡」——這條規則三個頁面都要用，所以放在導覽軌
@@ -55,10 +66,25 @@ export function matchBackHref(tournamentId: string | null | undefined): string {
 
 export default function MatchNavRail({ matchId, backHref, active, boardSlot }: MatchNavRailProps) {
   // 上半群組：回列表、計分表、數據分析——這三個是「常態」入口。
+  // 「計」「數」的 href 在沒有 matchId 時組不出合法網址（會變成 `/matches/undefined/...`），
+  // 但反正 requiresMatch 為真時 NavRailItem 根本不會把它當連結渲染，href 值不會被用到——
+  // 這裡還是給一個字串只是為了滿足型別、避免額外處理 undefined 的分支。
   const topItems: NavItemDef[] = [
     { key: "back", glyph: "比", label: "比賽列表", href: backHref },
-    { key: "record", glyph: "計", label: "計分", href: `/matches/${matchId}/record` },
-    { key: "analytics", glyph: "數", label: "數據", href: `/matches/${matchId}/analytics` },
+    {
+      key: "record",
+      glyph: "計",
+      label: "計分",
+      href: `/matches/${matchId}/record`,
+      requiresMatch: true,
+    },
+    {
+      key: "analytics",
+      glyph: "數",
+      label: "數據",
+      href: `/matches/${matchId}/analytics`,
+      requiresMatch: true,
+    },
   ];
 
   // 「戰」（戰術板）單獨拉到最下面，用 mt-auto 頂到 rail 底部，跟上面三個明顯分開一段距離。
@@ -71,35 +97,94 @@ export default function MatchNavRail({ matchId, backHref, active, boardSlot }: M
     glyph: "戰",
     label: "戰術",
     href: `/matches/${matchId}/board`,
+    requiresMatch: true,
   };
 
   return (
-    // w-16（64px）固定寬、h-full 撐滿外層容器高度、shrink-0 不被 flex 擠壓變窄。
+    // w-full h-full：撐滿 AppShell 左欄插槽給的尺寸。issue #172 之前這裡是寫死的
+    // `w-16 shrink-0`，現在「左欄多寬」由 AppShell 的 NAV_WIDTH 常數獨家決定（驗收條件
+    // 就是「三欄寬度只在那一個檔案裡定義」），這個元件只負責填滿被分配到的空間——
+    // 兩邊都寫一次寬度的話，以後環 2 調寬度時改了 AppShell 卻忘了改這裡，rail 的背景色塊
+    // 就會跟欄位寬度對不齊，露出一條沒上色的縫。
     // 配色跟 TacticsBoard.tsx 現有的「玻璃感」chrome 用同一組 token：半透明白底
     // （bg-white/[0.02]）+ 模糊背景（backdrop-blur-sm）+ 極淡邊框，維持整個 app
     // 一致的深色玻璃質感，不要每個地方各配一種深淺。
     <nav
-      className="flex h-full w-16 shrink-0 flex-col border-r border-white/[0.08]
+      className="flex h-full w-full flex-col border-r border-white/[0.08]
         bg-white/[0.02] font-dash text-[#f5f5f0] backdrop-blur-sm"
     >
+      {/* active="list"（比賽列表／資料夾內頁）要點亮的是「比」，但「比」這一項的 key 歷史上
+          叫 "back"（它在 match-scoped 頁面的語意是「回上一層」）。與其為了對齊而去改 key 名字
+          （那會牽動 boardSlot 之外所有呼叫端），這裡用一個小小的對照把兩種語意接起來：
+          在列表頁時，「比」就是當前頁。 */}
       <div className="flex flex-col items-center gap-1 py-3">
         {topItems.map((item) => (
-          <NavRailItem key={item.key} item={item} isActive={item.key === active} />
+          <NavRailItem
+            key={item.key}
+            item={item}
+            isActive={item.key === active || (active === "list" && item.key === "back")}
+            hasMatch={matchId !== undefined}
+          />
         ))}
       </div>
       {/* mt-auto：在 flex-column 容器裡把自己推到最底——這是「戰」被壓到 rail
           最下方、跟上面三個拉開距離的關鍵，不用另外算 margin 數字。
           boardSlot 有傳（目前只有 ScoreSheet.tsx）就整個取代下面的 <NavRailItem>——飛出
           選單的觸發按鈕長得跟 NavRailItem 很像，但它自己內部還要接一片絕對定位的選單、
-          管開關狀態，這些邏輯不屬於這個 dumb rail，所以整塊交給呼叫端決定要放什麼。 */}
+          管開關狀態，這些邏輯不屬於這個 dumb rail，所以整塊交給呼叫端決定要放什麼。
+          （boardSlot 只會由已經知道自己 matchId 的 ScoreSheet.tsx 傳進來，沒有 matchId
+          的列表型頁面不會用到這個分支，不用在這裡額外判斷 hasMatch。） */}
       <div className="mt-auto flex flex-col items-center gap-1 py-3">
-        {boardSlot ?? <NavRailItem item={boardItem} isActive={boardItem.key === active} />}
+        {boardSlot ?? (
+          <NavRailItem
+            item={boardItem}
+            isActive={boardItem.key === active}
+            hasMatch={matchId !== undefined}
+          />
+        )}
       </div>
     </nav>
   );
 }
 
-function NavRailItem({ item, isActive }: { item: NavItemDef; isActive: boolean }) {
+// issue #172：為什麼「沒有 matchId 就渲染停用態」是寫在同一個 NavRailItem 裡的 if 分支，
+// 而不是乾脆做兩個元件（一個給「有比賽」的頁面、一個給「純列表」的頁面）？
+// 因為環 2（#173）已經排定要把整條軌道改成「hover 展開＋active 整行反白＋戰術子清單」，
+// 那些邏輯不管有沒有 matchId 都是同一套（列表頁一樣要能 hover 展開看到「比賽列表」被
+// 反白）。如果現在就分成兩個元件，環 2 動手時勢必要同時改兩份幾乎一樣的程式碼，兩份
+// 遲早會抄錯一次、慢慢分岔成兩套不同步的行為——回到這個檔案開頭說明過的「重複 UI 邏輯
+// 散在多處」的老問題。停用態本身的語意其實很單純：「這個入口需要先選一場比賽才能用」，
+// 用一個 if 就能誠實表達，沒有理由為了這麼小的差異拆成兩個元件。
+function NavRailItem({
+  item,
+  isActive,
+  hasMatch,
+}: {
+  item: NavItemDef;
+  isActive: boolean;
+  hasMatch: boolean;
+}) {
+  // 需要 matchId 但目前沒有 matchId 的入口，例如使用者停在比賽列表、還沒點進任何一場比賽時
+  // 的「計」「數」「戰」。渲染成不可互動的 <span>（不是 <Link>，避免跳去一個 matchId 是
+  // undefined 的壞網址），並用 aria-disabled + title 告訴使用者「為什麼點不動」。
+  const disabled = item.requiresMatch === true && !hasMatch;
+
+  if (disabled) {
+    return (
+      <span
+        aria-disabled="true"
+        title="先選一場比賽"
+        // 樣式沿用一般未選中狀態的 text-white/60，再降一階到 text-white/25，讓「純粹沒選中」
+        // 跟「選不了」在視覺上有明顯區別，不會讓使用者以為只是還沒點過去而已。
+        // cursor-not-allowed 是額外的滑鼠提示，加強「這裡點不動」的訊號。
+        className="flex h-11 w-11 cursor-not-allowed items-center justify-center rounded-lg
+          text-lg font-bold text-white/25"
+      >
+        {item.glyph}
+      </span>
+    );
+  }
+
   return (
     <Link
       href={item.href}

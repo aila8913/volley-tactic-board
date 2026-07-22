@@ -14,6 +14,7 @@
 import { useParams } from "wouter";
 import { Spinner } from "@/components/ui/spinner";
 import BackToMatchListButton from "@/components/BackToMatchListButton";
+import AppShell from "@/components/AppShell";
 import MatchNavRail, { matchBackHref } from "@/components/MatchNavRail";
 import { useMatchWithRoster } from "@/hooks/useMatches";
 import { useMatchRecording } from "@/hooks/useMatchRecording";
@@ -92,12 +93,20 @@ export default function MatchAnalytics() {
   const backHref = matchBackHref(match.tournamentId);
 
   return (
-    // 跟 ScoreSheet.tsx 一樣改成 flex h-screen（橫向排），MatchNavRail 固定在最左邊，
-    // 右側才是這一頁原本「min-h-screen 直向捲動」的內容——原本的「回列表」「回計分表」
-    // header 連結現在統一交給 MatchNavRail（issue #160）。
-    <div className="flex h-screen w-full">
-      <MatchNavRail matchId={id ?? ""} backHref={backHref} active="analytics" />
-      <div className="min-h-screen w-full flex-1 overflow-y-auto bg-white">
+    // issue #172：三欄骨架交給 AppShell（mode="A"）。不傳 aside——站位列的資訊欄版本目前
+    // 被 #76 擋住（分析頁還沒有可以放進右欄的站位資料），這一環也不重寫功能元件，所以維持
+    // 「這一頁沒有右欄」。原本的「回列表」「回計分表」header 連結統一交給 MatchNavRail
+    // （issue #160，不變）。
+    <AppShell
+      mode="A"
+      nav={<MatchNavRail matchId={id ?? ""} backHref={backHref} active="analytics" />}
+    >
+      {/* 原本是 min-h-screen（讓整個瀏覽器視窗跟著內容變長、由視窗自己捲）。AppShell 改成
+          h-screen 固定版面之後，捲動責任下放到這一層：min-h-0 + flex-1 讓它剛好吃滿中央
+          主區的高度、不多不少，再由自己的 overflow-y-auto 捲內容。留著 min-h-screen 的話，
+          這塊的最小高度會被釘在 100vh，之後若中央主區上面多一條 header，它就會超出容器
+          一個 header 的高度、把捲軸推到看不見的地方。 */}
+      <div className="min-h-0 w-full flex-1 overflow-y-auto bg-white">
         <header className="flex items-center justify-center border-b-2 border-[#111] px-4 py-3">
           <h1 className="text-lg font-bold">vs {match.opponent} · 數據分析</h1>
         </header>
@@ -277,6 +286,6 @@ export default function MatchAnalytics() {
           </section>
         </div>
       </div>
-    </div>
+    </AppShell>
   );
 }

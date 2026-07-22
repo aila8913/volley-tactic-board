@@ -7,6 +7,8 @@ import { useMatchList, useDeleteMatch } from "@/hooks/useMatches";
 import { useTournamentList } from "@/hooks/useTournaments";
 import MatchFormDialog from "@/components/MatchFormDialog";
 import MatchCard from "@/components/MatchCard";
+import AppShell from "@/components/AppShell";
+import MatchNavRail from "@/components/MatchNavRail";
 import { Match } from "@/types/match";
 
 // 資料夾的內頁——只顯示歸在這個資料夾底下的比賽 (tournamentId 等於這個資料夾的 id)。
@@ -59,34 +61,44 @@ export default function TournamentDetail() {
   }
 
   return (
-    <div className="min-h-screen w-full bg-white">
-      <div className="mx-auto max-w-3xl px-4 py-8">
-        <BackToMatchListButton className="mb-4 -ml-2" />
+    // issue #172：跟 MatchList.tsx 一樣改成 AppShell 的 mode="A"，nav 是共用導覽軌（同樣沒有
+    // matchId——這頁是「資料夾」層級，不是某一場比賽），不傳 aside（右欄資訊欄留給環 3）。
+    // 這裡是 tournament 本身的資料，不是「這場比賽」的資料，所以 backHref 固定回最外層列表
+    //「/」，跟 matchBackHref() 那條「比賽該回哪個資料夾」的規則是兩回事，不能共用。
+    <AppShell mode="A" nav={<MatchNavRail backHref="/" active="list" />} className="bg-white">
+      {/* 跟 MatchList.tsx 同一個原因：AppShell 中央主區本身不捲動，這頁的比賽清單也可能超過
+          一屏高，所以一樣包一層 overflow-y-auto，不然長清單會被裁掉、捲不到下面的項目
+          （原本 min-h-screen 的寫法是讓整個瀏覽器視窗捲動，換成 AppShell 的 h-screen 固定
+          版面之後，捲動責任要下放到這一層，不然是體驗上的退步）。 */}
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="mx-auto max-w-3xl px-4 py-8">
+          <BackToMatchListButton className="mb-4 -ml-2" />
 
-        <div className="mb-6 flex items-center justify-between">
-          <h1 className="text-2xl font-bold">{tournament.name}</h1>
-          <Button onClick={openCreateDialog}>新增比賽</Button>
-        </div>
-
-        {matches.length === 0 ? (
-          <Card>
-            <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
-              <p className="text-muted-foreground">這個資料夾裡還沒有比賽</p>
-              <Button onClick={openCreateDialog}>新增第一場比賽</Button>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="space-y-3">
-            {matches.map((match) => (
-              <MatchCard
-                key={match.id}
-                match={match}
-                onEdit={() => openEditDialog(match)}
-                onDelete={() => handleDelete(match.id)}
-              />
-            ))}
+          <div className="mb-6 flex items-center justify-between">
+            <h1 className="text-2xl font-bold">{tournament.name}</h1>
+            <Button onClick={openCreateDialog}>新增比賽</Button>
           </div>
-        )}
+
+          {matches.length === 0 ? (
+            <Card>
+              <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
+                <p className="text-muted-foreground">這個資料夾裡還沒有比賽</p>
+                <Button onClick={openCreateDialog}>新增第一場比賽</Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-3">
+              {matches.map((match) => (
+                <MatchCard
+                  key={match.id}
+                  match={match}
+                  onEdit={() => openEditDialog(match)}
+                  onDelete={() => handleDelete(match.id)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       <MatchFormDialog
@@ -95,6 +107,6 @@ export default function TournamentDetail() {
         match={editingMatch}
         tournamentId={tournament.id}
       />
-    </div>
+    </AppShell>
   );
 }
