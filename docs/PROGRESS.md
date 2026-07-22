@@ -22,8 +22,13 @@
 > 平行 PR 就落在不同行段、git 幾乎都能自動合併，不用真的把檔案拆兩份、也保住一眼 catch-up。
 > 上面的 `_Last updated_` 是共用一行摘要（誰更新了什麼），保持精簡、別長成段落。
 
+
 \_Last updated: 2026-07-22 (aila) — M1.5 UI 大改版拆成七環（#172–#178）並立 `docs/layout-spec.md`；
 環 1（AppShell 三欄骨架）已合併，環 3 Stage A（列表頁右欄＋局軸）PR #181 待合。\_
+
+\_Last updated: 2026-07-22 (tang) — 計分表中間計分區＋戰術板球場材質補完深色語言（PR #182/#167），
+接上 aila 的 AppShell 重構；#131 只剩數據分析頁／資料夾內頁。\_
+
 
 ## Current state
 
@@ -144,13 +149,22 @@ lives in git log + the issues named).
 
 ### 設計進度 (tang — 視覺 / UX / area:design)
 
-- **設計規範已落地兩頁（首頁＋戰術板），手繪風確定全退役**（`docs/design-spec.md`，PR #129/#135/#140）：
-  深色儀表板語言（`#0a0b07` 底＋萊姆綠 `#C6F135`＋玻璃卡片＋Space Grotesk/JetBrains Mono）。戰術板再加
-  材質強化（#134 Track B，PR #140），品牌 logo mark 已定案（`public/favicon.svg`，PR #148），design-spec
-  多了「品牌標誌」段。剩計分表（`ScoreSheetCourt`/`RadialMenu`）、數據分析頁、資料夾內頁三處仍是手繪風，
-  由 #131 追蹤，但**排在 #134（戰術板視覺定案，needs-plan）之後**——#134 可能改動 spec 本身。#132（首頁
-  review 收尾）獨立進行。**寫 UI 前先讀 design-spec.md**；實作數值以該檔「實作微調」「實作決定」註記為準
-  （背景 `#0a0b07`、邊框 `white/[0.12]`～`[0.26]`、球場深青漸層——非原始的 `#121310`/暖木色）。
+- **設計規範已落地三頁（首頁＋戰術板＋計分表），手繪風全站退役**（`docs/design-spec.md`，
+  PR #129/#135/#140/#167/#182）：深色儀表板語言（`#0a0b07` 底＋萊姆綠 `#C6F135`＋玻璃卡片＋
+  Space Grotesk/JetBrains Mono）。戰術板加材質強化（#134 Track B：球場毛玻璃地板、邊緣繞行光、
+  球員標記改玻璃圓片，PR #167，2026-07-22——這批是接在 aila #154/#160 重構後的 session 架構之上
+  重做的）；計分表右欄（PR 見 #120）＋中間計分區（`ScoreSheetCourt.tsx`/`RadialMenu.tsx`/
+  `ScoreSheet.tsx`，PR #182，2026-07-22）也補齊，`ScoreSheet.tsx` 已改吃 aila 新出的 `AppShell`
+  骨架（#172）。`RadialMenu.tsx` 是全站最後一個 `wobbly-border` 消費者，換完後該 class 與
+  `--font-display`/Caveat/Permanent Marker 死碼一併從 `index.css` 清掉。品牌 logo mark 已定案
+  （`public/favicon.svg`，PR #148），design-spec 多了「品牌標誌」段。**剩數據分析頁、資料夾內頁
+  兩處仍是手繪風，由 #131 追蹤**（#134 保持 open：Track A 微 3D／Track C 版面呼吸空間尚未開始）。
+  #132（首頁 review 收尾）獨立進行。**寫 UI 前先讀 design-spec.md**；實作數值以該檔「實作微調」
+  「實作決定」註記為準（背景 `#0a0b07`、邊框 `white/[0.12]`～`[0.26]`、球場深青漸層——非原始的
+  `#121310`/暖木色）。
+  **教訓（本次踩了兩次）**：aila 這陣子的架構重構（#154/#160、#172 AppShell）速度很快，材質類 PR
+  只要卡在分支上超過一天，動到的元件常常已經被換底層架構，合併前務必先 `git fetch` 比對
+  `origin/main`，抓到就直接照新結構重做一次（不要嘗試 rebase 硬套舊 diff）。
 
 ## Known gaps / next big pieces
 
@@ -251,6 +265,18 @@ PO 拍板插入 M1.5「戰術板 UI 大改版」（#160）於 M1 與 M2 之間**
 
 ### 設計 (tang)
 
+- **PR #182**（#131 部分進度，該 issue 保持 open，2026-07-22）— 計分表中間計分區套用深色玻璃語言：
+  `ScoreSheet.tsx` 頁面外殼（改吃 `AppShell`）、`ScoreSheetCourt.tsx` 球場配色、`RadialMenu.tsx`
+  退役最後的 `wobbly-border`。右欄（`ScoreSheetStats.tsx`/`RotationRailPanel`）已由 aila 的 #120
+  處理過，這批完全沒碰。順手清掉 `index.css` 裡沒消費者的 `--font-display`/Caveat/Permanent Marker
+  死碼。**第一版曾在舊的 `ScoreSheet.tsx` 結構上做完，但卡分支期間 aila 合併了 #172 AppShell
+  重構，整頁骨架換掉，第一版直接作廢、照新結構重做**（v2 才是實際合併的版本）。
+- **PR #167**（#134 Track B，**#134 保持 open**，2026-07-22）— 戰術板球場材質補完：`.court-glass`
+  毛玻璃地板、`.court-edge-light` 邊緣繞行光（design-spec.md 第 6 節「每頁最多一個環境動效」的
+  範本案例）、`PlayerNode.tsx` 球員標記改玻璃圓片（圈內背號＋圈下姓名，取代沒有 UI 能切換的
+  `circleLabel` 三選一）。前排/後排/Libero/備位配色邏輯完全沒動。**同樣是接在 aila #154/#160
+  重構（`session`/`viewingScene` 架構）之後重做的第二版**——這是本次踩到「材質 PR 落後架構重構」
+  這個坑的第一次，第二次就是上面 #182 的教訓。
 - **PR #148**（無對應 issue）— tang 的品牌 logo mark（旋轉排球）＋ design-spec「品牌標誌」段（commit
   `e920ac1`，07-18）。品牌名稱未定、字標佔位；spec `stroke-width 6.5` vs 實檔 `9` 已在 PR 留言請對齊。
 - **PR #140**（#134 Track B，**#134 保持 open**）— 戰術板材質強化：置中字標、低調光影、玻璃卡片加深
