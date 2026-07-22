@@ -56,6 +56,11 @@ export interface CompletedSet {
   // 保留這局的球序歷史，讓結果頁可以做跨局統計。
   // 舊的 persist 資料沒有這個欄位，所以讀取時要用 ?? [] 補空陣列。
   history: PointRecord[];
+  // 這一局封存當下的先發快照（issue #174）：右欄資訊欄要能回看「已結束局」各自的站位，
+  // 不是只有進行中那一局才看得到。null 代表這局結束時根本沒有先發資料可存——理論上不該
+  // 發生（開賽一定要先選先發方才能記分），但舊的 localStorage persist 資料（#174 之前）
+  // 完全沒有這個欄位，型別上用 null 而不是非空斷言，讀取舊資料時才不會炸。
+  lineup: LineupSnapshot | null;
 }
 
 // 一般換人（跟自由球員即時替補是兩回事，見下方 liberoSubstitution 註解）：

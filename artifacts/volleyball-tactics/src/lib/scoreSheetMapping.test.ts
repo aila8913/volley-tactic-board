@@ -387,8 +387,10 @@ describe("reconstructRecording", () => {
 
     const state = reconstructRecording([set1, set2], [set1Rallies, set2Rallies], [], []);
 
+    // lineup: null——這個測試沒有傳 lineups 參數（第 5 個參數留空預設 []），沒有任何
+    // 先發資料可以回填，見 findLineupSnapshotForSet 找不到 setId 對應 row 時回傳 null。
     expect(state.completedSets).toEqual([
-      { setNumber: 1, ourScore: 2, opponentScore: 0, history: expect.any(Array) },
+      { setNumber: 1, ourScore: 2, opponentScore: 0, history: expect.any(Array), lineup: null },
     ]);
     expect(state.currentSet.setNumber).toBe(2);
     expect(state.currentSet.ourScore).toBe(1);
@@ -456,9 +458,9 @@ describe("reconstructRecording", () => {
 
     const state = reconstructRecording([set1, set2], [set1Rallies, []], [], []);
 
-    // 第 1 局照常收進 completedSets（2:0）。
+    // 第 1 局照常收進 completedSets（2:0）；lineup: null 理由同上一個測試——沒傳 lineups。
     expect(state.completedSets).toEqual([
-      { setNumber: 1, ourScore: 2, opponentScore: 0, history: expect.any(Array) },
+      { setNumber: 1, ourScore: 2, opponentScore: 0, history: expect.any(Array), lineup: null },
     ]);
     // 第 2 局是進行中，但因為 firstServer=null 而重建成空局：serving=null 觸發「誰先發球？」畫面，
     // 比分/輪轉全 0、沒有任何 history，且已帶著後端 row 的 serverId（選好先發後 PATCH 這個 id）。

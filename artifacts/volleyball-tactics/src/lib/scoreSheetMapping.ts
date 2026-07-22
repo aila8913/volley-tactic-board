@@ -279,6 +279,16 @@ export function apiLineupToSnapshot(row: Lineup): LineupSnapshot {
   };
 }
 
+// ── 依 setId 從整場的 lineups 裡找出某一局的先發快照（issue #174）──
+// lineups 是「一局一 row」（見上方欄位對應），reconstructRecording 要替「進行中那一局」
+// 跟「每個已結束局」各自找出自己的那一筆——兩處要的是同一個查找＋轉換邏輯，抽成共用函式，
+// 不要複製貼上兩份（複製貼上的下場是規則之後改一邊、另一邊忘記跟著改，兩邊兜不起來）。
+// 找不到（這局從沒選過先發方，例如已結束局理論上不該發生，但保守處理）就回傳 null。
+export function findLineupSnapshotForSet(lineups: Lineup[], setId: number): LineupSnapshot | null {
+  const row = lineups.find((l) => l.setId === setId);
+  return row ? apiLineupToSnapshot(row) : null;
+}
+
 // ── 空白狀態的建構子 ──
 // 一場比賽還沒記過任何一局時的初始狀態。原本 makeEmptySet/emptyRecord 只在
 // useScoreSheet.ts 裡私有定義；reconstructRecording（下方）在「這場還沒有任何 set」
@@ -386,6 +396,9 @@ export function reconstructRecording(
       ourScore: st.ourScore,
       opponentScore: st.opponentScore,
       history: st.history,
+      // 已結束局各自的先發快照（issue #174）：跟下面「進行中這一局」用的是同一個
+      // findLineupSnapshotForSet，只是換一個 setId 查找——不要各寫一份查找邏輯。
+      lineup: findLineupSnapshotForSet(lineups, s.id),
     };
   });
   // 已結束各局的換人次數：對每個已結束的 set，重放它的換人紀錄、取淨疊加清單的長度
@@ -413,10 +426,7 @@ export function reconstructRecording(
   // 進行中這一局若已有先發（已選過先發方）就讀回它；若還沒（例如剛按下一局、firstServer=null 的
   // 空 set，此時還沒選先發方也就還沒寫 lineup）就給 null——此時畫面停在「這局由誰先發球？」、
   // 還不需要顯示球場，等教練選先發方時 start() 會從當下輪轉表擷取這一局的新先發。
-  const currentLineupRow = lineups.find((l) => l.setId === sets[lastIdx].id);
-  const lineup: LineupSnapshot | null = currentLineupRow
-    ? apiLineupToSnapshot(currentLineupRow)
-    : null;
+  const lineup: LineupSnapshot | null = findLineupSnapshotForSet(lineups, sets[lastIdx].id);
 
   return {
     currentSet,

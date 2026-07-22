@@ -14,19 +14,40 @@ import type { LineupSnapshot } from "@/types/scoresheet";
 // 跟舊的兩個元件一樣，這裡刻意「不 import 任何 store」：資料完全由 props 決定
 // （issue #117 的錨點決議）。計分頁跟戰術板各自從自己的資料源（計分表的 per-set 快照 /
 // 輪轉表 store）算出 lineup 再傳進來，這個元件本身不知道、也不需要知道資料從哪裡來。
+//
+// issue #174（比賽列表右欄）文字上寫的 `editable` prop，對應到的就是這裡沿用 #120 的
+// `readOnly`（`editable === !readOnly`）——沒有新增一個同義的 prop，兩個既有呼叫端已經在用
+// readOnly 這個名字，重複造一個名字不同、語意相同的 prop 只會製造混淆。
 interface RotationRailPanelProps {
   // 6 個號位（1~6）→ 球員 id 的先發快照。null 代表這個資料源還沒有完整先發
   // （例如計分表 hasLineup 為 false，或戰術板這場還沒排過站位）。
   lineup: LineupSnapshot | null;
   roster: MatchPlayer[];
-  // 目前第幾輪，0-indexed（顯示時 +1，跟 RotationSwitcher「第 N 輪」的慣例一致）。
+  // 目前第幾輪／第幾局，0-indexed（顯示時 +1，跟 RotationSwitcher「第 N 輪」的慣例一致）。
+  // 這個數字代表什麼由 axis 決定（見下方）。
   rotation: number;
-  // true＝唯讀（戰術板用）：只能看不能改，也不顯示 stepper。
+  // 標題列右邊那個數字代表「輪」還是「局」（issue #174）。預設 "rotation"＝現況行為
+  // （戰術板／計分頁原本的用法不用改）。"set" 是比賽列表右欄（#170）要的——那裡列的是
+  // 「這場比賽第幾局」，跟輪轉的「第幾輪」是不同軸，文案跟著換才不會誤導使用者。
+  axis?: "rotation" | "set";
+  // true＝唯讀（戰術板用）：只能看不能改。
+  // 註：issue #174 文字上寫的 `editable` prop，就是這裡既有的 `!readOnly`——兩個呼叫端
+  // （ScoreSheet.tsx / RotationTable.tsx）已經在用 readOnly 這個名字，改名只會製造無意義的
+  // diff，所以刻意不照 issue 原文照搬 prop 名稱，語意上是同一件事。
   readOnly?: boolean;
   // 編輯模式下，選好球員指派到號位後，整份新快照透過這裡即時交出去——見下方
   // 「為什麼沒有 draft/確定鈕」的說明。readOnly 時不會用到，但呼叫端必須在 !readOnly
   // 時提供，否則點了球員也沒有任何效果。
   onLineupChange?: (next: LineupSnapshot) => void;
+  // 標題列數字旁的 stepper（layout-spec §4.2）的「按了上/下」回呼，delta 是 -1（往前一輪/局）
+  // 或 +1（往後一輪/局）。**只有傳了這個 prop 才會渲染 stepper**——見下方 GRID_ZONES 下方
+  // 原本「刻意不做 stepper」那段註解已經過期，這裡補充為什麼現在可以加回來了。
+  onStep?: (delta: -1 | 1) => void;
+  // stepper 兩顆按鈕各自的可按狀態，只在有傳 onStep 時有意義。不傳就視為一律可按——
+  // 元件本身不知道「輪」是環狀（mod 6 永遠可按）還是「局」是線性有邊界（第一局不能再往前、
+  // 最後一局不能再往後），這是呼叫端的領域規則，元件不內建假設（見下方 onStep 的說明）。
+  canStepPrev?: boolean;
+  canStepNext?: boolean;
   // 標題文字，預設「場上站位」。
   title?: string;
   // 頁面各自想加在三個區塊下面的額外內容（戰術板放球員設定/輪次選擇/提示；
@@ -45,8 +66,12 @@ export default function RotationRailPanel({
   lineup,
   roster,
   rotation,
+  axis = "rotation",
   readOnly = false,
   onLineupChange,
+  onStep,
+  canStepPrev = true,
+  canStepNext = true,
   title = "場上站位",
   footer,
 }: RotationRailPanelProps) {
@@ -63,6 +88,11 @@ export default function RotationRailPanel({
 
   const safeLineup = lineup ?? {};
   const filledCount = Object.keys(safeLineup).length;
+
+  // axis 決定「這個數字是輪還是局」的文案（issue #174）：計分頁/戰術板既有用法是輪
+  // （沿著六人輪轉制走），比賽列表右欄（#170）要顯示的是局數，兩者共用同一個標題列
+  // 版位、只換單位字，不用整段複製一份。
+  const unitLabel = axis === "set" ? "局" : "輪";
 
   // 自由球員（role "L"）不列進這六個號位——LineupSnapshot 定義上就只記非自由球員，
   // 自由球員是從場邊靠換人上場的（見 types/scoresheet.ts）。
@@ -87,13 +117,18 @@ export default function RotationRailPanel({
       <div className="mb-2 flex items-center justify-between gap-2">
         <h2 className="text-sm font-bold text-[#F5F5F0]">{title}</h2>
         <div className="flex items-center gap-2">
-          {/* 「第 N 輪」永遠顯示，唯讀或可編輯都一樣。這是 #120 第一階段的核心補強——
+          {/* 「第 N 輪／第 N 局」永遠顯示，唯讀或可編輯都一樣。這是 #120 第一階段的核心補強——
             在此之前計分頁整頁沒有任何地方顯示 currentSet.ourRotation，教練看得到誰站哪，
-            卻不知道現在輪到第幾轉。它是純資訊、不是控制項：計分頁的輪次由得分自動推進，
-            戰術板的輪次由 RotationSwitcher 切（那顆帶白板 session 副作用，見 RotationTable）。 */}
-          <span className="text-xs font-bold tabular-nums text-[#F5F5F0]">
-            第 {rotation + 1} 輪
-          </span>
+            卻不知道現在輪到第幾轉。它本身是純資訊、不是控制項：計分頁的輪次由得分自動推進，
+            戰術板的輪次由 RotationSwitcher 切（那顆帶白板 session 副作用，見 RotationTable）。
+            互動式的切換另外靠下面的 stepper（onStep 有傳才出現），不是靠點這行文字。
+            有 stepper 時這裡就不重複顯示：stepper 正中央那格已經是同一個數字，兩個地方
+            寫同一件事只會讓人懷疑「這兩個是不是不一樣的東西」。 */}
+          {!onStep && (
+            <span className="text-xs font-bold tabular-nums text-[#F5F5F0]">
+              第 {rotation + 1} {unitLabel}
+            </span>
+          )}
           {/* 唯讀時不顯示 {filled}/6——那是「還差幾人」的編輯進度提示，看戲的人不需要。 */}
           {!readOnly && <span className="text-xs text-[#9AA08C]">{filledCount}/6</span>}
         </div>
@@ -141,12 +176,39 @@ export default function RotationRailPanel({
         })}
       </div>
 
-      {/* layout-spec §4.2 的「輪次切換 stepper」目前刻意不做：兩個呼叫端都不需要它——
-        計分頁的輪次由得分自動推進，戰術板用 RotationSwitcher（帶白板 session 副作用）。
-        當初照 spec 先寫了一顆，結果沒有任何呼叫端傳 onRotationChange，等於死碼，還把
-        「第 N 輪」的顯示一起藏起來（已移到標題列，永遠顯示）。等真的有頁面需要在這裡
-        切輪次時再加回來——比賽列表右欄（#170）要的是切「局」不是切「輪」，語意不同，
-        不要直接套用這個。 */}
+      {/* layout-spec §4.2 的「輪次切換 stepper」：上一版寫死不做，是因為當時兩個呼叫端
+        （計分頁／戰術板）都不需要互動式切換——計分頁的輪次由得分自動推進，戰術板用
+        RotationSwitcher（帶白板 session 副作用，見 RotationTable.tsx），先寫好卻沒有
+        呼叫端傳 onRotationChange 等於死碼，所以先拔掉、只留純文字顯示。
+        現在（issue #174）比賽列表右欄要切的是「局」，是貨真價實需要互動的第三個呼叫端，
+        才把 stepper 加回來——但做法跟上一版不同：改成 onStep 這個「純粹回報使用者按了
+        上/下」的回呼，元件本身不內建 mod 6 或邊界判斷（見 props 註解），輪是環狀、局是
+        線性有邊界，這兩種領域規則由呼叫端各自決定要不要允許再往前/後、算完新的值再把
+        新的 rotation/lineup 傳回來。元件只負責畫出按鈕、回報方向。
+        沒有 onStep 就完全不渲染這個區塊，維持「純資訊、看戲的人不會誤以為能點」的原樣。 */}
+      {onStep && (
+        <div className="mt-2 flex items-center gap-1.5">
+          <button
+            onClick={() => onStep(-1)}
+            disabled={!canStepPrev}
+            className="flex-1 rounded-lg border border-white/[0.12] bg-white/[0.04] py-1.5 text-xs font-bold text-[#F5F5F0] transition hover:border-white/[0.30] disabled:cursor-not-allowed disabled:opacity-40"
+            aria-label={`上一${unitLabel}`}
+          >
+            上
+          </button>
+          <span className="shrink-0 px-2 text-xs font-bold tabular-nums text-[#F5F5F0]">
+            第 {rotation + 1} {unitLabel}
+          </span>
+          <button
+            onClick={() => onStep(1)}
+            disabled={!canStepNext}
+            className="flex-1 rounded-lg border border-white/[0.12] bg-white/[0.04] py-1.5 text-xs font-bold text-[#F5F5F0] transition hover:border-white/[0.30] disabled:cursor-not-allowed disabled:opacity-40"
+            aria-label={`下一${unitLabel}`}
+          >
+            下
+          </button>
+        </div>
+      )}
 
       {!readOnly && (
         <p className="mt-2 text-[11px] leading-snug text-[#9AA08C]">
