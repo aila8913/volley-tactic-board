@@ -6,6 +6,7 @@ import {
   findNearestZone,
   isLineupComplete,
   captureLineupFromRotations,
+  readLineupFromRotations,
   lineupToPositions,
   rotateZone,
   rotateLineup,
@@ -123,6 +124,27 @@ describe("captureLineupFromRotations", () => {
 
   it("returns null for an empty rotation set", () => {
     expect(captureLineupFromRotations([], roster)).toBeNull();
+  });
+
+  // 「排到一半」的中間狀態：把關用的 capture 要回 null（還不能開賽），但顯示用的 read 要
+  // 照實回報。這組測試釘的是右欄「點了放不上去」那顆 bug 的根因——當時顯示也接在 capture
+  // 上，排第一個人就被判成 null、面板變空，形成「要看到 1 個人得先有 6 個人」的死結。
+  describe("readLineupFromRotations (顯示用，部分先發照實回報)", () => {
+    it("reports a partially filled lineup instead of null", () => {
+      expect(readLineupFromRotations([rot0({ 3: "3" })], roster)).toEqual({ 3: "3" });
+    });
+
+    it("still filters out ghost positions from another match", () => {
+      expect(readLineupFromRotations([rot0({ 3: "3", 4: "999" })], roster)).toEqual({ 3: "3" });
+    });
+
+    it("returns an empty object (not null) when nothing is placed yet", () => {
+      expect(readLineupFromRotations([], roster)).toEqual({});
+    });
+
+    it("agrees with captureLineupFromRotations once all 6 zones are filled", () => {
+      expect(readLineupFromRotations([rot0(FULL)], roster)).toEqual(FULL);
+    });
   });
 });
 

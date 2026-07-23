@@ -5,7 +5,7 @@ import { useMatchList, useMatchWithRoster } from "@/hooks/useMatches";
 import { useTournamentList } from "@/hooks/useTournaments";
 import { useRotationTable } from "@/hooks/useRotationTable";
 import { useScoreSheet, useScoreSheetController } from "@/hooks/useScoreSheet";
-import { captureLineupFromRotations } from "@/lib/rotationLogic";
+import { readLineupFromRotations } from "@/lib/rotationLogic";
 import { getMatchWinner } from "@/lib/matchOutcome";
 import type { LineupSnapshot } from "@/types/scoresheet";
 
@@ -162,7 +162,12 @@ function MatchRotationSection({ matchId }: { matchId: string }) {
     // 目前這局還沒開賽：讀全站共用的「現役站位」（useRotationTable，#120 PO 定案的唯一真相），
     // 可以直接在這裡編輯——跟 ScoreSheet.tsx 開賽前那段是同一份資料、同一套寫法，教練在
     // 這裡排先發，計分頁/戰術板立刻看到同一份結果，不是各自一份副本。
-    lineup = captureLineupFromRotations(rotations ?? [], match?.players ?? []);
+    //
+    // 用 readLineupFromRotations（照實回報幾個人）而不是 captureLineupFromRotations
+    // （不滿 6 人回 null）：這一格是「編輯中的顯示」，必然會經過 1~5 人的中間狀態。
+    // 原本接錯成把關用的那支，導致排第一個人時面板讀回 null 整個變空，看起來就是
+    // 「點了放不上去」——完整說明見 rotationLogic.ts 兩支函式的註解。
+    lineup = readLineupFromRotations(rotations ?? [], match?.players ?? []);
     readOnly = false;
     onLineupChange = (next) => setLineupFromSnapshot(matchId, next);
   }

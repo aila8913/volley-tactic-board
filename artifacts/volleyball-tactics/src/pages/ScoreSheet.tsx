@@ -13,7 +13,11 @@ import ScoreSheetStats from "@/components/ScoreSheetStats";
 import RotationRailPanel from "@/components/RotationRailPanel";
 import { PlayAction } from "@/types/scoresheet";
 import { isSetComplete, disabledActions } from "@/lib/scoreSheetMapping";
-import { captureLineupFromRotations, lineupToPositions } from "@/lib/rotationLogic";
+import {
+  captureLineupFromRotations,
+  readLineupFromRotations,
+  lineupToPositions,
+} from "@/lib/rotationLogic";
 import { captureFromScoreSheet, captureBlank } from "@/lib/courtSnapshot";
 
 // 6 大類跟 lib/db/src/schema/events.ts 的 eventActionEnum 對齊（見
@@ -145,6 +149,15 @@ export default function ScoreSheet() {
     [match, rotations],
   );
   const activeLineup = lineup ?? capturableLineup;
+  // editableLineup：開賽前右欄面板「顯示」用的那一份，照實回報現在排了幾個人（0~6）。
+  // 為什麼不能沿用 activeLineup：activeLineup 背後是 captureLineupFromRotations，不滿 6 人
+  // 回 null——那是「可不可以開賽」的把關語意（hasLineup / start() 都靠它，不能放寬）。
+  // 拿把關語意去畫編輯中的面板，排第一個人就會讀回 null 整個變空，變成「點了放不上去」的
+  // 死結（要看到第 1 個人得先有 6 個人）。兩種語意在 rotationLogic.ts 已拆成兩支函式。
+  const editableLineup = useMemo(
+    () => (match ? readLineupFromRotations(rotations ?? [], match.players) : null),
+    [match, rotations],
+  );
 
   // ── 自由球員自動輪轉接替 ──
   // 每次我方輪轉（ourRotation 變動）檢查被替換的球員是否已輪到前排。
@@ -403,7 +416,9 @@ export default function ScoreSheet() {
             start()），這時 activeLineup 讀到的就是那份凍結快照，readOnly 鎖住不給改——
             已經記進去的球是綁著這份站位算的，中途改會讓歷史跟站位對不上。 */}
           <RotationRailPanel
-            lineup={activeLineup}
+            // 可編輯時顯示 editableLineup（排幾個顯示幾個），唯讀時顯示 activeLineup
+            // （該局凍結的完整快照）。理由見上方 editableLineup 的宣告處。
+            lineup={canEditLineup ? editableLineup : activeLineup}
             roster={match.players}
             rotation={currentSet?.ourRotation ?? 0}
             readOnly={!canEditLineup}
