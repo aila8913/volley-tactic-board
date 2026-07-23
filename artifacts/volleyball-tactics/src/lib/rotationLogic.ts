@@ -198,6 +198,21 @@ export function assignPlayerToZone(
   return next;
 }
 
+// assignPlayerToZone 的反向操作：把某個號位上的人拿下場，那格變空（issue #174 跨欄拖曳——
+// 從輪轉表格子拖回球員清單就是「下場」）。
+//
+// 為什麼是「留空」而不是「找人遞補」：遞補要嘛得自己挑一個板凳球員（元件憑什麼替教練決定
+// 派誰上），要嘛把後面的人往前移（那是輪轉、不是換人，語意完全不同）。留空並且讓
+// filledCount 掉到 5/6，正好讓「還沒排滿就不能開賽」那道既有把關（captureLineupFromRotations）
+// 自然生效——使用者拿掉一個人之後本來就該補人，不該被系統偷偷補完。
+//
+// 傳入號位本來就沒人時原樣回傳一份新快照，呼叫端不用先檢查。
+export function removePlayerFromZone(lineup: LineupSnapshot, zone: number): LineupSnapshot {
+  const next: LineupSnapshot = { ...lineup };
+  delete next[zone];
+  return next;
+}
+
 // 球員從球員設定拖到球場上、或在場上重新拖曳時，放開滑鼠的座標不會剛好落在 6 個
 // 格子的正中心，所以要找「離哪個格子最近」來吸附。x/y 跟 zoneCoords 一樣是 0~1 normalized。
 export function findNearestZone(x: number, y: number): number {

@@ -1,6 +1,8 @@
 import { useState } from "react";
-import type { ReactNode } from "react";
-import { assignPlayerToZone } from "@/lib/rotationLogic";
+// DragEvent 取別名：全域 DOM 也有一個同名的 DragEvent，直接 import 會蓋掉它讓人誤會，
+// 這裡要的是 React 的合成事件版本。
+import type { DragEvent as ReactDragEvent, ReactNode } from "react";
+import { assignPlayerToZone, removePlayerFromZone } from "@/lib/rotationLogic";
 import type { MatchPlayer } from "@/types/match";
 import type { LineupSnapshot } from "@/types/scoresheet";
 
@@ -62,6 +64,23 @@ interface RotationRailPanelProps {
 // 不然畫面會跟真實球場對不起來，教練照著排反而排錯場上的人。
 const GRID_ZONES = [4, 3, 2, 5, 6, 1] as const;
 
+// ── 跨欄拖曳的協定（issue #174 最後一項）──
+//
+// 用瀏覽器原生的 HTML5 drag and drop，不引入 dnd-kit / react-dnd 之類的套件。理由有兩個：
+// (1) 這個 repo 已經有一套一模一樣的拖放合約在跑——RotationTable 左側名單、TacticsRosterPanel
+//     拖球員到球場，用的都是 `dataTransfer.setData("text/plain", playerId)`（見那兩個檔的註解）。
+//     同一個 app 裡兩套拖曳心智模型只會讓下一個人猜錯。
+// (2) 這裡的拖放只有「一個 id 從 A 掉到 B」這麼簡單，沒有排序、沒有多選、沒有跨捲動容器的
+//     自動捲動，套件能解決的那些難題這裡一個都沒有；而 pnpm-workspace 還設了 minimumReleaseAge
+//     的供應鏈防線，能不加依賴就不加。
+//
+// text/plain 帶 playerId（跟既有合約相容）。另外多帶一個自訂 MIME 標記「他是從第幾號位被拖
+// 出來的」：只有「拖回球員清單＝下場」這個方向需要知道來源，往格子放的方向不需要——
+// assignPlayerToZone 自己會從快照裡找出這個人原本站哪、決定要互換還是搬移。
+// 自訂 MIME 而不是把兩個值塞進 text/plain 的字串裡，是為了讓既有的 Court.tsx drop handler
+// 就算收到這裡發出的拖曳，讀 text/plain 仍然只會拿到乾淨的 playerId。
+const DND_SOURCE_ZONE = "application/x-volley-source-zone";
+
 export default function RotationRailPanel({
   lineup,
   roster,
@@ -104,6 +123,52 @@ export default function RotationRailPanel({
   const assignToSelectedZone = (playerId: string) => {
     if (selectedZone === null || !onLineupChange) return;
     onLineupChange(assignPlayerToZone(safeLineup, selectedZone, playerId));
+    setSelectedZone(null);
+  };
+
+  // 拖曳中的視覺回饋：滑鼠正懸在哪個號位上方 / 是否懸在球員清單上方。純 UI 狀態，
+  // 不進 store——拖到一半的中間狀態不是「真相」，放開才是。
+  const [dragOverZone, setDragOverZone] = useState<number | null>(null);
+  const [dragOverBench, setDragOverBench] = useState(false);
+
+  const canDrag = !readOnly && !!onLineupChange;
+
+  // 開始拖一個球員（不管是從清單還是從格子上拖）。sourceZone 只有從格子拖出時才有值。
+  const startDrag = (e: ReactDragEvent, playerId: string, sourceZone?: number) => {
+    e.dataTransfer.setData("text/plain", playerId);
+    if (sourceZone !== undefined) e.dataTransfer.setData(DND_SOURCE_ZONE, String(sourceZone));
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  // preventDefault 是 HTML5 DnD 最反直覺的一點：**預設所有元素都拒收**，
+  // 只有在 dragover 阻止預設行為，這個元素才會變成合法的放置目標、drop 事件才會觸發。
+  const allowDrop = (e: ReactDragEvent) => {
+    if (!canDrag) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+  };
+
+  const handleDropOnZone = (e: ReactDragEvent, zone: number) => {
+    if (!canDrag || !onLineupChange) return;
+    e.preventDefault();
+    setDragOverZone(null);
+    const playerId = e.dataTransfer.getData("text/plain");
+    // 只認這場名單裡的人：其他地方（甚至別的分頁、桌面上的文字）也可能丟一段 text/plain
+    // 過來，沒這道檢查就會把垃圾 id 寫進先發快照，變成讀出來對不到人的「幽靈站位」。
+    if (!assignablePlayers.some((p) => p.id === playerId)) return;
+    onLineupChange(assignPlayerToZone(safeLineup, zone, playerId));
+    setSelectedZone(null);
+  };
+
+  // 拖回球員清單＝把他從場上拿下來。只有帶著 source zone 的拖曳（＝從格子拖出來的）
+  // 才有意義；從清單拖到清單是原地打轉，直接忽略。
+  const handleDropOnBench = (e: ReactDragEvent) => {
+    if (!canDrag || !onLineupChange) return;
+    e.preventDefault();
+    setDragOverBench(false);
+    const raw = e.dataTransfer.getData(DND_SOURCE_ZONE);
+    if (!raw) return;
+    onLineupChange(removePlayerFromZone(safeLineup, Number(raw)));
     setSelectedZone(null);
   };
 
@@ -152,8 +217,11 @@ export default function RotationRailPanel({
               </span>
             </>
           );
+          // 拖曳懸停的高亮沿用「已選號位」那一套顏色：兩者要表達的是同一件事——
+          // 「放開/點下去，人就會進這一格」，用兩種顏色反而要使用者記兩套規則。
+          const isDropTarget = dragOverZone === zone;
           const cellClass = `flex flex-col items-center justify-center rounded-lg border px-1 py-2 transition ${
-            isSelected
+            isSelected || isDropTarget
               ? "border-[#C6F135] bg-[#C6F135]/10 text-[#C6F135]"
               : "border-white/[0.12] bg-white/[0.04] text-[#F5F5F0]"
           } ${!readOnly ? "hover:border-white/[0.30]" : ""}`;
@@ -168,6 +236,16 @@ export default function RotationRailPanel({
             <button
               key={zone}
               onClick={() => setSelectedZone(isSelected ? null : zone)}
+              // 格子上有人才可以被拖走（空格子沒東西可拖）。playerId 在這個分支一定存在
+              // 才會進到 draggable，所以下面的 startDrag 不用再判一次。
+              draggable={canDrag && !!playerId}
+              onDragStart={(e) => playerId && startDrag(e, playerId, zone)}
+              onDragOver={allowDrop}
+              onDragEnter={() => canDrag && setDragOverZone(zone)}
+              // dragleave 要比對 zone 再清掉：拖過相鄰兩格時 enter(新格) 有機會早於
+              // leave(舊格)，無條件清空會把剛設好的高亮又抹掉，畫面就一路不亮。
+              onDragLeave={() => setDragOverZone((z) => (z === zone ? null : z))}
+              onDrop={(e) => handleDropOnZone(e, zone)}
               className={cellClass}
             >
               {cellContent}
@@ -214,14 +292,24 @@ export default function RotationRailPanel({
         <p className="mt-2 text-[11px] leading-snug text-[#9AA08C]">
           {selectedZone !== null
             ? `已選 ${selectedZone} 號位，點下面的球員指派過去（他原本在別的號位就互換）`
-            : "先點一個號位，再點球員把他放進去"}
+            : "把球員拖進號位即可上場，拖回清單則下場；也可以先點號位再點球員"}
         </p>
       )}
 
       {/* ③ 球員清單（layout-spec §4.3）：已經在場上的人標出目前號位，讓教練一眼看出
         誰還在板凳上。清單可能比六個號位長不少，給它自己的捲動範圍，才不會把下面的
         區塊推出視野外（右欄是 flex-column，這個 section 是 shrink-0）。 */}
-      <div className="mt-2 max-h-40 space-y-1 overflow-y-auto pr-0.5">
+      {/* 放置目標是「整個清單容器」而不是個別球員列：拖回板凳的語意是「離開場上」，
+        丟在誰身上都一樣，硬要求對準某一列只是在為難使用者（而且列高只有 ~28px）。 */}
+      <div
+        onDragOver={allowDrop}
+        onDragEnter={() => canDrag && setDragOverBench(true)}
+        onDragLeave={() => setDragOverBench(false)}
+        onDrop={handleDropOnBench}
+        className={`mt-2 max-h-40 space-y-1 overflow-y-auto rounded-lg border pr-0.5 transition ${
+          dragOverBench ? "border-[#C6F135]/60 bg-[#C6F135]/[0.06]" : "border-transparent"
+        }`}
+      >
         {assignablePlayers.map((p) => {
           const currentZone = Object.entries(safeLineup).find(([, pid]) => pid === p.id)?.[0];
           const rowClass =
@@ -244,8 +332,16 @@ export default function RotationRailPanel({
             <button
               key={p.id}
               onClick={() => assignToSelectedZone(p.id)}
-              disabled={selectedZone === null}
-              className={`${rowClass} hover:border-[#C6F135] hover:text-[#C6F135] disabled:cursor-not-allowed disabled:opacity-40`}
+              // 這裡刻意**不用** disabled：瀏覽器的 disabled button 完全不收指標事件，
+              // 連帶把 draggable 也一起廢掉——沒選號位時整排球員就拖不動了，而「直接拖上場」
+              // 正是不需要先選號位的那條路。改用 aria-disabled ＋ 樣式表達「點了沒用」，
+              // 實際的防呆本來就在 assignToSelectedZone 開頭那個 early return。
+              // 也不再把「沒選號位」的列變半透明：拖曳這條路隨時都能用，把它畫成
+              // 灰掉的樣子等於騙使用者說這裡現在動不了。
+              aria-disabled={selectedZone === null}
+              draggable={canDrag}
+              onDragStart={(e) => startDrag(e, p.id)}
+              className={`${rowClass} cursor-grab hover:border-[#C6F135] hover:text-[#C6F135] active:cursor-grabbing`}
             >
               {rowContent}
             </button>
