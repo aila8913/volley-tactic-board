@@ -9,6 +9,7 @@ import type { SnapshotPlayer } from "../types/courtSnapshot";
 import PlayerNode from "./PlayerNode";
 import Markers from "./Markers";
 import DefenseRange from "./DefenseRange";
+import { COURT_GRADIENT_STOPS } from "../lib/courtTheme";
 
 // 這一場還沒有分片資料時用的空白預設值（模組層、參照穩定，避免每 render 換新陣列造成重繪）。
 const EMPTY_ROSTER: MatchPlayer[] = [];
@@ -389,16 +390,19 @@ export default function Court() {
             className="touch-none select-none"
           >
             <defs>
-              {/* 球場底色：深青漸層（design-spec.md 第 5 節，2026-07-15 選定的方案 B）——
-                  比暖木色更貼近整體深色 UI，冷色調對己方萊姆綠跟對方珊瑚紅球員點都是安全的
-                  對比組合。 */}
+              {/* 球場底色深青漸層（design-spec.md 第 5 節，2026-07-15 選定的方案 B）改讀
+                  lib/courtTheme 的共用常數，跟計分表球場（ScoreSheetCourt）同一個來源——
+                  改那邊兩個球場一起變。stopOpacity 不是 100% 的理由見 courtTheme 的註解
+                  （毛玻璃地板要讓 wrapper 後面的背景透一點出來）。 */}
               <linearGradient id="court-gradient" x1="0" y1="0" x2="0" y2="1">
-                {/* stopOpacity 不是 100%：球場毛玻璃地板（.court-glass）本身要讓
-                    wrapper 後面被模糊的背景光暈透一點出來，底色若完全不透明，
-                    毛玻璃的模糊效果會被完全蓋住、等於白做。 */}
-                <stop offset="0%" stopColor="#12403f" stopOpacity="0.42" />
-                <stop offset="50%" stopColor="#1c5654" stopOpacity="0.38" />
-                <stop offset="100%" stopColor="#2a6e6a" stopOpacity="0.42" />
+                {COURT_GRADIENT_STOPS.map((stop) => (
+                  <stop
+                    key={stop.offset}
+                    offset={stop.offset}
+                    stopColor={stop.color}
+                    stopOpacity={stop.opacity}
+                  />
+                ))}
               </linearGradient>
               <marker
                 id="arrowhead"
