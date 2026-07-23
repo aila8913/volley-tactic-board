@@ -173,11 +173,15 @@ export default function MatchList() {
                     key={item.data.id}
                     onClick={() => setSelected({ kind: "tournament", id: item.data.id })}
                     onDoubleClick={() => navigate(`/tournaments/${item.data.id}`)}
+                    // 選中樣式跟 MatchCard.tsx 用同一套環 0 強階定案，transition 只轉
+                    // border-color/box-shadow、不轉 background-color，理由同見那邊的註解
+                    // （Tailwind v4.3.0 對任意值 hex+透明度的 color-mix() codegen 缺色彩
+                    // 空間關鍵字，拿去當轉場終點值會卡在動畫起點）。
                     className={`relative flex cursor-pointer select-none flex-col rounded-2xl border
-                    bg-white/[0.07] p-5 shadow-lg shadow-black/35 backdrop-blur-md transition ${
+                    p-5 shadow-lg shadow-black/35 backdrop-blur-md transition-[border-color,box-shadow] ${
                       selected?.kind === "tournament" && selected.id === item.data.id
-                        ? "border-[#c6f135]/70"
-                        : "border-white/[0.12]"
+                        ? "border-transparent bg-[#c6f135]/15 ring-1 ring-inset ring-[#c6f135]"
+                        : "border-white/[0.12] bg-white/[0.07]"
                     }`}
                   >
                     <div className="flex items-start justify-between gap-2.5">
