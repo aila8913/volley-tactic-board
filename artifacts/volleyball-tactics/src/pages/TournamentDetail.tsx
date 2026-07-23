@@ -15,13 +15,20 @@ import ListNavRail from "@/components/ListNavRail";
 import MatchInfoRail, { MatchListSelection } from "@/components/MatchInfoRail";
 import { Match } from "@/types/match";
 
-// 「找不到資料夾」錯誤畫面的次要按鈕，跟 ScoreSheet.tsx/MatchAnalytics.tsx 同名常數
-// 同一套語言（不透過 shadcn Button，理由見那邊的註解）。這個早期 return 是獨立於下面
-// AppShell 主要 render 路徑（仍是 bg-white，留給 #175）的頁面外殼，先轉不受影響。
+// 跟 ScoreSheet.tsx/MatchAnalytics.tsx 同名常數同一套語言（不透過 shadcn Button，理由見
+// 那邊的註解）。SECONDARY 目前只有「找不到資料夾」那個早期 return 在用——主要 render 路徑的
+// 「回列表」已經換回共用的 BackToMatchListButton（#175 重寫這頁時把版面收斂成跟 MatchList
+// 一致，那顆鈕沒有理由再是這頁專屬的一份）。
 const SECONDARY_BUTTON_CLASS =
   "inline-flex items-center justify-center rounded-full border border-white/[0.26] " +
   "bg-white/[0.05] px-5 py-2 text-sm font-bold text-[#f5f5f0] transition " +
   "hover:border-[#c6f135] hover:text-[#c6f135]";
+// PR #194（tang）抽出來的主要 CTA 樣式。空狀態那顆「新增第一場比賽」用它；操作列那顆
+// 「新增比賽」不用——它是 h-11 / rounded-2xl 的操作列尺寸，跟這個 h-10 / rounded-full 的
+// 圓角 CTA 是兩種不同的按鈕，硬共用一個常數再各自覆蓋反而更難讀。
+const PRIMARY_BUTTON_CLASS =
+  "inline-flex h-10 items-center gap-1.5 rounded-full bg-[#c6f135] px-5 text-[13px] " +
+  "font-semibold text-[#0a0b07] transition hover:brightness-110";
 
 // 資料夾的內頁——只顯示歸在這個資料夾底下的比賽 (tournamentId 等於這個資料夾的 id)。
 export default function TournamentDetail() {
@@ -62,9 +69,8 @@ export default function TournamentDetail() {
   };
 
   // 還在載資料夾時先別下「找不到」的定論，避免閃錯誤訊息。
-  // 這兩個早期 return 是獨立於下面主要 render 路徑的頁面外殼——AppShell 本身（含中央列表）
-  // 的深色化留給 #175（環 4，中央列表型會整個重寫這塊），這裡只先轉不受那次重寫影響的
-  // loading/error 狀態，避免白工。
+  // 這兩個早期 return 是獨立於下面主要 render 路徑的頁面外殼，深色化在 PR #186 就先轉好了
+  // （當時中央列表區還留給 #175）；現在主要路徑也轉完，兩邊視覺一致。
   if (tournamentsLoading) {
     return (
       <div className="flex min-h-screen w-full items-center justify-center bg-[#0a0b07] font-dash text-[#a9b096]">
@@ -146,12 +152,7 @@ export default function TournamentDetail() {
           {matches.length === 0 ? (
             <div className="flex flex-col items-center gap-4 rounded-2xl border border-white/[0.12] bg-white/[0.07] py-12 text-center backdrop-blur-md">
               <p className="text-[#a9b096]">這個資料夾裡還沒有比賽</p>
-              <button
-                type="button"
-                onClick={openCreateDialog}
-                className="inline-flex h-10 items-center gap-1.5 rounded-full bg-[#c6f135] px-5 text-[13px]
-                font-semibold text-[#0a0b07] transition hover:brightness-110"
-              >
+              <button type="button" onClick={openCreateDialog} className={PRIMARY_BUTTON_CLASS}>
                 新增第一場比賽
               </button>
             </div>

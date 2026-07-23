@@ -61,14 +61,22 @@ export default function ListItemCard({
       onClick={onSelect}
       onDoubleClick={onOpen}
       // 選中態用的是 #134 環 0 定案的「強階」：玻璃提亮 bg-[#c6f135]/15 ＋ 一圈細環
-      // ring-1 ring-[#c6f135]。線框稿字面寫的是「整張反白」（實色底＋深色字），但那是
-      // **持續呈現**的狀態、不是按下就放開的瞬間回饋，整張卡片鋪滿實色長時間看太搶眼，
+      // ring-1 ring-inset ring-[#c6f135]，並把 border 設成 transparent（環已經扮演邊界，
+      // 再留一圈有色 border 會變成雙線）。線框稿字面寫的是「整張反白」（實色底＋深色字），
+      // 但那是**持續呈現**的狀態、不是按下就放開的瞬間回饋，整張卡片鋪滿實色長時間看太搶眼，
       // 所以定案改成同一套玻璃材質再加環——完整比較見 docs/design-spec.md「選取狀態」。
       // 左欄導覽的 active 用的是同一組值，兩邊視覺才對得起來。
+      //
+      // transition 刻意縮小成只轉 border-color/box-shadow、**不轉 background-color**
+      // （tang 在 PR #194 找出來的坑，這裡沿用）：Tailwind v4.3.0 對「任意值 hex ＋ 透明度」
+      // （bg-[#c6f135]/15）生成的 color-mix() 少了必要的色彩空間關鍵字，是無效值。靜態套用
+      // 瀏覽器還認得，但拿它當轉場的終點值時 Chrome 會卡在起點色不動——同一個 DOM 節點動態
+      // 切 class 才會踩到，而點卡片選取正是這個情境。用 `transition`（= all）就會中招。
       className={`flex cursor-pointer select-none flex-col rounded-2xl border px-8 font-dash
-        text-[#f5f5f0] shadow-lg shadow-black/35 backdrop-blur-md transition ${
+        text-[#f5f5f0] shadow-lg shadow-black/35 backdrop-blur-md
+        transition-[border-color,box-shadow] ${
           selected
-            ? "border-[#c6f135]/40 bg-[#c6f135]/15 ring-1 ring-[#c6f135]"
+            ? "border-transparent bg-[#c6f135]/15 ring-1 ring-inset ring-[#c6f135]"
             : "border-white/[0.12] bg-white/[0.07] hover:border-white/[0.26]"
         }`}
     >
