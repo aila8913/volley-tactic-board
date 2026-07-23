@@ -55,13 +55,29 @@ export default function MatchCard({ match, onEdit, onDelete, selected, onSelect 
   return (
     <article
       onClick={onSelect}
-      // 跟資料夾卡片（MatchList.tsx 內聯那段）用同一套選中樣式（border-[#c6f135]/70），
-      // 選取語意才會一致——使用者不需要為了「這張是資料夾卡還是比賽卡」記兩套視覺規則。
+      // 選中樣式跟資料夾卡片（MatchList.tsx 內聯那段）、NavRail 的 active 態用同一套
+      // 環 0 強階定案（design-spec.md 第 5 節「選取狀態」：玻璃提亮 + 細環），選取語意
+      // 全站統一，使用者不需要為了「這張是資料夾卡還是比賽卡、還是導覽項目」記三套視覺規則。
       // 這裡不用像資料夾卡那樣分單擊/雙擊：比賽卡片底下已經有三顆明確的導覽按鈕
       // （戰術板/計分表/數據），不會有「點一下卡身就手滑跳頁」的風險，卡身單擊直接選取即可。
-      className={`relative flex cursor-pointer select-none flex-col rounded-2xl border bg-white/[0.07]
-        p-5 font-dash text-[#f5f5f0] shadow-lg shadow-black/35 backdrop-blur-md transition ${
-          selected ? "border-[#c6f135]/70" : "border-white/[0.12]"
+      className={`relative flex cursor-pointer select-none flex-col rounded-2xl border p-5
+        font-dash text-[#f5f5f0] shadow-lg shadow-black/35 backdrop-blur-md
+        transition-[border-color,box-shadow] ${
+          // bg-* 只能有一個生效，不能讓 bg-white/[0.07]（基底）跟 bg-[#c6f135]/15（選中）同時
+          // 出現在同一個 class 字串裡——兩者都是 Tailwind 任意值、生成順序不保證誰蓋過誰，
+          // 讓三元運算式整段決定要用哪一個，而不是疊加一個「選中專用」的覆蓋層。
+          //
+          // transition 刻意縮小成只轉 border-color/box-shadow、不轉 background-color：
+          // Tailwind v4.3.0 對「任意值 hex + 透明度」（例如 bg-[#c6f135]/15）目前生成的
+          // color-mix() 少了必要的色彩空間關鍵字（規範要求 color-mix(in srgb, ...)，
+          // 這裡只有 color-mix(rgb(...), ...)），是無效值。靜態套用瀏覽器還是認得、能正確
+          // 顯示，但拿它當「CSS transition 動畫的終點值」時，Chrome 會卡在動畫起點（也就是
+          // 選取前的顏色）不會跳過去——同一個 DOM 節點動態切換 class 才會踩到（換頁重新
+          // 掛載的元素不會，因為沒有「原本的顏色」可以轉場）。這正是使用者點卡片選取時
+          // 的情境。在 Tailwind 修好這個 codegen 之前，background-color 不能進轉場清單。
+          selected
+            ? "border-transparent bg-[#c6f135]/15 ring-1 ring-inset ring-[#c6f135]"
+            : "border-white/[0.12] bg-white/[0.07]"
         }`}
     >
       <div className="mb-3 flex items-start justify-between gap-2.5">

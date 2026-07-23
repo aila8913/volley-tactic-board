@@ -1,9 +1,6 @@
 import { useState } from "react";
 import { useParams, Link } from "wouter";
-import { ArrowLeft } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import BackToMatchListButton from "@/components/BackToMatchListButton";
+import { ArrowLeft, Plus } from "lucide-react";
 import { useMatchList, useDeleteMatch } from "@/hooks/useMatches";
 import { useTournamentList } from "@/hooks/useTournaments";
 import MatchFormDialog from "@/components/MatchFormDialog";
@@ -13,13 +10,17 @@ import ListNavRail from "@/components/ListNavRail";
 import MatchInfoRail, { MatchListSelection } from "@/components/MatchInfoRail";
 import { Match } from "@/types/match";
 
-// 「找不到資料夾」錯誤畫面的次要按鈕，跟 ScoreSheet.tsx/MatchAnalytics.tsx 同名常數
-// 同一套語言（不透過 shadcn Button，理由見那邊的註解）。這個早期 return 是獨立於下面
-// AppShell 主要 render 路徑（仍是 bg-white，留給 #175）的頁面外殼，先轉不受影響。
+// 跟 ScoreSheet.tsx/MatchAnalytics.tsx 同名常數同一套語言（不透過 shadcn Button，理由見
+// 那邊的註解）。原本只有 loading/error 早期 return 在用（中央列表區留給 #175 的環 4），
+// 現在主要 render 路徑裡「回列表」連結、清單以外的「新增比賽」CTA 也一併套用——這幾個
+// 元素不屬於 #175 要重排的卡片版面，先轉不會被那次重寫影響。
 const SECONDARY_BUTTON_CLASS =
   "inline-flex items-center justify-center rounded-full border border-white/[0.26] " +
   "bg-white/[0.05] px-5 py-2 text-sm font-bold text-[#f5f5f0] transition " +
   "hover:border-[#c6f135] hover:text-[#c6f135]";
+const PRIMARY_BUTTON_CLASS =
+  "inline-flex h-10 items-center gap-1.5 rounded-full bg-[#c6f135] px-5 text-[13px] " +
+  "font-semibold text-[#0a0b07] transition hover:brightness-110";
 
 // 資料夾的內頁——只顯示歸在這個資料夾底下的比賽 (tournamentId 等於這個資料夾的 id)。
 export default function TournamentDetail() {
@@ -94,7 +95,12 @@ export default function TournamentDetail() {
       mode="A"
       nav={<ListNavRail selected={selected} />}
       aside={<MatchInfoRail selected={selected} />}
-      className="bg-white"
+      className="bg-[#0a0b07] font-dash text-[#f5f5f0]"
+      style={{
+        backgroundImage:
+          "repeating-linear-gradient(45deg, rgba(245,245,240,0.035) 0 1px, transparent 1px 28px)," +
+          "repeating-linear-gradient(-45deg, rgba(245,245,240,0.035) 0 1px, transparent 1px 28px)",
+      }}
     >
       {/* 跟 MatchList.tsx 同一個原因：AppShell 中央主區本身不捲動，這頁的比賽清單也可能超過
           一屏高，所以一樣包一層 overflow-y-auto，不然長清單會被裁掉、捲不到下面的項目
@@ -102,20 +108,33 @@ export default function TournamentDetail() {
           版面之後，捲動責任要下放到這一層，不然是體驗上的退步）。 */}
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-3xl px-4 py-8">
-          <BackToMatchListButton className="mb-4 -ml-2" />
+          {/* 不用共用的 BackToMatchListButton：見上面 SECONDARY_BUTTON_CLASS 的說明。
+              margin 用外層 div 包一層而不是疊加在 SECONDARY_BUTTON_CLASS 後面——直接疊
+              class 字串容易不小心疊出兩個衝突的間距/字級值（同一個屬性由哪個生效要看
+              Tailwind 生成順序，不保證跟字串裡的先後順序一致，MatchCard.tsx 選取樣式
+              那邊就踩過同類問題），用 wrapper 隔開最保險。 */}
+          <div className="mb-4 -ml-2">
+            <Link href="/" className={SECONDARY_BUTTON_CLASS}>
+              <ArrowLeft className="mr-1 h-4 w-4" />
+              比賽列表
+            </Link>
+          </div>
 
           <div className="mb-6 flex items-center justify-between">
-            <h1 className="text-2xl font-bold">{tournament.name}</h1>
-            <Button onClick={openCreateDialog}>新增比賽</Button>
+            <h1 className="font-dash text-2xl font-bold">{tournament.name}</h1>
+            <button type="button" onClick={openCreateDialog} className={PRIMARY_BUTTON_CLASS}>
+              <Plus className="h-[15px] w-[15px]" />
+              新增比賽
+            </button>
           </div>
 
           {matches.length === 0 ? (
-            <Card>
-              <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
-                <p className="text-muted-foreground">這個資料夾裡還沒有比賽</p>
-                <Button onClick={openCreateDialog}>新增第一場比賽</Button>
-              </CardContent>
-            </Card>
+            <div className="flex flex-col items-center gap-4 rounded-2xl border border-white/[0.12] bg-white/[0.07] py-12 text-center backdrop-blur-md">
+              <p className="text-[#a9b096]">這個資料夾裡還沒有比賽</p>
+              <button type="button" onClick={openCreateDialog} className={PRIMARY_BUTTON_CLASS}>
+                新增第一場比賽
+              </button>
+            </div>
           ) : (
             <div className="space-y-3">
               {matches.map((match) => (
