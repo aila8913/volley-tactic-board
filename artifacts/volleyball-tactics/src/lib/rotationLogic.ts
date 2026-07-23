@@ -28,12 +28,38 @@ export function isLineupComplete(rotations: RotationPositions[]): boolean {
 //     當作該號位的先發（否則會少一個人）。
 //
 // 湊不滿 6 個不同號位就回 null（代表先發還沒排好、或已被污染），呼叫端據此顯示「請先排先發」。
+//
+// ⚠️ 這個「不滿 6 人就回 null」是**把關語意**（可不可以開賽），不是「讀出現在站位」的語意。
+// 要顯示「編輯中的站位」請改用下面的 readLineupFromRotations——理由見那邊的說明。
 export function captureLineupFromRotations(
   rotations: RotationPositions[],
   roster: MatchPlayer[],
 ): LineupSnapshot | null {
+  const lineup = readLineupFromRotations(rotations, roster);
+  // 六個號位（1~6）都要各站一個不同球員才算完整；有號位重疊或缺人就視為沒排好。
+  return Object.keys(lineup).length === 6 ? lineup : null;
+}
+
+// ── 「現在站位長什麼樣」的讀法（部分先發也照實回報）──
+//
+// 為什麼需要跟 captureLineupFromRotations 分成兩個函式，而不是加個 boolean 參數：
+// 兩者回答的是不同問題。
+//   - captureLineupFromRotations：「這份先發合格了嗎？可以開賽了嗎？」→ 不滿 6 人 = 不合格 = null
+//   - readLineupFromRotations：「現在場上排了誰？」→ 排了 1 個就回 1 個
+//
+// 這個分野是踩過雷才補上的：右欄「先點號位、再點球員」的編輯流程，本來把「顯示」也接在
+// 把關用的 captureLineupFromRotations 上，結果排第 1 個人時寫進 store 成功、讀回來卻因為
+// 不滿 6 人被判成 null，面板整個變空——使用者看到的是「點了放不上去」，而且是個死結
+// （要看到第 1 個人，得先有 6 個人）。編輯途中必然經過 1~5 人的中間狀態，用把關語意去讀
+// 編輯中的資料，本質上就是問錯問題。
+//
+// 過濾規則（幽靈站位、自由球員還原）兩者完全共用，差別只在最後那道 6 人門檻。
+export function readLineupFromRotations(
+  rotations: RotationPositions[],
+  roster: MatchPlayer[],
+): LineupSnapshot {
   const rot = rotations[0];
-  if (!rot) return null;
+  if (!rot) return {};
 
   const liberoIds = new Set(roster.filter((p) => p.role === "L").map((p) => p.id));
   const validIds = new Set(roster.map((p) => p.id));
@@ -52,9 +78,7 @@ export function captureLineupFromRotations(
     lineup[findNearestZone(pos.x, pos.y)] = pos.playerId;
   }
 
-  // 六個號位（1~6）都要各站一個不同球員才算完整；有號位重疊或缺人就視為沒排好。
-  const filledZones = Object.keys(lineup).length;
-  return filledZones === 6 ? lineup : null;
+  return lineup;
 }
 
 // 把先發快照（rotation 0 的號位→球員）換算成「第 rotation 輪」時場上 6 個人的座標，
