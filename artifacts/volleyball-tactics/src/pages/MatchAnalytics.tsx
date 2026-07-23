@@ -15,11 +15,12 @@ import { useParams, Link } from "wouter";
 import { ArrowLeft } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import AppShell from "@/components/AppShell";
-import MatchNavRail, { matchBackHref } from "@/components/MatchNavRail";
+import NavRail, { matchBackHref } from "@/components/NavRail";
 import { useMatchWithRoster } from "@/hooks/useMatches";
 import { useMatchRecording } from "@/hooks/useMatchRecording";
 import { ACTIONS, ACTION_LABELS, buildPlayerMatrix } from "@/lib/statsMapping";
 import { PointRecord } from "@/types/scoresheet";
+import { captureBlank } from "@/lib/courtSnapshot";
 
 // 找不到比賽時的「回列表」次要按鈕，跟 ScoreSheet.tsx 同一套語言（見該檔案同名常數的
 // 註解：不透過 shadcn Button，因為那套元件的顏色綁在給淺色頁面用的 CSS 變數上）。
@@ -110,14 +111,33 @@ export default function MatchAnalytics() {
   // 左側導覽軌（issue #160）的「比」按鈕要導回去的頁面，規則共用 matchBackHref。
   const backHref = matchBackHref(match.tournamentId);
 
+  // issue #173：NavRail「戰」子清單的「+ 新增戰術」需要呼叫端注入一段「現在站位怎麼擷取」
+  // 的邏輯（見 NavRail.tsx / NewTacticDialog.tsx 開頭的說明——這個元件自己不猜資料來源）。
+  // 但數據分析頁跟戰術頁／計分頁不一樣：這裡從頭到尾沒有「當下站位」這個概念（沒有輪轉表、
+  // 沒有先發快照，純粹是唯讀的賽後統計），所以沒有東西可以擷取。與其為了湊出一個假的擷取
+  // 函式，這裡直接把「擷取目前站位」這個選項整個停用（captureDisabled=true），只留「空站位」
+  // 這一條路可以開始新戰術；captureCurrent 仍要給一個型別合法的函式（NewTacticDialog 的
+  // captureCurrent 是 required prop），但因為按鈕被停用，使用者永遠按不到它，回傳值不會被
+  // 真的使用。
+  const captureCurrentForAnalytics = () => captureBlank({ matchId: id ?? null });
+
   return (
     // issue #172：三欄骨架交給 AppShell（mode="A"）。不傳 aside——站位列的資訊欄版本目前
     // 被 #76 擋住（分析頁還沒有可以放進右欄的站位資料），這一環也不重寫功能元件，所以維持
-    // 「這一頁沒有右欄」。原本的「回列表」「回計分表」header 連結統一交給 MatchNavRail
-    // （issue #160，不變）。
+    // 「這一頁沒有右欄」。原本的「回列表」「回計分表」header 連結統一交給 NavRail
+    // （issue #160 起就是共用元件，#173 併入戰術子清單/匯出子清單後改名 NavRail）。
     <AppShell
       mode="A"
-      nav={<MatchNavRail matchId={id ?? ""} backHref={backHref} active="analytics" />}
+      nav={
+        <NavRail
+          matchId={id ?? ""}
+          backHref={backHref}
+          active="analytics"
+          captureCurrent={captureCurrentForAnalytics}
+          captureLabel="此頁沒有可擷取的站位，僅能從空站位開始"
+          captureDisabled
+        />
+      }
       className="bg-[#0a0b07] font-dash text-[#f5f5f0]"
       style={{
         backgroundImage:

@@ -9,7 +9,7 @@ import { useTournamentList } from "@/hooks/useTournaments";
 import MatchFormDialog from "@/components/MatchFormDialog";
 import MatchCard from "@/components/MatchCard";
 import AppShell from "@/components/AppShell";
-import MatchNavRail from "@/components/MatchNavRail";
+import ListNavRail from "@/components/ListNavRail";
 import MatchInfoRail, { MatchListSelection } from "@/components/MatchInfoRail";
 import { Match } from "@/types/match";
 
@@ -92,7 +92,7 @@ export default function TournamentDetail() {
     // 就少一塊。
     <AppShell
       mode="A"
-      nav={<MatchNavRail backHref="/" active="list" />}
+      nav={<ListNavRail selected={selected} />}
       aside={<MatchInfoRail selected={selected} />}
       className="bg-white"
     >

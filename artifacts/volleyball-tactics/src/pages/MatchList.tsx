@@ -7,7 +7,7 @@ import MatchFormDialog from "@/components/MatchFormDialog";
 import TournamentFormDialog from "@/components/TournamentFormDialog";
 import MatchCard from "@/components/MatchCard";
 import AppShell from "@/components/AppShell";
-import MatchNavRail from "@/components/MatchNavRail";
+import ListNavRail from "@/components/ListNavRail";
 import MatchInfoRail, { MatchListSelection } from "@/components/MatchInfoRail";
 import { Match } from "@/types/match";
 import { Tournament } from "@/types/tournament";
@@ -93,7 +93,8 @@ export default function MatchList() {
   return (
     // issue #172：三欄骨架交給 AppShell，這裡只負責「這一頁的視覺」（背景）跟「這一頁要塞進
     // 哪些插槽」。mode="A"（列表瀏覽）、nav 是共用導覽軌（沒有 matchId——這頁本來就不屬於
-    // 任何一場比賽，MatchNavRail 會把「計/數/戰」渲染成停用態）。
+    // 任何一場比賽，NavRail 會把「計/數/戰/出」渲染成停用態，issue #173：點下去會跳 toast
+    // 「先選一場比賽」，不是完全不可互動）。
     // aside（issue #174）：右欄資訊欄，內容完全交給 MatchInfoRail 依 selected 決定要顯示
     // 空狀態／資料夾摘要／比賽站位——這一頁只負責把「目前選中什麼」傳過去，不自己判斷要
     // 渲染哪一種畫面。
@@ -105,7 +106,7 @@ export default function MatchList() {
     // className/style——AppShell 自己的 h-screen 已經接手了原本 min-h-screen 的角色。
     <AppShell
       mode="A"
-      nav={<MatchNavRail backHref="/" active="list" />}
+      nav={<ListNavRail selected={selected} />}
       aside={<MatchInfoRail selected={selected} />}
       className="bg-[#0a0b07] font-dash text-[#f5f5f0]"
       style={{

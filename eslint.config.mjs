@@ -95,7 +95,11 @@ export default tseslint.config(
         {
           patterns: [
             {
-              group: ["**/useRotationTable", "**/useScoreSheet"],
+              // issue #173：清單裡多了 captureCurrentRotation。它是四個 UI 呼叫端共用的
+              // 擷取工具，內部會讀 useRotationTable——如果不一起擋，白板 store 就能靠
+              // 「import 這個工具」繞過上面兩條禁令，把被焊死的反向依賴接回去（lint 比對的是
+              // import 路徑，看不出這種轉包）。理由詳見 lib/captureCurrentRotation.ts 的說明。
+              group: ["**/useRotationTable", "**/useScoreSheet", "**/captureCurrentRotation"],
               message:
                 "戰術白板必須維持單向：不得 import 輪轉表/計分表 store（會有能力反向寫回，正是 #154 病根）。擷取請在 UI 層用 captureFromRotation 以值傳入 startSession。",
             },

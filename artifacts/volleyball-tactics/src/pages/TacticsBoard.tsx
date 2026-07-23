@@ -1,13 +1,14 @@
 import React, { useEffect } from "react";
 import { useParams } from "wouter";
 import AppShell from "../components/AppShell";
-import MatchNavRail, { matchBackHref } from "../components/MatchNavRail";
+import NavRail, { matchBackHref } from "../components/NavRail";
 import RotationTable from "../components/RotationTable";
 import TacticsBoardPanel from "../components/TacticsBoardPanel";
 import Court from "../components/Court";
 import { useMatchWithRoster } from "../hooks/useMatches";
 import { useRotationTable } from "../hooks/useRotationTable";
 import { useTacticsBoard } from "../hooks/useTacticsBoard";
+import { captureCurrentRotation } from "../lib/captureCurrentRotation";
 
 export default function TacticsBoard() {
   const { id } = useParams<{ id: string }>();
@@ -37,6 +38,12 @@ export default function TacticsBoard() {
 
   // tournamentId 存在時返回該資料夾頁，否則返回根列表。
   const backHref = matchBackHref(match?.tournamentId);
+
+  // issue #173：左欄 NavRail「戰」子清單的「+ 新增戰術」需要呼叫端注入的「現在站位」擷取
+  // 邏輯——這一頁的「現在」＝輪轉表當下排的站位。四個呼叫端（這裡、TacticsBoardPanel、
+  // 兩個列表頁）共用 lib/captureCurrentRotation，那個檔案開頭說明了為什麼可以抽成共用模組
+  // 卻不會弱化 #154 的單向依賴防線（重點：抽出去的同時把它一起加進 eslint 的禁止清單，
+  // 否則白板 store 就能靠 import 這個工具繞過原本擋掉的相依）。
 
   return (
     // issue #172：三欄骨架交給 AppShell（mode="B"＝戰術唯讀）。這一頁比另外四頁複雜，有三個
@@ -74,12 +81,21 @@ export default function TacticsBoard() {
     <AppShell
       mode="B"
       nav={
-        // 共用左側導覽軌（issue #160）：以前「回列表」「計分表」是這個 header 自己的
-        // <BackToMatchListButton> / <Link>，跟另外兩個 match-scoped 頁面各刻各的、樣式
-        // 不統一。現在三個頁共用同一個 MatchNavRail，導覽只在一個地方定義。外面包一層
-        // `relative z-10 h-full`，理由見上面第 2 點的說明。
+        // 共用左側導覽軌（issue #160 起，#173 收斂進 NavRail）：以前「回列表」「計分表」是
+        // 這個 header 自己的 <BackToMatchListButton> / <Link>，跟另外兩個 match-scoped 頁面
+        // 各刻各的、樣式不統一。現在三個頁共用同一個 NavRail，導覽只在一個地方定義。外面包
+        // 一層 `relative z-10 h-full`，理由見上面第 2 點的說明。
         <div className="relative z-10 h-full">
-          <MatchNavRail matchId={id ?? ""} backHref={backHref} active="board" />
+          <NavRail
+            matchId={id ?? ""}
+            backHref={backHref}
+            active="board"
+            captureCurrent={() => captureCurrentRotation(id ?? "")}
+            captureLabel={`將複製當下輪次的站位`}
+            // 這一頁沒有「先發還沒排好」這種需要停用的情境（輪轉表沒排位置時
+            // captureFromRotation 就回一張 players 是空陣列的快照，仍然是一個合法的
+            // CourtSnapshot——空戰術當起點本身沒問題，不需要為此停用按鈕）。
+          />
         </div>
       }
       aside={
