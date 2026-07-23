@@ -1,13 +1,15 @@
 import { useState } from "react";
 import { useParams, Link } from "wouter";
-import { ArrowLeft } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { ArrowLeft, Plus, SlidersHorizontal } from "lucide-react";
 import BackToMatchListButton from "@/components/BackToMatchListButton";
 import { useMatchList, useDeleteMatch } from "@/hooks/useMatches";
 import { useTournamentList } from "@/hooks/useTournaments";
+import { useScoreSheet } from "@/hooks/useScoreSheet";
 import MatchFormDialog from "@/components/MatchFormDialog";
-import MatchCard from "@/components/MatchCard";
+import ListItemCard from "@/components/ListItemCard";
+import ListScrollArea from "@/components/ListScrollArea";
+import MatchEntryLinks from "@/components/MatchEntryLinks";
+import { formatMatchDateTime, formatMatchResult } from "@/lib/matchSummary";
 import AppShell from "@/components/AppShell";
 import ListNavRail from "@/components/ListNavRail";
 import MatchInfoRail, { MatchListSelection } from "@/components/MatchInfoRail";
@@ -40,6 +42,8 @@ export default function TournamentDetail() {
   // 型別（而不是另外定義一個只收 string 的窄型別），是因為 MatchInfoRail 的 props 契約本來
   // 就是吃這個型別，兩邊維持同一份型別，日後兩個頁面的行為要保持一致時才不會各自飄掉。
   const [selected, setSelected] = useState<MatchListSelection>(null);
+  // 「3:0 勝」那格的來源，理由同 MatchList.tsx：直接讀共用 store 已有的紀錄，不逐場 hydrate。
+  const recordingsByMatch = useScoreSheet((s) => s.recordingsByMatch);
 
   const openCreateDialog = () => {
     setEditingMatch(null);
@@ -94,41 +98,86 @@ export default function TournamentDetail() {
       mode="A"
       nav={<ListNavRail selected={selected} />}
       aside={<MatchInfoRail selected={selected} />}
-      className="bg-white"
+      // issue #131：這頁的中央區原本還是 shadcn 預設的白底（`bg-white` ＋ Card/Button），
+      // #175 既然要整個重寫這塊，深色語言就在這裡一次做完，不在 #131 底下另外做一次白工。
+      // 背景（純色 ＋ 斜線網格）跟 MatchList.tsx 用同一組值：兩頁是同一個列表體驗的兩層，
+      // 進了資料夾底色卻換一種會很突兀；網格的作用是讓卡片的 backdrop-blur 有東西可以模糊
+      // （純色背景模糊完還是同一個純色，玻璃感等於沒發生）。
+      className="bg-[#0a0b07] font-dash text-[#f5f5f0]"
+      style={{
+        backgroundImage:
+          "repeating-linear-gradient(45deg, rgba(245,245,240,0.035) 0 1px, transparent 1px 28px)," +
+          "repeating-linear-gradient(-45deg, rgba(245,245,240,0.035) 0 1px, transparent 1px 28px)",
+      }}
     >
-      {/* 跟 MatchList.tsx 同一個原因：AppShell 中央主區本身不捲動，這頁的比賽清單也可能超過
-          一屏高，所以一樣包一層 overflow-y-auto，不然長清單會被裁掉、捲不到下面的項目
-          （原本 min-h-screen 的寫法是讓整個瀏覽器視窗捲動，換成 AppShell 的 h-screen 固定
-          版面之後，捲動責任要下放到這一層，不然是體驗上的退步）。 */}
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-3xl px-4 py-8">
+      {/* 版面與捲動的處理跟 MatchList.tsx 完全一致，說明見那邊。 */}
+      <div className="flex min-h-0 flex-1 flex-col px-8 py-8">
+        <div className="mx-auto flex min-h-0 w-full max-w-[1136px] flex-1 flex-col">
           <BackToMatchListButton className="mb-4 -ml-2" />
 
-          <div className="mb-6 flex items-center justify-between">
-            <h1 className="text-2xl font-bold">{tournament.name}</h1>
-            <Button onClick={openCreateDialog}>新增比賽</Button>
+          <div className="mb-8 flex items-center justify-between gap-4">
+            <h1 className="font-dash text-2xl font-bold">{tournament.name}</h1>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                // 停用理由同 MatchList.tsx：篩選行為還沒定案，留位但不做假按鈕。
+                disabled
+                aria-label="篩選（尚未開放）"
+                title="篩選功能規劃中"
+                className="flex h-11 w-11 items-center justify-center rounded-2xl border
+                  border-white/[0.12] text-[#a9b096] opacity-40"
+              >
+                <SlidersHorizontal className="h-[18px] w-[18px]" />
+              </button>
+              {/* 資料夾內頁沒有「新增資料夾」：目前不支援子資料夾（見 selected 那段的說明），
+                  所以操作列只留篩選＋新增比賽。 */}
+              <button
+                type="button"
+                onClick={openCreateDialog}
+                className="inline-flex h-11 items-center gap-1.5 rounded-2xl bg-[#c6f135] px-5 text-[13px]
+                font-semibold text-[#0a0b07] transition hover:brightness-110"
+              >
+                <Plus className="h-[15px] w-[15px]" />
+                新增比賽
+              </button>
+            </div>
           </div>
 
           {matches.length === 0 ? (
-            <Card>
-              <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
-                <p className="text-muted-foreground">這個資料夾裡還沒有比賽</p>
-                <Button onClick={openCreateDialog}>新增第一場比賽</Button>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="space-y-3">
-              {matches.map((match) => (
-                <MatchCard
-                  key={match.id}
-                  match={match}
-                  onEdit={() => openEditDialog(match)}
-                  onDelete={() => handleDelete(match.id)}
-                  selected={selected?.kind === "match" && selected.id === match.id}
-                  onSelect={() => setSelected({ kind: "match", id: match.id })}
-                />
-              ))}
+            <div className="flex flex-col items-center gap-4 rounded-2xl border border-white/[0.12] bg-white/[0.07] py-12 text-center backdrop-blur-md">
+              <p className="text-[#a9b096]">這個資料夾裡還沒有比賽</p>
+              <button
+                type="button"
+                onClick={openCreateDialog}
+                className="inline-flex h-10 items-center gap-1.5 rounded-full bg-[#c6f135] px-5 text-[13px]
+                font-semibold text-[#0a0b07] transition hover:brightness-110"
+              >
+                新增第一場比賽
+              </button>
             </div>
+          ) : (
+            <ListScrollArea>
+              {/* 卡距同 MatchList.tsx，見那邊的說明。 */}
+              <div className="space-y-5">
+                {matches.map((match) => (
+                  <ListItemCard
+                    key={match.id}
+                    kind="match"
+                    title={`vs ${match.opponent}`}
+                    dateText={formatMatchDateTime(match.dateTime)}
+                    secondaryText={formatMatchResult(
+                      recordingsByMatch[match.id]?.completedSets ?? [],
+                    )}
+                    selected={selected?.kind === "match" && selected.id === match.id}
+                    onSelect={() => setSelected({ kind: "match", id: match.id })}
+                    // 跟 MatchList.tsx 同一套：選中就地展開三個入口，不跳頁也不疊層。
+                    expandedContent={<MatchEntryLinks matchId={match.id} />}
+                    onEdit={() => openEditDialog(match)}
+                    onDelete={() => handleDelete(match.id)}
+                  />
+                ))}
+              </div>
+            </ListScrollArea>
           )}
         </div>
       </div>
