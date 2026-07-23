@@ -11,6 +11,7 @@ import {
   rotateZone,
   rotateLineup,
   assignPlayerToZone,
+  removePlayerFromZone,
 } from "./rotationLogic";
 import type { RotationPositions } from "../types/rotationTable";
 import type { MatchPlayer } from "../types/match";
@@ -241,6 +242,36 @@ describe("assignPlayerToZone", () => {
   it("不會就地改動傳進來的那份快照（純函式，回傳新物件）", () => {
     const original = { ...LINEUP };
     assignPlayerToZone(LINEUP, 3, "p1");
+    expect(LINEUP).toEqual(original);
+  });
+});
+
+// removePlayerFromZone 是 assignPlayerToZone 的反向操作（issue #174 跨欄拖曳：
+// 把人從號位拖回球員清單＝下場）。關鍵是「留空、不自動遞補」——見該函式的註解。
+describe("removePlayerFromZone", () => {
+  // 各個 describe 各自宣告一份滿編快照（跟上面幾個 block 的慣例一致）：測試之間不共用
+  // 可變資料，才不會有「上一個 it 改到它、下一個 it 就莫名其妙掛掉」的順序相依。
+  const LINEUP: LineupSnapshot = { 1: "p1", 2: "p2", 3: "p3", 4: "p4", 5: "p5", 6: "p6" };
+
+  it("把該號位清空，其他人原地不動", () => {
+    const next = removePlayerFromZone(LINEUP, 3);
+    expect(next[3]).toBeUndefined();
+    expect(Object.keys(next)).toHaveLength(5);
+    expect(next[1]).toBe(LINEUP[1]);
+  });
+
+  it("不會自動找人遞補（拿掉一個人就是 5 人，該補人的是使用者）", () => {
+    expect(Object.values(removePlayerFromZone(LINEUP, 3))).not.toContain(LINEUP[3]);
+  });
+
+  it("號位本來就沒人時原樣回傳，呼叫端不用先檢查", () => {
+    const partial = { 1: "p1" };
+    expect(removePlayerFromZone(partial, 4)).toEqual(partial);
+  });
+
+  it("不會就地改動傳進來的那份快照", () => {
+    const original = { ...LINEUP };
+    removePlayerFromZone(LINEUP, 3);
     expect(LINEUP).toEqual(original);
   });
 });
