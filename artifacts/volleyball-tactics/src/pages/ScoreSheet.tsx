@@ -3,8 +3,7 @@ import type { PointerEvent as ReactPointerEvent } from "react";
 import { useParams, Link } from "wouter";
 import { ArrowLeft } from "lucide-react";
 import AppShell from "@/components/AppShell";
-import MatchNavRail, { matchBackHref } from "@/components/MatchNavRail";
-import TacticsRailMenu from "@/components/TacticsRailMenu";
+import NavRail, { matchBackHref } from "@/components/NavRail";
 import { useMatchWithRoster } from "@/hooks/useMatches";
 import { useRotationTable } from "@/hooks/useRotationTable";
 import { useScoreSheet, useScoreSheetController } from "@/hooks/useScoreSheet";
@@ -333,15 +332,16 @@ export default function ScoreSheet() {
     setSelectedBenchPlayer(null);
   };
 
-  // 左側導覽軌「戰」按鈕的飛出選單（issue #160 C3）：TacticsRailMenu 自己管開關/清單/彈窗，
-  // 這裡只需要告訴它「計分頁的『現在站位』要怎麼查」——見 NewTacticDialog.tsx 開頭那段
-  // 「為什麼擷取來源要由呼叫端注入」的說明。計分頁的現在站位＝activeLineup（計分表自己的
-  // 逐局先發快照）。為什麼不直接讀全域輪轉表 store：activeLineup 已經幫我們處理好「開賽前讀
-  // 共用站位、開賽後讀該局凍結快照」的分岔，而戰術板要的是「計分頁此刻畫面上那一份」——
-  // 第 3 局進行中時，共用站位可能已經被改成第 4 局的先發了，直接讀 store 會抓到未來的陣容。
+  // 左側導覽軌（issue #173，原 issue #160 C3 的 TacticsRailMenu 已收斂進 NavRail）「戰」
+  // 子清單的「+ 新增戰術」：NavRail 自己管開關/清單/彈窗，這裡只需要告訴它「計分頁的『現在
+  // 站位』要怎麼查」——見 NewTacticDialog.tsx 開頭那段「為什麼擷取來源要由呼叫端注入」的
+  // 說明。計分頁的現在站位＝activeLineup（計分表自己的逐局先發快照）。為什麼不直接讀全域
+  // 輪轉表 store：activeLineup 已經幫我們處理好「開賽前讀共用站位、開賽後讀該局凍結快照」
+  // 的分岔，而戰術板要的是「計分頁此刻畫面上那一份」——第 3 局進行中時，共用站位可能已經
+  // 被改成第 4 局的先發了，直接讀 store 會抓到未來的陣容。
   const captureCurrentForBoard = () => {
     if (!activeLineup || !currentSet) {
-      // 理論上不會被呼叫到——TacticsRailMenu 在 captureDisabled 為真時，會把「擷取
+      // 理論上不會被呼叫到——NavRail 在 captureDisabled 為真時，會把「擷取
       // 目前站位」這個選項停用，使用者按不到這裡。但 captureCurrent 的型別要求永遠回傳一張
       // CourtSnapshot（不能是 null/undefined），所以保底給一張空站位，純粹滿足型別、不會
       // 真的被用到。
@@ -354,7 +354,7 @@ export default function ScoreSheet() {
 
   return (
     // issue #172：三欄骨架交給 AppShell（mode="A"）。以前這裡是自己手刻的
-    // `<div className="flex h-screen w-full">` + MatchNavRail + 一整個 `flex-1` 內容區，
+    // `<div className="flex h-screen w-full">` + NavRail + 一整個 `flex-1` 內容區，
     // 現在拆成 nav / aside / children 三個插槽——nav 是共用導覽軌（不變）；aside 是原本那塊
     // `w-72` 深色玻璃右欄（站位面板 + 比賽統計）的「內容」，寬度不再由這個頁面自己寫死
     // `w-72 flex-none`，改交給 AppShell 的 ASIDE_WIDTH 常數決定（這一環兩者剛好都是
@@ -373,21 +373,17 @@ export default function ScoreSheet() {
           "repeating-linear-gradient(-45deg, rgba(245,245,240,0.035) 0 1px, transparent 1px 28px)",
       }}
       nav={
-        <MatchNavRail
+        <NavRail
           matchId={id}
           backHref={backHref}
           active="record"
-          // issue #160 C3：計分頁的「戰」按鈕改成飛出選單（列出已存戰術＋新增戰術），取代原本
-          // 右欄底部單獨一顆「快速戰術板」按鈕——兩者是同一個功能，收進選單的「+」之後那顆
-          // 按鈕就沒有存在必要了（見下面右欄，那個區塊已整段移除）。
-          boardSlot={
-            <TacticsRailMenu
-              matchId={id}
-              captureCurrent={captureCurrentForBoard}
-              captureLabel="擷取目前計分站位"
-              captureDisabled={!activeLineup || !currentSet}
-            />
-          }
+          // issue #160 C3 起，計分頁的「戰」就不是單純導覽連結，而是列出已存戰術＋新增戰術的
+          // 子清單——#173 把這段行為從獨立的 TacticsRailMenu 收斂進 NavRail 本身，這裡不用
+          // 再像以前那樣透過 boardSlot 塞一整塊自訂 UI 進去，只需要把「擷取現在站位」這一小段
+          // 因頁而異的邏輯傳進去。
+          captureCurrent={captureCurrentForBoard}
+          captureLabel="擷取目前計分站位"
+          captureDisabled={!activeLineup || !currentSet}
         />
       }
       aside={

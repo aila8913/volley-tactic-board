@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import { useState } from "react";
 import { useParams } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -11,7 +11,6 @@ import {
 } from "@workspace/api-client-react";
 import { useTacticsBoard, isSessionDirty, DISCARD_MSG } from "../hooks/useTacticsBoard";
 import { useRotationTable } from "../hooks/useRotationTable";
-import { exportCourtAsPng, exportStateAsJson, importStateFromJson } from "../lib/exportUtils";
 import { captureFromRotation } from "../lib/courtSnapshot";
 import { Toaster } from "@/components/ui/toaster";
 import { useToast } from "@/hooks/use-toast";
@@ -19,12 +18,11 @@ import TacticsBrowsePanel from "./TacticsBrowsePanel";
 import TacticsViewingPanel from "./TacticsViewingPanel";
 import TacticsEditPanel from "./TacticsEditPanel";
 import NewTacticDialog from "./NewTacticDialog";
-import { SECONDARY_BTN_CLASS } from "../lib/tacticsBoardStyles";
 
 // 未存內容捨棄前的確認訊息（issue #154 PR C）：白板單向化後，唯一還會「弄丟東西」的動作
 // 就是捨棄一個編到一半、還沒存的 session——所以確認彈窗集中留在這裡（取代舊的載入覆蓋確認）。
 // 判準（isSessionDirty）與訊息（DISCARD_MSG）本身住在 hooks/useTacticsBoard.ts，這裡只是
-// 使用者之一：飛出選單 TacticsRailMenu、切輪次的 RotationSwitcher 也走同一條路。
+// 使用者之一：左欄導覽 NavRail 的戰術子清單、切輪次的 RotationSwitcher 也走同一條路。
 
 // ── issue #160 C2：戰術頁狀態機 + 面板拆檔 ──
 //
@@ -53,7 +51,6 @@ export default function TacticsBoardPanel() {
   const enterEditFromViewing = useTacticsBoard((s) => s.enterEditFromViewing);
   const setCourtView = useTacticsBoard((s) => s.setCourtView);
   const loadProject = useTacticsBoard((s) => s.loadProject);
-  const importState = useTacticsBoard((s) => s.importState);
   const buildSavedTactic = useTacticsBoard((s) => s.buildSavedTactic);
   const discardSession = useTacticsBoard((s) => s.discardSession);
 
@@ -72,7 +69,6 @@ export default function TacticsBoardPanel() {
   );
 
   const { toast } = useToast();
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
   const [newTacticDialogOpen, setNewTacticDialogOpen] = useState(false);
 
@@ -128,35 +124,6 @@ export default function TacticsBoardPanel() {
   // 渲染，matchId 實務上一定存在；抽出這個守衛後，下面所有 handler 都能把 matchId 當
   // string 用，不必每個呼叫點各自防呆。
   if (!matchId) return null;
-
-  const situationLabel = session?.name || "tactics";
-
-  const handleExportPNG = () => {
-    exportCourtAsPng("court-wrapper", `${situationLabel}_輪次${currentRotation + 1}`);
-    toast({ title: "匯出成功", description: "PNG 下載中..." });
-  };
-
-  // 匯出 JSON：直接用 buildSavedTactic() 組出 v2 格式（單景快照）。白板單向化後，存檔/匯出
-  // 的內容就是「當前 session 這一景」，不再需要回頭去併輪轉表兩份資料。
-  const handleExportJSON = () => {
-    exportStateAsJson(buildSavedTactic(), situationLabel);
-    toast({ title: "匯出成功", description: "JSON 下載中..." });
-  };
-
-  const handleImportJSON = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      const data = await importStateFromJson(file);
-      // importStateFromJson 回傳 unknown（JSON 檔內容沒驗證），直接交給 importState——
-      // 它內部走 parseSavedTactic 用 zod 驗證，格式錯誤會拋錯、落到下面的 catch 顯示「匯入失敗」。
-      importState(data);
-      toast({ title: "匯入成功", description: "戰術板已更新（唯讀檢視）" });
-    } catch {
-      toast({ title: "匯入失敗", description: "檔案格式錯誤", variant: "destructive" });
-    }
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  };
 
   // 點清單裡的一筆已存戰術＝切到唯讀檢視這張快照（browse/edit 模式共用同一顆 TacticsList，
   // 所以這顆 handler 也共用）。若正在編一個沒存的 session，會被清掉，先確認。
@@ -262,39 +229,9 @@ export default function TacticsBoardPanel() {
         )}
       </div>
 
-      <div className="border-t border-white/[0.12] p-3">
-        <h2 className="mb-2 text-[15px] font-bold">分享匯出</h2>
-        <div className="grid grid-cols-2 gap-1.5">
-          <button
-            onClick={handleExportPNG}
-            className={`py-1.5 text-xs font-bold ${SECONDARY_BTN_CLASS}`}
-            data-testid="button-export-png"
-          >
-            匯出 PNG
-          </button>
-          <button
-            onClick={handleExportJSON}
-            className={`py-1.5 text-xs font-bold ${SECONDARY_BTN_CLASS}`}
-            data-testid="button-export-json"
-          >
-            匯出 JSON
-          </button>
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className={`py-1.5 text-xs font-bold ${SECONDARY_BTN_CLASS}`}
-            data-testid="button-import-json"
-          >
-            匯入 JSON
-          </button>
-          <input
-            type="file"
-            accept=".json"
-            className="hidden"
-            ref={fileInputRef}
-            onChange={handleImportJSON}
-          />
-        </div>
-      </div>
+      {/* issue #173：「分享匯出」這一整塊（PNG/JSON 匯出、JSON 匯入）已經搬到左欄 NavRail
+          的「出」子清單，不再是戰術板專屬——理由見 NavRail.tsx 開頭的說明：匯出是全站行為，
+          不該只藏在戰術板的編輯模式裡。這裡不用再留一份重複的按鈕。 */}
 
       <NewTacticDialog
         open={newTacticDialogOpen}

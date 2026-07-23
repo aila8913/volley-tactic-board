@@ -22,8 +22,9 @@
 > 平行 PR 就落在不同行段、git 幾乎都能自動合併，不用真的把檔案拆兩份、也保住一眼 catch-up。
 > 上面的 `_Last updated_` 是共用一行摘要（誰更新了什麼），保持精簡、別長成段落。
 
-\_Last updated: 2026-07-22 (aila) — M1.5 拆成七環（#172–#178）＋`docs/layout-spec.md`，環 1 已合、
-環 3 Stage A PR #181；同日 (tang) 計分表中間計分區＋球場材質補完深色語言（PR #182/#167）。\_
+\_Last updated: 2026-07-23 (aila) — 環 2（#173）左欄導覽落地並關閉，展開寬度／推開版面兩條規格
+經 PO 實機推翻並回寫 layout-spec §2.2；前一批：M1.5 七環拆解、環 1（#172）、環 3 Stage A（#181），
+(tang) 計分表／球場材質深色語言（PR #182/#167）。\_
 
 ## Current state
 
@@ -104,6 +105,24 @@ lives in git log + the issues named).
   比賽卡片卡身可單擊選取、**不自動選第一場**（使用者未表達意圖前不該讓站位進可寫狀態）。
   「已記完」用新純函式 `getMatchWinner` 判**勝隊**而非局數（三戰兩勝 2:0 也可能已結束）。
   **Stage B（統計格）blocked on M2、跨欄拖曳（DnD）未做，故 #174 不關。**
+- **環 2（#173）左欄導覽落地：`NavRail` 一顆取代 `MatchNavRail` ＋ `TacticsRailMenu`**（收合軌
+  ↔ 展開側欄、active 整行強階選取態、「戰」子清單、承接 #17 第 3 節的匯出入口「出」）。
+  **實作後 PO 依實機畫面推翻兩條既有規格**（已回寫 `docs/layout-spec.md` §2.2）：展開寬度
+  370→176px（`w-44`）；展開改成**推開版面、中央跟著壓縮**，不是 #172 註解裡寫死的浮層方案
+  ——浮層會遮住使用者正要點的中央內容。欄寬仍由 `AppShell` 單一常數擁有，用 CSS
+  `hover:`/`focus-within:` 變體驅動，不把 NavRail 的展開 state 拉上去當 prop（欄寬歸 shell、
+  內容歸 rail，各自對同一個瀏覽器事實反應、天然同步）。**踩到的雷**：Tailwind class 是建置時
+  掃描原始碼字串產生的，`hover:${變數}` 拼出來的名字掃不到、執行期是條不存在的規則。
+  **抓到一個四項檢查全綠、但一定會發生的行為問題**：`NavRail` 現在掛在全站五頁，而
+  `useListTactics(undefined)` 的語意是「不帶過濾條件查」＝要全帳號所有戰術，列表頁明明不會
+  渲染那份清單卻每次進頁面白打一支；補 `enabled` 才擋掉。**另一個是實機才看得到的**：右欄用
+  #174 的 `selected` 判斷選了哪一場，左欄卻寫死「列表頁永遠沒有 matchId」，於是點了卡片右欄
+  站位都出來了、左欄還在說「先選一場比賽」——新增 `ListNavRail` 把兩欄接到同一個選取狀態。
+  `captureCurrentRotation` 抽成共用工具（本來要變四份複製），抽的同時**把它加進 eslint 的
+  禁止清單**：它會讀輪轉表 store，只放進 `lib/` 而不擋，白板 store 就能靠 import 它繞過 #154
+  焊在 CI 上的單向依賴禁令（lint 比對的是 import 路徑，看不出這種轉包）。
+  #173 驗收項全數完成、已關。實機驗收時另外發現右欄「點擊排站位」在列表頁失效（沒開賽也
+  放不上去），連同一直沒做的跨欄拖曳一起歸 #174。
 - **Schema foundations for stats are in place:** `lineups`（起始先發，一局一 row）、
   `substitutions`（換人，存比分快照）、`events.outcome`（得/失/球續 enum）、`people`＋`teams`
   （跨場跨隊身分／分組標籤，`players.personId`/`matches.teamId` nullable FK、`onDelete: set null`
