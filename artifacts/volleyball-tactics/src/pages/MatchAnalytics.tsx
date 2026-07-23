@@ -29,7 +29,7 @@ const SECONDARY_BUTTON_CLASS =
   "bg-white/[0.05] px-5 py-2 text-sm font-bold text-[#f5f5f0] transition " +
   "hover:border-[#c6f135] hover:text-[#c6f135]";
 
-// 每個統計區塊共用的玻璃卡片外觀，跟 MatchCard.tsx 的卡片語言一致（rounded-2xl +
+// 每個統計區塊共用的玻璃卡片外觀，跟 ListItemCard.tsx 的卡片語言一致（rounded-2xl +
 // border-white/[0.12] + bg-white/[0.07] + backdrop-blur-md）。
 const GLASS_SECTION_CLASS =
   "rounded-2xl border border-white/[0.12] bg-white/[0.07] p-4 shadow-lg shadow-black/35 backdrop-blur-md";

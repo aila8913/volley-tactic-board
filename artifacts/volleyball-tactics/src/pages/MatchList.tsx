@@ -1,14 +1,18 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { Folder, Pencil, Trash2, Plus } from "lucide-react";
+import { Plus, SlidersHorizontal } from "lucide-react";
 import { useMatchList, useDeleteMatch } from "@/hooks/useMatches";
 import { useTournamentList, useDeleteTournament } from "@/hooks/useTournaments";
+import { useScoreSheet } from "@/hooks/useScoreSheet";
 import MatchFormDialog from "@/components/MatchFormDialog";
 import TournamentFormDialog from "@/components/TournamentFormDialog";
-import MatchCard from "@/components/MatchCard";
+import ListItemCard from "@/components/ListItemCard";
+import ListScrollArea from "@/components/ListScrollArea";
+import MatchEntryLinks from "@/components/MatchEntryLinks";
 import AppShell from "@/components/AppShell";
 import ListNavRail from "@/components/ListNavRail";
 import MatchInfoRail, { MatchListSelection } from "@/components/MatchInfoRail";
+import { formatMatchDateTime, formatMatchResult } from "@/lib/matchSummary";
 import { Match } from "@/types/match";
 import { Tournament } from "@/types/tournament";
 
@@ -36,6 +40,13 @@ export default function MatchList() {
   // 進頁面時右欄是空狀態，理由見 MatchInfoRail 空狀態分支的註解：使用者還沒表達意圖前，
   // 不該把任何一場比賽的站位放進「可編輯」狀態。
   const [selected, setSelected] = useState<MatchListSelection>(null);
+  // 卡片右端「3:0 勝」那格的來源。直接讀共用 store 的既有內容，**不**逐場呼叫
+  // useScoreSheetController 去 hydrate——那支會為每一場比賽各發一輪 sets/rallies 請求，
+  // 列表有 30 場就是 30 輪，為了一行小字讓進頁變慢完全不划算。還沒被開啟過的比賽在 store
+  // 裡沒有紀錄，formatMatchResult 會回「尚未開賽」，語意上也剛好對得上。
+  const recordingsByMatch = useScoreSheet((s) => s.recordingsByMatch);
+  const matchResultText = (matchId: string) =>
+    formatMatchResult(recordingsByMatch[matchId]?.completedSets ?? []);
 
   // 「最上層」比賽 = 沒有歸到任何資料夾（tournamentId 為 null）。
   // #117 修好後這裡回到單純判斷 !m.tournamentId：資料夾已進 DB、tournamentId 是帶 cascade 的
@@ -115,22 +126,33 @@ export default function MatchList() {
           "repeating-linear-gradient(-45deg, rgba(245,245,240,0.035) 0 1px, transparent 1px 28px)",
       }}
     >
-      {/* AppShell 的中央主區本身不會捲動（overflow-hidden 在最外層），這頁的清單可能很長，
-          所以在中央主區內部自己包一層 overflow-y-auto，讓列表能捲、左右兩欄固定不跟著捲走。
-          min-h-0 跟 AppShell 裡中央主區的 min-w-0 是同一個 flexbox 坑的另一個方向：flex 子項
-          的 min-height 預設也是 auto（＝至少要跟內容一樣高），所以只寫 overflow-y-auto 而不寫
-          min-h-0 的話，這一層會被內容撐到比視窗還高、根本不會出現捲軸，超出的部分直接被最外層
-          的 overflow-hidden 裁掉——清單一長就再也點不到下面的比賽。flex-1 則是讓它吃滿中央
-          主區剩下的高度。 */}
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-3xl px-4 py-8">
-          <div className="mb-6 flex items-center justify-between">
+      {/* 中央主區（issue #175 環 4）。
+          捲動責任下放給 ListScrollArea（AppShell 最外層是 overflow-hidden，沒人接手的話長清單
+          會被裁掉），它同時負責藏掉原生捲軸、在右邊畫那條 8px 指示條。
+          max-w-[1136px] 是 Figma 的內容寬基準，超寬螢幕下不讓卡片無限拉長。 */}
+      <div className="flex min-h-0 flex-1 flex-col px-8 py-8">
+        <div className="mx-auto flex min-h-0 w-full max-w-[1136px] flex-1 flex-col">
+          <div className="mb-8 flex items-center justify-between gap-4">
             <h1 className="font-dash text-2xl font-bold">比賽列表</h1>
-            <div className="flex gap-2">
+            {/* §3.1 的操作列，由左至右：篩選（方形圖示鈕）、新增資料夾、新增比賽。 */}
+            <div className="flex gap-3">
+              <button
+                type="button"
+                // 篩選的行為（要能篩什麼欄位、跟資料夾階層怎麼互動）還沒有定案，線框稿只畫了
+                // 這顆鈕的位置。這裡照版面留位、但明確標成停用，不做一顆點下去沒反應的假按鈕
+                // ——假按鈕比沒有按鈕更糟，使用者會以為是壞掉。
+                disabled
+                aria-label="篩選（尚未開放）"
+                title="篩選功能規劃中"
+                className="flex h-11 w-11 items-center justify-center rounded-2xl border
+                  border-white/[0.12] text-[#a9b096] opacity-40"
+              >
+                <SlidersHorizontal className="h-[18px] w-[18px]" />
+              </button>
               <button
                 type="button"
                 onClick={openCreateTournamentDialog}
-                className="inline-flex h-10 items-center gap-1.5 rounded-full border border-white/[0.26]
+                className="inline-flex h-11 items-center gap-1.5 rounded-2xl border border-white/[0.26]
                 px-5 text-[13px] font-semibold text-[#f5f5f0] transition hover:border-[#c6f135]
                 hover:text-[#c6f135]"
               >
@@ -140,7 +162,7 @@ export default function MatchList() {
               <button
                 type="button"
                 onClick={openCreateMatchDialog}
-                className="inline-flex h-10 items-center gap-1.5 rounded-full bg-[#c6f135] px-5 text-[13px]
+                className="inline-flex h-11 items-center gap-1.5 rounded-2xl bg-[#c6f135] px-5 text-[13px]
                 font-semibold text-[#0a0b07] transition hover:brightness-110"
               >
                 <Plus className="h-[15px] w-[15px]" />
@@ -166,76 +188,44 @@ export default function MatchList() {
               </button>
             </div>
           ) : (
-            <div className="space-y-3">
-              {items.map((item) =>
-                item.kind === "tournament" ? (
-                  <article
-                    key={item.data.id}
-                    onClick={() => setSelected({ kind: "tournament", id: item.data.id })}
-                    onDoubleClick={() => navigate(`/tournaments/${item.data.id}`)}
-                    // 選中樣式跟 MatchCard.tsx 用同一套環 0 強階定案，transition 只轉
-                    // border-color/box-shadow、不轉 background-color，理由同見那邊的註解
-                    // （Tailwind v4.3.0 對任意值 hex+透明度的 color-mix() codegen 缺色彩
-                    // 空間關鍵字，拿去當轉場終點值會卡在動畫起點）。
-                    className={`relative flex cursor-pointer select-none flex-col rounded-2xl border
-                    p-5 shadow-lg shadow-black/35 backdrop-blur-md transition-[border-color,box-shadow] ${
-                      selected?.kind === "tournament" && selected.id === item.data.id
-                        ? "border-transparent bg-[#c6f135]/15 ring-1 ring-inset ring-[#c6f135]"
-                        : "border-white/[0.12] bg-white/[0.07]"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-2.5">
-                      <div className="flex items-center gap-3">
-                        <span className="flex h-[38px] w-[38px] flex-shrink-0 items-center justify-center rounded-xl bg-[#c6f135]/15 text-[#c6f135]">
-                          <Folder className="h-[19px] w-[19px]" />
-                        </span>
-                        <div>
-                          <h2 className="font-dash text-[17px] font-bold">{item.data.name}</h2>
-                          <p className="text-xs text-[#a9b096]">
-                            {matches.filter((m) => m.tournamentId === item.data.id).length} 場比賽
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex flex-shrink-0 gap-1">
-                        <button
-                          type="button"
-                          aria-label="編輯資料夾"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openEditTournamentDialog(item.data);
-                          }}
-                          className="flex h-[30px] w-[30px] items-center justify-center rounded-full
-                          text-[#a9b096] transition hover:bg-white/[0.12] hover:text-[#f5f5f0]"
-                        >
-                          <Pencil className="h-[15px] w-[15px]" />
-                        </button>
-                        <button
-                          type="button"
-                          aria-label="刪除資料夾"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteTournament(item.data);
-                          }}
-                          className="flex h-[30px] w-[30px] items-center justify-center rounded-full
-                          text-[#a9b096] transition hover:bg-[#ef4444]/15 hover:text-[#ef4444]"
-                        >
-                          <Trash2 className="h-[15px] w-[15px]" />
-                        </button>
-                      </div>
-                    </div>
-                  </article>
-                ) : (
-                  <MatchCard
-                    key={item.data.id}
-                    match={item.data}
-                    onEdit={() => openEditMatchDialog(item.data)}
-                    onDelete={() => handleDeleteMatch(item.data.id)}
-                    selected={selected?.kind === "match" && selected.id === item.data.id}
-                    onSelect={() => setSelected({ kind: "match", id: item.data.id })}
-                  />
-                ),
-              )}
-            </div>
+            <ListScrollArea>
+              {/* 卡距跟著卡片高度一起收（PO 回饋「上下太寬」）：Figma 的 53px 是配 252px 高的
+                  卡片畫的比例，卡片降到 104 之後同樣鬆度大約是 20px。 */}
+              <div className="space-y-5">
+                {items.map((item) =>
+                  item.kind === "tournament" ? (
+                    <ListItemCard
+                      key={`t-${item.data.id}`}
+                      kind="tournament"
+                      title={item.data.name}
+                      secondaryText={`${matches.filter((m) => m.tournamentId === item.data.id).length} 場比賽`}
+                      selected={selected?.kind === "tournament" && selected.id === item.data.id}
+                      onSelect={() => setSelected({ kind: "tournament", id: item.data.id })}
+                      onOpen={() => navigate(`/tournaments/${item.data.id}`)}
+                      onEdit={() => openEditTournamentDialog(item.data)}
+                      onDelete={() => handleDeleteTournament(item.data)}
+                    />
+                  ) : (
+                    <ListItemCard
+                      // key 加 t-/m- 前綴：資料夾與比賽是兩張不同的表，id 各自從 1 開始，
+                      // 混在同一個列表裡不加前綴就會出現重複 key，React 會把兩個項目認成同一個。
+                      key={`m-${item.data.id}`}
+                      kind="match"
+                      title={`vs ${item.data.opponent}`}
+                      dateText={formatMatchDateTime(item.data.dateTime)}
+                      secondaryText={matchResultText(item.data.id)}
+                      selected={selected?.kind === "match" && selected.id === item.data.id}
+                      onSelect={() => setSelected({ kind: "match", id: item.data.id })}
+                      // 比賽卡片沒有 onOpen（不跳頁）：三個入口改成選中後在卡片裡就地展開，
+                      // 見 MatchEntryLinks 開頭記的那段演進。
+                      expandedContent={<MatchEntryLinks matchId={item.data.id} />}
+                      onEdit={() => openEditMatchDialog(item.data)}
+                      onDelete={() => handleDeleteMatch(item.data.id)}
+                    />
+                  ),
+                )}
+              </div>
+            </ListScrollArea>
           )}
         </div>
       </div>
