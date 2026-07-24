@@ -3,7 +3,8 @@ import { SECONDARY_BTN_CLASS, PRIMARY_BTN_CLASS } from "../lib/tacticsBoardStyle
 // viewing 模式（viewingScene !== null）——issue #160 C2 三模式裡最單薄的一個：正在看一張
 // 已存戰術的「唯讀照片」（見 useTacticsBoard.ts 的 viewingScene / PR B 的說明），畫面上
 // 只有「這是哪一張」的名稱跟「編輯」按鈕，沒有畫筆工具、也沒有球員名單——這些都要先按
-// 「編輯」把這張照片升級成可改的 session 才會出現（見 TacticsEditPanel）。
+// 「編輯」把這張照片升級成可改的 session 才會出現（見 TacticsEditToolRail，issue #176
+// 把原本的 TacticsEditPanel 搬進右欄工具軌）。
 interface TacticsViewingPanelProps {
   viewingTacticName: string;
   onEdit: () => void;
