@@ -6,7 +6,7 @@ import { useTacticsBoard, isSessionDirty, DISCARD_MSG } from "../hooks/useTactic
 import { useRotationTable } from "../hooks/useRotationTable";
 import { useToast } from "@/hooks/use-toast";
 import { exportCourtAsPng, exportStateAsJson, importStateFromJson } from "../lib/exportUtils";
-import NewTacticDialog from "./NewTacticDialog";
+import NewTacticDialogModal from "./NewTacticDialogModal";
 import type { CourtSnapshot } from "../types/courtSnapshot";
 
 // issue #173（layout-spec 環 2）：全站左側導覽，取代原本分開的 MatchNavRail（收合直排導覽軌）
@@ -100,6 +100,9 @@ export default function NavRail(props: NavRailProps) {
   const loadProject = useTacticsBoard((s) => s.loadProject);
   const buildSavedTactic = useTacticsBoard((s) => s.buildSavedTactic);
   const importState = useTacticsBoard((s) => s.importState);
+  // issue #177：戰術板頁的「+ 新增戰術」改開中央浮層（store 旗標），其他頁面仍走本檔案自己
+  // 管理的全螢幕彈窗（見下面 handleOpenNewTacticDialog 的分支）。
+  const openNewTactic = useTacticsBoard((s) => s.openNewTactic);
   const isDirty = isSessionDirty(session);
   // 「目前這一筆戰術是不是被打開著」的判準：編輯中看 session.serverId，唯讀檢視看
   // viewingTacticId——兩者不會同時有值（session 存在時 viewingScene 一定是 null，見
@@ -177,8 +180,19 @@ export default function NavRail(props: NavRailProps) {
   // 編、還沒存的 session，有的話先問過使用者要不要捨棄（isSessionDirty/DISCARD_MSG 是
   // useTacticsBoard.ts 共用的判準，三個消費者：這裡、RotationSwitcher、原本的
   // TacticsBoardPanel，都不各自重寫一份）。
+  //
+  // issue #177：確認完之後分兩條路——已經在戰術板頁（active === "board"）時，中央就有球場
+  // 欄可以蓋，改開 store 管的中央浮層（NewTacticDialog.tsx，TacticsBoard.tsx 會渲染它）；
+  // 其他頁面沒有中央球場欄，維持原本「開全螢幕彈窗、選完起點再導去戰術板頁」的行為，走這個
+  // 元件自己的 local state + NewTacticDialogModal。分成兩條路是因為「中央浮層只蓋中央欄」
+  // 這件事本來就要求呼叫時「中央欄要存在」，戰術板頁以外的頁面沒有這個前提，硬用同一個浮層
+  // 只會變成蓋滿整頁的怪東西（等於重新發明一次 Modal，不如直接沿用）。
   const handleOpenNewTacticDialog = () => {
     if (isDirty && !window.confirm(DISCARD_MSG)) return;
+    if (active === "board") {
+      openNewTactic();
+      return;
+    }
     setDialogOpen(true);
   };
 
@@ -460,11 +474,14 @@ export default function NavRail(props: NavRailProps) {
         </div>
       )}
 
-      {/* NewTacticDialog 只在有 matchId 時可能被開啟（handleOpenNewTacticDialog 只有 matchId
-          存在的收合／展開分支才連得到），沒有 matchId 就不渲染，跟原本 TacticsRailMenu 的
-          作法一致。 */}
+      {/* NewTacticDialogModal 只在有 matchId 時可能被開啟（handleOpenNewTacticDialog 只有
+          matchId 存在的收合／展開分支才連得到），沒有 matchId 就不渲染，跟原本
+          TacticsRailMenu 的作法一致。這裡渲染的永遠是全螢幕版——active === "board" 時
+          handleOpenNewTacticDialog 根本不會把 dialogOpen 設成 true（改開 store 的中央浮層），
+          所以這個彈窗實際上只會在非戰術板頁被打開，見上面 handleOpenNewTacticDialog 的
+          說明。 */}
       {matchId && (
-        <NewTacticDialog
+        <NewTacticDialogModal
           open={dialogOpen}
           onOpenChange={setDialogOpen}
           matchId={matchId}

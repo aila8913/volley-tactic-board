@@ -60,6 +60,19 @@ export interface WhiteboardSession {
   // undo/redo 歷史：sceneContent 的堆疊，index 指向「畫面現況那一格」（#147 先改後記約定）。
   history: SceneContent[];
   historyIndex: number;
+  // 這個 session 目前是「佈陣模式」（mode D：只能拖球員上下場、調位置，畫筆/防守範圍工具
+  // 都還沒開放）還是「編輯模式」（mode C：完整工具軌）——issue #177。
+  //
+  // 為什麼這裡要存一個顯式旗標，而不是像 #160 當初反對的那樣，另外推導一個等價的東西？
+  // #160 反對的是「把可以從既有欄位算出來的東西，多存一份 enum/flag」——那種重複會有兩份
+  // 真相對不上的風險。但 D／C 這兩態不屬於這種情況：兩者的 session 形狀完全一樣（同一張
+  // snapshot、同一份 history），畫面上只差在「工具軌收起來、右欄改放球員名單、球場右上角
+  // 那顆鈕文案是『確定』」——這件事在其他任何欄位裡都找不到對應的推導依據（不像
+  // `session !== null` 天生對應「有沒有在編」，D/C 沒有這種天然可推導的信號）。硬要推導，
+  // 只會逼自己發明一個假的判準（例如「history.length === 1 就是佈陣模式」——但編輯到一半
+  // undo 回第 0 格也會變成 history.length === 1，會把使用者誤判回佈陣模式）。所以這裡選擇
+  // 誠實地多存一個位元，讓「現在是 D 還是 C」永遠只有一個地方定義。
+  arranging: boolean;
 }
 
 // 深拷貝小工具：undo 歷史每一格都必須是「當下的獨立快照」，不能跟 session 內的陣列共用
@@ -96,12 +109,20 @@ interface TacticsBoardStore {
   selectedObjectId: string | null;
   courtView: "rotation" | "tactics";
   labelToggles: { zone: boolean };
+  // 「新增戰術」中央浮層（issue #177）開關——戰術板頁按左欄或瀏覽面板的「+ 新增戰術」時
+  // 開啟，選了起點（或按取消）就關閉。放在這顆 store 而不是頁面的 local state，是因為
+  // 「開這個浮層」的觸發點（NavRail 的左欄子清單、TacticsBrowsePanel 的按鈕）跟「畫這個
+  // 浮層」的地方（TacticsBoard.tsx 中央欄）分屬不同元件，用全域旗標串起來最直接——跟
+  // courtView/activeTool 這些既有的全域暫時 UI state 同一種性質，不需要另外開一顆 context。
+  newTacticOpen: boolean;
 
   // 全域畫面狀態的 setter
   setActiveTool: (tool: ToolType) => void;
   setSelectedObjectId: (id: string | null) => void;
   setCourtView: (v: "rotation" | "tactics") => void;
   toggleLabel: (key: keyof TacticsBoardStore["labelToggles"]) => void;
+  openNewTactic: () => void;
+  closeNewTactic: () => void;
   // 切場（換 matchId）時把所有暫時狀態歸零：丟掉 session、清掉唯讀檢視、跳回輪轉視圖。
   // matchId 是選填的「目前要顯示哪一場」——傳了它，resetBoardView 才有辦法分辨「跨場切換」
   // 跟「同一場內部的一次交棒」（見下面實作的說明）。
@@ -117,12 +138,20 @@ interface TacticsBoardStore {
       defenseRanges?: DefenseRange[];
       name?: string;
       serverId?: string | null;
+      // 開啟時是不是先進佈陣模式（mode D）。預設 false＝直接進編輯模式（mode C），這樣
+      // enterEditFromViewing（面板「編輯」按鈕）跟計分頁 C3 交棒進來的既有呼叫端完全不用
+      // 改，行為維持原樣——只有 issue #177 新增的「+ 新增戰術」流程會明確傳 true。
+      arranging?: boolean;
     },
   ) => void;
   discardSession: () => void;
   // 把目前唯讀檢視中的那張 scene 升級成可編輯 session（面板「編輯」按鈕）。
   enterEditFromViewing: () => void;
   setSessionName: (name: string) => void;
+  // 佈陣模式（D）按「確定」＝把 arranging 收回 false，進入編輯模式（C）。只動這一個欄位，
+  // history/historyIndex 等其餘欄位原封不動——佈陣期間拖上場的球員本來就已經記進歷史了，
+  // 「確定」單純是切換右欄/工具軌要顯示什麼，不是一個新的編輯動作。沒有 session 時 no-op。
+  confirmArrangement: () => void;
 
   // ── session 內的編輯動作（都作用在當前 session；沒有 session 時是 no-op）──
   // 球員以 sourcePlayerId 當 key：可編輯 session 的球員都來自 roster 擷取，sourcePlayerId 必為
@@ -183,6 +212,10 @@ export const useTacticsBoard = create<TacticsBoardStore>()((set, get) => ({
   selectedObjectId: null,
   courtView: "rotation",
   labelToggles: { zone: false },
+  newTacticOpen: false,
+
+  openNewTactic: () => set({ newTacticOpen: true }),
+  closeNewTactic: () => set({ newTacticOpen: false }),
 
   setActiveTool: (tool) => set({ activeTool: tool, selectedObjectId: null }),
   setSelectedObjectId: (id) => set({ selectedObjectId: id }),
@@ -224,6 +257,11 @@ export const useTacticsBoard = create<TacticsBoardStore>()((set, get) => ({
         courtView: keepSession ? state.courtView : "rotation",
         selectedObjectId: null,
         activeTool: "select",
+        // issue #177：「新增戰術」中央浮層的開關也是全域暫時 UI 狀態，一起歸零。否則使用者
+        // 在 A 場開了浮層、沒選就切走，這個旗標會留在 store，下次一 mount 戰術板（這個 reset
+        // 就是在 mount／換場時跑的）浮層就會無來由地自己冒出來。跟上面那些 selectedObjectId／
+        // activeTool 同一種性質，不受 keepSession 影響——它跟「是不是同一場」無關，永遠該關。
+        newTacticOpen: false,
       };
     }),
 
@@ -244,6 +282,7 @@ export const useTacticsBoard = create<TacticsBoardStore>()((set, get) => ({
         { players: clone(players), markers: clone(markers), defenseRanges: clone(defenseRanges) },
       ],
       historyIndex: 0,
+      arranging: opts?.arranging ?? false,
     };
     set({
       session,
@@ -258,6 +297,9 @@ export const useTacticsBoard = create<TacticsBoardStore>()((set, get) => ({
 
   discardSession: () =>
     set({ session: null, courtView: "rotation", selectedObjectId: null, activeTool: "select" }),
+
+  confirmArrangement: () =>
+    set((state) => (state.session ? { session: { ...state.session, arranging: false } } : state)),
 
   enterEditFromViewing: () => {
     const { viewingScene, viewingTacticId, viewingTacticName } = get();
