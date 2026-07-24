@@ -228,6 +228,57 @@ describe("編輯已存戰術 + 存檔（issue #154 PR C）", () => {
   });
 });
 
+// issue #177：新增戰術流程加了「佈陣模式（D）」，session 多一個 arranging 旗標區分
+// D／C 兩態。這裡釘住旗標本身的生命週期，不重複測上面已經涵蓋過的 history/undo 行為。
+describe("佈陣 D → 編輯 C 狀態機（issue #177）", () => {
+  it("startSession 預設 arranging=false（既有呼叫端維持原行為，直接進編輯模式）", () => {
+    tb().startSession(snapshot([snapPlayer("p1")]));
+    expect(tb().session?.arranging).toBe(false);
+  });
+
+  it("startSession({ arranging: true }) 開的 session 先停在佈陣模式", () => {
+    tb().startSession(snapshot([]), { arranging: true });
+    expect(tb().session?.arranging).toBe(true);
+  });
+
+  it("confirmArrangement 把 arranging 收回 false，其餘欄位（history 等）不受影響", () => {
+    tb().startSession(snapshot([]), { arranging: true });
+    tb().placeSessionPlayer(snapPlayer("p1"));
+    const historyBefore = tb().session?.history;
+    const historyIndexBefore = tb().session?.historyIndex;
+
+    tb().confirmArrangement();
+
+    expect(tb().session?.arranging).toBe(false);
+    expect(tb().session?.history).toBe(historyBefore); // 同一個參照，沒有被動過
+    expect(tb().session?.historyIndex).toBe(historyIndexBefore);
+    // 已經拖上場的球員不受「確定」影響。
+    expect(tb().session?.snapshot.players.map((p) => p.sourcePlayerId)).toEqual(["p1"]);
+  });
+
+  it("沒有 session 時 confirmArrangement 是 no-op", () => {
+    expect(tb().session).toBeNull();
+    tb().confirmArrangement();
+    expect(tb().session).toBeNull();
+  });
+
+  it("enterEditFromViewing（面板「編輯」按鈕）維持原行為：直接進編輯模式，不經過佈陣", () => {
+    tb().loadProject(legacySave([player("p1")]), "tid", "x");
+    tb().enterEditFromViewing();
+    expect(tb().session?.arranging).toBe(false);
+  });
+});
+
+describe("新增戰術中央浮層開關（issue #177）", () => {
+  it("openNewTactic/closeNewTactic 切換 newTacticOpen，預設是 false", () => {
+    expect(tb().newTacticOpen).toBe(false);
+    tb().openNewTactic();
+    expect(tb().newTacticOpen).toBe(true);
+    tb().closeNewTactic();
+    expect(tb().newTacticOpen).toBe(false);
+  });
+});
+
 // issue #160 C3：計分頁的「快速戰術板」是先 startSession()、再導航到戰術板頁面。戰術板頁面
 // 一 mount 就會呼叫 resetBoardView(id)，所以這道 reset 必須看得懂「跨場切換」跟「同一場內
 // 的一次交棒」的差別，否則剛交棒過去的 session 會在落地當下被清掉。
