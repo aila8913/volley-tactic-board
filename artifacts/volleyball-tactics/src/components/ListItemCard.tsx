@@ -37,6 +37,10 @@ interface ListItemCardProps {
   expandedContent?: ReactNode;
   onEdit: () => void;
   onDelete: () => void;
+  // issue #190（軟提醒）：比賽卡片專用，資料夾永遠不傳。刻意收 ReactNode 而不是
+  // boolean+寫死文案——這張卡片不該認識「先發」這種比賽領域的概念（它只服務排版），
+  // 提醒文字/要不要顯示都由呼叫端（MatchList）決定，卡片只負責「有給就畫在哪裡」。
+  statusHint?: ReactNode;
 }
 
 const BADGE_TEXT: Record<ListItemKind, string> = {
@@ -55,6 +59,7 @@ export default function ListItemCard({
   expandedContent,
   onEdit,
   onDelete,
+  statusHint,
 }: ListItemCardProps) {
   return (
     <article
@@ -107,6 +112,13 @@ export default function ListItemCard({
         </div>
 
         <div className="flex flex-shrink-0 flex-col items-end gap-1 text-right">
+          {/* 軟提醒（#190）：只是提示、不是把卡片鎖住——所以是一顆小藥丸而不是整張卡片
+            變色或加圖示，避免使用者誤以為這場比賽「壞了」或「不能點」。 */}
+          {statusHint && (
+            <span className="rounded border border-amber-400/30 bg-amber-400/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">
+              {statusHint}
+            </span>
+          )}
           {dateText && (
             <p className="font-numeric text-sm tabular-nums text-[#a9b096]">{dateText}</p>
           )}

@@ -4,6 +4,8 @@ import { Plus, SlidersHorizontal } from "lucide-react";
 import { useMatchList, useDeleteMatch } from "@/hooks/useMatches";
 import { useTournamentList, useDeleteTournament } from "@/hooks/useTournaments";
 import { useScoreSheet } from "@/hooks/useScoreSheet";
+import { useRotationTable } from "@/hooks/useRotationTable";
+import { captureLineupFromRotations } from "@/lib/rotationLogic";
 import MatchFormDialog from "@/components/MatchFormDialog";
 import TournamentFormDialog from "@/components/TournamentFormDialog";
 import ListItemCard from "@/components/ListItemCard";
@@ -47,6 +49,22 @@ export default function MatchList() {
   const recordingsByMatch = useScoreSheet((s) => s.recordingsByMatch);
   const matchResultText = (matchId: string) =>
     formatMatchResult(recordingsByMatch[matchId]?.completedSets ?? []);
+
+  // issue #190（軟提醒）：「這場比賽還沒排先發」這件事，讀的是跟右欄（MatchInfoRail）
+  // 完全同一份共用輪轉表 store（useRotationTable），所以在右欄把先發排完的當下，這裡的
+  // 判斷會自動跟著變、卡片上的提示會馬上消失——不用重整頁面，因為兩邊看的是同一份真相，
+  // 不是各自快取的一份副本。
+  const dataByMatch = useRotationTable((s) => s.dataByMatch);
+  const matchNeedsLineup = (matchId: string): boolean => {
+    const rec = recordingsByMatch[matchId];
+    if ((rec?.completedSets?.length ?? 0) > 0) return false; // 已經打過至少一局，不用再提醒
+    if (rec?.lineup) return false; // 目前這局已經開賽/凍結過先發，同樣不用提醒
+    // 從沒被打開過的比賽（沒進過計分頁/戰術板/右欄），dataByMatch[matchId] 是 undefined，
+    // per?.rotations 用 ?? [] 補成空陣列——six-zone 檢查自然全部落空，captureLineupFromRotations
+    // 回 null，這裡判定為「還沒排」，邏輯上正確，不需要額外的 undefined 特判。
+    const per = dataByMatch[matchId];
+    return captureLineupFromRotations(per?.rotations ?? [], per?.roster ?? []) === null;
+  };
 
   // 「最上層」比賽 = 沒有歸到任何資料夾（tournamentId 為 null）。
   // #117 修好後這裡回到單純判斷 !m.tournamentId：資料夾已進 DB、tournamentId 是帶 cascade 的
@@ -214,11 +232,17 @@ export default function MatchList() {
                       title={`vs ${item.data.opponent}`}
                       dateText={formatMatchDateTime(item.data.dateTime)}
                       secondaryText={matchResultText(item.data.id)}
+                      statusHint={matchNeedsLineup(item.data.id) ? "尚未排先發" : undefined}
                       selected={selected?.kind === "match" && selected.id === item.data.id}
                       onSelect={() => setSelected({ kind: "match", id: item.data.id })}
                       // 比賽卡片沒有 onOpen（不跳頁）：三個入口改成選中後在卡片裡就地展開，
                       // 見 MatchEntryLinks 開頭記的那段演進。
-                      expandedContent={<MatchEntryLinks matchId={item.data.id} />}
+                      expandedContent={
+                        <MatchEntryLinks
+                          matchId={item.data.id}
+                          needsLineup={matchNeedsLineup(item.data.id)}
+                        />
+                      }
                       onEdit={() => openEditMatchDialog(item.data)}
                       onDelete={() => handleDeleteMatch(item.data.id)}
                     />

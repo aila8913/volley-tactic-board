@@ -16,6 +16,7 @@ import { ArrowLeft } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import AppShell from "@/components/AppShell";
 import NavRail, { matchBackHref } from "@/components/NavRail";
+import AnalyticsRotationRail from "@/components/AnalyticsRotationRail";
 import { useMatchWithRoster } from "@/hooks/useMatches";
 import { useMatchRecording } from "@/hooks/useMatchRecording";
 import { ACTIONS, ACTION_LABELS, buildPlayerMatrix } from "@/lib/statsMapping";
@@ -122,10 +123,11 @@ export default function MatchAnalytics() {
   const captureCurrentForAnalytics = () => captureBlank({ matchId: id ?? null });
 
   return (
-    // issue #172：三欄骨架交給 AppShell（mode="A"）。不傳 aside——站位列的資訊欄版本目前
-    // 被 #76 擋住（分析頁還沒有可以放進右欄的站位資料），這一環也不重寫功能元件，所以維持
-    // 「這一頁沒有右欄」。原本的「回列表」「回計分表」header 連結統一交給 NavRail
-    // （issue #160 起就是共用元件，#173 併入戰術子清單/匯出子清單後改名 NavRail）。
+    // issue #172：三欄骨架交給 AppShell（mode="A"）。issue #193 補上 aside——用唯讀的
+    // AnalyticsRotationRail（不重用 MatchInfoRail，理由見該檔案開頭的說明），讓教練在
+    // 分析頁也能回看各局的先發站位，不用切回計分頁才看得到。原本的「回列表」「回計分表」
+    // header 連結統一交給 NavRail（issue #160 起就是共用元件，#173 併入戰術子清單/
+    // 匯出子清單後改名 NavRail）。
     <AppShell
       mode="A"
       nav={
@@ -138,6 +140,7 @@ export default function MatchAnalytics() {
           captureDisabled
         />
       }
+      aside={<AnalyticsRotationRail record={record} roster={match.players} />}
       className="bg-[#0a0b07] font-dash text-[#f5f5f0]"
       style={{
         backgroundImage:

@@ -427,7 +427,6 @@ export function useScoreSheetController(matchId: string) {
     (servingFirst: Side, lineup: LineupSnapshot | null) => {
       const pre = useScoreSheet.getState().recordingsByMatch[matchId]?.currentSet;
       const setNumber = pre?.setNumber ?? 1;
-      useScoreSheet.getState().startSet(matchId, servingFirst);
 
       // 先發快照（issue #115）：選先發方這一刻，把「這一局」的先發凍結下來。先發每局可不同，所以
       // 這裡用的是呼叫端（ScoreSheet.tsx）從當下輪轉表擷取好、傳進來的那份；換下一局時 nextSet 已把
@@ -436,7 +435,16 @@ export function useScoreSheetController(matchId: string) {
       // 輪轉表改站位不會污染進行中這一局，要動陣容得走 substitute() 換人。
       const existingLineup = useScoreSheet.getState().recordingsByMatch[matchId]?.lineup ?? null;
       const effectiveLineup = existingLineup ?? lineup;
-      if (effectiveLineup && !existingLineup) {
+
+      // 「發球方」與「凍結先發」必須同進同出——沒有先發可凍結時，連 serving 都不能寫出去。
+      // 否則會製造一筆「serving 非 null、lineup null」的殘缺 set：本地看起來像開賽了（serving
+      // 有值），但沒有任何先發被凍結，重整後就變成 ScoreSheet.tsx canEditLineup 註解描述的死結
+      // （右欄被鎖、中央又喊還沒排先發）。呼叫端（ScoreSheet 的「誰先發球」）本來就只在有先發時
+      // 才會走到這裡，這道 guard 是把「兩者必須成對」這個不變量寫死在 store，不靠呼叫端自律。
+      if (!effectiveLineup) return;
+
+      useScoreSheet.getState().startSet(matchId, servingFirst);
+      if (!existingLineup) {
         useScoreSheet.getState().setLineup(matchId, effectiveLineup);
       }
       // 兩條路（#63 修法）：
