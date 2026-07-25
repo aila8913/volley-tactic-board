@@ -487,11 +487,14 @@ export function useScoreSheetController(matchId: string) {
       const pre = useScoreSheet.getState().recordingsByMatch[matchId]?.currentSet;
       if (!pre || pre.serving === null) return;
 
-      // 記分前先擷取「這分開始前」的比分與 rallyNumber（rallies.homeScore/awayScore 存的是
-      // 開分前的值）。之後才跑 reducer 加分，才不會把加完的分數當成 before。
+      // 記分前先擷取「這分開始前」的比分、輪次與 rallyNumber（rallies.homeScore/awayScore/
+      // homeRotation/awayRotation 存的都是開分前的值）。之後才跑 reducer 加分/輪轉，
+      // 才不會把加完分、轉完位的值當成 before。
       const rallyNumber = pre.history.length + 1;
       const homeScoreBefore = pre.ourScore;
       const awayScoreBefore = pre.opponentScore;
+      const homeRotationBefore = pre.ourRotation;
+      const awayRotationBefore = pre.opponentRotation;
       const point: PointRecord = { side, wasSideOut: side !== pre.serving, ...meta };
 
       // 0) 先存一份「記這分之前」的快照，讓之後「復原」能整包退回這一球（issue #41）。
@@ -507,7 +510,14 @@ export function useScoreSheetController(matchId: string) {
         if (setId === undefined) return; // 理論上 start 一定先跑過；防呆
         const rally = await createRally.mutateAsync({
           setId,
-          data: pointRecordToRally(point, rallyNumber, homeScoreBefore, awayScoreBefore),
+          data: pointRecordToRally(
+            point,
+            rallyNumber,
+            homeScoreBefore,
+            awayScoreBefore,
+            homeRotationBefore,
+            awayRotationBefore,
+          ),
         });
         rallyIdsRef.current.push(rally.id);
         const newEvent = pointRecordToEvent(point, 1);

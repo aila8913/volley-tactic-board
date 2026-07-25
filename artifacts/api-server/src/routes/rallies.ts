@@ -54,6 +54,8 @@ router.post("/sets/:setId/rallies", async (req, res) => {
       rallyNumber: body.rallyNumber,
       homeScore: body.homeScore,
       awayScore: body.awayScore,
+      homeRotation: body.homeRotation,
+      awayRotation: body.awayRotation,
       winner: body.winner,
     })
     .returning();

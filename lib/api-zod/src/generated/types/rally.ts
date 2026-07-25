@@ -13,5 +13,7 @@ export interface Rally {
   rallyNumber: number;
   homeScore: number;
   awayScore: number;
+  homeRotation: number;
+  awayRotation: number;
   winner: RallyWinner;
 }
