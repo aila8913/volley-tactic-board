@@ -136,6 +136,12 @@ export interface NewRally {
   winner: RallyWinner;
 }
 
+export interface RotationStat {
+  rotation: number;
+  pointsWon: number;
+  pointsLost: number;
+}
+
 export type SubstitutionKind = typeof SubstitutionKind[keyof typeof SubstitutionKind];
 
 
