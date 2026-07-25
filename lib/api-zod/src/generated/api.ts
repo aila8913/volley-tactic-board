@@ -654,3 +654,18 @@ export const GetMatchRotationStatsResponseItem = zod.object({
 export const GetMatchRotationStatsResponse = zod.array(GetMatchRotationStatsResponseItem)
 
 
+/**
+ * @summary Get a one-row-per-match summary (opponent, date, sets played, points) for every match owned by the current user
+ */
+export const ListMatchAnalysisResponseItem = zod.object({
+  "matchId": zod.number(),
+  "opponent": zod.string(),
+  "date": zod.coerce.date(),
+  "teamId": zod.number().nullish(),
+  "setsPlayed": zod.number(),
+  "ourPoints": zod.number(),
+  "opponentPoints": zod.number()
+})
+export const ListMatchAnalysisResponse = zod.array(ListMatchAnalysisResponseItem)
+
+

@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { sql, eq } from "drizzle-orm";
-import { db, ralliesTable, setsTable } from "@workspace/db";
+import { sql, eq, desc } from "drizzle-orm";
+import { db, ralliesTable, setsTable, matchesTable } from "@workspace/db";
 import { mockAuth } from "../middleware/mockAuth";
 import { matchBelongsToUser } from "../lib/ownership";
 import { GetMatchRotationStatsParams } from "@workspace/api-zod";
@@ -68,6 +68,92 @@ router.get("/analysis/matches/:matchId/rotations", async (req, res) => {
   // 只回傳「有 rally 資料」的輪次——沒發生過的輪次（例如這場比賽從來沒輪到過第 5 輪）
   // 不會出現在結果裡，前端就依實際回傳筆數畫幾列，不用自己補「這輪是 0:0」的空列。
   res.json(rows);
+});
+
+// GET /analysis/matches — 「跨場彙總」（#65 M2 視圖②）：這個使用者名下每一場比賽各一列摘要
+// （對手、日期、局數、得失分），一支請求就拿到全部，不用前端逐場再各發一輪 sets/rallies
+// 請求去現算——首頁 MatchList.tsx 目前卡片上的「3:0 勝」就是為了閃避這種 fan-out，改成只讀
+// 本機 zustand store，代價是沒被開啟過的比賽顯示不出真實比分。這支 endpoint 就是要在 DB 層
+// 一次把「每場的摘要」算好，讓分析頁能一覽多場而不必逐場 fan-out（本輪先只加這支
+// endpoint＋新分析頁，MatchList 卡片本身的顯示邏輯留給之後再動，那塊是設計夥伴擁有的卡片）。
+router.get("/analysis/matches", async (req, res) => {
+  // matches 是頂層資源、自己就存了 userId（見 lib/db/src/schema/matches.ts），不像
+  // players/sets/rallies 那些巢狀資源要往上 join 到 match 才能驗擁有權——這裡直接
+  // where userId 過濾就好，不需要用 matchBelongsToUser 之類的擁有權檢查函式。
+  const matches = await db
+    .select({
+      matchId: matchesTable.id,
+      opponent: matchesTable.opponent,
+      date: matchesTable.date,
+      teamId: matchesTable.teamId,
+    })
+    .from(matchesTable)
+    .where(eq(matchesTable.userId, req.userId))
+    .orderBy(desc(matchesTable.date));
+
+  // 為什麼這裡刻意拆成三支小查詢、在 JS 裡合併，而不是像上面 /rotations 那樣寫成一支
+  // 多重 join 的聚合：/rotations 只 join 了 rallies → sets，兩張表對這場比賽而言是
+  // 「同一個 grain」（一個 rally 剛好屬於一個 set），join 完 count 不會被撐大。但這支要同時
+  // 算「rally 筆數」（得失分）跟「set 筆數」（局數），這兩者是不同 grain：一場比賽如果打了
+  // 3 局、每局 20 分，若把 rallies 跟 sets 一起 join 進同一支查詢再 groupBy(matchId)，
+  // 每一筆 set 都會先被 rallies 那邊的多筆列「乘」出去（3 局 × 各局 rally 數的笛卡兒積），
+  // count(*) 出來的局數就不是 3 而是被相乘膨脹過的假數字。標準解法是三支各自單一 grain
+  // 的查詢，在應用層（JS）用 matchId 當 key 合併，而不是硬湊一支 SQL 掩蓋不同 grain
+  // 硬 join 的問題——這是報表查詢很常見的取捨：正確性優先於「只發一支 SQL 比較潮」。
+  const rallyRows = await db
+    .select({
+      matchId: setsTable.matchId,
+      ourPoints: sql<number>`count(*) filter (where ${ralliesTable.winner} = 'home')`.mapWith(
+        Number,
+      ),
+      opponentPoints: sql<number>`count(*) filter (where ${ralliesTable.winner} = 'away')`.mapWith(
+        Number,
+      ),
+    })
+    .from(ralliesTable)
+    .innerJoin(setsTable, eq(ralliesTable.setId, setsTable.id))
+    .innerJoin(matchesTable, eq(setsTable.matchId, matchesTable.id))
+    .where(eq(matchesTable.userId, req.userId))
+    .groupBy(setsTable.matchId);
+
+  // 局數＝真正開過球的局（firstServer 不是 null）——按「下一局」當下就會先建一筆空 set
+  // （firstServer 還是 null），使用者還沒選先發方，這種空局不該被算進「打了幾局」，跟
+  // lib/db/src/schema/sets.ts 裡 firstServer 允許 null 的那段註解、以及 #63 是同一個道理。
+  const setRows = await db
+    .select({
+      matchId: setsTable.matchId,
+      setsPlayed: sql<number>`count(*) filter (where ${setsTable.firstServer} is not null)`.mapWith(
+        Number,
+      ),
+    })
+    .from(setsTable)
+    .innerJoin(matchesTable, eq(setsTable.matchId, matchesTable.id))
+    .where(eq(matchesTable.userId, req.userId))
+    .groupBy(setsTable.matchId);
+
+  // 用 Map 把 rallyRows / setRows keyed 起來，等下對 matches 的每一場逐一查表合併，
+  // 查表是 O(1)，整體合併是 O(場數)，不會因為場數變多而變慢。
+  const rallyByMatch = new Map(rallyRows.map((r) => [r.matchId, r]));
+  const setsByMatch = new Map(setRows.map((r) => [r.matchId, r]));
+
+  const summaries = matches.map((m) => {
+    const rally = rallyByMatch.get(m.matchId);
+    const sets = setsByMatch.get(m.matchId);
+    return {
+      matchId: m.matchId,
+      opponent: m.opponent,
+      date: m.date,
+      teamId: m.teamId,
+      // 缺聚合結果代表這場比賽還沒有任何 rally/set 資料（剛建立、還沒開始記錄），
+      // 預設補 0——這樣「建了但還沒記過任何東西」的比賽也會出現在列表裡，摘要是 0:0、
+      // 局數 0，而不是整場從結果裡消失（消失反而更讓人困惑：使用者明明建過這場比賽）。
+      setsPlayed: sets?.setsPlayed ?? 0,
+      ourPoints: rally?.ourPoints ?? 0,
+      opponentPoints: rally?.opponentPoints ?? 0,
+    };
+  });
+
+  res.json(summaries);
 });
 
 export default router;

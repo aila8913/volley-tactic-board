@@ -667,6 +667,25 @@ paths:
                 items:
                   $ref: "#/components/schemas/RotationStat"
 
+  # M2 分析頁「視圖②：跨場彙總」（#65）。跟上面 /rotations 一樣是純讀的報表型聚合，但這支
+  # 不掛在單一 matchId 底下——回傳「這個使用者名下每一場比賽」各一列摘要，一支請求就拿到
+  # 全部場次的得失分/局數，讓分析頁可以一覽多場而不必逐場 fan-out（見 MatchList.tsx 目前
+  # 卡片改讀本機 store 閃避 fan-out 的取捨，那段留給之後再處理）。
+  /analysis/matches:
+    get:
+      operationId: listMatchAnalysis
+      tags: [analysis]
+      summary: Get a one-row-per-match summary (opponent, date, sets played, points) for every match owned by the current user
+      responses:
+        "200":
+          description: One row per match, ordered by date (newest first).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MatchAnalysisSummary"
+
 components:
   parameters:
     MatchId:
@@ -994,6 +1013,31 @@ components:
         pointsLost:
           type: integer
       required: [rotation, pointsWon, pointsLost]
+
+    # GET /analysis/matches 的一列：一場比賽的摘要，供「視圖②：跨場彙總」逐場列出。
+    # setsPlayed 只算真正開過球的局（firstServer 不是 null），呼應 sets 表 firstServer
+    # 允許 null 的設計（還沒選先發方的空局不算「打過」，見 lib/db/src/schema/sets.ts）。
+    # teamId 沒放進 required：跟 matches 表一樣，可能沒有指定球隊。
+    MatchAnalysisSummary:
+      type: object
+      properties:
+        matchId:
+          type: integer
+        opponent:
+          type: string
+        date:
+          type: string
+          format: date-time
+        teamId:
+          type: integer
+          nullable: true
+        setsPlayed:
+          type: integer
+        ourPoints:
+          type: integer
+        opponentPoints:
+          type: integer
+      required: [matchId, opponent, date, setsPlayed, ourPoints, opponentPoints]
 
     # 換人的種類，見 lib/db/src/schema/substitutions.ts 的 substitutionKindEnum 註解：
     # regular = 一般換人；libero = 自由球員上/下（規則上不算正式換人次數，但記錄結構相同）。
