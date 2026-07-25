@@ -142,6 +142,16 @@ export interface RotationStat {
   pointsLost: number;
 }
 
+export interface MatchAnalysisSummary {
+  matchId: number;
+  opponent: string;
+  date: string;
+  teamId?: number | null;
+  setsPlayed: number;
+  ourPoints: number;
+  opponentPoints: number;
+}
+
 export type SubstitutionKind = typeof SubstitutionKind[keyof typeof SubstitutionKind];
 
 
