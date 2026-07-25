@@ -20,25 +20,38 @@ const ENTRIES = [
   { path: "analytics", icon: BarChart3, label: "數據" },
 ] as const;
 
-export default function MatchEntryLinks({ matchId }: { matchId: string }) {
+interface MatchEntryLinksProps {
+  matchId: string;
+  // issue #190：軟提醒，不是硬性把關——三個入口本來就有各自的領域規則會在真正開始
+  // 記分時擋下（既有的 domain gate 維持不動），這裡只是在使用者點進來之前先提醒一句，
+  // 不 disable 任何連結。
+  needsLineup?: boolean;
+}
+
+export default function MatchEntryLinks({ matchId, needsLineup }: MatchEntryLinksProps) {
   return (
-    <div className="flex flex-wrap gap-3">
-      {ENTRIES.map(({ path, icon: Icon, label }) => (
-        <Link
-          key={path}
-          href={`/matches/${matchId}/${path}`}
-          // stopPropagation：卡身的 onClick 是「選取」，這三顆是「導覽」。不擋的話點擊會冒泡
-          // 上去再選一次同一張卡；現在看不出差別（本來就已經選中了），但選取語意之後若改成
-          // 可切換（再點一次取消選取），就會變成「點了入口反而把自己收起來」的怪 bug。
-          onClick={(e) => e.stopPropagation()}
-          className="inline-flex items-center gap-2 rounded-xl border border-white/[0.26]
-            bg-white/[0.05] px-5 py-2.5 text-sm font-bold text-[#f5f5f0] transition
-            hover:border-[#c6f135] hover:text-[#c6f135]"
-        >
-          <Icon className="h-4 w-4" />
-          {label}
-        </Link>
-      ))}
+    <div className="flex flex-col gap-2">
+      {needsLineup && (
+        <p className="text-xs text-amber-300/90">→ 先到右欄排好先發（6 人）再開始計分</p>
+      )}
+      <div className="flex flex-wrap gap-3">
+        {ENTRIES.map(({ path, icon: Icon, label }) => (
+          <Link
+            key={path}
+            href={`/matches/${matchId}/${path}`}
+            // stopPropagation：卡身的 onClick 是「選取」，這三顆是「導覽」。不擋的話點擊會冒泡
+            // 上去再選一次同一張卡；現在看不出差別（本來就已經選中了），但選取語意之後若改成
+            // 可切換（再點一次取消選取），就會變成「點了入口反而把自己收起來」的怪 bug。
+            onClick={(e) => e.stopPropagation()}
+            className="inline-flex items-center gap-2 rounded-xl border border-white/[0.26]
+              bg-white/[0.05] px-5 py-2.5 text-sm font-bold text-[#f5f5f0] transition
+              hover:border-[#c6f135] hover:text-[#c6f135]"
+          >
+            <Icon className="h-4 w-4" />
+            {label}
+          </Link>
+        ))}
+      </div>
     </div>
   );
 }
