@@ -22,7 +22,9 @@
 > 平行 PR 就落在不同行段、git 幾乎都能自動合併，不用真的把檔案拆兩份、也保住一眼 catch-up。
 > 上面的 `_Last updated_` 是共用一行摘要（誰更新了什麼），保持精簡、別長成段落。
 
-\_Last updated: 2026-07-24 (aila) — 環 5（#176 結構部分，PR #197）mode C 工具軌整欄換＋球場放大、
+\_Last updated: 2026-07-25 (aila) — #127 補上 `tournamentBelongsToUser` 擁有權驗證；順手校正
+本檔三處與現實對不上的敘述（#131 已關、#199 已編號、#174 的過期提醒）。前一批 2026-07-24 (aila)
+— 環 5（#176 結構部分，PR #197）mode C 工具軌整欄換＋球場放大、
 環 6（#177）新增戰術流程＋佈陣 mode D（來源浮層只蓋中央、確定鈕切 D→C）；#177 已關、對手球員分色
 渲染另開新 issue。前一批：環 4（#175）、環 2（#173）、環 1（#172）、環 3 Stage A（#181），
 (tang) 計分表／球場材質深色語言（PR #182/#167）。\_
@@ -164,16 +166,18 @@ lives in git log + the issues named).
 
 ### 設計進度 (tang — 視覺 / UX / area:design)
 
-- **設計規範已落地三頁（首頁＋戰術板＋計分表），手繪風全站退役**（`docs/design-spec.md`，
-  PR #129/#135/#140/#167/#182）：深色儀表板語言（`#0a0b07` 底＋萊姆綠 `#C6F135`＋玻璃卡片＋
+- **深色語言已套完全站、手繪風全站退役，#131 於 07-23 關閉**（`docs/design-spec.md`，
+  PR #129/#135/#140/#167/#182/#186）：深色儀表板語言（`#0a0b07` 底＋萊姆綠 `#C6F135`＋玻璃卡片＋
   Space Grotesk/JetBrains Mono）。戰術板加材質強化（#134 Track B：球場毛玻璃地板、邊緣繞行光、
   球員標記改玻璃圓片，PR #167，2026-07-22——這批是接在 aila #154/#160 重構後的 session 架構之上
   重做的）；計分表右欄（PR 見 #120）＋中間計分區（`ScoreSheetCourt.tsx`/`RadialMenu.tsx`/
   `ScoreSheet.tsx`，PR #182，2026-07-22）也補齊，`ScoreSheet.tsx` 已改吃 aila 新出的 `AppShell`
   骨架（#172）。`RadialMenu.tsx` 是全站最後一個 `wobbly-border` 消費者，換完後該 class 與
   `--font-display`/Caveat/Permanent Marker 死碼一併從 `index.css` 清掉。品牌 logo mark 已定案
-  （`public/favicon.svg`，PR #148），design-spec 多了「品牌標誌」段。**剩數據分析頁、資料夾內頁
-  兩處仍是手繪風，由 #131 追蹤**（#134 保持 open：Track A 微 3D／Track C 版面呼吸空間尚未開始）。
+  （`public/favicon.svg`，PR #148），design-spec 多了「品牌標誌」段。**最後兩處也補完、#131 已關**：
+  數據分析頁整頁轉深色（PR #186，2026-07-22），資料夾內頁只在該 PR 轉了頁面外殼、中央列表區
+  刻意留給環 4（#175）整段重寫，#175 落地後 #131 於 07-23 收掉。
+  （#134 仍 open：Track A 微 3D／Track C 版面呼吸空間尚未開始。）
   #132（首頁 review 收尾）獨立進行。**寫 UI 前先讀 design-spec.md**；實作數值以該檔「實作微調」
   「實作決定」註記為準（背景 `#0a0b07`、邊框 `white/[0.12]`～`[0.26]`、球場深青漸層——非原始的
   `#121310`/暖木色）。
@@ -204,9 +208,8 @@ PO 拍板插入 M1.5「戰術板 UI 大改版」（#160）於 M1 與 M2 之間**
 `環1 →（環2 ‖ 環3 ‖ 環4）→ 環5 → 環6`。** 環 1–6（#172–#177）已全部落地；只剩 **#178（環 7
 響應式）需先補線框稿**。#176（環 5）僅合併結構部分、**仍 open**：剩繪圖工具正式圖示（blocked
 @tangyi1025）。#177（環 6）已關，但 spec 把 mode D 叫「對手佈陣」的那層——**對手球員分色渲染**
-（Court 從未渲染對手、snapshot player 無 `side`、珊瑚橘 #FF8A5C 無落點）——**另開新 issue 追蹤**。
-#174 只剩 Stage B（統計格，blocked on M2），跨欄拖曳已由 PR #189 完成（issue body 的「未做」區塊
-還沒改掉，讀的時候留意）。
+（Court 從未渲染對手、snapshot player 無 `side`、珊瑚橘 #FF8A5C 無落點）——**已另開 #199 追蹤**。
+#174 只剩 Stage B（統計格，blocked on M2），跨欄拖曳已由 PR #189 完成。
 **#175 實機測試長出四張新 issue（#190–#193）**：引導使用者先排站位／未排好時鎖住其他版面（#190，
 question＋needs-plan，「引導」還是「鎖住」待 PO 拍板）、右欄局數資訊要更明顯（#191）、選中比賽後
 直接看上一局計分（#192）、數據頁也要右欄（#193，坑：數據頁自己的局篩選與右欄局軸必須共用同一份
@@ -216,8 +219,10 @@ state，否則會出現「左邊看第 2 局、右邊顯示第 3 局站位」）
 使用者會遇到」的 bug（用 store 狀態反推使用者意圖），修好了但無回歸測試保護。
 （#120 已移入 M1.5，原「掛 M5 是否移轉」的待裁決事項結案。）
 #40（undo/redo 不涵蓋輪轉拖曳，與 #147 同塊邏輯但不同 store）、
-#64（背景寫入失敗不 reconcile，關聯部署 #26／離線契約 #75）、**#127（後端沒驗 tournamentId 擁有權，真 auth
-後補）** 仍 open。
+#64（背景寫入失敗不 reconcile，關聯部署 #26／離線契約 #75）仍 open。
+**#127（後端沒驗 tournamentId 擁有權）已於 07-25 修掉**：`lib/ownership.ts` 加 `tournamentBelongsToUser`，
+matches 的 POST/PATCH 在收到非 null 的 `tournamentId` 時驗一次、不符回 404。**判準值得記住：外鍵保證
+referential integrity（uuid 指得到一列），不保證 ownership（那列是不是你的）——兩者很容易被當成同一件事。**
 進階版差異化（M4）：#51 動作子分類、#21 球線座標、#99 站位快照——同屬 advanced tier，可一起設計。
 
 ## Recently closed (past ~week)
@@ -308,7 +313,7 @@ state，否則會出現「左邊看第 2 局、右邊顯示第 3 局站位」）
 
 ### 設計 (tang)
 
-- **PR #182**（#131 部分進度，該 issue 保持 open，2026-07-22）— 計分表中間計分區套用深色玻璃語言：
+- **PR #182**（#131 部分進度，該 issue 已於 07-23 關閉，2026-07-22）— 計分表中間計分區套用深色玻璃語言：
   `ScoreSheet.tsx` 頁面外殼（改吃 `AppShell`）、`ScoreSheetCourt.tsx` 球場配色、`RadialMenu.tsx`
   退役最後的 `wobbly-border`。右欄（`ScoreSheetStats.tsx`/`RotationRailPanel`）已由 aila 的 #120
   處理過，這批完全沒碰。順手清掉 `index.css` 裡沒消費者的 `--font-display`/Caveat/Permanent Marker
@@ -324,7 +329,7 @@ state，否則會出現「左邊看第 2 局、右邊顯示第 3 局站位」）
   `e920ac1`，07-18）。品牌名稱未定、字標佔位；spec `stroke-width 6.5` vs 實檔 `9` 已在 PR 留言請對齊。
 - **PR #140**（#134 Track B，**#134 保持 open**）— 戰術板材質強化：置中字標、低調光影、玻璃卡片加深
   （commit `72a3670`，07-18）。#134 微 3D／版面呼吸等其餘方向續留 issue。
-- **PR #135 / #129**（#131 部分進度，該 issue 保持 open）— 戰術板＋首頁套深色語言、手繪風全退役、
+- **PR #135 / #129**（#131 部分進度，該 issue 已於 07-23 關閉）— 戰術板＋首頁套深色語言、手繪風全退役、
   球場改深青漸層（commit `0d63ee3`／`bef0e14`）。方法論教訓（review 夥伴 PR 用）：落後 main 又同檔的
   PR，git 自動合併無衝突**不等於合對**，要讀合併後檔案確認雙方改動都活著；fork PR 的 CI 預設不跑、
   要手動核准。
