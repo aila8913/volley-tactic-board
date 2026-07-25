@@ -122,6 +122,8 @@ export interface Rally {
   rallyNumber: number;
   homeScore: number;
   awayScore: number;
+  homeRotation: number;
+  awayRotation: number;
   winner: RallyWinner;
 }
 
@@ -129,6 +131,8 @@ export interface NewRally {
   rallyNumber: number;
   homeScore: number;
   awayScore: number;
+  homeRotation: number;
+  awayRotation: number;
   winner: RallyWinner;
 }
 

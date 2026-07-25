@@ -300,6 +300,8 @@ export const ListRalliesResponseItem = zod.object({
   "rallyNumber": zod.number(),
   "homeScore": zod.number(),
   "awayScore": zod.number(),
+  "homeRotation": zod.number(),
+  "awayRotation": zod.number(),
   "winner": zod.enum(['home', 'away'])
 })
 export const ListRalliesResponse = zod.array(ListRalliesResponseItem)
@@ -316,6 +318,8 @@ export const CreateRallyBody = zod.object({
   "rallyNumber": zod.number(),
   "homeScore": zod.number(),
   "awayScore": zod.number(),
+  "homeRotation": zod.number(),
+  "awayRotation": zod.number(),
   "winner": zod.enum(['home', 'away'])
 })
 

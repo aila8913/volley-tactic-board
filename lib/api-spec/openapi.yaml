@@ -929,9 +929,15 @@ components:
           type: integer
         awayScore:
           type: integer
+        # 這分開始前的輪次快照（0–5），跟 homeScore/awayScore 同一套語意——給 M2 分析頁
+        # （#65）當 join key 用，不用回放整局歷史才能知道某一球發生時的輪次。
+        homeRotation:
+          type: integer
+        awayRotation:
+          type: integer
         winner:
           $ref: "#/components/schemas/RallyWinner"
-      required: [id, setId, rallyNumber, homeScore, awayScore, winner]
+      required: [id, setId, rallyNumber, homeScore, awayScore, homeRotation, awayRotation, winner]
 
     NewRally:
       type: object
@@ -942,9 +948,13 @@ components:
           type: integer
         awayScore:
           type: integer
+        homeRotation:
+          type: integer
+        awayRotation:
+          type: integer
         winner:
           $ref: "#/components/schemas/RallyWinner"
-      required: [rallyNumber, homeScore, awayScore, winner]
+      required: [rallyNumber, homeScore, awayScore, homeRotation, awayRotation, winner]
 
     # 換人的種類，見 lib/db/src/schema/substitutions.ts 的 substitutionKindEnum 註解：
     # regular = 一般換人；libero = 自由球員上/下（規則上不算正式換人次數，但記錄結構相同）。

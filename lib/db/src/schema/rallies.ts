@@ -16,6 +16,10 @@ export const ralliesTable = pgTable("rallies", {
   // 不需要把所有 rally 加總起來才能知道某一球發生時的比分。
   homeScore: integer("home_score").notNull(),
   awayScore: integer("away_score").notNull(),
+  // 跟比分同一套語意：存的是這個 rally「開始前」的輪次快照（0–5），不是打完轉完之後的值。
+  // 這樣未來分析頁（#65）要用「某個輪次時發生了什麼」當 join key 時，不用回推整局歷史來重建當下輪次。
+  homeRotation: integer("home_rotation").notNull(),
+  awayRotation: integer("away_rotation").notNull(),
   winner: rallyWinnerEnum("winner").notNull(),
 });
 

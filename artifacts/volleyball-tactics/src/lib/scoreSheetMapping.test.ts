@@ -96,10 +96,12 @@ describe("disabledActions (issue #50 規則#1：發球/接發互斥)", () => {
 describe("pointRecordToRally", () => {
   it("carries the score-before and maps the winner side", () => {
     const point: PointRecord = { side: "us", wasSideOut: true };
-    expect(pointRecordToRally(point, 5, 4, 3)).toEqual({
+    expect(pointRecordToRally(point, 5, 4, 3, 2, 1)).toEqual({
       rallyNumber: 5,
       homeScore: 4,
       awayScore: 3,
+      homeRotation: 2,
+      awayRotation: 1,
       winner: "home",
     });
   });
@@ -200,8 +202,10 @@ describe("reconstructSetFromRallies", () => {
     id,
     setId: 9,
     rallyNumber,
-    homeScore: 0, // 重建時不看 rally 存的 before-score，靠 replay 自己算，這欄位在測試裡不重要
+    homeScore: 0, // 重建時不看 rally 存的 before-score，靠 replay 自己算，這幾欄在測試裡不重要
     awayScore: 0,
+    homeRotation: 0,
+    awayRotation: 0,
     winner,
   });
 
@@ -378,6 +382,8 @@ describe("reconstructRecording", () => {
       rallyNumber,
       homeScore: 0,
       awayScore: 0,
+      homeRotation: 0,
+      awayRotation: 0,
       winner,
     });
     // 第 1 局：home 先發，home 連得 2 分 → 2:0 已結束。
@@ -402,10 +408,28 @@ describe("reconstructRecording", () => {
     const set1: MatchSet = { id: 1, matchId: 3, setNumber: 1, firstServer: "home" };
     const set2: MatchSet = { id: 2, matchId: 3, setNumber: 2, firstServer: "home" };
     const set1Rallies: Rally[] = [
-      { id: 100, setId: 1, rallyNumber: 1, homeScore: 0, awayScore: 0, winner: "home" },
+      {
+        id: 100,
+        setId: 1,
+        rallyNumber: 1,
+        homeScore: 0,
+        awayScore: 0,
+        homeRotation: 0,
+        awayRotation: 0,
+        winner: "home",
+      },
     ];
     const set2Rallies: Rally[] = [
-      { id: 200, setId: 2, rallyNumber: 1, homeScore: 0, awayScore: 0, winner: "home" },
+      {
+        id: 200,
+        setId: 2,
+        rallyNumber: 1,
+        homeScore: 0,
+        awayScore: 0,
+        homeRotation: 0,
+        awayRotation: 0,
+        winner: "home",
+      },
     ];
     const events: MatchEvent[] = [
       makeEvent({ rallyId: 100, side: "home", playerId: "5", action: "serve" }),
@@ -428,10 +452,28 @@ describe("reconstructRecording", () => {
     const set1: MatchSet = { id: 1, matchId: 3, setNumber: 1, firstServer: "home" };
     const set2: MatchSet = { id: 2, matchId: 3, setNumber: 2, firstServer: "home" };
     const set1Rallies: Rally[] = [
-      { id: 100, setId: 1, rallyNumber: 1, homeScore: 0, awayScore: 0, winner: "home" },
+      {
+        id: 100,
+        setId: 1,
+        rallyNumber: 1,
+        homeScore: 0,
+        awayScore: 0,
+        homeRotation: 0,
+        awayRotation: 0,
+        winner: "home",
+      },
     ];
     const set2Rallies: Rally[] = [
-      { id: 200, setId: 2, rallyNumber: 1, homeScore: 0, awayScore: 0, winner: "home" },
+      {
+        id: 200,
+        setId: 2,
+        rallyNumber: 1,
+        homeScore: 0,
+        awayScore: 0,
+        homeRotation: 0,
+        awayRotation: 0,
+        winner: "home",
+      },
     ];
     const subs = [
       makeSub({ setId: 1, playerOutId: "1", playerInId: "2", homeScore: 0, awayScore: 0 }),
@@ -452,8 +494,26 @@ describe("reconstructRecording", () => {
     // 剛按下一局建出來的空局：firstServer 還沒選，是 null，底下一定沒有任何 rally。
     const set2: MatchSet = { id: 2, matchId: 3, setNumber: 2, firstServer: null };
     const set1Rallies: Rally[] = [
-      { id: 100, setId: 1, rallyNumber: 1, homeScore: 0, awayScore: 0, winner: "home" },
-      { id: 101, setId: 1, rallyNumber: 2, homeScore: 1, awayScore: 0, winner: "home" },
+      {
+        id: 100,
+        setId: 1,
+        rallyNumber: 1,
+        homeScore: 0,
+        awayScore: 0,
+        homeRotation: 0,
+        awayRotation: 0,
+        winner: "home",
+      },
+      {
+        id: 101,
+        setId: 1,
+        rallyNumber: 2,
+        homeScore: 1,
+        awayScore: 0,
+        homeRotation: 0,
+        awayRotation: 0,
+        winner: "home",
+      },
     ];
 
     const state = reconstructRecording([set1, set2], [set1Rallies, []], [], []);
@@ -477,7 +537,16 @@ describe("reconstructRecording", () => {
   it("seeds the current set's lineup from the lineups list", () => {
     const set1: MatchSet = { id: 1, matchId: 3, setNumber: 1, firstServer: "home" };
     const set1Rallies: Rally[] = [
-      { id: 100, setId: 1, rallyNumber: 1, homeScore: 0, awayScore: 0, winner: "home" },
+      {
+        id: 100,
+        setId: 1,
+        rallyNumber: 1,
+        homeScore: 0,
+        awayScore: 0,
+        homeRotation: 0,
+        awayRotation: 0,
+        winner: "home",
+      },
     ];
     const lineups: Lineup[] = [
       {
@@ -503,7 +572,16 @@ describe("reconstructRecording", () => {
     const set1: MatchSet = { id: 1, matchId: 3, setNumber: 1, firstServer: "home" };
     const set2: MatchSet = { id: 2, matchId: 3, setNumber: 2, firstServer: null };
     const set1Rallies: Rally[] = [
-      { id: 100, setId: 1, rallyNumber: 1, homeScore: 0, awayScore: 0, winner: "home" },
+      {
+        id: 100,
+        setId: 1,
+        rallyNumber: 1,
+        homeScore: 0,
+        awayScore: 0,
+        homeRotation: 0,
+        awayRotation: 0,
+        winner: "home",
+      },
     ];
     const lineups: Lineup[] = [
       {
@@ -528,10 +606,28 @@ describe("reconstructRecording", () => {
     const set1: MatchSet = { id: 1, matchId: 3, setNumber: 1, firstServer: "home" };
     const set2: MatchSet = { id: 2, matchId: 3, setNumber: 2, firstServer: "home" };
     const set1Rallies: Rally[] = [
-      { id: 100, setId: 1, rallyNumber: 1, homeScore: 0, awayScore: 0, winner: "home" },
+      {
+        id: 100,
+        setId: 1,
+        rallyNumber: 1,
+        homeScore: 0,
+        awayScore: 0,
+        homeRotation: 0,
+        awayRotation: 0,
+        winner: "home",
+      },
     ];
     const set2Rallies: Rally[] = [
-      { id: 200, setId: 2, rallyNumber: 1, homeScore: 0, awayScore: 0, winner: "home" },
+      {
+        id: 200,
+        setId: 2,
+        rallyNumber: 1,
+        homeScore: 0,
+        awayScore: 0,
+        homeRotation: 0,
+        awayRotation: 0,
+        winner: "home",
+      },
     ];
     const lineups: Lineup[] = [
       {
@@ -563,7 +659,16 @@ describe("reconstructRecording", () => {
   it("leaves lineup null when no lineups are provided", () => {
     const set1: MatchSet = { id: 1, matchId: 3, setNumber: 1, firstServer: "home" };
     const set1Rallies: Rally[] = [
-      { id: 100, setId: 1, rallyNumber: 1, homeScore: 0, awayScore: 0, winner: "home" },
+      {
+        id: 100,
+        setId: 1,
+        rallyNumber: 1,
+        homeScore: 0,
+        awayScore: 0,
+        homeRotation: 0,
+        awayRotation: 0,
+        winner: "home",
+      },
     ];
     const state = reconstructRecording([set1], [set1Rallies], [], []);
     expect(state.lineup).toBeNull();
