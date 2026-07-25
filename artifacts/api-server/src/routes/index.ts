@@ -10,6 +10,7 @@ import eventsRouter from "./events";
 import substitutionsRouter from "./substitutions";
 import timeoutsRouter from "./timeouts";
 import lineupsRouter from "./lineups";
+import analysisRouter from "./analysis";
 
 const router: IRouter = Router();
 
@@ -26,5 +27,6 @@ router.use(eventsRouter);
 router.use(substitutionsRouter);
 router.use(timeoutsRouter);
 router.use(lineupsRouter);
+router.use(analysisRouter);
 
 export default router;

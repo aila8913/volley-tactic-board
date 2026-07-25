@@ -31,6 +31,7 @@ export * from './player';
 export * from './playerRole';
 export * from './rally';
 export * from './rallyWinner';
+export * from './rotationStat';
 export * from './servingSide';
 export * from './substitution';
 export * from './substitutionKind';

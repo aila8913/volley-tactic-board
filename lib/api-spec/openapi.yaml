@@ -14,6 +14,8 @@ tags:
     description: Matches, and the players/sets/rallies/events nested under a match
   - name: tactics
     description: Saved tactics board configurations (rotations, markers, defense ranges)
+  - name: analysis
+    description: Read-only cross-resource report endpoints for the analytics pages (M2)
 paths:
   /healthz:
     get:
@@ -641,6 +643,30 @@ paths:
         "204":
           description: Deleted
 
+  # M2 分析頁「各輪次得失分」（#65）。跟上面 /matches/{matchId}/* 那些「一資源一 CRUD」的路徑
+  # 不同，這支是純讀的報表型聚合：把一場比賽底下所有 rally 依 homeRotation 分組算得失分，
+  # 不對應單一資料表，所以獨立掛在 /analysis 底下、用專屬的 analysis tag，不硬塞進 matches。
+  # 只用 rallies.winner/homeRotation 算，不碰 events——events.outcome 目前恆為 null
+  # （live 記錄路徑 pointRecordToEvent 沒有寫這欄），攻擊細分統計留待之後。
+  /analysis/matches/{matchId}/rotations:
+    parameters:
+      - $ref: "#/components/parameters/MatchId"
+    get:
+      operationId: getMatchRotationStats
+      tags: [analysis]
+      summary: Get per-rotation points won/lost for a match, aggregated from rallies
+      responses:
+        "200":
+          description: >-
+            One row per rotation that has at least one rally recorded (rotations with no data are
+            omitted; the frontend only renders as many rows as it gets back).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RotationStat"
+
 components:
   parameters:
     MatchId:
@@ -955,6 +981,19 @@ components:
         winner:
           $ref: "#/components/schemas/RallyWinner"
       required: [rallyNumber, homeScore, awayScore, homeRotation, awayRotation, winner]
+
+    # GET /analysis/matches/{matchId}/rotations 的一列：我方在某個輪次時的得失分彙總。
+    # rotation 沿用 rallies.homeRotation 的語意——從先發起算的第幾輪（0–5），不是場上號位。
+    RotationStat:
+      type: object
+      properties:
+        rotation:
+          type: integer
+        pointsWon:
+          type: integer
+        pointsLost:
+          type: integer
+      required: [rotation, pointsWon, pointsLost]
 
     # 換人的種類，見 lib/db/src/schema/substitutions.ts 的 substitutionKindEnum 註解：
     # regular = 一般換人；libero = 自由球員上/下（規則上不算正式換人次數，但記錄結構相同）。

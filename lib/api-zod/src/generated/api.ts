@@ -639,3 +639,18 @@ export const DeleteEventParams = zod.object({
 })
 
 
+/**
+ * @summary Get per-rotation points won/lost for a match, aggregated from rallies
+ */
+export const GetMatchRotationStatsParams = zod.object({
+  "matchId": zod.coerce.number()
+})
+
+export const GetMatchRotationStatsResponseItem = zod.object({
+  "rotation": zod.number(),
+  "pointsWon": zod.number(),
+  "pointsLost": zod.number()
+})
+export const GetMatchRotationStatsResponse = zod.array(GetMatchRotationStatsResponseItem)
+
+
