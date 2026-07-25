@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
 import { db, matchesTable } from "@workspace/db";
 import { mockAuth } from "../middleware/mockAuth";
+import { tournamentBelongsToUser } from "../lib/ownership";
 import {
   CreateMatchBody,
   GetMatchParams,
@@ -31,6 +32,18 @@ router.get("/matches", async (req, res) => {
 router.post("/matches", async (req, res) => {
   const body = CreateMatchBody.parse(req.body);
 
+  // 要放進某個資料夾的話，先確認那個資料夾是「這個使用者的」（#127）。
+  // null／沒帶＝放最上層，沒有資料夾可驗，直接跳過。
+  // 回 404 而不是 403：對不屬於你的資源，回「不存在」比回「存在但你不能碰」更保守——
+  // 後者等於用錯誤碼幫攻擊者確認了那個 uuid 真的有東西。
+  if (
+    body.tournamentId != null &&
+    !(await tournamentBelongsToUser(body.tournamentId, req.userId))
+  ) {
+    res.status(404).json({ error: "Tournament not found" });
+    return;
+  }
+
   const [created] = await db
     .insert(matchesTable)
     .values({
@@ -42,7 +55,7 @@ router.post("/matches", async (req, res) => {
       opponent: body.opponent,
       location: body.location ?? null,
       videoUrl: body.videoUrl ?? null,
-      // 前端資料夾 id（可為 null＝放最上層）。後端只是原封不動存起來。
+      // 資料夾 id（可為 null＝放最上層）。擁有權已在上面驗過，這裡才敢直接存。
       tournamentId: body.tournamentId ?? null,
     })
     .returning();
@@ -74,6 +87,19 @@ router.get("/matches/:matchId", async (req, res) => {
 router.patch("/matches/:matchId", async (req, res) => {
   const { matchId } = UpdateMatchParams.parse(req.params);
   const body = UpdateMatchBody.parse(req.body);
+
+  // 同 POST：搬進某個資料夾前先驗那個資料夾的擁有權（#127）。
+  // 這裡要分清楚 undefined 和 null 兩種「沒有值」——undefined ＝ body 根本沒帶這欄、
+  // 資料夾維持原樣；null ＝ 明確要求搬到最上層。兩者都沒有資料夾可驗，`!= null`
+  // （寬鬆比較）剛好一次涵蓋，但下面 set 裡的展開仍必須用嚴格的 !== undefined，
+  // 否則 null 會被誤判成「沒帶」、搬到最上層就失效了。
+  if (
+    body.tournamentId != null &&
+    !(await tournamentBelongsToUser(body.tournamentId, req.userId))
+  ) {
+    res.status(404).json({ error: "Tournament not found" });
+    return;
+  }
 
   const [updated] = await db
     .update(matchesTable)

@@ -8,6 +8,7 @@ import {
   eventsTable,
   substitutionsTable,
   timeoutsTable,
+  tournamentsTable,
 } from "@workspace/db";
 
 // 巢狀資源（players/sets/rallies/events）自己沒有存 userId，它們的擁有權是「繼承」自所屬的 match。
@@ -21,6 +22,26 @@ export async function matchBelongsToUser(matchId: number, userId: string): Promi
     .where(and(eq(matchesTable.id, matchId), eq(matchesTable.userId, userId)));
 
   return match !== undefined;
+}
+
+// tournament（資料夾）跟 match 一樣是頂層資源、自己就存了 userId，所以不用 join，
+// 直接比對 id + userId 就好——形狀跟上面的 matchBelongsToUser 一模一樣。
+//
+// 為什麼需要這一支（#127）：matches 的 POST/PATCH 收到 body.tournamentId 時，以前是原封不動
+// 存進 DB，只靠外鍵擋。**外鍵保證的是 referential integrity（這個 uuid 真的指到一列存在的
+// 資料夾），不保證 ownership（那列是不是「你的」資料夾）**——這兩件事很容易被當成同一件。
+// 現在是 mock auth 單一使用者所以出不了事，但真 auth 上線後，A 只要知道 B 的資料夾 uuid，
+// 就能把自己的比賽塞進 B 的資料夾（典型的 IDOR）。
+export async function tournamentBelongsToUser(
+  tournamentId: string,
+  userId: string,
+): Promise<boolean> {
+  const [row] = await db
+    .select({ id: tournamentsTable.id })
+    .from(tournamentsTable)
+    .where(and(eq(tournamentsTable.id, tournamentId), eq(tournamentsTable.userId, userId)));
+
+  return row !== undefined;
 }
 
 // player 的擁有權分兩步：先用上面的 matchBelongsToUser 確認 match 是這個 user 的，
