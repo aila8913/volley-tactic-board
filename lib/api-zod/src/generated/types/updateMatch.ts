@@ -12,4 +12,5 @@ export interface UpdateMatch {
   location?: string | null;
   videoUrl?: string | null;
   tournamentId?: string | null;
+  teamId?: number | null;
 }

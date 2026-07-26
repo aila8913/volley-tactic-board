@@ -40,6 +40,7 @@ export function serverMatchToDomain(m: ApiMatch, players: ApiPlayer[] = []): Mat
     players: players.map(serverPlayerToDomain),
     createdAt: m.createdAt,
     tournamentId: m.tournamentId ?? null,
+    teamId: m.teamId ?? null,
   };
 }
 

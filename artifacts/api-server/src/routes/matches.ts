@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
 import { db, matchesTable } from "@workspace/db";
 import { mockAuth } from "../middleware/mockAuth";
-import { tournamentBelongsToUser } from "../lib/ownership";
+import { tournamentBelongsToUser, teamBelongsToUser } from "../lib/ownership";
 import {
   CreateMatchBody,
   GetMatchParams,
@@ -44,6 +44,13 @@ router.post("/matches", async (req, res) => {
     return;
   }
 
+  // 同理，要標成某支球隊的話，先確認那支球隊是「這個使用者的」（跟 tournamentId 同一套
+  // ownership 檢查，見 lib/ownership.ts 的 teamBelongsToUser）。null／沒帶＝未分類，跳過。
+  if (body.teamId != null && !(await teamBelongsToUser(body.teamId, req.userId))) {
+    res.status(404).json({ error: "Team not found" });
+    return;
+  }
+
   const [created] = await db
     .insert(matchesTable)
     .values({
@@ -57,6 +64,8 @@ router.post("/matches", async (req, res) => {
       videoUrl: body.videoUrl ?? null,
       // 資料夾 id（可為 null＝放最上層）。擁有權已在上面驗過，這裡才敢直接存。
       tournamentId: body.tournamentId ?? null,
+      // 球隊標籤 id（可為 null＝未分類）。擁有權同樣已在上面驗過。
+      teamId: body.teamId ?? null,
     })
     .returning();
 
@@ -101,6 +110,13 @@ router.patch("/matches/:matchId", async (req, res) => {
     return;
   }
 
+  // 改標球隊時同樣先驗擁有權（`!= null` 一次涵蓋 undefined＝沒帶 與 null＝改成未分類，
+  // 兩者都沒有球隊可驗）。下面 set 的展開仍用嚴格 !== undefined，讓 null（清成未分類）寫得進去。
+  if (body.teamId != null && !(await teamBelongsToUser(body.teamId, req.userId))) {
+    res.status(404).json({ error: "Team not found" });
+    return;
+  }
+
   const [updated] = await db
     .update(matchesTable)
     .set({
@@ -113,6 +129,7 @@ router.patch("/matches/:matchId", async (req, res) => {
       ...(body.location !== undefined && { location: body.location }),
       ...(body.videoUrl !== undefined && { videoUrl: body.videoUrl }),
       ...(body.tournamentId !== undefined && { tournamentId: body.tournamentId }),
+      ...(body.teamId !== undefined && { teamId: body.teamId }),
     })
     .where(and(eq(matchesTable.id, matchId), eq(matchesTable.userId, req.userId)))
     .returning();

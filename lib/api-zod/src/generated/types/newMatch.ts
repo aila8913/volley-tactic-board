@@ -13,4 +13,5 @@ export interface NewMatch {
   location?: string | null;
   videoUrl?: string | null;
   tournamentId?: string | null;
+  teamId?: number | null;
 }

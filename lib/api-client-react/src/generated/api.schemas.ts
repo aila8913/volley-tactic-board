@@ -50,6 +50,19 @@ export interface UpdateTournament {
   name?: string;
 }
 
+export interface Team {
+  id: number;
+  name: string;
+}
+
+export interface NewTeam {
+  name: string;
+}
+
+export interface UpdateTeam {
+  name?: string;
+}
+
 export interface Match {
   id: number;
   name?: string | null;
@@ -58,6 +71,7 @@ export interface Match {
   location?: string | null;
   videoUrl?: string | null;
   tournamentId?: string | null;
+  teamId?: number | null;
   createdAt: string;
 }
 
@@ -68,6 +82,7 @@ export interface NewMatch {
   location?: string | null;
   videoUrl?: string | null;
   tournamentId?: string | null;
+  teamId?: number | null;
 }
 
 export interface UpdateMatch {
@@ -76,6 +91,7 @@ export interface UpdateMatch {
   location?: string | null;
   videoUrl?: string | null;
   tournamentId?: string | null;
+  teamId?: number | null;
 }
 
 export interface UpdatePlayer {

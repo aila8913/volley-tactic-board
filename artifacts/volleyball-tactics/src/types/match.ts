@@ -26,6 +26,10 @@ export interface Match {
   // null 代表這場比賽直接放在最上層，沒有歸到任何資料夾(Tournament)底下。
   // 不放進 matchFormSchema：使用者不會在表單裡選資料夾，是由「從哪個畫面建立」決定的。
   tournamentId: string | null;
+  // 這場比賽標到哪支球隊（分組標籤），null＝未分類。跟 tournamentId 一樣不放進 matchFormSchema：
+  // 球隊是用「下拉挑既有／臨時建新」的選擇器管理，不是普通的受控欄位（新建的球隊在送出前還沒有
+  // id），所以 MatchFormDialog 用獨立的本地 state 處理，見該檔案。
+  teamId: number | null;
 }
 
 export const matchFormSchema = z.object({
