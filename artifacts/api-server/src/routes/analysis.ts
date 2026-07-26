@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { sql, eq, desc } from "drizzle-orm";
-import { db, ralliesTable, setsTable, matchesTable } from "@workspace/db";
+import { db, ralliesTable, setsTable, matchesTable, lineupsTable } from "@workspace/db";
 import { mockAuth } from "../middleware/mockAuth";
 import { matchBelongsToUser } from "../lib/ownership";
 import { GetMatchRotationStatsParams } from "@workspace/api-zod";
@@ -91,30 +91,53 @@ router.get("/analysis/matches", async (req, res) => {
     .where(eq(matchesTable.userId, req.userId))
     .orderBy(desc(matchesTable.date));
 
-  // 為什麼這裡刻意拆成三支小查詢、在 JS 裡合併，而不是像上面 /rotations 那樣寫成一支
+  // 為什麼這裡刻意拆成多支小查詢、在 JS 裡合併，而不是像上面 /rotations 那樣寫成一支
   // 多重 join 的聚合：/rotations 只 join 了 rallies → sets，兩張表對這場比賽而言是
   // 「同一個 grain」（一個 rally 剛好屬於一個 set），join 完 count 不會被撐大。但這支要同時
   // 算「rally 筆數」（得失分）跟「set 筆數」（局數），這兩者是不同 grain：一場比賽如果打了
   // 3 局、每局 20 分，若把 rallies 跟 sets 一起 join 進同一支查詢再 groupBy(matchId)，
   // 每一筆 set 都會先被 rallies 那邊的多筆列「乘」出去（3 局 × 各局 rally 數的笛卡兒積），
-  // count(*) 出來的局數就不是 3 而是被相乘膨脹過的假數字。標準解法是三支各自單一 grain
+  // count(*) 出來的局數就不是 3 而是被相乘膨脹過的假數字。標準解法是各自單一 grain
   // 的查詢，在應用層（JS）用 matchId 當 key 合併，而不是硬湊一支 SQL 掩蓋不同 grain
   // 硬 join 的問題——這是報表查詢很常見的取捨：正確性優先於「只發一支 SQL 比較潮」。
-  const rallyRows = await db
+
+  // 逐「局」的我方/對方得分（grain = set）。首頁列表卡片要顯示「局比數」(例如 3:0)，
+  // 需要每一局各自的比分，不能只有整場加總的 ourPoints/opponentPoints。
+  //
+  // 用 leftJoin 而非 innerJoin：剛按「下一局」但還沒開球的空局（firstServer=null、還沒有
+  // 任何 rally）也要留一列 0:0，這樣下面「最後一局＝進行中」的判斷才看得到它、能正確把它
+  // 當成進行中那局排除掉。leftJoin 讓沒有 rally 的 set 仍出現一列（rally 欄位為 NULL），
+  // 而 count(*) filter (where winner=...) 對 NULL 那列的 winner 判斷為 false、不會誤加，
+  // 所以空局算出來剛好是 0:0，正是我們要的。
+  const setScoreRows = await db
     .select({
       matchId: setsTable.matchId,
-      ourPoints: sql<number>`count(*) filter (where ${ralliesTable.winner} = 'home')`.mapWith(
+      setNumber: setsTable.setNumber,
+      ourScore: sql<number>`count(*) filter (where ${ralliesTable.winner} = 'home')`.mapWith(
         Number,
       ),
-      opponentPoints: sql<number>`count(*) filter (where ${ralliesTable.winner} = 'away')`.mapWith(
+      opponentScore: sql<number>`count(*) filter (where ${ralliesTable.winner} = 'away')`.mapWith(
         Number,
       ),
     })
-    .from(ralliesTable)
-    .innerJoin(setsTable, eq(ralliesTable.setId, setsTable.id))
+    .from(setsTable)
+    .leftJoin(ralliesTable, eq(ralliesTable.setId, setsTable.id))
+    .innerJoin(matchesTable, eq(setsTable.matchId, matchesTable.id))
+    .where(eq(matchesTable.userId, req.userId))
+    .groupBy(setsTable.matchId, setsTable.id, setsTable.setNumber)
+    .orderBy(setsTable.matchId, setsTable.setNumber);
+
+  // 這個使用者名下「有凍結過先發陣容」的比賽集合。lineups 一局一 row（見
+  // lib/db/src/schema/lineups.ts），只要這場任一局有先發 row，就代表教練排過先發、
+  // 卡片不用再亮「尚未排先發」黃標。join lineups → sets 才拿得到 matchId（lineups 只存 setId）。
+  const lineupMatchRows = await db
+    .select({ matchId: setsTable.matchId })
+    .from(lineupsTable)
+    .innerJoin(setsTable, eq(lineupsTable.setId, setsTable.id))
     .innerJoin(matchesTable, eq(setsTable.matchId, matchesTable.id))
     .where(eq(matchesTable.userId, req.userId))
     .groupBy(setsTable.matchId);
+  const matchesWithLineup = new Set(lineupMatchRows.map((r) => r.matchId));
 
   // 局數＝真正開過球的局（firstServer 不是 null）——按「下一局」當下就會先建一筆空 set
   // （firstServer 還是 null），使用者還沒選先發方，這種空局不該被算進「打了幾局」，跟
@@ -131,25 +154,42 @@ router.get("/analysis/matches", async (req, res) => {
     .where(eq(matchesTable.userId, req.userId))
     .groupBy(setsTable.matchId);
 
-  // 用 Map 把 rallyRows / setRows keyed 起來，等下對 matches 的每一場逐一查表合併，
-  // 查表是 O(1)，整體合併是 O(場數)，不會因為場數變多而變慢。
-  const rallyByMatch = new Map(rallyRows.map((r) => [r.matchId, r]));
+  // 把逐局比分依 matchId 分組（setScoreRows 已照 matchId, setNumber 排好，所以每組內部
+  // 天然就是第 1 局、第 2 局…的順序）。等下對 matches 的每一場查表 O(1) 合併。
+  const setScoresByMatch = new Map<number, { ourScore: number; opponentScore: number }[]>();
+  for (const row of setScoreRows) {
+    const list = setScoresByMatch.get(row.matchId);
+    const entry = { ourScore: row.ourScore, opponentScore: row.opponentScore };
+    if (list) list.push(entry);
+    else setScoresByMatch.set(row.matchId, [entry]);
+  }
   const setsByMatch = new Map(setRows.map((r) => [r.matchId, r]));
 
   const summaries = matches.map((m) => {
-    const rally = rallyByMatch.get(m.matchId);
     const sets = setsByMatch.get(m.matchId);
+    // 這場所有局的比分（含進行中的最後一局），已依局序排好。
+    const allSetScores = setScoresByMatch.get(m.matchId) ?? [];
+    // setResults 只給「已結束局」：排除最後一局（進行中那局），鏡射前端 reconstructRecording
+    // 的「最後一局＝進行中、其餘＝已結束」慣例（見 lib/scoreSheetMapping.ts）。這樣卡片用
+    // setResults 算出來的局比數，會跟使用者點進計分頁後看到的完全一致。slice(0, -1) 對空
+    // 陣列或單一元素都安全（回空陣列），不用特判。
+    const setResults = allSetScores.slice(0, -1);
+    // 整場總得失分＝把每一局的得分加起來（含進行中那局，跟舊 rallyRows 的整場 count 等價）。
+    const ourPoints = allSetScores.reduce((sum, s) => sum + s.ourScore, 0);
+    const opponentPoints = allSetScores.reduce((sum, s) => sum + s.opponentScore, 0);
     return {
       matchId: m.matchId,
       opponent: m.opponent,
       date: m.date,
       teamId: m.teamId,
-      // 缺聚合結果代表這場比賽還沒有任何 rally/set 資料（剛建立、還沒開始記錄），
-      // 預設補 0——這樣「建了但還沒記過任何東西」的比賽也會出現在列表裡，摘要是 0:0、
-      // 局數 0，而不是整場從結果裡消失（消失反而更讓人困惑：使用者明明建過這場比賽）。
+      // 缺資料代表這場還沒有任何 set/rally（剛建立、還沒開始記錄），預設補 0/空——這樣
+      // 「建了但還沒記過任何東西」的比賽也會出現在列表裡，摘要是 0:0、局數 0，而不是整場
+      // 從結果裡消失（消失反而更讓人困惑：使用者明明建過這場比賽）。
       setsPlayed: sets?.setsPlayed ?? 0,
-      ourPoints: rally?.ourPoints ?? 0,
-      opponentPoints: rally?.opponentPoints ?? 0,
+      ourPoints,
+      opponentPoints,
+      setResults,
+      hasLineup: matchesWithLineup.has(m.matchId),
     };
   });
 

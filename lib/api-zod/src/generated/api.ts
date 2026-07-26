@@ -664,7 +664,12 @@ export const ListMatchAnalysisResponseItem = zod.object({
   "teamId": zod.number().nullish(),
   "setsPlayed": zod.number(),
   "ourPoints": zod.number(),
-  "opponentPoints": zod.number()
+  "opponentPoints": zod.number(),
+  "setResults": zod.array(zod.object({
+  "ourScore": zod.number(),
+  "opponentScore": zod.number()
+})),
+  "hasLineup": zod.boolean()
 })
 export const ListMatchAnalysisResponse = zod.array(ListMatchAnalysisResponseItem)
 

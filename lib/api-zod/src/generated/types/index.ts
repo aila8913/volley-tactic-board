@@ -34,6 +34,7 @@ export * from './rally';
 export * from './rallyWinner';
 export * from './rotationStat';
 export * from './servingSide';
+export * from './setResult';
 export * from './substitution';
 export * from './substitutionKind';
 export * from './tactic';

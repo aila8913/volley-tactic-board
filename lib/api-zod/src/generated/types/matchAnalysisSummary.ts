@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { SetResult } from './setResult';
 
 export interface MatchAnalysisSummary {
   matchId: number;
@@ -14,4 +15,6 @@ export interface MatchAnalysisSummary {
   setsPlayed: number;
   ourPoints: number;
   opponentPoints: number;
+  setResults: SetResult[];
+  hasLineup: boolean;
 }

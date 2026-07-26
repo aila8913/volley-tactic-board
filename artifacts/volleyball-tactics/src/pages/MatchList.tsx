@@ -3,9 +3,7 @@ import { useLocation } from "wouter";
 import { Plus, SlidersHorizontal, BarChart3 } from "lucide-react";
 import { useMatchList, useDeleteMatch } from "@/hooks/useMatches";
 import { useTournamentList, useDeleteTournament } from "@/hooks/useTournaments";
-import { useScoreSheet } from "@/hooks/useScoreSheet";
-import { useRotationTable } from "@/hooks/useRotationTable";
-import { captureLineupFromRotations } from "@/lib/rotationLogic";
+import { useCrossMatchAnalysis } from "@/hooks/useCrossMatchAnalysis";
 import MatchFormDialog from "@/components/MatchFormDialog";
 import TournamentFormDialog from "@/components/TournamentFormDialog";
 import ListItemCard from "@/components/ListItemCard";
@@ -42,28 +40,41 @@ export default function MatchList() {
   // 進頁面時右欄是空狀態，理由見 MatchInfoRail 空狀態分支的註解：使用者還沒表達意圖前，
   // 不該把任何一場比賽的站位放進「可編輯」狀態。
   const [selected, setSelected] = useState<MatchListSelection>(null);
-  // 卡片右端「3:0 勝」那格的來源。直接讀共用 store 的既有內容，**不**逐場呼叫
-  // useScoreSheetController 去 hydrate——那支會為每一場比賽各發一輪 sets/rallies 請求，
-  // 列表有 30 場就是 30 輪，為了一行小字讓進頁變慢完全不划算。還沒被開啟過的比賽在 store
-  // 裡沒有紀錄，formatMatchResult 會回「尚未開賽」，語意上也剛好對得上。
-  const recordingsByMatch = useScoreSheet((s) => s.recordingsByMatch);
-  const matchResultText = (matchId: string) =>
-    formatMatchResult(recordingsByMatch[matchId]?.completedSets ?? []);
+  // 卡片右端「3:0 勝」那格、跟「尚未排先發」黃標的來源，都改讀後端的跨場彙總
+  // （GET /analysis/matches，#65 視圖②那支），不再讀本機 zustand store。
+  //
+  // 為什麼換來源：本機 store（useScoreSheet / useRotationTable）只有在「打開過那一場」時
+  // 才會被 hydrate，所以列表剛載入、還沒點任何一場時每張卡都是空的 → 一律顯示「尚未開賽」
+  // ＋亮黃標，點進去才變對。改讀這支 bulk endpoint 後，一支請求就把每場的摘要（逐局比分 +
+  // 是否排過先發）一次拿回來，列表載入當下就是正確的，不用逐場開啟。而且是「一支請求 O(場數)
+  // 列」，不是「一場一輪 sets/rallies 請求」的 fan-out——這正是當初刻意只讀本機 store 想
+  // 閃避的成本，現在後端算好摘要就沒這個顧慮了。
+  const { summaries, isLoading: isSummaryLoading } = useCrossMatchAnalysis();
+  // summaries 的 matchId 是數字（後端 serial），這裡的 domain id 是字串，轉成字串當 key。
+  const summaryByMatch = new Map(summaries.map((s) => [String(s.matchId), s]));
 
-  // issue #190（軟提醒）：「這場比賽還沒排先發」這件事，讀的是跟右欄（MatchInfoRail）
-  // 完全同一份共用輪轉表 store（useRotationTable），所以在右欄把先發排完的當下，這裡的
-  // 判斷會自動跟著變、卡片上的提示會馬上消失——不用重整頁面，因為兩邊看的是同一份真相，
-  // 不是各自快取的一份副本。
-  const dataByMatch = useRotationTable((s) => s.dataByMatch);
+  // setResults 只含「已結束局」（後端已排除進行中的最後一局），formatMatchResult 吃的就是
+  // 逐局比分，語意跟原本傳 completedSets 完全一致。查不到（還沒載入 / 這場沒資料）就回
+  // 空陣列 → 顯示「尚未開賽」。
+  const matchResultText = (matchId: string) =>
+    formatMatchResult(summaryByMatch.get(matchId)?.setResults ?? []);
+
+  // issue #190（軟提醒）：這場是否已排先發，直接看後端 hasLineup（有沒有任一局凍結過先發
+  // 陣容）。刻意在 summaries 還在載入時先不亮黃標——寧可晚半秒出現，也不要在載入瞬間對每場
+  // 都閃一下「尚未排先發」的假警告（那正是使用者回報的困擾）。載完後 hasLineup 為 false 才
+  // 判定「還沒排」。注意：輪轉表上「排好但還沒開賽」的暫存陣容不進 DB（見 useRotationTable
+  // 的 partialize），所以這裡認的是「已凍結進計分流程」的先發；純輪轉表暫存的先發不算，
+  // 這跟「暫存狀態重整就沒了」本來就一致，不是退步。
   const matchNeedsLineup = (matchId: string): boolean => {
-    const rec = recordingsByMatch[matchId];
-    if ((rec?.completedSets?.length ?? 0) > 0) return false; // 已經打過至少一局，不用再提醒
-    if (rec?.lineup) return false; // 目前這局已經開賽/凍結過先發，同樣不用提醒
-    // 從沒被打開過的比賽（沒進過計分頁/戰術板/右欄），dataByMatch[matchId] 是 undefined，
-    // per?.rotations 用 ?? [] 補成空陣列——six-zone 檢查自然全部落空，captureLineupFromRotations
-    // 回 null，這裡判定為「還沒排」，邏輯上正確，不需要額外的 undefined 特判。
-    const per = dataByMatch[matchId];
-    return captureLineupFromRotations(per?.rotations ?? [], per?.roster ?? []) === null;
+    if (isSummaryLoading) return false;
+    const s = summaryByMatch.get(matchId);
+    if (!s) return true; // 查不到摘要＝這場還沒任何資料，當作「還沒排」
+    // 打過至少一局就不用再提醒——鏡射舊本機邏輯的 completedSets>0 分支。這一條也順手擋掉
+    // 舊資料的邊界：有些早期/被清過 rally 的比賽，sets 還在但對應的 lineups row 已不存在
+    //（hasLineup=false），若只看 hasLineup 會對這種「其實打過球」的比賽誤亮黃標，跟點進去
+    // 計分頁看到的（有完成局、不提醒）就對不上。先看 setsPlayed 能讓兩邊一致。
+    if (s.setsPlayed > 0) return false;
+    return !s.hasLineup;
   };
 
   // 「最上層」比賽 = 沒有歸到任何資料夾（tournamentId 為 null）。
