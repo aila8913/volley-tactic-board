@@ -69,15 +69,14 @@ describe("NavRail", () => {
     expect(html).toContain("ring-[#c6f135]");
   });
 
-  it("沒有 matchId 時：計/數/戰/出 四格渲染成停用態（aria-disabled，仍是可點擊的 <button>）", () => {
+  it("沒有 matchId 時：計/戰/出 三格停用；數是常駐連結、通往跨場紀錄本（/analytics）", () => {
     const html = renderWithProviders(<NavRail backHref="/" active="list" />);
     // 「比」永遠是普通連結，不受 matchId 影響。
     expect(html).toContain('data-testid="link-nav-rail-collapsed-比"');
-    // 計/數/戰/出改成渲染成停用態按鈕（不是舊版 MatchNavRail 的不可互動 <span>）——
+    // 計/戰/出改成渲染成停用態按鈕（不是舊版 MatchNavRail 的不可互動 <span>）——
     // 型別上必須是 <button>，不然點了不會觸發 onClick、也就跳不出「先選一場比賽」的 toast
     // （HTML 原生 disabled 屬性會讓瀏覽器完全不派發滑鼠事件，這正是這次要修的坑）。
     expect(html).toContain('data-testid="button-nav-rail-collapsed-計"');
-    expect(html).toContain('data-testid="button-nav-rail-collapsed-數"');
     expect(html).toContain('data-testid="button-nav-rail-collapsed-戰"');
     expect(html).toContain('data-testid="button-nav-rail-collapsed-出"');
     expect(html).toContain('aria-disabled="true"');
@@ -85,6 +84,10 @@ describe("NavRail", () => {
     // 停用態按鈕沒有寫死 disabled 屬性——renderToStaticMarkup 只序列化 React 認得的 props，
     // 這裡簡單確認渲染出來的字串裡沒有裸的 `disabled` 屬性字樣（不是 aria-disabled 的一部分）。
     expect(html).not.toMatch(/[^-]disabled(?!=)/);
+    // 「數」是例外：PO 定案數據分析＝隨時翻得開的紀錄本，所以沒選比賽時它不灰掉，而是
+    // 渲染成連結、指向跨場彙總紀錄本 /analytics（有選比賽才改指那場的單場分析）。
+    expect(html).toContain('data-testid="link-nav-rail-collapsed-數"');
+    expect(html).toContain('href="/analytics"');
   });
 
   it("渲染當下不會呼叫 captureCurrent——擷取要等使用者實際走到「新增戰術」那一步才發生", () => {

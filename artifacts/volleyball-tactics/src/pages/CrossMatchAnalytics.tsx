@@ -12,6 +12,7 @@ import { useLocation, Link } from "wouter";
 import { BarChart3 } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import AppShell from "@/components/AppShell";
+import NavRail from "@/components/NavRail";
 import { useCrossMatchAnalysis } from "@/hooks/useCrossMatchAnalysis";
 import { useTeamList } from "@/hooks/useTeams";
 import { formatMatchDateTime } from "@/lib/matchSummary";
@@ -51,10 +52,13 @@ export default function CrossMatchAnalytics() {
 
   return (
     // mode="A"（列表瀏覽）：這頁本質上是一張「比賽摘要列表」，跟 MatchList 同一種版面模式。
-    // 不傳 nav/aside——最小可用先不硬湊左右欄插槽（那兩欄目前的內容都是綁在單一比賽/資料夾
-    // 情境設計的，這頁沒有那種情境），之後要不要補齊完整導覽軌留給後續迭代決定。
+    // nav：帶上全站共用導覽軌，讓「數」這格在紀錄本頁也常駐、且標成 active——PO 定案數據分析
+    // 要像戰術板一樣「隨時翻得開」，所以它自己也要有那條可以再翻去別頁的軌（沒有 matchId，
+    // 所以 NavRail 走 base 變體、計/戰/出照樣灰掉；「數」因為永遠可到而亮起）。aside 仍不傳
+    // ——右欄目前的內容都綁在單一比賽/資料夾情境，這頁沒有那種情境，硬湊反而沒意義。
     <AppShell
       mode="A"
+      nav={<NavRail backHref="/" active="analytics" />}
       className="bg-[#0a0b07] font-dash text-[#f5f5f0]"
       style={{
         backgroundImage:

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { Plus, SlidersHorizontal, BarChart3 } from "lucide-react";
+import { Plus, SlidersHorizontal } from "lucide-react";
 import { useMatchList, useDeleteMatch } from "@/hooks/useMatches";
 import { useTournamentList, useDeleteTournament } from "@/hooks/useTournaments";
 import { useCrossMatchAnalysis } from "@/hooks/useCrossMatchAnalysis";
@@ -164,20 +164,10 @@ export default function MatchList() {
           <div className="mb-8 flex items-center justify-between gap-4">
             <h1 className="font-dash text-2xl font-bold">比賽列表</h1>
             {/* §3.1 的操作列，由左至右：篩選（方形圖示鈕）、新增資料夾、新增比賽。 */}
+            {/* 跨場紀錄本的入口以前在這裡放一顆 BarChart 小圖示，現在收斂到左欄導覽軌的「數」
+                （沒選比賽時「數」就通往 /analytics，見 NavRail.tsx analyticsHref）——同一個目的地
+                不再有兩個入口，避免使用者困惑，也讓「隨時翻得開的紀錄本」統一從那條軌進出。 */}
             <div className="flex gap-3">
-              {/* 「回頭看多場」入口（#65 M2 視圖②，跨場彙總分析頁）。這顆按鈕的視覺跟擺放
-                  位置刻意求最小 footprint——之後歸設計夥伴調整，這裡先求「有路可以到」。 */}
-              <button
-                type="button"
-                onClick={() => navigate("/analytics")}
-                aria-label="數據分析（跨場彙總）"
-                title="數據分析"
-                className="flex h-11 w-11 items-center justify-center rounded-2xl border
-                  border-white/[0.12] text-[#a9b096] transition hover:border-[#c6f135]
-                  hover:text-[#c6f135]"
-              >
-                <BarChart3 className="h-[18px] w-[18px]" />
-              </button>
               <button
                 type="button"
                 // 篩選的行為（要能篩什麼欄位、跟資料夾階層怎麼互動）還沒有定案，線框稿只畫了

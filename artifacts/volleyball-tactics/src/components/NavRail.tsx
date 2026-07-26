@@ -163,14 +163,21 @@ export default function NavRail(props: NavRailProps) {
   // 變成清單自己在閃。
   const openSubmenuByHover = (key: "board" | "export") => setOpenSubmenu(key);
 
-  // 沒有 matchId 時，「計／數／戰／出」四格全部灰掉——這是 issue #173 留言裡 PO 拍板的決定
+  // 沒有 matchId 時，「計／戰／出」三格灰掉——這是 issue #173 留言裡 PO 拍板的決定
   // （見 issue 討論）：位置固定不隱藏，讓使用者維持位置記憶；但停用不再是啞的，點下去要跳
   // toast 告訴使用者「為什麼點不動」，而不是像舊版 MatchNavRail 那樣渲染成不可互動的 <span>。
   // 這裡改用 <button>（保留 aria-disabled="true"，但不能用 HTML disabled 屬性）：disabled
   // 屬性會讓瀏覽器完全不派發任何滑鼠事件給這個元素，onClick 永遠不會被呼叫，也就跳不出 toast。
+  //
+  // 「數」是這裡唯一的例外，不套用停用態：PO 定案「數據分析＝隨時翻得開的紀錄本」，所以它
+  // 永遠可到——有選比賽就去那場的單場分析，沒選比賽就去跨場彙總紀錄本（/analytics）。見下面
+  // 數格的 href。
   const handleDisabledClick = () => {
     toast({ title: "先選一場比賽" });
   };
+
+  // 「數」的目的地：跟計/戰/出不同，沒有 matchId 也有得去——導向跨場紀錄本而不是灰掉。
+  const analyticsHref = matchId ? `/matches/${matchId}/analytics` : "/analytics";
 
   const goToBoard = () => {
     if (matchId) setLocation(`/matches/${matchId}/board`);
@@ -296,12 +303,13 @@ export default function NavRail(props: NavRailProps) {
           isActive={active === "record"}
           onDisabledClick={matchId ? undefined : handleDisabledClick}
         />
+        {/* 「數」永遠是連結、永遠可到（見 analyticsHref 上方說明）——不傳 onDisabledClick，
+            所以就算沒選比賽也不會灰掉，而是通往跨場紀錄本。 */}
         <CollapsedEntry
           glyph="數"
           label="數據"
-          href={matchId ? `/matches/${matchId}/analytics` : undefined}
+          href={analyticsHref}
           isActive={active === "analytics"}
-          onDisabledClick={matchId ? undefined : handleDisabledClick}
         />
       </div>
       <div className="mt-auto flex flex-col items-center gap-1 py-3">
@@ -345,12 +353,12 @@ export default function NavRail(props: NavRailProps) {
               isActive={active === "record"}
               onDisabledClick={matchId ? undefined : handleDisabledClick}
             />
+            {/* 「數」永遠可到（見 analyticsHref 上方說明）：有比賽→那場單場分析，沒比賽→紀錄本。 */}
             <ExpandedEntry
               glyph="數"
               label="數據分析"
-              href={matchId ? `/matches/${matchId}/analytics` : undefined}
+              href={analyticsHref}
               isActive={active === "analytics"}
-              onDisabledClick={matchId ? undefined : handleDisabledClick}
             />
           </div>
 
