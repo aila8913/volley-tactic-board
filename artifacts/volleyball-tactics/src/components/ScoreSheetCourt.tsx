@@ -5,6 +5,7 @@ import { Side, RegularSub } from "../types/scoresheet";
 import type { MatchPlayer } from "../types/match";
 import type { PlayerPosition } from "../types/rotationTable";
 import { CourtGradientDefs, COURT_LINE_COLOR, COURT_LINE_OPACITY } from "../lib/courtTheme";
+import PlayerMarker from "./PlayerMarker";
 
 export interface TouchedTarget {
   side: Side;
@@ -424,10 +425,28 @@ export default function ScoreSheetCourt({
             const isServer = serving === "us" && pos.x > 0.7 && pos.y > 0.75;
             const isDropTarget = isLiberoDropHighlight(pos);
             const isSubTarget = subModeActive && !isFrontRow;
-            // L 蓋住時橘色；前排黃綠；後排白色
-            const fill = isLiberoOverlay ? "#FF6B00" : isFrontRow ? "#CCFF00" : "#FFFFFF";
+            // 邊框色＝狀態指示：拖曳提示 > 換人提示 > L 蓋住(橘) > 前排(黃綠) > 後排(白)。
+            // 圓圈本身（深色玻璃底＋背號在圈裡、姓名在圈下）跟戰術板 PlayerNode.tsx 共用
+            // components/PlayerMarker.tsx——這裡只算「這個位置現在該用什麼顏色」。
+            const color = isDropTarget
+              ? "#FF6B00"
+              : isSubTarget
+                ? "#3B82F6"
+                : isLiberoOverlay
+                  ? "#FF6B00"
+                  : isFrontRow
+                    ? "#CCFF00"
+                    : "#FFFFFF";
             const x = pos.x * 100;
             const y = pos.y * 200;
+            // L 蓋住此格時，顯示的是 L 本人的背號/姓名，姓名後面加註被蓋格主的背號
+            // （原本是圈裡第二行小字，PlayerMarker 只有「背號＋姓名」兩格，改成併進姓名
+            // 那一行，資訊沒有少，只是排版跟著共用元件走）。
+            const displayPlayer = isLiberoOverlay && liberoPlayer ? liberoPlayer : slotPlayer;
+            const displayName =
+              isLiberoOverlay && liberoPlayer
+                ? `${liberoPlayer.name || liberoPlayer.role} /${slotPlayer.number}`
+                : slotPlayer.name || slotPlayer.role;
 
             return (
               <g key={pos.playerId} transform={`translate(${x},${y})`}>
@@ -446,39 +465,13 @@ export default function ScoreSheetCourt({
                     strokeDasharray="3 2"
                   />
                 )}
-                <circle
-                  r={isServer ? 7.5 : 6}
-                  fill={fill}
-                  stroke={isDropTarget ? "#FF6B00" : isSubTarget ? "#3B82F6" : "#111"}
-                  strokeWidth={isServer ? 1.5 : 1}
+                <PlayerMarker
+                  number={displayPlayer.number}
+                  name={displayName}
+                  color={color}
+                  radius={isServer ? 7.5 : 6}
+                  emphasized={isServer}
                 />
-                {isLiberoOverlay && liberoPlayer ? (
-                  // L 蓋住此格：主顯示 L 標籤，下方小字顯示被蓋格主的號碼
-                  <>
-                    <text
-                      y="1"
-                      fontSize={circleLabel === "name" ? 3 : 4}
-                      fontWeight="bold"
-                      fill="#fff"
-                      textAnchor="middle"
-                    >
-                      {playerLabel(liberoPlayer)}
-                    </text>
-                    <text y="5.5" fontSize="2.5" fill="rgba(255,255,255,0.75)" textAnchor="middle">
-                      /{slotPlayer.number}
-                    </text>
-                  </>
-                ) : (
-                  <text
-                    y="2"
-                    fontSize={circleLabel === "name" ? 3 : 4}
-                    fontWeight="bold"
-                    fill="#111"
-                    textAnchor="middle"
-                  >
-                    {playerLabel(slotPlayer)}
-                  </text>
-                )}
                 {isServer && (
                   <text y="-9" fontSize="6" textAnchor="middle">
                     🏐

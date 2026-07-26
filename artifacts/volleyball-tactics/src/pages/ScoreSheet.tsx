@@ -525,7 +525,7 @@ export default function ScoreSheet() {
           <h1 className="text-lg font-bold">vs {match.opponent}</h1>
         </header>
 
-        <div className="flex flex-1 min-h-0">
+        <div className="flex flex-1 min-h-0 justify-center">
           {!hasLineup ? (
             // 這場還沒有先發。以前這裡是一顆「前往戰術板」把使用者踢出計分頁，現在右欄的
             // 站位面板在開賽前本來就是可編輯的（不用另外切換模式），所以這裡只留一句指路，
@@ -569,7 +569,7 @@ export default function ScoreSheet() {
             // 右邊一直欄（使用者要求：不要把功能都擠成上下一長條）。
             <>
               {/* ── 左：球場 ── */}
-              <div className="flex min-w-0 flex-1 flex-col gap-2 p-4">
+              <div className="flex min-w-0 flex-col gap-2 p-4">
                 {selectedBenchPlayer ? (
                   <div className="flex w-full items-center justify-between rounded-lg border border-[#3b82f6]/40 bg-[#3b82f6]/15 px-3 py-1.5 text-sm">
                     <span className="font-semibold text-[#93c5fd]">
