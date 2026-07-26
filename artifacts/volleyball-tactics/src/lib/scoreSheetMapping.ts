@@ -80,16 +80,21 @@ export function disabledActions(serving: Side | null, actorSide: Side): PlayActi
 // ── PointRecord → rally ──
 // 一個 PointRecord 就是一分 = 一個 rally。homeScore/awayScore 存的是「這分開始前」的比分
 // （後端設計，見 lib/db/src/schema/rallies.ts），所以呼叫端要把記這分之前的比分傳進來。
+// homeRotation/awayRotation 同理，存的也是「這分開始前」的輪次快照，不是加分/輪轉後的值。
 export function pointRecordToRally(
   point: PointRecord,
   rallyNumber: number,
   homeScoreBefore: number,
   awayScoreBefore: number,
+  homeRotationBefore: number,
+  awayRotationBefore: number,
 ): NewRally {
   return {
     rallyNumber,
     homeScore: homeScoreBefore,
     awayScore: awayScoreBefore,
+    homeRotation: homeRotationBefore,
+    awayRotation: awayRotationBefore,
     winner: sideToApi(point.side),
   };
 }

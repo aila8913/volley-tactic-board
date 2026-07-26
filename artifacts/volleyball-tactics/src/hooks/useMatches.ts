@@ -34,14 +34,15 @@ import {
 // ── 讀取 ──
 
 // 比賽列表。這裡不順便抓每場的名單（那會變成 N+1 個請求），domain Match 的 players 先給空陣列；
-// 需要顯示人數的卡片（MatchCard）自己用 useRoster 抓自己那一場。
+// 需要名單的畫面自己用 useRoster 抓自己那一場（#175 之後列表卡片不再顯示人數，右欄的
+// MatchInfoRail 才是看名單的地方，所以列表這條路徑上已經沒有人需要逐場的名單了）。
 export function useMatchList() {
   const { data, isLoading, isError } = useListMatches();
   const matches: Match[] = (data ?? []).map((m) => serverMatchToDomain(m));
   return { matches, isLoading, isError };
 }
 
-// 單場比賽的名單（給 MatchCard 顯示人數、給編輯彈窗做 diff 用）。
+// 單場比賽的名單（給右欄站位面板、編輯彈窗做 diff 用）。
 export function useRoster(matchId: number) {
   const { data, isLoading, isError } = useListPlayers(matchId);
   const players: MatchPlayer[] = (data ?? []).map(serverPlayerToDomain);

@@ -24,6 +24,7 @@ import type {
   Lineup,
   ListTacticsParams,
   Match,
+  MatchAnalysisSummary,
   MatchEvent,
   MatchSet,
   NewEvent,
@@ -38,6 +39,7 @@ import type {
   NewTournament,
   Player,
   Rally,
+  RotationStat,
   Substitution,
   Tactic,
   Timeout,
@@ -2862,4 +2864,158 @@ export const useDeleteEvent = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getDeleteEventMutationOptions(options));
     }
+
+export const getGetMatchRotationStatsUrl = (matchId: number,) => {
+
+
+
+
+  return `/api/analysis/matches/${matchId}/rotations`
+}
+
+/**
+ * @summary Get per-rotation points won/lost for a match, aggregated from rallies
+ */
+export const getMatchRotationStats = async (matchId: number, options?: RequestInit): Promise<RotationStat[]> => {
+
+  return customFetch<RotationStat[]>(getGetMatchRotationStatsUrl(matchId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMatchRotationStatsQueryKey = (matchId: number,) => {
+    return [
+    `/api/analysis/matches/${matchId}/rotations`
+    ] as const;
+    }
+
+
+export const getGetMatchRotationStatsQueryOptions = <TData = Awaited<ReturnType<typeof getMatchRotationStats>>, TError = ErrorType<unknown>>(matchId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMatchRotationStats>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMatchRotationStatsQueryKey(matchId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMatchRotationStats>>> = ({ signal }) => getMatchRotationStats(matchId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(matchId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMatchRotationStats>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetMatchRotationStatsQueryResult = NonNullable<Awaited<ReturnType<typeof getMatchRotationStats>>>
+export type GetMatchRotationStatsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get per-rotation points won/lost for a match, aggregated from rallies
+ */
+
+export function useGetMatchRotationStats<TData = Awaited<ReturnType<typeof getMatchRotationStats>>, TError = ErrorType<unknown>>(
+ matchId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMatchRotationStats>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetMatchRotationStatsQueryOptions(matchId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getListMatchAnalysisUrl = () => {
+
+
+
+
+  return `/api/analysis/matches`
+}
+
+/**
+ * @summary Get a one-row-per-match summary (opponent, date, sets played, points) for every match owned by the current user
+ */
+export const listMatchAnalysis = async ( options?: RequestInit): Promise<MatchAnalysisSummary[]> => {
+
+  return customFetch<MatchAnalysisSummary[]>(getListMatchAnalysisUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListMatchAnalysisQueryKey = () => {
+    return [
+    `/api/analysis/matches`
+    ] as const;
+    }
+
+
+export const getListMatchAnalysisQueryOptions = <TData = Awaited<ReturnType<typeof listMatchAnalysis>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMatchAnalysis>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListMatchAnalysisQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listMatchAnalysis>>> = ({ signal }) => listMatchAnalysis({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listMatchAnalysis>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListMatchAnalysisQueryResult = NonNullable<Awaited<ReturnType<typeof listMatchAnalysis>>>
+export type ListMatchAnalysisQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get a one-row-per-match summary (opponent, date, sets played, points) for every match owned by the current user
+ */
+
+export function useListMatchAnalysis<TData = Awaited<ReturnType<typeof listMatchAnalysis>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMatchAnalysis>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListMatchAnalysisQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
 

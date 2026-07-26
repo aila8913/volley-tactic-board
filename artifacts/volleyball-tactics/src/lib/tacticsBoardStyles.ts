@@ -1,5 +1,5 @@
 // 戰術板右側面板共用的視覺 token（issue #160 C2 把 TacticsBoardPanel 拆成多個檔案後，
-// 這兩個 class 字串被 TacticsBrowsePanel / TacticsViewingPanel / TacticsEditPanel /
+// 這兩個 class 字串被 TacticsBrowsePanel / TacticsViewingPanel / TacticsEditToolRail /
 // NewTacticDialog 好幾個檔案一起用，抽到這裡當唯一真相來源——不然每個檔案各自複製一份，
 // 之後要調整深色玻璃風格的按鈕樣式（例如 #c6f135 這個螢光綠強調色）就要找好幾個地方改。
 

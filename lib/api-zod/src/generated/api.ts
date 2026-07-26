@@ -300,6 +300,8 @@ export const ListRalliesResponseItem = zod.object({
   "rallyNumber": zod.number(),
   "homeScore": zod.number(),
   "awayScore": zod.number(),
+  "homeRotation": zod.number(),
+  "awayRotation": zod.number(),
   "winner": zod.enum(['home', 'away'])
 })
 export const ListRalliesResponse = zod.array(ListRalliesResponseItem)
@@ -316,6 +318,8 @@ export const CreateRallyBody = zod.object({
   "rallyNumber": zod.number(),
   "homeScore": zod.number(),
   "awayScore": zod.number(),
+  "homeRotation": zod.number(),
+  "awayRotation": zod.number(),
   "winner": zod.enum(['home', 'away'])
 })
 
@@ -633,5 +637,40 @@ export const UpdateEventResponse = zod.object({
 export const DeleteEventParams = zod.object({
   "eventId": zod.coerce.number()
 })
+
+
+/**
+ * @summary Get per-rotation points won/lost for a match, aggregated from rallies
+ */
+export const GetMatchRotationStatsParams = zod.object({
+  "matchId": zod.coerce.number()
+})
+
+export const GetMatchRotationStatsResponseItem = zod.object({
+  "rotation": zod.number(),
+  "pointsWon": zod.number(),
+  "pointsLost": zod.number()
+})
+export const GetMatchRotationStatsResponse = zod.array(GetMatchRotationStatsResponseItem)
+
+
+/**
+ * @summary Get a one-row-per-match summary (opponent, date, sets played, points) for every match owned by the current user
+ */
+export const ListMatchAnalysisResponseItem = zod.object({
+  "matchId": zod.number(),
+  "opponent": zod.string(),
+  "date": zod.coerce.date(),
+  "teamId": zod.number().nullish(),
+  "setsPlayed": zod.number(),
+  "ourPoints": zod.number(),
+  "opponentPoints": zod.number(),
+  "setResults": zod.array(zod.object({
+  "ourScore": zod.number(),
+  "opponentScore": zod.number()
+})),
+  "hasLineup": zod.boolean()
+})
+export const ListMatchAnalysisResponse = zod.array(ListMatchAnalysisResponseItem)
 
 

@@ -222,7 +222,15 @@ export default function ScoreSheet() {
   // （setLineupFromSnapshot 直接寫回 useRotationTable）；開賽後已經記進去的球是綁著
   // record.lineup 這份凍結快照的，這時候改站位會讓歷史對不上，所以只能看不能改，
   // 要動陣容得走換人。
-  const canEditLineup = !currentSet || currentSet.serving === null;
+  //
+  // 判準是「有沒有凍結先發」（lineup，即 record.lineup），不是「有沒有選過發球方」（serving）。
+  // 舊寫法只看 serving，會踩到一個死結：某條路徑（背景寫入只成功了一半、或曾在沒先發時就寫出
+  // 發球方，見 hooks/useScoreSheet.ts 的 start() guard 與 #64）讓後端出現「有 firstServer、
+  // 沒 lineup」的殘缺 set，rehydrate 後 serving 非 null（→ 右欄被鎖成唯讀）但 record.lineup
+  // 是 null（→ 中央喊「還沒排先發」），變成「要排先發才解得開、卻被鎖住排不了」的死結。
+  // 改看 lineup 就沒有這個矛盾：只要還沒真的凍結先發，右欄一律可編輯——而沒有先發本來就記不了
+  // 球（記分 UI 整段藏在 hasLineup 分支裡），開放編輯是安全的。
+  const canEditLineup = lineup === null;
   // 球場要畫的「這一輪我方 6 人座標」，從快照即時換算（不再讀全域 rotations）。
   const ourPositions =
     activeLineup && currentSet ? lineupToPositions(activeLineup, currentSet.ourRotation) : [];
@@ -529,8 +537,12 @@ export default function ScoreSheet() {
                 在右邊的「場上站位」點號位、再點球員，湊滿 6 人就能開始記錄。
               </p>
             </div>
-          ) : !currentSet || currentSet.serving === null ? (
-            // 開賽前：還沒有球場可畫，比分區＋「這局誰先發球」置中就好，不用左右分欄。
+          ) : !lineup || !currentSet ? (
+            // 開賽前／殘缺 set 自癒（aila 在 main 修的死結，見 canEditLineup 的說明）：
+            // 判準看「有沒有凍結先發」（lineup）而非 serving——serving 已被寫過、但 lineup
+            // 還是 null 時，也要落到這個分支「再問一次」發球方，讓教練重排滿 6 人後重選，
+            // start() 這次就能把先發真正凍結＋補寫後端。還沒有球場可畫，比分區＋「這局誰
+            // 先發球」置中就好，不用左右分欄。
             <div className="flex flex-1 flex-col items-center justify-center gap-4 px-4 text-center">
               {scoreDisplay}
               <p className="text-sm font-bold text-[#f5f5f0]">這局由誰先發球？</p>

@@ -141,23 +141,48 @@ function MatchRotationSection({ matchId }: { matchId: string }) {
   let lineup: LineupSnapshot | null;
   let readOnly: boolean;
   let onLineupChange: ((next: LineupSnapshot) => void) | undefined;
+  // #191/#192：跟 lineup/readOnly 一樣，狀態小藥丸跟比分要沿著同一條 if/else 分支算，
+  // 不能另外重寫一份判斷式——不然兩份規則遲早會飄開（例如未來改了「已打完」的判定條件，
+  // 卻只記得改 lineup 那一支，藥丸跟著顯示錯誤的狀態）。
+  let setStatus: "historical" | "live" | "upcoming";
+  let score: { our: number; opponent: number } | null;
 
   if (clampedIndex < completedSets.length) {
     // 滑到「已經打完的某一局」：讀那一局封存當下的先發快照，純粹看歷史、不能改
     // （改了也沒意義——那一局早就打完了，改站位不會讓已經發生的比賽重新來過）。
     lineup = completedSets[clampedIndex].lineup;
     readOnly = true;
+    setStatus = "historical";
+    score = {
+      our: completedSets[clampedIndex].ourScore,
+      opponent: completedSets[clampedIndex].opponentScore,
+    };
   } else if (isMatchFinished) {
     // 整場已經打完：不管滑到「目前這局」時它有沒有資料（可能是還沒開打就被判定已經贏了的
     // 空局，教練沒有按「下一局」封存它），都一律唯讀——比賽結束了，不該再從這裡改任何站位。
     lineup = record?.lineup ?? null;
     readOnly = true;
+    setStatus = "historical";
+    // 這局可能根本沒開球過（見上面註解的「空局」情況），這時 currentSet.serving 是 null，
+    // 沒有比分可顯示——用 null 而不是硬湊 0:0，教練才不會誤以為這局真的打過。
+    score =
+      record?.currentSet && record.currentSet.serving !== null
+        ? { our: record.currentSet.ourScore, opponent: record.currentSet.opponentScore }
+        : null;
   } else if (record?.lineup) {
     // 目前這局已經開賽（局中凍結，跟 ScoreSheet.tsx 的 activeLineup 是同一條規則）：
     // 已經開始記分的局，站位要跟開賽當下凍結的那一份綁在一起，中途改會讓歷史跟站位對不上，
     // 要調整陣容得走換人，不能直接在這裡動先發。
     lineup = record.lineup;
     readOnly = true;
+    setStatus = "live";
+    // record.lineup 存在代表這局已經選過先發方、正在進行，理論上 currentSet.serving
+    // 一定不是 null；仍用同一條判斷式保底，serving 意外還是 null 時顯示 0:0 而不是憑空
+    // 湊一個可能不準的比分。
+    score =
+      record.currentSet.serving !== null
+        ? { our: record.currentSet.ourScore, opponent: record.currentSet.opponentScore }
+        : { our: 0, opponent: 0 };
   } else {
     // 目前這局還沒開賽：讀全站共用的「現役站位」（useRotationTable，#120 PO 定案的唯一真相），
     // 可以直接在這裡編輯——跟 ScoreSheet.tsx 開賽前那段是同一份資料、同一套寫法，教練在
@@ -170,6 +195,8 @@ function MatchRotationSection({ matchId }: { matchId: string }) {
     lineup = readLineupFromRotations(rotations ?? [], match?.players ?? []);
     readOnly = false;
     onLineupChange = (next) => setLineupFromSnapshot(matchId, next);
+    setStatus = "upcoming";
+    score = null; // 還沒開賽，沒有分可看。
   }
 
   return (
@@ -186,6 +213,8 @@ function MatchRotationSection({ matchId }: { matchId: string }) {
       canStepPrev={clampedIndex > 0}
       canStepNext={clampedIndex < totalSets - 1}
       title={isHydrating ? "場上站位（載入中…）" : "場上站位"}
+      setStatus={setStatus}
+      score={score}
     />
   );
 }

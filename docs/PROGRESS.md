@@ -22,9 +22,11 @@
 > 平行 PR 就落在不同行段、git 幾乎都能自動合併，不用真的把檔案拆兩份、也保住一眼 catch-up。
 > 上面的 `_Last updated_` 是共用一行摘要（誰更新了什麼），保持精簡、別長成段落。
 
-\_Last updated: 2026-07-23 (aila) — 環 2（#173）左欄導覽落地並關閉，展開寬度／推開版面兩條規格
-經 PO 實機推翻並回寫 layout-spec §2.2；前一批：M1.5 七環拆解、環 1（#172）、環 3 Stage A（#181），
-(tang) 計分表／球場材質深色語言（PR #182/#167）。\_
+\_Last updated: 2026-07-25 (aila) — #190–193 右欄三頁補齊（PR #201）＋修計分頁「有發球方沒
+先發」死結（既有 bug，非本次引入；關聯 #64）。前一批 2026-07-25 (aila) — #127 補上
+`tournamentBelongsToUser` 擁有權驗證。再前一批 2026-07-24 (aila) — 環 5（#176 結構部分，
+PR #197）、環 6（#177 新增戰術流程＋佈陣 mode D）；環 4（#175）、環 2（#173）、環 1（#172）、
+環 3 Stage A（#181），(tang) 計分表／球場材質深色語言（PR #182/#167）。\_
 
 ## Current state
 
@@ -79,7 +81,9 @@ lives in git log + the issues named).
   「切輪次要確認捨棄未存戰術」的 session 副作用、後者是 `Court.tsx` 拖放協定的來源。
   **`lib/rotationLogic.ts` 連續兩次 UI 重寫都一行未動**——把領域邏輯抽出元件的回報。
   **換局換輪視窗（commit `844b50d`）作廢**：右欄本來就顯示下一局站位、本來就能改，彈窗是多餘轉場。
-  **剩：分析頁站位列（blocked #76），#120 保持 open。**（比賽列表／資料夾內頁的右欄已由 #174
+  **分析頁站位列已由 #193 交付唯讀版**（`AnalyticsRotationRail`，PR #201）：PO 拍板只加唯讀右欄、
+  統計仍以整場為單位，不做 per-set 統計篩選，故 #76「資訊軸未定」的 blocker 被繞開而非解掉；
+  #120 仍 open（原構想的可寫/彙總版仍待 #76 定調）。（比賽列表／資料夾內頁的右欄已由 #174
   Stage A 補上，見下一則。）
 - **版面規格立法＋七環落地計畫（07-22）。** 新增 `docs/layout-spec.md`：2048×1440 畫布的換算表
   （nav 105／aside 493／tools 132／中央 `flex-1`，**不要硬寫 px**）、三欄骨架與四種模式
@@ -163,16 +167,18 @@ lives in git log + the issues named).
 
 ### 設計進度 (tang — 視覺 / UX / area:design)
 
-- **設計規範已落地三頁（首頁＋戰術板＋計分表），手繪風全站退役**（`docs/design-spec.md`，
-  PR #129/#135/#140/#167/#182）：深色儀表板語言（`#0a0b07` 底＋萊姆綠 `#C6F135`＋玻璃卡片＋
+- **深色語言已套完全站、手繪風全站退役，#131 於 07-23 關閉**（`docs/design-spec.md`，
+  PR #129/#135/#140/#167/#182/#186）：深色儀表板語言（`#0a0b07` 底＋萊姆綠 `#C6F135`＋玻璃卡片＋
   Space Grotesk/JetBrains Mono）。戰術板加材質強化（#134 Track B：球場毛玻璃地板、邊緣繞行光、
   球員標記改玻璃圓片，PR #167，2026-07-22——這批是接在 aila #154/#160 重構後的 session 架構之上
   重做的）；計分表右欄（PR 見 #120）＋中間計分區（`ScoreSheetCourt.tsx`/`RadialMenu.tsx`/
   `ScoreSheet.tsx`，PR #182，2026-07-22）也補齊，`ScoreSheet.tsx` 已改吃 aila 新出的 `AppShell`
   骨架（#172）。`RadialMenu.tsx` 是全站最後一個 `wobbly-border` 消費者，換完後該 class 與
   `--font-display`/Caveat/Permanent Marker 死碼一併從 `index.css` 清掉。品牌 logo mark 已定案
-  （`public/favicon.svg`，PR #148），design-spec 多了「品牌標誌」段。**剩數據分析頁、資料夾內頁
-  兩處仍是手繪風，由 #131 追蹤**（#134 保持 open：Track A 微 3D／Track C 版面呼吸空間尚未開始）。
+  （`public/favicon.svg`，PR #148），design-spec 多了「品牌標誌」段。**最後兩處也補完、#131 已關**：
+  數據分析頁整頁轉深色（PR #186，2026-07-22），資料夾內頁只在該 PR 轉了頁面外殼、中央列表區
+  刻意留給環 4（#175）整段重寫，#175 落地後 #131 於 07-23 收掉。
+  （#134 仍 open：Track A 微 3D／Track C 版面呼吸空間尚未開始。）
   #132（首頁 review 收尾）獨立進行。**寫 UI 前先讀 design-spec.md**；實作數值以該檔「實作微調」
   「實作決定」註記為準（背景 `#0a0b07`、邊框 `white/[0.12]`～`[0.26]`、球場深青漸層——非原始的
   `#121310`/暖木色）。
@@ -200,23 +206,63 @@ PO 拍板插入 M1.5「戰術板 UI 大改版」（#160）於 M1 與 M2 之間**
 多餘轉場）。
 
 **M1.5 的當前形狀＝七環（#172–#178），規格住 `docs/layout-spec.md`、相依鏈
-`環1 →（環2 ‖ 環3 ‖ 環4）→ 環5 → 環6`。** 環 1（#172）已關；環 3（#174）Stage A 已送 PR #181。
-**下一步是三選一，彼此獨立、順序可調**：#173（環 2 左欄 hover 展開）／#175（環 4 中央列表型）／
-#176（環 5 中央球場型＋模式 C，依賴環 1、3、4）。#174 剩 Stage B（統計格，blocked on M2）與跨欄
-拖曳（與 #40「undo/redo 不涵蓋輪轉拖曳」相鄰，動到時留意）。#178（環 7 響應式）需先補線框稿。
-**新開 #168：引入 `@testing-library/react` 補互動測試**——現行 `renderToStaticMarkup` 慣例無法觸發
-事件、讀不到 Radix Portal，飛出選單的行為全無自動測試；這輪就在該盲區抓到一個「四項檢查全綠但
-使用者會遇到」的 bug（用 store 狀態反推使用者意圖），修好了但無回歸測試保護。
+`環1 →（環2 ‖ 環3 ‖ 環4）→ 環5 → 環6`。** 環 1–6（#172–#177）已全部落地；只剩 **#178（環 7
+響應式）需先補線框稿**。#176（環 5）僅合併結構部分、**仍 open**：剩繪圖工具正式圖示（blocked
+@tangyi1025）。#177（環 6）已關，但 spec 把 mode D 叫「對手佈陣」的那層——**對手球員分色渲染**
+（Court 從未渲染對手、snapshot player 無 `side`、珊瑚橘 #FF8A5C 無落點）——**已另開 #199 追蹤**。
+#174 只剩 Stage B（統計格，blocked on M2），跨欄拖曳已由 PR #189 完成。
+**#175 實機測試長出的四張 issue（#190–#193）已於 07-25 全數落地並關閉（PR #201）**：#190 PO 拍板
+走**柔性引導**（未排先發顯示「尚未排先發」提示、推去右欄排，不鎖任何版面）、#191 右欄局狀態
+（已打完／進行中／未開賽）標示、#192 右欄顯示當局比分、#193 數據頁只加**唯讀**右欄（統計仍整場、
+不做 per-set 篩選——PO 決策，繞開 #192 原描述的「左右局軸共用 state」坑）。
+**#168：引入 `@testing-library/react` 補互動測試**——現行 `renderToStaticMarkup` 慣例無法觸發
+事件、讀不到 Radix Portal，飛出選單的行為全無自動測試；#201 的計分頁死結修復也落在此盲區
+（controller 帶 mutation 副作用），僅手動驗證、無回歸測試保護。
 （#120 已移入 M1.5，原「掛 M5 是否移轉」的待裁決事項結案。）
 #40（undo/redo 不涵蓋輪轉拖曳，與 #147 同塊邏輯但不同 store）、
-#64（背景寫入失敗不 reconcile，關聯部署 #26／離線契約 #75）、**#127（後端沒驗 tournamentId 擁有權，真 auth
-後補）** 仍 open。
+#64（背景寫入失敗不 reconcile，關聯部署 #26／離線契約 #75）仍 open——#201 的死結修復在
+`useScoreSheet.start()` 補了 guard（沒 lineup 就不寫 serving），**堵掉「單機就能製造
+serving≠null 但 record.lineup=null」那條路**，但真正的「背景寫入失敗後 reconcile」仍未做。
+**#127（後端沒驗 tournamentId 擁有權）已於 07-25 修掉**：`lib/ownership.ts` 加 `tournamentBelongsToUser`，
+matches 的 POST/PATCH 在收到非 null 的 `tournamentId` 時驗一次、不符回 404。**判準值得記住：外鍵保證
+referential integrity（uuid 指得到一列），不保證 ownership（那列是不是你的）——兩者很容易被當成同一件事。**
 進階版差異化（M4）：#51 動作子分類、#21 球線座標、#99 站位快照——同屬 advanced tier，可一起設計。
 
 ## Recently closed (past ~week)
 
 ### 開發 (aila)
 
+- **#190–#193**（右欄三頁補齊，PR #201，07-25）— #190 柔性引導（列表卡片／比賽入口在未排先發時
+  顯示琥珀提示、推去右欄排，**不鎖任何版面**——PO 在「引導 vs 鎖住」拍板走引導）；#191 `RotationRailPanel`
+  局軸加狀態 pill（已打完／進行中／未開賽）＋#192 加當局比分行，兩者都是 `axis="set"` 專用的加成式
+  prop，輪次軸呼叫端（計分頁／戰術板）不傳就不受影響、零回歸；#193 數據頁新增 `AnalyticsRotationRail`
+  唯讀右欄，**刻意不重用 `MatchInfoRail`**（那顆有可寫分支＋讀共用輪轉表 store，會把「可編輯站位」
+  語意偷渡進唯讀頁），自帶局數 stepper、只吃 `record`＋roster。**同 PR 修掉一隻既有死結**：`start()`
+  無條件寫 `serving` 但只條件性凍結 `record.lineup`，會生出 serving≠null／lineup=null 的局 → 右欄鎖唯讀
+  「看得到球員拖不動」＋中央顯示「還沒排先發」。修法：判準改看凍結先發（`canEditLineup = lineup===null`）、
+  發球提示在無凍結先發時重新出現（讓重選自癒壞資料）、`start()` 補 guard 防再發生（關聯 #64，僅堵單機路徑）。
+- **#177**（環 6／新增戰術流程＋佈陣 mode D，07-24）— 左欄/瀏覽面板的「+」在戰術板頁改開
+  **只蓋中央球場的浮層**（`NewTacticDialog` 從 Radix 全螢幕改成中央欄內 `absolute inset-0`——父容器
+  `relative`，浮層天然只鋪滿中央欄、蓋不到左右欄，比 Portal＋算座標省事；舊全螢幕版另存
+  `NewTacticDialogModal` 給非戰術板頁沿用，行為不變，NavRail 用 `active==="board"` 分流）。選
+  「現有輪轉位／重新佈陣」→進**佈陣 mode D**（右欄放球員清單、球場右上角「確定」鈕）→確定→編輯
+  mode C。狀態機加一個顯式 `session.arranging` 位元（D/C 兩態 session 形狀相同、無既有欄位可推導，
+  故誠實多存一位；`startSession` 預設 false→`enterEditFromViewing`/計分頁 C3 交棒等既有入口行為不變）。
+  「編輯」鈕從右欄檢視面板搬到球場右上角、跟「確定」共用同一顆。18 個 store 狀態機測試＋浮層測試。
+  **對手球員分色渲染不在本環**（見上方 Known gaps 的新 issue）。
+- **#176**（環 5 結構部分，PR #197，07-24，**#176 保持 open**）— 編輯戰術時整個右欄換成 132px
+  工具軌（`TacticsEditToolRail`）、中央球場放大（隱藏 260px 輪轉表欄）、球場角落方塊、刪掉屬性
+  編輯器。頁面層一行 `mode={session ? "C" : "B"}`＋把 mutation 抽成 `useTacticsBoardController`
+  共用 hook（aside 與工具軌看到同一份 pending，不會不同步）。**剩繪圖工具正式圖示 blocked
+  @tangyi1025**（暫用單字佔位）。
+- **#175**（07-23）— 環 4／中央列表型（模式 A）：`ListItemCard`（資／比 徽章，資料夾與比賽**共用
+  同一個元件**，因為線框稿的意圖是兩者混在同一列表，分兩個元件遲早飄成兩種行高）＋`ListScrollArea`
+  （藏原生捲軸、自繪 8px 指示條；是指示器不是控制項，不可拖）＋`matchSummary.ts`（「3:0 勝」規則，
+  4 個測試）。`MatchCard.tsx` 刪除。同 PR 收掉 #131 的 `TournamentDetail` 深色化（那頁的中央區本來
+  就要整個重寫，不在 #131 底下另做一次白工）。**兩個 PO 實機推翻**：卡高 Figma 等比 176px 太空曠→
+  104（線框稿高度是配多行內容畫的）；比賽三入口從 @tangyi1025 提的 modal 改成**選中的卡片就地向下
+  展開**——疊層會把「旁邊還有哪幾場、我捲到哪」一起蓋掉，還多一個返回動作。「整張反白」照 #134
+  環 0 定案改用玻璃提亮＋細環（持續狀態不適合實色）。實機測試另外長出 #190–#193 四張 issue。
 - **#172**（PR #180，commit `b130bdb`，07-22）— 環 1／抽出 `AppShell` 三欄骨架，五頁收斂到單一
   版面元件。細節與兩個「刻意不做」的決定見上方 Current state。**教訓值得記**：四項檢查全綠但
   **一項都抓不到版面問題**——捲不動、欄被擠爆、scroll-snap 沒對齊，型別全都合法。這正是 #168
@@ -279,7 +325,7 @@ PO 拍板插入 M1.5「戰術板 UI 大改版」（#160）於 M1 與 M2 之間**
 
 ### 設計 (tang)
 
-- **PR #182**（#131 部分進度，該 issue 保持 open，2026-07-22）— 計分表中間計分區套用深色玻璃語言：
+- **PR #182**（#131 部分進度，該 issue 已於 07-23 關閉，2026-07-22）— 計分表中間計分區套用深色玻璃語言：
   `ScoreSheet.tsx` 頁面外殼（改吃 `AppShell`）、`ScoreSheetCourt.tsx` 球場配色、`RadialMenu.tsx`
   退役最後的 `wobbly-border`。右欄（`ScoreSheetStats.tsx`/`RotationRailPanel`）已由 aila 的 #120
   處理過，這批完全沒碰。順手清掉 `index.css` 裡沒消費者的 `--font-display`/Caveat/Permanent Marker
@@ -295,7 +341,7 @@ PO 拍板插入 M1.5「戰術板 UI 大改版」（#160）於 M1 與 M2 之間**
   `e920ac1`，07-18）。品牌名稱未定、字標佔位；spec `stroke-width 6.5` vs 實檔 `9` 已在 PR 留言請對齊。
 - **PR #140**（#134 Track B，**#134 保持 open**）— 戰術板材質強化：置中字標、低調光影、玻璃卡片加深
   （commit `72a3670`，07-18）。#134 微 3D／版面呼吸等其餘方向續留 issue。
-- **PR #135 / #129**（#131 部分進度，該 issue 保持 open）— 戰術板＋首頁套深色語言、手繪風全退役、
+- **PR #135 / #129**（#131 部分進度，該 issue 已於 07-23 關閉）— 戰術板＋首頁套深色語言、手繪風全退役、
   球場改深青漸層（commit `0d63ee3`／`bef0e14`）。方法論教訓（review 夥伴 PR 用）：落後 main 又同檔的
   PR，git 自動合併無衝突**不等於合對**，要讀合併後檔案確認雙方改動都活著；fork PR 的 CI 預設不跑、
   要手動核准。

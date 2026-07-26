@@ -427,7 +427,6 @@ export function useScoreSheetController(matchId: string) {
     (servingFirst: Side, lineup: LineupSnapshot | null) => {
       const pre = useScoreSheet.getState().recordingsByMatch[matchId]?.currentSet;
       const setNumber = pre?.setNumber ?? 1;
-      useScoreSheet.getState().startSet(matchId, servingFirst);
 
       // 先發快照（issue #115）：選先發方這一刻，把「這一局」的先發凍結下來。先發每局可不同，所以
       // 這裡用的是呼叫端（ScoreSheet.tsx）從當下輪轉表擷取好、傳進來的那份；換下一局時 nextSet 已把
@@ -436,7 +435,16 @@ export function useScoreSheetController(matchId: string) {
       // 輪轉表改站位不會污染進行中這一局，要動陣容得走 substitute() 換人。
       const existingLineup = useScoreSheet.getState().recordingsByMatch[matchId]?.lineup ?? null;
       const effectiveLineup = existingLineup ?? lineup;
-      if (effectiveLineup && !existingLineup) {
+
+      // 「發球方」與「凍結先發」必須同進同出——沒有先發可凍結時，連 serving 都不能寫出去。
+      // 否則會製造一筆「serving 非 null、lineup null」的殘缺 set：本地看起來像開賽了（serving
+      // 有值），但沒有任何先發被凍結，重整後就變成 ScoreSheet.tsx canEditLineup 註解描述的死結
+      // （右欄被鎖、中央又喊還沒排先發）。呼叫端（ScoreSheet 的「誰先發球」）本來就只在有先發時
+      // 才會走到這裡，這道 guard 是把「兩者必須成對」這個不變量寫死在 store，不靠呼叫端自律。
+      if (!effectiveLineup) return;
+
+      useScoreSheet.getState().startSet(matchId, servingFirst);
+      if (!existingLineup) {
         useScoreSheet.getState().setLineup(matchId, effectiveLineup);
       }
       // 兩條路（#63 修法）：
@@ -479,11 +487,14 @@ export function useScoreSheetController(matchId: string) {
       const pre = useScoreSheet.getState().recordingsByMatch[matchId]?.currentSet;
       if (!pre || pre.serving === null) return;
 
-      // 記分前先擷取「這分開始前」的比分與 rallyNumber（rallies.homeScore/awayScore 存的是
-      // 開分前的值）。之後才跑 reducer 加分，才不會把加完的分數當成 before。
+      // 記分前先擷取「這分開始前」的比分、輪次與 rallyNumber（rallies.homeScore/awayScore/
+      // homeRotation/awayRotation 存的都是開分前的值）。之後才跑 reducer 加分/輪轉，
+      // 才不會把加完分、轉完位的值當成 before。
       const rallyNumber = pre.history.length + 1;
       const homeScoreBefore = pre.ourScore;
       const awayScoreBefore = pre.opponentScore;
+      const homeRotationBefore = pre.ourRotation;
+      const awayRotationBefore = pre.opponentRotation;
       const point: PointRecord = { side, wasSideOut: side !== pre.serving, ...meta };
 
       // 0) 先存一份「記這分之前」的快照，讓之後「復原」能整包退回這一球（issue #41）。
@@ -499,7 +510,14 @@ export function useScoreSheetController(matchId: string) {
         if (setId === undefined) return; // 理論上 start 一定先跑過；防呆
         const rally = await createRally.mutateAsync({
           setId,
-          data: pointRecordToRally(point, rallyNumber, homeScoreBefore, awayScoreBefore),
+          data: pointRecordToRally(
+            point,
+            rallyNumber,
+            homeScoreBefore,
+            awayScoreBefore,
+            homeRotationBefore,
+            awayRotationBefore,
+          ),
         });
         rallyIdsRef.current.push(rally.id);
         const newEvent = pointRecordToEvent(point, 1);

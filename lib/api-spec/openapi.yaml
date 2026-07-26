@@ -14,6 +14,8 @@ tags:
     description: Matches, and the players/sets/rallies/events nested under a match
   - name: tactics
     description: Saved tactics board configurations (rotations, markers, defense ranges)
+  - name: analysis
+    description: Read-only cross-resource report endpoints for the analytics pages (M2)
 paths:
   /healthz:
     get:
@@ -641,6 +643,49 @@ paths:
         "204":
           description: Deleted
 
+  # M2 分析頁「各輪次得失分」（#65）。跟上面 /matches/{matchId}/* 那些「一資源一 CRUD」的路徑
+  # 不同，這支是純讀的報表型聚合：把一場比賽底下所有 rally 依 homeRotation 分組算得失分，
+  # 不對應單一資料表，所以獨立掛在 /analysis 底下、用專屬的 analysis tag，不硬塞進 matches。
+  # 只用 rallies.winner/homeRotation 算，不碰 events——events.outcome 目前恆為 null
+  # （live 記錄路徑 pointRecordToEvent 沒有寫這欄），攻擊細分統計留待之後。
+  /analysis/matches/{matchId}/rotations:
+    parameters:
+      - $ref: "#/components/parameters/MatchId"
+    get:
+      operationId: getMatchRotationStats
+      tags: [analysis]
+      summary: Get per-rotation points won/lost for a match, aggregated from rallies
+      responses:
+        "200":
+          description: >-
+            One row per rotation that has at least one rally recorded (rotations with no data are
+            omitted; the frontend only renders as many rows as it gets back).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RotationStat"
+
+  # M2 分析頁「視圖②：跨場彙總」（#65）。跟上面 /rotations 一樣是純讀的報表型聚合，但這支
+  # 不掛在單一 matchId 底下——回傳「這個使用者名下每一場比賽」各一列摘要，一支請求就拿到
+  # 全部場次的得失分/局數，讓分析頁可以一覽多場而不必逐場 fan-out（見 MatchList.tsx 目前
+  # 卡片改讀本機 store 閃避 fan-out 的取捨，那段留給之後再處理）。
+  /analysis/matches:
+    get:
+      operationId: listMatchAnalysis
+      tags: [analysis]
+      summary: Get a one-row-per-match summary (opponent, date, sets played, points) for every match owned by the current user
+      responses:
+        "200":
+          description: One row per match, ordered by date (newest first).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MatchAnalysisSummary"
+
 components:
   parameters:
     MatchId:
@@ -929,9 +974,15 @@ components:
           type: integer
         awayScore:
           type: integer
+        # 這分開始前的輪次快照（0–5），跟 homeScore/awayScore 同一套語意——給 M2 分析頁
+        # （#65）當 join key 用，不用回放整局歷史才能知道某一球發生時的輪次。
+        homeRotation:
+          type: integer
+        awayRotation:
+          type: integer
         winner:
           $ref: "#/components/schemas/RallyWinner"
-      required: [id, setId, rallyNumber, homeScore, awayScore, winner]
+      required: [id, setId, rallyNumber, homeScore, awayScore, homeRotation, awayRotation, winner]
 
     NewRally:
       type: object
@@ -942,9 +993,77 @@ components:
           type: integer
         awayScore:
           type: integer
+        homeRotation:
+          type: integer
+        awayRotation:
+          type: integer
         winner:
           $ref: "#/components/schemas/RallyWinner"
-      required: [rallyNumber, homeScore, awayScore, winner]
+      required: [rallyNumber, homeScore, awayScore, homeRotation, awayRotation, winner]
+
+    # GET /analysis/matches/{matchId}/rotations 的一列：我方在某個輪次時的得失分彙總。
+    # rotation 沿用 rallies.homeRotation 的語意——從先發起算的第幾輪（0–5），不是場上號位。
+    RotationStat:
+      type: object
+      properties:
+        rotation:
+          type: integer
+        pointsWon:
+          type: integer
+        pointsLost:
+          type: integer
+      required: [rotation, pointsWon, pointsLost]
+
+    # GET /analysis/matches 的一列裡「已結束局」的比分。逐局的我方/對方得分，讓首頁列表
+    # 卡片能算出「局比數」(例如 3:0) ——排球講一場結果的單位是「贏了幾局」而不是總分，
+    # 所以需要逐局結果、不能只靠彙總的 ourPoints/opponentPoints。
+    SetResult:
+      type: object
+      properties:
+        ourScore:
+          type: integer
+        opponentScore:
+          type: integer
+      required: [ourScore, opponentScore]
+
+    # GET /analysis/matches 的一列：一場比賽的摘要，供「視圖②：跨場彙總」逐場列出，
+    # 也給首頁比賽列表卡片直接讀（不必逐場 hydrate 本機 store，見 pages/MatchList.tsx）。
+    # setsPlayed 只算真正開過球的局（firstServer 不是 null），呼應 sets 表 firstServer
+    # 允許 null 的設計（還沒選先發方的空局不算「打過」，見 lib/db/src/schema/sets.ts）。
+    # teamId 沒放進 required：跟 matches 表一樣，可能沒有指定球隊。
+    #
+    # setResults：只含「已結束局」(排除進行中的最後一局)，鏡射前端 reconstructRecording
+    # 的「最後一局＝進行中、其餘＝已結束」慣例，讓卡片顯示的局比數跟點進去計分頁後一致。
+    # hasLineup：這場是否已有任一局凍結過先發陣容(lineups 表有 row)，給卡片決定要不要亮
+    # 「尚未排先發」黃標。注意輪轉表上「排好但還沒開賽」的暫存陣容不進 DB(見
+    # useRotationTable.ts 的 partialize)，所以 server 只認已凍結進 lineups 的那種。
+    MatchAnalysisSummary:
+      type: object
+      properties:
+        matchId:
+          type: integer
+        opponent:
+          type: string
+        date:
+          type: string
+          format: date-time
+        teamId:
+          type: integer
+          nullable: true
+        setsPlayed:
+          type: integer
+        ourPoints:
+          type: integer
+        opponentPoints:
+          type: integer
+        setResults:
+          type: array
+          items:
+            $ref: "#/components/schemas/SetResult"
+        hasLineup:
+          type: boolean
+      required:
+        [matchId, opponent, date, setsPlayed, ourPoints, opponentPoints, setResults, hasLineup]
 
     # 換人的種類，見 lib/db/src/schema/substitutions.ts 的 substitutionKindEnum 註解：
     # regular = 一般換人；libero = 自由球員上/下（規則上不算正式換人次數，但記錄結構相同）。

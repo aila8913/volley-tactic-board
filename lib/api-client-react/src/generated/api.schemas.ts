@@ -122,6 +122,8 @@ export interface Rally {
   rallyNumber: number;
   homeScore: number;
   awayScore: number;
+  homeRotation: number;
+  awayRotation: number;
   winner: RallyWinner;
 }
 
@@ -129,7 +131,32 @@ export interface NewRally {
   rallyNumber: number;
   homeScore: number;
   awayScore: number;
+  homeRotation: number;
+  awayRotation: number;
   winner: RallyWinner;
+}
+
+export interface RotationStat {
+  rotation: number;
+  pointsWon: number;
+  pointsLost: number;
+}
+
+export interface SetResult {
+  ourScore: number;
+  opponentScore: number;
+}
+
+export interface MatchAnalysisSummary {
+  matchId: number;
+  opponent: string;
+  date: string;
+  teamId?: number | null;
+  setsPlayed: number;
+  ourPoints: number;
+  opponentPoints: number;
+  setResults: SetResult[];
+  hasLineup: boolean;
 }
 
 export type SubstitutionKind = typeof SubstitutionKind[keyof typeof SubstitutionKind];

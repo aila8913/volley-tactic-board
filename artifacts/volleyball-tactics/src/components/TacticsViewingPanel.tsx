@@ -1,18 +1,20 @@
-import { SECONDARY_BTN_CLASS, PRIMARY_BTN_CLASS } from "../lib/tacticsBoardStyles";
+import { SECONDARY_BTN_CLASS } from "../lib/tacticsBoardStyles";
 
 // viewing 模式（viewingScene !== null）——issue #160 C2 三模式裡最單薄的一個：正在看一張
 // 已存戰術的「唯讀照片」（見 useTacticsBoard.ts 的 viewingScene / PR B 的說明），畫面上
-// 只有「這是哪一張」的名稱跟「編輯」按鈕，沒有畫筆工具、也沒有球員名單——這些都要先按
-// 「編輯」把這張照片升級成可改的 session 才會出現（見 TacticsEditPanel）。
+// 只有「這是哪一張」的名稱，沒有畫筆工具、也沒有球員名單——這些都要先升級成可改的 session
+// 才會出現（見 TacticsEditToolRail，issue #176 把原本的 TacticsEditPanel 搬進右欄工具軌）。
+//
+// issue #177：「編輯」鈕原本住在這個面板裡，現在搬到球場右上角那顆共用的模式鈕
+//（TacticsBoard.tsx，跟佈陣模式的「確定」鈕共用同一個位置/樣式語彙），所以這個面板不再收
+// onEdit——它只負責顯示戰術名稱＋返回列表。
 interface TacticsViewingPanelProps {
   viewingTacticName: string;
-  onEdit: () => void;
   onBackToBrowse: () => void;
 }
 
 export default function TacticsViewingPanel({
   viewingTacticName,
-  onEdit,
   onBackToBrowse,
 }: TacticsViewingPanelProps) {
   return (
@@ -31,15 +33,8 @@ export default function TacticsViewingPanel({
         {viewingTacticName || "（未命名戰術）"}
       </p>
       <button
-        onClick={onEdit}
-        className={`w-full py-1.5 text-xs font-bold ${PRIMARY_BTN_CLASS}`}
-        data-testid="button-edit-current"
-      >
-        編輯
-      </button>
-      <button
         onClick={onBackToBrowse}
-        className={`mt-1.5 w-full py-1.5 text-xs font-bold ${SECONDARY_BTN_CLASS}`}
+        className={`w-full py-1.5 text-xs font-bold ${SECONDARY_BTN_CLASS}`}
         data-testid="button-back-to-browse"
       >
         返回列表

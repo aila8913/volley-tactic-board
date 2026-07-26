@@ -374,6 +374,29 @@ export default function Court() {
           {/* 邊緣繞行光（issue #134）：獨立於 SVG 之外的一層，蓋在整個 wrapper 外框，
               見 index.css 的 .court-edge-light 說明。 */}
           <div className="court-edge-light" />
+
+          {/* 左上／右下對角方塊（issue #176、docs/layout-spec.md §3.2）：示意「場外區塊」——
+              發球位/替補區之類球場本體以外、但仍屬於這片戰術白板的留白區。
+              用一般 HTML 絕對定位的 div 疊在 wrapper 上，而不是畫進 SVG 裡的 <g>：這片 SVG
+              整份用 preserveAspectRatio="none"（見上面 computeTacticsViewBox 的說明），
+              viewBox 會依 wrapper 的寬高比非等比縮放，畫在 SVG 座標系裡的方塊會被拉伸變形
+              （球員圓圈之所以看起來還是正圓，是 PlayerNode 自己用 CTM 反向補償縮放）。
+              這兩個方塊只是純裝飾示意，犯不著也去做那層補償，直接用 CSS box 疊在 wrapper
+              外層——wrapper 本身尺寸固定（撐滿 court-glass 那個容器），這兩個角的 top/left/
+              bottom/right 百分比位置就不會隨球場縮放而漂移，符合 spec 「位置固定不隨球場
+              縮放漂移」的要求。pointer-events-none：它們純粹裝飾，不能擋掉底下球場的
+              點擊/拖放（球場的 pointerDown/drop 事件都掛在 SVG 上，這兩個 div 疊在最上層，
+              沒有這個屬性會吃掉事件）。尺寸刻意抓小（h-8 w-8＝32px）——示意用，不是主角。 */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute left-1.5 top-1.5 z-10 h-8 w-8 rounded-md
+              border border-white/[0.15] bg-white/[0.04] backdrop-blur-sm"
+          />
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute bottom-1.5 right-1.5 z-10 h-8 w-8 rounded-md
+              border border-white/[0.15] bg-white/[0.04] backdrop-blur-sm"
+          />
           <svg
             id="court-svg"
             ref={courtRef}

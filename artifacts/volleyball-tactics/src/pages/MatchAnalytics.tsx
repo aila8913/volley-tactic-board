@@ -16,8 +16,10 @@ import { ArrowLeft } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import AppShell from "@/components/AppShell";
 import NavRail, { matchBackHref } from "@/components/NavRail";
+import AnalyticsRotationRail from "@/components/AnalyticsRotationRail";
 import { useMatchWithRoster } from "@/hooks/useMatches";
 import { useMatchRecording } from "@/hooks/useMatchRecording";
+import { useMatchRotationStats } from "@/hooks/useMatchRotationStats";
 import { ACTIONS, ACTION_LABELS, buildPlayerMatrix } from "@/lib/statsMapping";
 import { PointRecord } from "@/types/scoresheet";
 import { captureBlank } from "@/lib/courtSnapshot";
@@ -29,7 +31,7 @@ const SECONDARY_BUTTON_CLASS =
   "bg-white/[0.05] px-5 py-2 text-sm font-bold text-[#f5f5f0] transition " +
   "hover:border-[#c6f135] hover:text-[#c6f135]";
 
-// 每個統計區塊共用的玻璃卡片外觀，跟 MatchCard.tsx 的卡片語言一致（rounded-2xl +
+// 每個統計區塊共用的玻璃卡片外觀，跟 ListItemCard.tsx 的卡片語言一致（rounded-2xl +
 // border-white/[0.12] + bg-white/[0.07] + backdrop-blur-md）。
 const GLASS_SECTION_CLASS =
   "rounded-2xl border border-white/[0.12] bg-white/[0.07] p-4 shadow-lg shadow-black/35 backdrop-blur-md";
@@ -38,6 +40,10 @@ export default function MatchAnalytics() {
   const { id } = useParams<{ id: string }>();
   const { match, isLoading: isMatchLoading } = useMatchWithRoster(Number(id));
   const { record, isLoading: isRecordLoading } = useMatchRecording(id ?? "");
+  // 各輪次得失分（#65）：獨立一支查詢，loading 不會擋住頁面其他區塊——id 還沒解析出來時
+  // Number(id) 會是 NaN，generated hook 內部用 enabled: !!matchId 擋（NaN 是 falsy），
+  // 不會真的發出一支帶 NaN 的請求。
+  const { rotationStats, isLoading: isRotationLoading } = useMatchRotationStats(Number(id));
 
   if (id && (isMatchLoading || isRecordLoading)) {
     return (
@@ -122,10 +128,11 @@ export default function MatchAnalytics() {
   const captureCurrentForAnalytics = () => captureBlank({ matchId: id ?? null });
 
   return (
-    // issue #172：三欄骨架交給 AppShell（mode="A"）。不傳 aside——站位列的資訊欄版本目前
-    // 被 #76 擋住（分析頁還沒有可以放進右欄的站位資料），這一環也不重寫功能元件，所以維持
-    // 「這一頁沒有右欄」。原本的「回列表」「回計分表」header 連結統一交給 NavRail
-    // （issue #160 起就是共用元件，#173 併入戰術子清單/匯出子清單後改名 NavRail）。
+    // issue #172：三欄骨架交給 AppShell（mode="A"）。issue #193 補上 aside——用唯讀的
+    // AnalyticsRotationRail（不重用 MatchInfoRail，理由見該檔案開頭的說明），讓教練在
+    // 分析頁也能回看各局的先發站位，不用切回計分頁才看得到。原本的「回列表」「回計分表」
+    // header 連結統一交給 NavRail（issue #160 起就是共用元件，#173 併入戰術子清單/
+    // 匯出子清單後改名 NavRail）。
     <AppShell
       mode="A"
       nav={
@@ -138,6 +145,7 @@ export default function MatchAnalytics() {
           captureDisabled
         />
       }
+      aside={<AnalyticsRotationRail record={record} roster={match.players} />}
       className="bg-[#0a0b07] font-dash text-[#f5f5f0]"
       style={{
         backgroundImage:
@@ -307,17 +315,56 @@ export default function MatchAnalytics() {
             <p className="mt-1 text-[11px] text-[#a9b096]">僅計入一般換人（不含自由球員）。</p>
           </section>
 
-          {/* ── 階段接續：即將推出（明確空狀態，不放假資料） ── */}
-          <section className={`${GLASS_SECTION_CLASS} border-dashed`}>
-            <div className="mb-2 flex items-center gap-2">
-              <h2 className="text-sm font-bold text-[#f5f5f0]">階段接續</h2>
-              <span className="rounded bg-white/[0.08] px-1.5 py-0.5 text-[10px] font-semibold text-[#a9b096]">
-                即將推出
-              </span>
-            </div>
-            <p className="text-sm text-[#a9b096]">
-              side-out% /
-              破發率、各輪次得失分等「跨球序的階段性」統計，需要更完整的輪次追蹤，規劃中。
+          {/* ── 各輪次得失分（#65 M2） ──
+              純用 rallies.homeRotation / winner 算，不碰 events（events.outcome 目前恆為
+              null，見 useMatchRotationStats.ts 跟後端 analysis.ts 的註解）。side-out% /
+              破發率需要知道每分是誰發球，rallies 沒有直接存這欄，還在規劃中，先留一行說明。 */}
+          <section className={GLASS_SECTION_CLASS}>
+            <h2 className="mb-2 text-sm font-bold text-[#f5f5f0]">各輪次得失分</h2>
+            {isRotationLoading ? (
+              <div className="flex items-center gap-2 text-sm text-[#a9b096]">
+                <Spinner className="size-4" />
+                載入中…
+              </div>
+            ) : rotationStats.length === 0 ? (
+              <p className="text-sm text-[#a9b096]">尚無記錄。</p>
+            ) : (
+              <table className="w-full border-collapse text-sm">
+                <thead>
+                  <tr className="border-b-2 border-white/[0.2]">
+                    <th className="pb-1 text-left font-normal text-[#a9b096]">輪次</th>
+                    <th className="pb-1 text-right font-normal text-[#a9b096]">得</th>
+                    <th className="pb-1 text-right font-normal text-[#a9b096]">失</th>
+                    <th className="pb-1 text-right font-normal text-[#a9b096]">得分率</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rotationStats.map((r) => {
+                    const total = r.pointsWon + r.pointsLost;
+                    return (
+                      <tr key={r.rotation} className="border-b border-white/[0.06]">
+                        {/* homeRotation 存的是「從先發起算的第幾輪（0–5）」，畫面上習慣從
+                            「第 1 輪」開始數，所以顯示時 +1。 */}
+                        <td className="py-1 font-semibold text-[#f5f5f0]">
+                          第 {r.rotation + 1} 輪
+                        </td>
+                        <td className="py-1 text-right font-numeric tabular-nums text-[#c6f135]">
+                          {r.pointsWon}
+                        </td>
+                        <td className="py-1 text-right font-numeric tabular-nums text-[#ef4444]">
+                          {r.pointsLost}
+                        </td>
+                        <td className="py-1 text-right font-numeric tabular-nums text-[#a9b096]">
+                          {total === 0 ? "—" : `${Math.round((r.pointsWon / total) * 100)}%`}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+            <p className="mt-2 text-[11px] text-[#a9b096]">
+              side-out% / 破發率需要更完整的發球序追蹤，規劃中。
             </p>
           </section>
 

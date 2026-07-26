@@ -55,7 +55,41 @@ interface RotationRailPanelProps {
   // 頁面各自想加在三個區塊下面的額外內容（戰術板放球員設定/輪次選擇/提示；
   // 計分頁目前用不到，留空）。
   footer?: ReactNode;
+
+  // ── 以下兩個 prop 只有 axis==="set" 時才有意義（issue #191/#192）──
+  //
+  // 「第 N 局」這串數字本身不會告訴使用者這局是打完了、正在打、還是根本還沒開賽——
+  // 教練得自己心算「已完成局數」跟「目前滑到第幾局」的關係才能猜出來，這正是 #191
+  // 要補的「狀態不夠好讀」。rotation 軸（計分頁/戰術板既有用法）沒有這個問題：
+  // 「第 N 輪」永遠是同一份現在進行式的資料，不存在歷史/進行中/未開始的分野，
+  // 所以這兩個 prop 刻意設計成不傳就完全不渲染，不會動到 rotation 軸兩個既有呼叫端
+  // 的畫面（沒傳 = undefined = 底下 && 判斷直接短路）。
+  setStatus?: "historical" | "live" | "upcoming";
+  // 這局的比分。null 代表這局有 setStatus 但還沒有比分可看（例如還沒開賽的那一局）——
+  // 呼叫端要能區分「不是 set 軸，不該顯示」（undefined）跟「是 set 軸但這局沒分」（null），
+  // 所以型別上特意留了兩層。
+  score?: { our: number; opponent: number } | null;
 }
+
+// #191 狀態小藥丸的文案跟色票（tone 沿用 MatchAnalytics.tsx 比分總覽那組「進行中＝天藍、
+// 我方領先＝萊姆綠」的用色邏輯，讓使用者在不同頁面看到同一種狀態時顏色是一致的）。
+const SET_STATUS_META: Record<
+  NonNullable<RotationRailPanelProps["setStatus"]>,
+  { label: string; className: string }
+> = {
+  historical: {
+    label: "已打完",
+    className: "border-white/[0.18] bg-white/[0.06] text-[#9AA08C]",
+  },
+  live: {
+    label: "進行中",
+    className: "border-sky-400/30 bg-sky-400/10 text-sky-300",
+  },
+  upcoming: {
+    label: "未開賽",
+    className: "border-[#C6F135]/30 bg-[#C6F135]/10 text-[#C6F135]",
+  },
+};
 
 // 六宮格排法是 docs/layout-spec.md §4.1 訂死的規格，不是隨便湊的：上排 4 3 2、下排
 // 5 6 1，是「從場上視角看」的站位——1 號位在右後方（發球位），逆時針 1→6→5→4→3→2
@@ -93,6 +127,8 @@ export default function RotationRailPanel({
   canStepNext = true,
   title = "場上站位",
   footer,
+  setStatus,
+  score,
 }: RotationRailPanelProps) {
   // 唯一的 local state：目前選中哪個號位（「先點格子、再點球員」兩段式操作的第一段）。
   //
@@ -180,7 +216,18 @@ export default function RotationRailPanel({
       data-testid="rotation-rail-panel"
     >
       <div className="mb-2 flex items-center justify-between gap-2">
-        <h2 className="text-sm font-bold text-[#F5F5F0]">{title}</h2>
+        <div className="flex min-w-0 items-center gap-1.5">
+          <h2 className="truncate text-sm font-bold text-[#F5F5F0]">{title}</h2>
+          {/* 狀態小藥丸（#191）：只有 axis="set" 的呼叫端會傳 setStatus，rotation 軸
+            （計分頁/戰術板）不傳，這裡就不渲染，畫面跟改動前一模一樣。 */}
+          {setStatus && (
+            <span
+              className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold ${SET_STATUS_META[setStatus].className}`}
+            >
+              {SET_STATUS_META[setStatus].label}
+            </span>
+          )}
+        </div>
         <div className="flex items-center gap-2">
           {/* 「第 N 輪／第 N 局」永遠顯示，唯讀或可編輯都一樣。這是 #120 第一階段的核心補強——
             在此之前計分頁整頁沒有任何地方顯示 currentSet.ourRotation，教練看得到誰站哪，
@@ -198,6 +245,27 @@ export default function RotationRailPanel({
           {!readOnly && <span className="text-xs text-[#9AA08C]">{filledCount}/6</span>}
         </div>
       </div>
+
+      {/* 這局的比分（#192）：跟狀態藥丸一樣只有 axis="set" 才會傳 score，且 score 是 null
+        （例如「未開賽」那一局根本沒有分可看）時也不渲染——不是每個 setStatus 都一定有比分，
+        「不渲染」比「硬顯示 0:0」更誠實，教練不會誤以為這局已經開球。 */}
+      {score && (
+        <div className="mb-2 text-xs tabular-nums text-[#9AA08C]">
+          我{" "}
+          <span
+            className={`font-bold ${score.our > score.opponent ? "text-[#C6F135]" : "text-[#F5F5F0]"}`}
+          >
+            {score.our}
+          </span>{" "}
+          :{" "}
+          <span
+            className={`font-bold ${score.opponent > score.our ? "text-[#ef4444]" : "text-[#F5F5F0]"}`}
+          >
+            {score.opponent}
+          </span>{" "}
+          對手
+        </div>
+      )}
 
       {/* ① 輪轉表（layout-spec §4.1）：六宮格本身就是站位表。可編輯時點格子選號位；
         唯讀時純粹渲染成看不能點的資訊卡片。 */}
