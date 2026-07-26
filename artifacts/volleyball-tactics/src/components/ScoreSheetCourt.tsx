@@ -4,6 +4,7 @@ import { findNearestZone, getZoneLayout, isBackRowPosition } from "../lib/rotati
 import { Side, RegularSub } from "../types/scoresheet";
 import type { MatchPlayer } from "../types/match";
 import type { PlayerPosition } from "../types/rotationTable";
+import { CourtGradientDefs, COURT_LINE_COLOR, COURT_LINE_OPACITY } from "../lib/courtTheme";
 
 export interface TouchedTarget {
   side: Side;
@@ -303,11 +304,13 @@ export default function ScoreSheetCourt({
 
   return (
     <div className="mx-auto flex h-full w-full max-w-[480px] items-center justify-center gap-2">
-      {/* 球場 SVG */}
+      {/* 球場 SVG。court-glass（毛玻璃地板）＋ court-edge-light（邊緣繞行光）跟戰術板
+          Court.tsx 用同一組 index.css class，材質完全一致；改那兩個 class 兩邊一起變。 */}
       <div
-        className="relative flex-shrink-0 rounded-lg border-2 border-white/[0.15] shadow-lg shadow-black/30"
+        className="court-glass relative flex-shrink-0 shadow-lg shadow-black/30"
         style={{ height: "100%", aspectRatio: "1/2" }}
       >
+        <div className="court-edge-light" />
         <svg
           ref={svgRef}
           viewBox="0 0 100 200"
@@ -318,23 +321,16 @@ export default function ScoreSheetCourt({
           onPointerUp={handlePointerUp}
           onPointerLeave={handlePointerLeave}
         >
-          <defs>
-            {/* 跟戰術板 Court.tsx 的 court-gradient 同一組深青色階，兩個球場（這裡是
-                比賽時快速記錄用的簡化版）維持一致的「球場長相」，不要一個深青一個純白。 */}
-            <linearGradient id="ss-court-gradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#12403f" />
-              <stop offset="50%" stopColor="#1c5654" />
-              <stop offset="100%" stopColor="#2a6e6a" />
-            </linearGradient>
-          </defs>
+          {/* 底色漸層、線條顏色都從 lib/courtTheme 讀，跟戰術板同一個來源（改那邊兩邊動）。 */}
+          <CourtGradientDefs id="ss-court-gradient" />
           <rect x="0" y="0" width="100" height="200" fill="url(#ss-court-gradient)" />
           <line
             x1="0"
             y1="100"
             x2="100"
             y2="100"
-            stroke="#F5F5F0"
-            strokeOpacity="0.6"
+            stroke={COURT_LINE_COLOR}
+            strokeOpacity={COURT_LINE_OPACITY}
             strokeWidth="2.5"
           />
           <line
@@ -342,8 +338,8 @@ export default function ScoreSheetCourt({
             y1="66.7"
             x2="100"
             y2="66.7"
-            stroke="#F5F5F0"
-            strokeOpacity="0.6"
+            stroke={COURT_LINE_COLOR}
+            strokeOpacity={COURT_LINE_OPACITY}
             strokeWidth="1"
             strokeDasharray="3 3"
           />
@@ -352,15 +348,15 @@ export default function ScoreSheetCourt({
             y1="133.3"
             x2="100"
             y2="133.3"
-            stroke="#F5F5F0"
-            strokeOpacity="0.6"
+            stroke={COURT_LINE_COLOR}
+            strokeOpacity={COURT_LINE_OPACITY}
             strokeWidth="1"
             strokeDasharray="3 3"
           />
-          <text x="50" y="15" fontSize="6" fill="#F5F5F0" textAnchor="middle">
+          <text x="50" y="15" fontSize="6" fill={COURT_LINE_COLOR} textAnchor="middle">
             對手
           </text>
-          <text x="50" y="192" fontSize="6" fill="#F5F5F0" textAnchor="middle">
+          <text x="50" y="192" fontSize="6" fill={COURT_LINE_COLOR} textAnchor="middle">
             我方
           </text>
 
