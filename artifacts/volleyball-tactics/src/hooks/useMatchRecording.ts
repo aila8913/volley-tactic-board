@@ -19,11 +19,18 @@ import {
   listRallies,
   getListRalliesQueryKey,
 } from "@workspace/api-client-react";
+import type { Rally } from "@workspace/api-client-react";
 import { ScoreSheetState } from "@/types/scoresheet";
 import { reconstructRecording } from "@/lib/scoreSheetMapping";
 
 export function useMatchRecording(matchId: string): {
   record: ScoreSheetState | undefined;
+  // 額外把「每一局的原始 rally 陣列」也交給呼叫端（key＝setNumber），跟 allRallies（整場攤平）
+  // 一起用來算「各輪次得失分」——分析頁要能依局篩選那份統計（#65），而 record 重建時已經把
+  // 每分的輪次資訊丟掉了（PointRecord 不存輪次），所以這裡直接把 rallies 原封不動遞出去，
+  // 讓頁面用 buildRotationStats 自己算（見 MatchAnalytics.tsx 的用法）。
+  ralliesBySetNumber: Map<number, Rally[]>;
+  allRallies: Rally[];
   isLoading: boolean;
 } {
   const numericMatchId = Number(matchId);
@@ -49,7 +56,12 @@ export function useMatchRecording(matchId: string): {
 
   // 資料還沒到位時回傳 undefined，讓頁面顯示載入狀態，避免用半份資料重建出誤導性的統計。
   if (isLoading) {
-    return { record: undefined, isLoading: true };
+    return {
+      record: undefined,
+      ralliesBySetNumber: new Map(),
+      allRallies: [],
+      isLoading: true,
+    };
   }
 
   const ralliesBySetIndex = ralliesQueries.map((q) => q.data ?? []);
@@ -60,5 +72,13 @@ export function useMatchRecording(matchId: string): {
     subsQuery.data ?? [],
   );
 
-  return { record, isLoading: false };
+  // sets 跟 ralliesBySetIndex 是「同索引對齊」的（見上方 useQueries）。把它整理成
+  // 「setNumber → 該局 rallies」的 Map，讓頁面用 setNumber（使用者選的局）直接查得到；
+  // allRallies 則是整場攤平，給「全場」範圍算輪次統計用。
+  const ralliesBySetNumber = new Map<number, Rally[]>(
+    sets.map((s, i) => [s.setNumber, ralliesBySetIndex[i] ?? []]),
+  );
+  const allRallies = ralliesBySetIndex.flat();
+
+  return { record, ralliesBySetNumber, allRallies, isLoading: false };
 }
