@@ -557,7 +557,7 @@ export default function ScoreSheet() {
             // 右邊一直欄（使用者要求：不要把功能都擠成上下一長條）。
             <>
               {/* ── 左：球場 ── */}
-              <div className="flex min-w-0 flex-1 flex-col gap-2 border-r border-white/[0.08] p-4">
+              <div className="flex min-w-0 flex-1 flex-col gap-2 p-4">
                 {selectedBenchPlayer ? (
                   <div className="flex w-full items-center justify-between rounded-lg border border-[#3b82f6]/40 bg-[#3b82f6]/15 px-3 py-1.5 text-sm">
                     <span className="font-semibold text-[#93c5fd]">
@@ -593,8 +593,10 @@ export default function ScoreSheet() {
                 </div>
               </div>
 
-              {/* ── 右：比分 + 操作按鈕（直欄） ── */}
-              <div className="flex w-[280px] shrink-0 flex-col items-center gap-6 overflow-y-auto p-5">
+              {/* ── 右：比分 + 操作按鈕（直欄） ──
+                  垂直置中（justify-center）、不加分隔線——跟左邊球場之間單純靠留白區隔，
+                  不需要一條實體邊框線。 */}
+              <div className="flex w-[280px] shrink-0 flex-col items-center justify-center gap-6 overflow-y-auto p-5">
                 {scoreDisplay}
 
                 {/* 暫停（issue #44）：每一方一顆鈕，標籤帶「已用/上限」，達到 2 次就反灰
