@@ -5,6 +5,7 @@ import { MatchPlayer } from "../types/match";
 import { useRotationTable } from "../hooks/useRotationTable";
 import { useTacticsBoard } from "../hooks/useTacticsBoard";
 import { findNearestZone, getZoneCoords } from "../lib/rotationLogic";
+import PlayerMarker from "./PlayerMarker";
 
 interface PlayerNodeProps {
   player: MatchPlayer;
@@ -182,39 +183,16 @@ export default function PlayerNode({
       className={`cursor-grab touch-none ${isDragging ? "cursor-grabbing" : ""}`}
       style={{ transition: isDragging ? "none" : "transform 0.1s ease-out" }}
     >
-      {/* 玻璃圓片（issue #134）：深色半透明底 + 狀態色細邊框，呼應球場毛玻璃地板/
-          外層面板同一套材質語言，取代原本「整顆實色圓」的樣式。選取時邊框加粗
-          （原本 1.5 太粗，改成 2，仍比未選取的 1.2 明顯）並加一圈跟狀態色同色的
-          發光，作為選取態的視覺回饋。 */}
-      <circle
-        r={isSelected ? radius + 1.5 : radius}
-        fill="rgba(10, 11, 7, 0.62)"
-        stroke={stateColor}
-        strokeWidth={isSelected ? "2" : "1.2"}
-        style={isSelected ? { filter: `drop-shadow(0 0 3px ${stateColor})` } : undefined}
+      {/* 玻璃圓片（issue #134，視覺共用抽成 components/PlayerMarker.tsx——計分表的
+          ScoreSheetCourt.tsx 也吃同一顆，改一邊兩邊會一起變）：深色半透明底 + 狀態色
+          細邊框，圈裡固定背號、圈下姓名，不再套用 circleLabel 三選一。 */}
+      <PlayerMarker
+        number={player.number}
+        name={player.name || player.role}
+        color={stateColor}
+        radius={radius}
+        emphasized={isSelected}
       />
-      {/* 圈裡固定顯示背號（辨識度最高、字數最少最不擠），圈下方小字顯示姓名——
-          使用者明確要求的雙行格式，不再套用 circleLabel 三選一。 */}
-      <text
-        y="1.6"
-        fontSize="4.5"
-        fontWeight="bold"
-        fill="#F5F5F0"
-        textAnchor="middle"
-        className="font-sans pointer-events-none"
-      >
-        {player.number}
-      </text>
-      <text
-        y={radius + 5.5}
-        fontSize="3.2"
-        fill="#F5F5F0"
-        fillOpacity="0.75"
-        textAnchor="middle"
-        className="font-sans pointer-events-none"
-      >
-        {player.name || player.role}
-      </text>
     </g>
   );
 }
