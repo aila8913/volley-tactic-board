@@ -7,12 +7,18 @@
 //
 // 這是最小可用版本：一張表、每列可點進去單場分析頁，先求「能一覽多場」，視覺打磨（表格
 // 排版、篩選、排序等）留給之後迭代／設計夥伴接手，不在這一輪的範圍內。
+import { useMemo, useState } from "react";
 import { useLocation, Link } from "wouter";
 import { BarChart3 } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import AppShell from "@/components/AppShell";
 import { useCrossMatchAnalysis } from "@/hooks/useCrossMatchAnalysis";
+import { useTeamList } from "@/hooks/useTeams";
 import { formatMatchDateTime } from "@/lib/matchSummary";
+
+// 球隊篩選的兩個特殊值：全部場次、以及「未分類」（teamId 為 null 的場）。其餘就是球隊 id。
+const TEAM_FILTER_ALL = "all";
+const TEAM_FILTER_NONE = "none";
 
 // 跟 MatchAnalytics.tsx 同一套「回列表」次要按鈕語言（不透過 shadcn Button，那套元件的
 // 顏色綁在給淺色頁面用的 CSS 變數上，見該檔案同名常數的註解）。
@@ -27,6 +33,21 @@ const GLASS_SECTION_CLASS =
 export default function CrossMatchAnalytics() {
   const [, navigate] = useLocation();
   const { summaries, isLoading } = useCrossMatchAnalysis();
+  const { teams } = useTeamList();
+
+  // 球隊 id → 名稱，讓每列能顯示球隊名（摘要只帶 teamId 整數，不帶名稱）。
+  const teamNameById = useMemo(() => new Map(teams.map((t) => [t.id, t.name])), [teams]);
+
+  // 目前選的球隊篩選（預設「全部」）。
+  const [teamFilter, setTeamFilter] = useState<string>(TEAM_FILTER_ALL);
+
+  // 依篩選挑出要顯示的場次。用 useMemo 避免每次 render 都重算一遍整個陣列。
+  const visibleSummaries = useMemo(() => {
+    if (teamFilter === TEAM_FILTER_ALL) return summaries;
+    if (teamFilter === TEAM_FILTER_NONE) return summaries.filter((m) => m.teamId == null);
+    const id = Number(teamFilter);
+    return summaries.filter((m) => m.teamId === id);
+  }, [summaries, teamFilter]);
 
   return (
     // mode="A"（列表瀏覽）：這頁本質上是一張「比賽摘要列表」，跟 MatchList 同一種版面模式。
@@ -55,7 +76,24 @@ export default function CrossMatchAnalytics() {
 
         <div className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-6">
           <section className={GLASS_SECTION_CLASS}>
-            <h2 className="mb-3 text-sm font-bold text-[#f5f5f0]">各場比賽摘要</h2>
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <h2 className="text-sm font-bold text-[#f5f5f0]">各場比賽摘要</h2>
+              {/* 球隊篩選。頁面是刻意的深色玻璃風、跟淺色的 shadcn Select 主題不合，這裡先用
+                  一個輕量的原生 select 手接篩選，視覺打磨留給後續／設計夥伴。 */}
+              <select
+                value={teamFilter}
+                onChange={(e) => setTeamFilter(e.target.value)}
+                className="rounded-full border border-white/[0.26] bg-white/[0.05] px-3 py-1.5 text-xs font-bold text-[#f5f5f0] outline-none transition hover:border-[#c6f135] focus:border-[#c6f135] [&>option]:bg-[#0a0b07]"
+              >
+                <option value={TEAM_FILTER_ALL}>全部球隊</option>
+                {teams.map((t) => (
+                  <option key={t.id} value={String(t.id)}>
+                    {t.name}
+                  </option>
+                ))}
+                <option value={TEAM_FILTER_NONE}>未分類</option>
+              </select>
+            </div>
             {isLoading ? (
               <div className="flex items-center gap-2 text-sm text-[#a9b096]">
                 <Spinner className="size-4" />
@@ -63,18 +101,21 @@ export default function CrossMatchAnalytics() {
               </div>
             ) : summaries.length === 0 ? (
               <p className="text-sm text-[#a9b096]">還沒有任何比賽記錄。</p>
+            ) : visibleSummaries.length === 0 ? (
+              <p className="text-sm text-[#a9b096]">這個球隊底下還沒有比賽。</p>
             ) : (
               <table className="w-full border-collapse text-sm">
                 <thead>
                   <tr className="border-b-2 border-white/[0.2]">
                     <th className="pb-1 text-left font-normal text-[#a9b096]">對手</th>
+                    <th className="pb-1 text-left font-normal text-[#a9b096]">球隊</th>
                     <th className="pb-1 text-left font-normal text-[#a9b096]">日期</th>
                     <th className="pb-1 text-right font-normal text-[#a9b096]">局數</th>
                     <th className="pb-1 text-right font-normal text-[#a9b096]">得分:失分</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {summaries.map((m) => (
+                  {visibleSummaries.map((m) => (
                     <tr
                       key={m.matchId}
                       // 點整列導去既有的單場分析頁（視圖一），這頁只負責「一覽多場、挑一場」，
@@ -83,6 +124,9 @@ export default function CrossMatchAnalytics() {
                       className="cursor-pointer border-b border-white/[0.06] transition hover:bg-white/[0.05]"
                     >
                       <td className="py-1.5 font-semibold text-[#f5f5f0]">vs {m.opponent}</td>
+                      <td className="py-1.5 text-[#a9b096]">
+                        {m.teamId != null ? (teamNameById.get(m.teamId) ?? "—") : "未分類"}
+                      </td>
                       <td className="py-1.5 text-[#a9b096]">{formatMatchDateTime(m.date)}</td>
                       <td className="py-1.5 text-right font-numeric tabular-nums text-[#f5f5f0]">
                         {m.setsPlayed}

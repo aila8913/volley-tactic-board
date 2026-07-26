@@ -28,6 +28,7 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { useCreateMatch, useUpdateMatch, useMatchWithRoster } from "@/hooks/useMatches";
+import { useTeamList, useCreateTeam } from "@/hooks/useTeams";
 import {
   Match,
   matchFormSchema,
@@ -42,6 +43,11 @@ const emptyDefaults: MatchFormValues = {
   dateTime: "",
   players: [{ name: "", number: 0, role: "S" }],
 };
+
+// 球隊下拉的兩個特殊值。Radix Select 不允許 SelectItem 用空字串當 value（會丟錯），
+// 所以「未指定」用一個 sentinel 字串，而不是 ""。"__new__" 是「臨時建一支新球隊」那一列。
+const TEAM_NONE = "__none__";
+const TEAM_NEW = "__new__";
 
 interface MatchFormDialogProps {
   open: boolean;
@@ -66,6 +72,14 @@ export default function MatchFormDialog({
   const createMatch = useCreateMatch();
   const updateMatch = useUpdateMatch();
 
+  // 球隊標籤是「挑既有／臨時建新」的選擇器，不是 zod 表單欄位（新建的球隊送出前還沒有 id），
+  // 所以用獨立的本地 state 管：teamSelection 存下拉目前選的值（sentinel 或 String(id)），
+  // newTeamName 只有選了「建立新球隊」時才會用到。
+  const { teams } = useTeamList();
+  const createTeam = useCreateTeam();
+  const [teamSelection, setTeamSelection] = useState<string>(TEAM_NONE);
+  const [newTeamName, setNewTeamName] = useState("");
+
   // 編輯模式才需要抓「伺服器目前的完整名單」——用來預填表單、也用來讓儲存時算出名單差異
   // （新增/修改/刪除哪些球員）。列表傳進來的 match 只有身份、沒有名單（避免列表 N+1）。
   const { match: fetchedMatch } = useMatchWithRoster(match ? Number(match.id) : 0, isEditing);
@@ -88,16 +102,31 @@ export default function MatchFormDialog({
     if (open) {
       const source = fetchedMatch ?? match;
       form.reset(source ? matchToFormValues(source) : emptyDefaults);
+      // 球隊選擇不在 form 裡，要自己隨開窗重置：編輯模式預填這場原本的球隊，新增模式回到「未指定」。
+      setTeamSelection(source?.teamId != null ? String(source.teamId) : TEAM_NONE);
+      setNewTeamName("");
     }
   }, [open, match, fetchedMatch, form]);
 
   const onSubmit = async (values: MatchFormValues) => {
     setSubmitting(true);
     try {
+      // 把下拉的選擇解析成要存進比賽的 teamId：
+      //   "__none__" → null（未分類）
+      //   "__new__"  → 有輸入名字就先建一支新球隊、拿它的 id；沒輸入就當未分類
+      //   其他       → 既有球隊的整數 id
+      let teamId: number | null = null;
+      if (teamSelection === TEAM_NEW) {
+        const name = newTeamName.trim();
+        teamId = name ? await createTeam(name) : null;
+      } else if (teamSelection !== TEAM_NONE) {
+        teamId = Number(teamSelection);
+      }
+
       if (match) {
-        await updateMatch(Number(match.id), values, existingPlayers);
+        await updateMatch(Number(match.id), values, existingPlayers, teamId);
       } else {
-        await createMatch(values, tournamentId);
+        await createMatch(values, tournamentId, teamId);
       }
       onOpenChange(false);
     } catch {
@@ -144,6 +173,33 @@ export default function MatchFormDialog({
                 </FormItem>
               )}
             />
+
+            {/* 球隊標籤（可選）。不是 react-hook-form 欄位，所以直接用 Label + Select 手接
+                本地 state，不走 FormField。選「建立新球隊」時才展開一格名稱輸入。 */}
+            <div className="space-y-2">
+              <Label>球隊（可選）</Label>
+              <Select value={teamSelection} onValueChange={setTeamSelection}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={TEAM_NONE}>未指定</SelectItem>
+                  {teams.map((team) => (
+                    <SelectItem key={team.id} value={String(team.id)}>
+                      {team.name}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value={TEAM_NEW}>＋ 建立新球隊…</SelectItem>
+                </SelectContent>
+              </Select>
+              {teamSelection === TEAM_NEW && (
+                <Input
+                  placeholder="新球隊名稱"
+                  value={newTeamName}
+                  onChange={(e) => setNewTeamName(e.target.value)}
+                />
+              )}
+            </div>
 
             <div className="space-y-3">
               <Label>球員名單</Label>

@@ -28,6 +28,7 @@ export const ListMatchesResponseItem = zod.object({
   "location": zod.string().nullish(),
   "videoUrl": zod.string().nullish(),
   "tournamentId": zod.string().uuid().nullish(),
+  "teamId": zod.number().nullish(),
   "createdAt": zod.coerce.date()
 })
 export const ListMatchesResponse = zod.array(ListMatchesResponseItem)
@@ -42,7 +43,8 @@ export const CreateMatchBody = zod.object({
   "opponent": zod.string(),
   "location": zod.string().nullish(),
   "videoUrl": zod.string().nullish(),
-  "tournamentId": zod.string().uuid().nullish()
+  "tournamentId": zod.string().uuid().nullish(),
+  "teamId": zod.number().nullish()
 })
 
 
@@ -61,6 +63,7 @@ export const GetMatchResponse = zod.object({
   "location": zod.string().nullish(),
   "videoUrl": zod.string().nullish(),
   "tournamentId": zod.string().uuid().nullish(),
+  "teamId": zod.number().nullish(),
   "createdAt": zod.coerce.date()
 })
 
@@ -77,7 +80,8 @@ export const UpdateMatchBody = zod.object({
   "date": zod.coerce.date().optional(),
   "location": zod.string().nullish(),
   "videoUrl": zod.string().nullish(),
-  "tournamentId": zod.string().uuid().nullish()
+  "tournamentId": zod.string().uuid().nullish(),
+  "teamId": zod.number().nullish()
 })
 
 export const UpdateMatchResponse = zod.object({
@@ -88,6 +92,7 @@ export const UpdateMatchResponse = zod.object({
   "location": zod.string().nullish(),
   "videoUrl": zod.string().nullish(),
   "tournamentId": zod.string().uuid().nullish(),
+  "teamId": zod.number().nullish(),
   "createdAt": zod.coerce.date()
 })
 
@@ -143,6 +148,49 @@ export const UpdateTournamentResponse = zod.object({
  */
 export const DeleteTournamentParams = zod.object({
   "tournamentId": zod.coerce.string().uuid()
+})
+
+
+/**
+ * @summary List teams (grouping labels)
+ */
+export const ListTeamsResponseItem = zod.object({
+  "id": zod.number(),
+  "name": zod.string()
+})
+export const ListTeamsResponse = zod.array(ListTeamsResponseItem)
+
+
+/**
+ * @summary Create a team
+ */
+export const CreateTeamBody = zod.object({
+  "name": zod.string()
+})
+
+
+/**
+ * @summary Rename a team
+ */
+export const UpdateTeamParams = zod.object({
+  "teamId": zod.coerce.number()
+})
+
+export const UpdateTeamBody = zod.object({
+  "name": zod.string().optional()
+})
+
+export const UpdateTeamResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string()
+})
+
+
+/**
+ * @summary Delete a team (unsets teamId on its matches; does not delete them)
+ */
+export const DeleteTeamParams = zod.object({
+  "teamId": zod.coerce.number()
 })
 
 

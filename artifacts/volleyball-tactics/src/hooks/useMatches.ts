@@ -92,7 +92,11 @@ export function useCreateMatch() {
   const createPlayer = useCreatePlayer();
 
   return useCallback(
-    async (values: MatchFormValues, tournamentId: string | null): Promise<number> => {
+    async (
+      values: MatchFormValues,
+      tournamentId: string | null,
+      teamId: number | null,
+    ): Promise<number> => {
       const created = await createMatch.mutateAsync({
         data: {
           opponent: values.opponent,
@@ -100,6 +104,8 @@ export function useCreateMatch() {
           // 前端用 opponent 當標題，沒有獨立比賽名稱，name 一律留空。
           name: null,
           tournamentId,
+          // 球隊標籤（null＝未分類）。由表單的球隊選擇器決定，見 MatchFormDialog。
+          teamId,
         },
       });
       for (const p of values.players) {
@@ -147,10 +153,15 @@ export function useUpdateMatch() {
   const applyRosterDiff = useApplyRosterDiff();
 
   return useCallback(
-    async (matchId: number, values: MatchFormValues, existing: MatchPlayer[]): Promise<void> => {
+    async (
+      matchId: number,
+      values: MatchFormValues,
+      existing: MatchPlayer[],
+      teamId: number | null,
+    ): Promise<void> => {
       await updateMatch.mutateAsync({
         matchId,
-        data: { opponent: values.opponent, date: localInputToIso(values.dateTime) },
+        data: { opponent: values.opponent, date: localInputToIso(values.dateTime), teamId },
       });
       await applyRosterDiff(matchId, existing, values.players);
       queryClient.invalidateQueries({ queryKey: getListMatchesQueryKey() });

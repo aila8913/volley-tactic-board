@@ -162,6 +162,66 @@ paths:
         "204":
           description: Deleted
 
+  /teams:
+    get:
+      operationId: listTeams
+      tags: [teams]
+      summary: List teams (grouping labels)
+      responses:
+        "200":
+          description: List of teams
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Team"
+    post:
+      operationId: createTeam
+      tags: [teams]
+      summary: Create a team
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewTeam"
+      responses:
+        "201":
+          description: Created team
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Team"
+
+  /teams/{teamId}:
+    parameters:
+      - $ref: "#/components/parameters/TeamId"
+    patch:
+      operationId: updateTeam
+      tags: [teams]
+      summary: Rename a team
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTeam"
+      responses:
+        "200":
+          description: Updated team
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Team"
+    delete:
+      operationId: deleteTeam
+      tags: [teams]
+      summary: Delete a team (unsets teamId on its matches; does not delete them)
+      responses:
+        "204":
+          description: Deleted
+
   /matches/{matchId}/players:
     parameters:
       - $ref: "#/components/parameters/MatchId"
@@ -745,6 +805,13 @@ components:
       schema:
         type: string
         format: uuid
+    # team id 是整數（serial），不是 uuid——跟 tournaments 不同，見 lib/db/src/schema/teams.ts。
+    TeamId:
+      name: teamId
+      in: path
+      required: true
+      schema:
+        type: integer
 
   schemas:
     HealthStatus:
@@ -827,6 +894,32 @@ components:
         name:
           type: string
 
+    # 球隊＝分組標籤（見 lib/db/src/schema/teams.ts）。id 是整數（serial），沒有 createdAt 欄位，
+    # 所以這裡只有 id/name——比 Tournament 更精簡。
+    Team:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+      required: [id, name]
+
+    NewTeam:
+      type: object
+      # id 不收 client 生的（serial 由 DB 自動遞增），所以新增只需要 name。
+      properties:
+        name:
+          type: string
+      required: [name]
+
+    UpdateTeam:
+      type: object
+      # 球隊目前也只有名稱可改；name 選填以保持 PATCH「只帶想改的」語意。
+      properties:
+        name:
+          type: string
+
     Match:
       type: object
       properties:
@@ -855,6 +948,10 @@ components:
           type: string
           format: uuid
           nullable: true
+        # 這場比賽標到哪支球隊（分組標籤）。整數外鍵指向 teams 表；null＝未分類。
+        teamId:
+          type: integer
+          nullable: true
         createdAt:
           type: string
           format: date-time
@@ -881,6 +978,9 @@ components:
           type: string
           format: uuid
           nullable: true
+        teamId:
+          type: integer
+          nullable: true
       required: [date, opponent]
 
     UpdateMatch:
@@ -901,6 +1001,9 @@ components:
         tournamentId:
           type: string
           format: uuid
+          nullable: true
+        teamId:
+          type: integer
           nullable: true
 
     UpdatePlayer:

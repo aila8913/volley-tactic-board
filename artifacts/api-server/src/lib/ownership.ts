@@ -9,6 +9,7 @@ import {
   substitutionsTable,
   timeoutsTable,
   tournamentsTable,
+  teamsTable,
 } from "@workspace/db";
 
 // 巢狀資源（players/sets/rallies/events）自己沒有存 userId，它們的擁有權是「繼承」自所屬的 match。
@@ -40,6 +41,19 @@ export async function tournamentBelongsToUser(
     .select({ id: tournamentsTable.id })
     .from(tournamentsTable)
     .where(and(eq(tournamentsTable.id, tournamentId), eq(tournamentsTable.userId, userId)));
+
+  return row !== undefined;
+}
+
+// team（球隊標籤）跟 tournament 一樣是頂層資源、自己存了 userId，直接比對 id + userId，
+// 不用 join。matches 的 POST/PATCH 收到 body.teamId 時要先過這關，理由同 tournamentBelongsToUser：
+// 外鍵只保證「這個 id 指到一列存在的球隊」，不保證「那是你的球隊」——真 auth 上線後別讓 A
+// 把自己的比賽標成 B 的球隊（IDOR）。teamId 是整數（serial），所以參數型別是 number。
+export async function teamBelongsToUser(teamId: number, userId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: teamsTable.id })
+    .from(teamsTable)
+    .where(and(eq(teamsTable.id, teamId), eq(teamsTable.userId, userId)));
 
   return row !== undefined;
 }
