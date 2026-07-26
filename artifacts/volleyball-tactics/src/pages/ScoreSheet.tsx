@@ -377,38 +377,74 @@ export default function ScoreSheet() {
   // 抽成一個區塊避免兩處各寫一份、日後改一邊忘另一邊漂移。
   const scoreDisplay = (
     <div className="flex flex-col items-center gap-2">
-      <div className="flex items-center gap-3">
-        <span className="text-sm font-bold text-[#f5f5f0]">第 {currentSet?.setNumber ?? 1} 局</span>
+      <span className="text-sm font-bold text-[#f5f5f0]">第 {currentSet?.setNumber ?? 1} 局</span>
+
+      {/* 大分數：借鏡實體翻牌計分板（黑卡＋粗體大數字＋卡片間距）的排版節奏。字體真的換了：
+        JetBrains Mono 這個專案只掛到 700 字重，撐不出翻牌板那種黑體量感，改用 font-score
+        （Anton）——這是 design-spec.md 第 3 節明文留的例外「真的需要大字展示、而且內容以
+        英文/數字為主的場合」，之前 PR #129 review 判 Anton 死刑是因為套在 17–18px 中英混排
+        的卡片標題上最難讀，跟這裡純數字、大尺寸的展示情境是兩回事；只在 font-score 用，不
+        碰 font-dash/font-sans，中文內容不會被牽連。套上我方＝萊姆綠／對手＝紅這組既有配色
+        （跟下面局數框、#199 對手珊瑚橘系語彙同一套）。
+        發球指示原本是卡片下方一顆 🏐，改成發球方卡片邊框＋外光暈直接亮起來——照 design-spec
+        第 4 節「發光效果只留給真正需要被看見的狀態」那條原則，發球正是這種狀態；副作用是
+        兩張卡不再因為一顆 emoji 而寬度不一致，永遠等寬。
+        局數框（原本掛在「第 N 局」那行）搬進這一排、卡在兩張比分卡中間——照實體翻牌計分板
+        的樣子，所有卡片是掛在同一條頂邊上的（大卡片只是比較高，會往下多長一截），所以外層
+        改成 items-start 對齊上緣，而不是原本跟著比分卡置底；局數框矮很多，跟著同一條上緣
+        對齊，整排看起來才像掛在同一條線上、不是各自對齊各自的。 */}
+      <div className="flex items-start gap-3">
+        <div
+          className={`flex flex-col items-center gap-1 rounded-2xl border px-5 py-3 transition-shadow ${
+            currentSet?.serving === "us"
+              ? "border-[#C6F135] shadow-[0_0_18px_rgba(198,241,53,0.4)]"
+              : "border-white/[0.14] shadow-lg shadow-black/30"
+          } bg-black/30`}
+        >
+          <span className="font-score text-5xl tabular-nums text-[#C6F135]">
+            {currentSet?.ourScore ?? 0}
+          </span>
+          <span className="text-[11px] font-semibold text-[#a9b096]">我方</span>
+        </div>
+
+        {/* 局數勝負：原本是「局數 Y:Z」文字，改成兩顆小方框數字——跟翻牌計分板中間那兩張
+          小卡（局/game 計數）同一個語彙，圖像化取代文字標籤，不用再讀「局數」兩個字才懂
+          這兩個數字是什麼。哪隊領先，框線／數字就亮對應隊色，沒領先維持中性灰白。 */}
         {completedSets.length > 0 && (
-          <span className="text-xs text-[#a9b096]">
-            局數&nbsp;
-            <span className={ourSetsWon > opponentSetsWon ? "font-bold text-[#c6f135]" : ""}>
+          <div className="flex items-center gap-1">
+            <span
+              className={`flex h-5 min-w-5 items-center justify-center rounded border font-score text-xs tabular-nums leading-none ${
+                ourSetsWon > opponentSetsWon
+                  ? "border-[#C6F135] text-[#C6F135]"
+                  : "border-white/20 text-[#a9b096]"
+              }`}
+            >
               {ourSetsWon}
             </span>
-            :
-            <span className={opponentSetsWon > ourSetsWon ? "font-bold text-[#ef4444]" : ""}>
+            <span
+              className={`flex h-5 min-w-5 items-center justify-center rounded border font-score text-xs tabular-nums leading-none ${
+                opponentSetsWon > ourSetsWon
+                  ? "border-[#ef4444] text-[#ef4444]"
+                  : "border-white/20 text-[#a9b096]"
+              }`}
+            >
               {opponentSetsWon}
             </span>
-          </span>
+          </div>
         )}
-      </div>
 
-      {/* 大分數：比分是 design-spec.md 第 3 節指定要用等寬字體（JetBrains Mono，這裡的
-        font-numeric）的地方，數字對齊、有「數據感」，跟一般內文字體分開。 */}
-      <div className="flex items-center gap-6 font-numeric text-5xl font-bold tabular-nums">
-        <span className="flex items-center gap-1">
-          {currentSet?.serving === "us" && <span className="text-2xl">🏐</span>}
-          {currentSet?.ourScore ?? 0}
-        </span>
-        <span className="text-white/20">:</span>
-        <span className="flex items-center gap-1">
-          {currentSet?.opponentScore ?? 0}
-          {currentSet?.serving === "opponent" && <span className="text-2xl">🏐</span>}
-        </span>
-      </div>
-      <div className="flex gap-12 text-xs font-semibold text-[#a9b096]">
-        <span>我方</span>
-        <span>對手</span>
+        <div
+          className={`flex flex-col items-center gap-1 rounded-2xl border px-5 py-3 transition-shadow ${
+            currentSet?.serving === "opponent"
+              ? "border-[#ef4444] shadow-[0_0_18px_rgba(239,68,68,0.4)]"
+              : "border-white/[0.14] shadow-lg shadow-black/30"
+          } bg-black/30`}
+        >
+          <span className="font-score text-5xl tabular-nums text-[#ef4444]">
+            {currentSet?.opponentScore ?? 0}
+          </span>
+          <span className="text-[11px] font-semibold text-[#a9b096]">對手</span>
+        </div>
       </div>
     </div>
   );
@@ -485,7 +521,7 @@ export default function ScoreSheet() {
 
           {/* 每個 snap pane 是一場比賽的統計；CSS scroll-snap 不需要任何 JS */}
           <div className="flex min-h-0 flex-1 snap-x snap-mandatory overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {statsMatches.map((m, i) => (
+            {statsMatches.map((m) => (
               // 這一格以前寫死 `w-72`，意思其實是「跟右欄一樣寬」——現在右欄多寬只由
               // AppShell 的 ASIDE_WIDTH 一處決定，這裡改成 w-full 直接吃滿父層（也就是
               // aside 插槽）給的寬度，不用在第二個地方重複寫一次同一個數字。如果以後只改
@@ -493,17 +529,13 @@ export default function ScoreSheet() {
               // 不一致（scroll-snap 的每一格可能露出下一格一小角）——改成 w-full 之後這種
               // 情況不可能發生。
               <div key={m.id} className="flex min-h-0 w-full flex-none snap-center flex-col">
-                <div className="flex shrink-0 items-center gap-2 border-b border-white/[0.10] bg-white/[0.03] px-3 py-1.5">
-                  <span className="truncate text-xs font-bold">vs {m.opponent}</span>
-                  {m.id === id && (
-                    <span className="shrink-0 rounded bg-[#C6F135]/15 px-1 text-[10px] text-[#C6F135]">
-                      本場
-                    </span>
-                  )}
-                  <span className="ml-auto shrink-0 text-[10px] text-[#9AA08C]">
-                    {i + 1}/{statsMatches.length}
-                  </span>
-                </div>
+                {/* 這裡原本有一條「vs {對手} / 本場 / i+1/length」的分頁小標題，跟頁面最上面
+                  的 <h1>vs {match.opponent}</h1> 重複——而且 statsMatches 目前是寫死的單一
+                  元素陣列（見上面 statsMatches 宣告處的註解：跨場統計要等 Phase 3b-ii），
+                  「i+1/length」永遠是「1/1」，不是現在真的有用的分頁資訊，純粹佔右欄空間、
+                  逼使用者多滑一段才看得到下面的統計。刪掉，省下的高度用來讓比賽統計不用
+                  捲軸就看得到。等 Phase 3b-ii 真的做多場統計時，那時候的人可以照那個功能
+                  的實際形狀決定要不要重新加標題，不必現在先猜。 */}
                 <div className="flex-1 overflow-y-auto">
                   <ScoreSheetStats
                     players={m.players}

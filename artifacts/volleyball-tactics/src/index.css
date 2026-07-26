@@ -6,6 +6,7 @@
 @import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400..700&display=swap");
 @import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap");
 @import url("https://fonts.googleapis.com/css2?family=Sixtyfour&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Anton&display=swap");
 @import "tailwindcss";
 @import "tw-animate-css";
 @plugin "@tailwindcss/typography";
@@ -51,6 +52,13 @@
      全 app 任何用到 font-mono class 的地方都變成 JetBrains Mono（PR #129 review 抓到的坑）。 */
   --font-dash: "Space Grotesk", "Noto Sans TC", sans-serif;
   --font-numeric: "JetBrains Mono", ui-monospace, monospace;
+
+  /* Anton 在 design-spec.md 第 3 節被 PR #129 review 後判過死刑，但當時的場景是 17–18px
+     的卡片標題（中英混排）——Anton 只有一個字重、中文完全不會 fallback。這裡是
+     design-spec 明文留的例外：「真的需要大字展示、而且內容以英文/數字為主的場合」，
+     計分頁的翻牌計分卡（大比分、局數框）純數字、大尺寸，正好是那個例外。只用在
+     font-score，不動 font-dash/font-sans，不會把 Anton 泄漏回中英混排的地方。 */
+  --font-score: "Anton", "Space Grotesk", sans-serif;
 
   --radius-sm: 4px;
   --radius-md: 6px;
@@ -286,5 +294,50 @@
 @media (prefers-reduced-motion: reduce) {
   .court-edge-light {
     animation: none;
+  }
+}
+
+/* 導覽軌圖示的「畫出來」進場動畫（issue：左欄圖示化，2026-07-26 起陸續把「比」「戰」…
+   換成圖示）。使用者提供的參考 SVG（外部圖示包）原本是「畫出來、停留、淡出、暫停、重來」
+   的無限迴圈，實機看過後改成**只播一次**：畫完就停在「完整畫好、不透明」的狀態，不再淡出
+   重播——常駐的導覽圖示一直重複動畫會讓人等得不耐煩、反而不好閱讀（使用者原話）。同時把
+   節奏從參考檔的 1.5 秒手寫感拉快到 260ms，一次到位。
+   只用一份 keyframes／class（不是每顆圖示自己內嵌一份 <style>，理由跟
+   .court-glass/.court-edge-light 一樣：多個圖示同時出現在畫面上時──收合軌跟展開浮層是
+   同時掛著的兩份 DOM，見 NavRail.tsx 的說明──共用同一份 keyframes 不會重複定義，之後
+   要調整節奏也只要改這裡一處）。
+   「這條線總長度是多少」（stroke-dasharray 的終值）改用 CSS 自訂屬性 `--nav-icon-len`
+   讀，不是像第一版那樣每種長度各刻一個 class——「比」的清單圖示只有兩種長度（28／7）看
+   起來還好，但「戰」的劍形圖示八條路徑有五種不同長度（38.527/8.485/5.657/2.828/15.899），
+   每加一顆圖示就多刻幾個 `.nav-icon-pXXX` class 會很快失控。現在圖示元件自己在每個
+   `<path>` 的 inline style 設一次 `--nav-icon-len`（該路徑的實際長度，通常是圖示來源
+   工具算好的），套同一個 `nav-icon-draw` class 就會照那個長度畫出來，之後再加圖示不用
+   回來改這個檔案。
+   顏色故意不寫死在這裡——圖示元件用 stroke="currentColor"，套用 nav 既有的
+   text-white/60 / hover:text-[#c6f135] / STRONG_SELECT_CLASS 這一套顏色 class 就會自動
+   對；不用另外傳顏色 prop、也不會跟 active/hover 的既有色彩邏輯各管一套。
+   「只播一次」不用另外寫 JS 旗標去擋重播：NavRail 是各頁面各自 mount 一份（不是全站共用
+   單一常駐實例），切換到「比」「計」「數」不同頁面時，舊頁面的 NavRail 連同這顆圖示會被
+   卸載、新頁面重新掛載一份全新的——動畫本來就只在「這個元件剛出現在畫面上」那一刻播一次，
+   同一頁停留多久都不會再重播，天然符合「只播一次」，不用額外狀態管理。 */
+@keyframes nav-icon-draw {
+  from {
+    stroke-dasharray: 0 var(--nav-icon-len);
+    stroke-dashoffset: calc(-1 * var(--nav-icon-len));
+  }
+  to {
+    stroke-dasharray: var(--nav-icon-len) var(--nav-icon-len);
+    stroke-dashoffset: 0;
+  }
+}
+.nav-icon-draw {
+  animation: nav-icon-draw 260ms cubic-bezier(0.65, 0, 0.35, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .nav-icon-draw {
+    animation: none;
+    stroke-dasharray: none;
+    stroke-dashoffset: 0;
+    opacity: 1;
   }
 }
