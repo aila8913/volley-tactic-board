@@ -1014,10 +1014,29 @@ components:
           type: integer
       required: [rotation, pointsWon, pointsLost]
 
-    # GET /analysis/matches 的一列：一場比賽的摘要，供「視圖②：跨場彙總」逐場列出。
+    # GET /analysis/matches 的一列裡「已結束局」的比分。逐局的我方/對方得分，讓首頁列表
+    # 卡片能算出「局比數」(例如 3:0) ——排球講一場結果的單位是「贏了幾局」而不是總分，
+    # 所以需要逐局結果、不能只靠彙總的 ourPoints/opponentPoints。
+    SetResult:
+      type: object
+      properties:
+        ourScore:
+          type: integer
+        opponentScore:
+          type: integer
+      required: [ourScore, opponentScore]
+
+    # GET /analysis/matches 的一列：一場比賽的摘要，供「視圖②：跨場彙總」逐場列出，
+    # 也給首頁比賽列表卡片直接讀（不必逐場 hydrate 本機 store，見 pages/MatchList.tsx）。
     # setsPlayed 只算真正開過球的局（firstServer 不是 null），呼應 sets 表 firstServer
     # 允許 null 的設計（還沒選先發方的空局不算「打過」，見 lib/db/src/schema/sets.ts）。
     # teamId 沒放進 required：跟 matches 表一樣，可能沒有指定球隊。
+    #
+    # setResults：只含「已結束局」(排除進行中的最後一局)，鏡射前端 reconstructRecording
+    # 的「最後一局＝進行中、其餘＝已結束」慣例，讓卡片顯示的局比數跟點進去計分頁後一致。
+    # hasLineup：這場是否已有任一局凍結過先發陣容(lineups 表有 row)，給卡片決定要不要亮
+    # 「尚未排先發」黃標。注意輪轉表上「排好但還沒開賽」的暫存陣容不進 DB(見
+    # useRotationTable.ts 的 partialize)，所以 server 只認已凍結進 lineups 的那種。
     MatchAnalysisSummary:
       type: object
       properties:
@@ -1037,7 +1056,14 @@ components:
           type: integer
         opponentPoints:
           type: integer
-      required: [matchId, opponent, date, setsPlayed, ourPoints, opponentPoints]
+        setResults:
+          type: array
+          items:
+            $ref: "#/components/schemas/SetResult"
+        hasLineup:
+          type: boolean
+      required:
+        [matchId, opponent, date, setsPlayed, ourPoints, opponentPoints, setResults, hasLineup]
 
     # 換人的種類，見 lib/db/src/schema/substitutions.ts 的 substitutionKindEnum 註解：
     # regular = 一般換人；libero = 自由球員上/下（規則上不算正式換人次數，但記錄結構相同）。

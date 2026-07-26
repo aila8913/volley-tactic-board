@@ -10,8 +10,10 @@ import { useListMatchAnalysis } from "@workspace/api-client-react";
 export function useCrossMatchAnalysis() {
   const { data, isLoading, isError } = useListMatchAnalysis();
   return {
-    // 尚未拿到資料時給空陣列，讓呼叫端不用另外判斷 undefined。
-    summaries: data ?? [],
+    // 一律回陣列（跟 useMatchRotationStats 同一套理由，見該檔註解）：用 Array.isArray
+    // 而不是 `data ?? []`，才擋得掉「後端回了非陣列」——例如 api-server 沒重啟、endpoint
+    // 還沒掛上時掉進 SPA fallback 回 HTML 字串的情況，避免 summaries.map 白屏崩潰。
+    summaries: Array.isArray(data) ? data : [],
     isLoading,
     isError,
   };
