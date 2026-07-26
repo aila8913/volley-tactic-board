@@ -8,7 +8,7 @@
 // 這裡只回傳要放進那個 <g> 裡的 SVG 內容（circle + 兩行 text），呼叫端自己決定要不要再疊加
 // 選取環、發球圖示、換人提示這類「這個情境才有」的裝飾。
 interface PlayerMarkerProps {
-  number: number | string;
+  number: number;
   name: string;
   // 邊框色＝目前唯一的狀態指示（前排/後排/自由球員/備位…），語意由呼叫端決定，
   // 這裡只負責畫出來。
