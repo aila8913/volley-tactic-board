@@ -269,14 +269,17 @@ export default function RotationRailPanel({
 
       {/* ① 輪轉表（layout-spec §4.1）：六宮格本身就是站位表。可編輯時點格子選號位；
         唯讀時純粹渲染成看不能點的資訊卡片。 */}
-      <div className="grid grid-cols-3 gap-1.5">
+      <div className="grid grid-cols-3 gap-1">
         {GRID_ZONES.map((zone) => {
           const playerId = safeLineup[zone];
           const player = playerId ? roster.find((p) => p.id === playerId) : undefined;
           const isSelected = !readOnly && selectedZone === zone;
+          // 號位數字（1–6）不顯示：GRID_ZONES 的排法本身就是「從場上視角看」的空間位置，
+          // 看的是格子在哪、不是格子寫著幾號——教練關心的是相對站位，數字反而是多餘的
+          // 資訊圖層（使用者原話：「數字資訊不重要」）。GRID_ZONES 陣列順序仍然不能動
+          // （layout-spec §4.1 鎖死），只是不再把 zone 這個數字渲染出來而已。
           const cellContent = (
             <>
-              <span className="text-[10px] text-[#9AA08C]">{zone}</span>
               <span className="text-xs font-bold leading-tight">
                 {player ? player.number : "—"}
               </span>
@@ -288,7 +291,7 @@ export default function RotationRailPanel({
           // 拖曳懸停的高亮沿用「已選號位」那一套顏色：兩者要表達的是同一件事——
           // 「放開/點下去，人就會進這一格」，用兩種顏色反而要使用者記兩套規則。
           const isDropTarget = dragOverZone === zone;
-          const cellClass = `flex flex-col items-center justify-center rounded-lg border px-1 py-2 transition ${
+          const cellClass = `flex flex-col items-center justify-center rounded-lg border px-1 py-1.5 transition ${
             isSelected || isDropTarget
               ? "border-[#C6F135] bg-[#C6F135]/10 text-[#C6F135]"
               : "border-white/[0.12] bg-white/[0.04] text-[#F5F5F0]"
@@ -366,7 +369,10 @@ export default function RotationRailPanel({
 
       {/* ③ 球員清單（layout-spec §4.3）：已經在場上的人標出目前號位，讓教練一眼看出
         誰還在板凳上。清單可能比六個號位長不少，給它自己的捲動範圍，才不會把下面的
-        區塊推出視野外（右欄是 flex-column，這個 section 是 shrink-0）。 */}
+        區塊推出視野外（右欄是 flex-column，這個 section 是 shrink-0）。
+        max-h 從 40（160px）收到 28（112px）：右欄疊了這個面板＋比賽統計，原本的高度會逼
+        整個右欄要滾輪才看得到比賽統計，縮小上限讓這裡自己捲、不再把下面擠出視野
+        （跟 #209 在追蹤的「資訊密度」同一類問題，這裡先做立即可行的收斂）。 */}
       {/* 放置目標是「整個清單容器」而不是個別球員列：拖回板凳的語意是「離開場上」，
         丟在誰身上都一樣，硬要求對準某一列只是在為難使用者（而且列高只有 ~28px）。 */}
       <div
@@ -374,7 +380,7 @@ export default function RotationRailPanel({
         onDragEnter={() => canDrag && setDragOverBench(true)}
         onDragLeave={() => setDragOverBench(false)}
         onDrop={handleDropOnBench}
-        className={`mt-2 max-h-40 space-y-1 overflow-y-auto rounded-lg border pr-0.5 transition ${
+        className={`mt-2 max-h-28 space-y-1 overflow-y-auto rounded-lg border pr-0.5 transition ${
           dragOverBench ? "border-[#C6F135]/60 bg-[#C6F135]/[0.06]" : "border-transparent"
         }`}
       >

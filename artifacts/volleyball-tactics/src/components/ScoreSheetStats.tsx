@@ -70,20 +70,22 @@ export default function ScoreSheetStats({
     <div className="flex flex-col gap-5 px-4 py-4">
       {/* ── 比分總覽：每局一張 pill 卡片 ── */}
       <section>
-        <h2 className="mb-2 text-sm font-bold text-[#F5F5F0]">比分總覽</h2>
+        <h2 className="mb-2 text-center text-sm font-bold text-[#F5F5F0]">比分總覽</h2>
 
         {setRows.length === 0 ? (
-          <p className="text-xs text-[#9AA08C]">尚未開始記分。</p>
+          <p className="text-center text-xs text-[#9AA08C]">尚未開始記分。</p>
         ) : (
-          <div className="flex flex-col gap-2">
-            <div className="flex gap-2 flex-wrap">
+          <div className="flex flex-col items-center gap-2">
+            <div className="flex flex-wrap justify-center gap-2">
               {setRows.map((s) => {
                 const weWon = s.ourScore > s.opponentScore;
                 const inProgress = s.status === "in-progress";
                 return (
                   <div
                     key={s.setNumber}
-                    className={`flex flex-col items-center rounded border px-2.5 py-1 min-w-[40px] text-center ${
+                    // 使用者要求放大：px-2.5/py-1/min-w-40px → px-4/py-2/min-w-16（跟下面
+                    // 字級一起放大，維持框跟字的比例，不是只把字放大讓框顯得太擠）。
+                    className={`flex min-w-16 flex-col items-center rounded border px-4 py-2 text-center ${
                       // 「進行中」是中性狀態，design-spec 的三色系統（萊姆綠=成功／珊瑚紅=錯誤／
                       // 琥珀=警示）裡沒有對應色，這裡沿用藍色系但調成適合深底的透明度，
                       // 跟下面「贏＝萊姆綠／輸＝珊瑚紅」的語意色分開，不會混淆成勝負判斷。
@@ -94,9 +96,14 @@ export default function ScoreSheetStats({
                           : "border-[#EF4444]/30 bg-[#EF4444]/10"
                     }`}
                   >
-                    <span className="text-[10px] leading-none text-[#9AA08C]">{s.setNumber}</span>
+                    <span className="text-xs leading-none text-[#9AA08C]">{s.setNumber}</span>
+                    {/* 字體跟計分板大比分同一套 font-score（Anton，見 index.css /
+                      docs/design-spec.md 第 3 節的例外）——比分總覽也是「數字為主的展示」，
+                      用同一套字體讓整頁的「這是比分」語彙一致。Anton 本身已經是視覺上的
+                      粗體量感，不再疊 font-bold（疊了在只有一個字重的字體上是合成假粗體，
+                      瀏覽器算圖比較糊）。 */}
                     <span
-                      className={`text-xs font-bold tabular-nums leading-none mt-0.5 ${
+                      className={`font-score mt-1 text-lg leading-none tabular-nums ${
                         inProgress ? "text-sky-300" : weWon ? "text-[#C6F135]" : "text-[#EF4444]"
                       }`}
                     >
@@ -108,12 +115,12 @@ export default function ScoreSheetStats({
             </div>
 
             {completedSets.length > 0 && (
-              <div className="text-xs text-[#9AA08C]">
+              <div className="text-center text-xs text-[#9AA08C]">
                 局數{" "}
                 <span className={ourSetsWon > opponentSetsWon ? "font-bold text-[#C6F135]" : ""}>
                   {ourSetsWon}
                 </span>
-                :
+                <span className="mx-1">:</span>
                 <span className={opponentSetsWon > ourSetsWon ? "font-bold text-[#EF4444]" : ""}>
                   {opponentSetsWon}
                 </span>
@@ -125,16 +132,24 @@ export default function ScoreSheetStats({
 
       {/* ── 換人紀錄 ── */}
       <section>
-        <h2 className="mb-1.5 text-sm font-bold text-[#F5F5F0]">換人紀錄</h2>
-        <div className="flex gap-5 text-sm">
-          <div className="flex flex-col items-center gap-0.5">
+        <h2 className="mb-1.5 text-center text-sm font-bold text-[#F5F5F0]">換人紀錄</h2>
+        {/* 中間一條分隔線：本局／全場累計原本只靠 gap 隔開，數字本身大而醒目、標籤小而不
+          顯眼，一眼看過去容易誤讀成同一組數字的兩個部分而不是兩個獨立類別。加一條線是分隔
+          兩組統計最直接的視覺手法，比純粹拉大間距更明確。
+          （原本想用 Tailwind 的 divide-x 工具 class，實機量測發現這個專案的建置設定下它沒
+          真的產生 border——別處也從沒人用過這個 class，不深究原因，直接改用整個專案到處
+          驗證過能動的寫法：border-l 直接放在第二塊上。） */}
+        <div className="flex justify-center text-sm">
+          <div className="flex flex-col items-center gap-0.5 px-5">
             {/* 本局才有上限（MAX_SUBS_PER_SET），所以顯示成「已用 / 上限」；達到上限時
                 變成警示色提醒教練——排球規則到這裡就不能再換人了（自由球員例外，不算在這個
                 數字裡）。用琥珀（Warning，見 design-spec 色票）而不是珊瑚紅：這只是「到頂了」
                 的提醒，不是像失分那樣的負面結果，跟下面比分卡片的「輸」用色要分開語意。
-                全場累計是跨局總和，本來就沒有上限對象，維持原本純數字。 */}
+                全場累計是跨局總和，本來就沒有上限對象，維持原本純數字。
+                字體改用 font-score（Anton，跟計分板大比分、上面比分總覽同一套「數字展示」
+                語彙），不再疊 font-bold——理由同上面比分總覽的說明。 */}
             <span
-              className={`text-xl font-bold tabular-nums ${
+              className={`font-score text-xl tabular-nums ${
                 currentSetSubCount >= MAX_SUBS_PER_SET ? "text-[#F5A623]" : "text-[#F5F5F0]"
               }`}
             >
@@ -142,40 +157,41 @@ export default function ScoreSheetStats({
             </span>
             <span className="text-xs text-[#9AA08C]">本局</span>
           </div>
-          <div className="flex flex-col items-center gap-0.5">
-            <span className="text-xl font-bold tabular-nums text-[#F5F5F0]">{totalSubCount}</span>
+          <div className="flex flex-col items-center gap-0.5 border-l border-white/[0.10] px-5">
+            <span className="font-score text-xl tabular-nums text-[#F5F5F0]">{totalSubCount}</span>
             <span className="text-xs text-[#9AA08C]">全場累計</span>
           </div>
         </div>
-        <p className="mt-1 text-[11px] text-[#9AA08C]">僅計入一般換人（不含自由球員）。</p>
       </section>
 
       {/* ── 暫停紀錄（issue #44）── */}
       <section>
-        <h2 className="mb-1.5 text-sm font-bold text-[#F5F5F0]">暫停紀錄</h2>
-        <div className="flex gap-5 text-sm">
-          <div className="flex flex-col items-center gap-0.5">
-            <span className="text-xl font-bold tabular-nums text-[#F5F5F0]">
+        <h2 className="mb-1.5 text-center text-sm font-bold text-[#F5F5F0]">暫停紀錄</h2>
+        {/* 同換人紀錄：border-l 加分隔線＋ font-score，理由見上面那段說明。 */}
+        <div className="flex justify-center text-sm">
+          <div className="flex flex-col items-center gap-0.5 px-5">
+            <span className="font-score text-xl tabular-nums text-[#F5F5F0]">
               {currentSetTimeoutCount}
             </span>
             <span className="text-xs text-[#9AA08C]">本局（雙方）</span>
           </div>
-          <div className="flex flex-col items-center gap-0.5">
-            <span className="text-xl font-bold tabular-nums text-[#F5F5F0]">
+          <div className="flex flex-col items-center gap-0.5 border-l border-white/[0.10] px-5">
+            <span className="font-score text-xl tabular-nums text-[#F5F5F0]">
               {totalTimeoutCount}
             </span>
             <span className="text-xs text-[#9AA08C]">全場累計</span>
           </div>
         </div>
-        <p className="mt-1 text-[11px] text-[#9AA08C]">每隊每局上限 2 次；分隊次數見計分區。</p>
       </section>
 
       {/* ── 球員動作統計表 ── */}
       <section>
-        <h2 className="mb-2 text-sm font-bold text-[#F5F5F0]">球員統計</h2>
+        <h2 className="mb-2 text-center text-sm font-bold text-[#F5F5F0]">球員統計</h2>
 
         {playerRows.length === 0 ? (
-          <p className="text-xs text-[#9AA08C]">尚無記錄。在球場上畫線選動作後，這裡會顯示統計。</p>
+          <p className="text-center text-xs text-[#9AA08C]">
+            尚無記錄。在球場上畫線選動作後，這裡會顯示統計。
+          </p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-xs">

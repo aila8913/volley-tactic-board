@@ -7,6 +7,11 @@ import { useRotationTable } from "../hooks/useRotationTable";
 import { useToast } from "@/hooks/use-toast";
 import { exportCourtAsPng, exportStateAsJson, importStateFromJson } from "../lib/exportUtils";
 import NewTacticDialogModal from "./NewTacticDialogModal";
+import NavListIcon from "./icons/NavListIcon";
+import NavSwordsIcon from "./icons/NavSwordsIcon";
+import NavChartIcon from "./icons/NavChartIcon";
+import NavSaveIcon from "./icons/NavSaveIcon";
+import NavClipboardIcon from "./icons/NavClipboardIcon";
 import type { CourtSnapshot } from "../types/courtSnapshot";
 
 // issue #173（layout-spec 環 2）：全站左側導覽，取代原本分開的 MatchNavRail（收合直排導覽軌）
@@ -295,9 +300,16 @@ export default function NavRail(props: NavRailProps) {
           移到浮層途中會不會有一段空隙導致 hover 意外中斷」的問題——因為滑鼠移動路徑全程都
           還在同一個 <nav> 的範圍內。 */}
       <div className="flex flex-1 flex-col items-center gap-1 py-3">
-        <CollapsedEntry glyph="比" label="比賽列表" href={backHref} isActive={listActive} />
+        <CollapsedEntry
+          glyph="比"
+          icon={<NavListIcon className="size-5" />}
+          label="比賽列表"
+          href={backHref}
+          isActive={listActive}
+        />
         <CollapsedEntry
           glyph="計"
+          icon={<NavClipboardIcon className="size-5" />}
           label="計分"
           href={matchId ? `/matches/${matchId}/record` : undefined}
           isActive={active === "record"}
@@ -307,6 +319,7 @@ export default function NavRail(props: NavRailProps) {
             所以就算沒選比賽也不會灰掉，而是通往跨場紀錄本。 */}
         <CollapsedEntry
           glyph="數"
+          icon={<NavChartIcon className="size-5" />}
           label="數據"
           href={analyticsHref}
           isActive={active === "analytics"}
@@ -315,6 +328,7 @@ export default function NavRail(props: NavRailProps) {
       <div className="mt-auto flex flex-col items-center gap-1 py-3">
         <CollapsedEntry
           glyph="戰"
+          icon={<NavSwordsIcon className="size-5" />}
           label="戰術"
           isActive={active === "board"}
           onDisabledClick={matchId ? undefined : handleDisabledClick}
@@ -322,6 +336,7 @@ export default function NavRail(props: NavRailProps) {
         />
         <CollapsedEntry
           glyph="出"
+          icon={<NavSaveIcon className="size-5" />}
           label="匯出／匯入"
           isActive={false}
           onDisabledClick={matchId ? undefined : handleDisabledClick}
@@ -345,9 +360,16 @@ export default function NavRail(props: NavRailProps) {
             border-white/[0.14] bg-[#12140f]/97 p-2 shadow-2xl shadow-black/50 backdrop-blur-lg"
         >
           <div className="flex flex-col gap-1">
-            <ExpandedEntry glyph="比" label="比賽列表" href={backHref} isActive={listActive} />
+            <ExpandedEntry
+              glyph="比"
+              icon={<NavListIcon className="size-5" />}
+              label="比賽列表"
+              href={backHref}
+              isActive={listActive}
+            />
             <ExpandedEntry
               glyph="計"
+              icon={<NavClipboardIcon className="size-5" />}
               label="計分表"
               href={matchId ? `/matches/${matchId}/record` : undefined}
               isActive={active === "record"}
@@ -356,6 +378,7 @@ export default function NavRail(props: NavRailProps) {
             {/* 「數」永遠可到（見 analyticsHref 上方說明）：有比賽→那場單場分析，沒比賽→紀錄本。 */}
             <ExpandedEntry
               glyph="數"
+              icon={<NavChartIcon className="size-5" />}
               label="數據分析"
               href={analyticsHref}
               isActive={active === "analytics"}
@@ -365,6 +388,7 @@ export default function NavRail(props: NavRailProps) {
           <div className="mt-auto flex flex-col gap-1">
             <ExpandedEntry
               glyph="戰"
+              icon={<NavSwordsIcon className="size-5" />}
               label="戰術板"
               isActive={active === "board"}
               isOpen={openSubmenu === "board"}
@@ -419,6 +443,7 @@ export default function NavRail(props: NavRailProps) {
 
             <ExpandedEntry
               glyph="出"
+              icon={<NavSaveIcon className="size-5" />}
               label="匯出／匯入"
               isActive={false}
               isOpen={openSubmenu === "export"}
@@ -511,6 +536,7 @@ export default function NavRail(props: NavRailProps) {
 // 加上條件分支，比三份幾乎相同的 JSX 更不容易出現「改了一種忘了改另一種」的漂移。
 function CollapsedEntry({
   glyph,
+  icon,
   label,
   href,
   isActive,
@@ -518,6 +544,10 @@ function CollapsedEntry({
   onToggle,
 }: {
   glyph: string;
+  // 圖示化試點（2026-07-26，先只有「比」傳這個 prop）：有給 icon 就畫圖示，沒給就照舊顯示
+  // 文字字符——glyph 本身仍然必填，data-testid／aria-label／title 全部還是靠它組字串，
+  // 圖示只是「這格中間畫什麼」的替換，不影響其他既有行為。
+  icon?: React.ReactNode;
   label: string;
   href?: string;
   isActive: boolean;
@@ -538,7 +568,7 @@ function CollapsedEntry({
         data-testid={`button-nav-rail-collapsed-${glyph}`}
         className={`${sizeClass} cursor-not-allowed text-white/25`}
       >
-        {glyph}
+        {icon ?? glyph}
       </button>
     );
   }
@@ -558,7 +588,7 @@ function CollapsedEntry({
           isActive ? STRONG_SELECT_CLASS : "text-white/60 hover:text-[#c6f135]"
         }`}
       >
-        {glyph}
+        {icon ?? glyph}
       </button>
     );
   }
@@ -574,7 +604,7 @@ function CollapsedEntry({
         isActive ? STRONG_SELECT_CLASS : "text-white/60 hover:text-[#c6f135]"
       }`}
     >
-      {glyph}
+      {icon ?? glyph}
     </Link>
   );
 }
@@ -588,6 +618,7 @@ function CollapsedEntry({
 // 「這是目前所在的頁面」。
 function ExpandedEntry({
   glyph,
+  icon,
   label,
   href,
   isActive,
@@ -597,6 +628,8 @@ function ExpandedEntry({
   onHoverOpen,
 }: {
   glyph: string;
+  // 同 CollapsedEntry 的 icon prop：有給就畫圖示，沒給就照舊顯示文字字符。
+  icon?: React.ReactNode;
   label: string;
   href?: string;
   isActive: boolean;
@@ -620,7 +653,7 @@ function ExpandedEntry({
         data-testid={`button-nav-rail-expanded-${glyph}`}
         className={`${baseClass} cursor-not-allowed text-white/25`}
       >
-        <span className="w-5 text-center">{glyph}</span>
+        <span className="w-5 text-center">{icon ?? glyph}</span>
         {label}
       </button>
     );
@@ -645,7 +678,7 @@ function ExpandedEntry({
               : "text-white/70 hover:text-[#c6f135]"
         }`}
       >
-        <span className="w-5 text-center">{glyph}</span>
+        <span className="w-5 text-center">{icon ?? glyph}</span>
         {label}
       </button>
     );
@@ -660,7 +693,7 @@ function ExpandedEntry({
         isActive ? STRONG_SELECT_CLASS : "text-white/70 hover:text-[#c6f135]"
       }`}
     >
-      <span className="w-5 text-center">{glyph}</span>
+      <span className="w-5 text-center">{icon ?? glyph}</span>
       {label}
     </Link>
   );
