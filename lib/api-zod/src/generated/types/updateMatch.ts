@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { UpdateMatchFormat } from './updateMatchFormat';
 
 export interface UpdateMatch {
   opponent?: string;
@@ -13,4 +14,5 @@ export interface UpdateMatch {
   videoUrl?: string | null;
   tournamentId?: string | null;
   teamId?: number | null;
+  format?: UpdateMatchFormat;
 }

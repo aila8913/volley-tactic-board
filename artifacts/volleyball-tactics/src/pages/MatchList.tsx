@@ -13,6 +13,7 @@ import AppShell from "@/components/AppShell";
 import ListNavRail from "@/components/ListNavRail";
 import MatchInfoRail, { MatchListSelection } from "@/components/MatchInfoRail";
 import { formatMatchDateTime, formatMatchResult } from "@/lib/matchSummary";
+import { winsNeededFor, type MatchFormat } from "@/lib/matchOutcome";
 import { Match } from "@/types/match";
 import { Tournament } from "@/types/tournament";
 
@@ -56,8 +57,11 @@ export default function MatchList() {
   // setResults 只含「已結束局」（後端已排除進行中的最後一局），formatMatchResult 吃的就是
   // 逐局比分，語意跟原本傳 completedSets 完全一致。查不到（還沒載入 / 這場沒資料）就回
   // 空陣列 → 顯示「尚未開賽」。
-  const matchResultText = (matchId: string) =>
-    formatMatchResult(summaryByMatch.get(matchId)?.setResults ?? []);
+  //
+  // format（#215）：呼叫端（render 時手上就有這張卡片的 match 物件）把賽制換算成
+  // winsNeeded 一起傳進來，不能再靠 formatMatchResult 內部假設全站都是五戰三勝。
+  const matchResultText = (matchId: string, format: MatchFormat) =>
+    formatMatchResult(summaryByMatch.get(matchId)?.setResults ?? [], winsNeededFor(format));
 
   // issue #190（軟提醒）：這場是否已排先發，直接看後端 hasLineup（有沒有任一局凍結過先發
   // 陣容）。刻意在 summaries 還在載入時先不亮黃標——寧可晚半秒出現，也不要在載入瞬間對每場
@@ -245,7 +249,7 @@ export default function MatchList() {
                       kind="match"
                       title={`vs ${item.data.opponent}`}
                       dateText={formatMatchDateTime(item.data.dateTime)}
-                      secondaryText={matchResultText(item.data.id)}
+                      secondaryText={matchResultText(item.data.id, item.data.format)}
                       statusHint={matchNeedsLineup(item.data.id) ? "尚未排先發" : undefined}
                       selected={selected?.kind === "match" && selected.id === item.data.id}
                       onSelect={() => setSelected({ kind: "match", id: item.data.id })}

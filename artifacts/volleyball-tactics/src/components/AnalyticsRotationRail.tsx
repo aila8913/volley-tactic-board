@@ -27,6 +27,12 @@ import type { LineupSnapshot, ScoreSheetState } from "@/types/scoresheet";
 interface AnalyticsRotationRailProps {
   record: ScoreSheetState | undefined;
   roster: MatchPlayer[];
+  // 「贏幾局才算贏」（#215）。刻意用呼叫端已經算好的數字當 prop，而不是讓這個元件自己收
+  // match.format 再呼叫 winsNeededFor——理由跟上面「不重用 MatchInfoRail」的第 2 點一樣：
+  // 這顆元件刻意只吃 record + roster 這種最原始的資料，多一個 match 型別的依賴就是多一條
+  // 這個唯讀元件本來不需要的耦合，讓呼叫端（MatchAnalytics.tsx，手上本來就有 match）多做
+  // 一次 winsNeededFor(match.format) 換算就好。
+  winsNeeded: number;
 }
 
 // 跟 MatchInfoRail.tsx 用同一個常數字面值（不是 import，因為那邊的常數沒有 export——
@@ -34,13 +40,17 @@ interface AnalyticsRotationRailProps {
 const RAIL_BASE_CLASS =
   "flex h-full flex-col border-l border-white/[0.10] bg-[#121310] font-dash text-[#F5F5F0]";
 
-export default function AnalyticsRotationRail({ record, roster }: AnalyticsRotationRailProps) {
+export default function AnalyticsRotationRail({
+  record,
+  roster,
+  winsNeeded,
+}: AnalyticsRotationRailProps) {
   // null＝跟著「目前這局」走（預設）；使用者按過 stepper 之後變成一個具體數字。
   // 跟 MatchInfoRail 同一套設計，見該檔案的說明。
   const [manualSetIndex, setManualSetIndex] = useState<number | null>(null);
 
   const completedSets = record?.completedSets ?? [];
-  const isMatchFinished = getMatchWinner(completedSets) !== null;
+  const isMatchFinished = getMatchWinner(completedSets, winsNeeded) !== null;
   const totalSets = completedSets.length + 1;
   const clampedIndex = Math.min(Math.max(manualSetIndex ?? totalSets - 1, 0), totalSets - 1);
 

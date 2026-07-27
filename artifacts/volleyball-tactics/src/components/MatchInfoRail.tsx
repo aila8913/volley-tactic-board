@@ -6,7 +6,7 @@ import { useTournamentList } from "@/hooks/useTournaments";
 import { useRotationTable } from "@/hooks/useRotationTable";
 import { useScoreSheet, useScoreSheetController } from "@/hooks/useScoreSheet";
 import { readLineupFromRotations } from "@/lib/rotationLogic";
-import { getMatchWinner } from "@/lib/matchOutcome";
+import { getMatchWinner, winsNeededFor } from "@/lib/matchOutcome";
 import type { LineupSnapshot } from "@/types/scoresheet";
 
 // 比賽列表（MatchList）／資料夾內頁（TournamentDetail）共用的「選取」語意（issue #174）。
@@ -131,7 +131,12 @@ function MatchRotationSection({ matchId }: { matchId: string }) {
   // 「整場比賽是不是已經打完」用勝隊判、不是用局數判（issue #174 明文決策）——2:0 也可能已經
   // 結束（例如三戰兩勝，或教練提早封存），單看「打了幾局」猜不出來；getMatchWinner 只看
   // 「贏了幾局」，才不會被賽制或提早封存誤導。
-  const isMatchFinished = getMatchWinner(completedSets) !== null;
+  // 賽制（#215）：跟 getMatchWinner 一樣不能再假設全站都是五戰三勝，用這場比賽自己的
+  // format 換算「贏幾局才算贏」。match 可能還沒載入完（enabled=false 之類），這裡沒有
+  // 額外兜底——match 尚未就緒時 isMatchFinished 提早算成 false 沒關係，下面各分支本來就
+  // 有處理 match 未定義時的 fallback（例如 match?.players ?? []）。
+  const isMatchFinished =
+    match !== undefined && getMatchWinner(completedSets, winsNeededFor(match.format)) !== null;
   // 「已完成局數 + 1」＝目前這一局（可能還在打、也可能還沒開賽），這是使用者能滑到的上界。
   const totalSets = completedSets.length + 1;
   // 局是線性有邊界的（跟輪轉的「輪」是環狀不同）：夾在 [0, totalSets-1] 之間，manualSetIndex

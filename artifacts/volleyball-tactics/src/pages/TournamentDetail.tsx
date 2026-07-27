@@ -10,6 +10,7 @@ import ListItemCard from "@/components/ListItemCard";
 import ListScrollArea from "@/components/ListScrollArea";
 import MatchEntryLinks from "@/components/MatchEntryLinks";
 import { formatMatchDateTime, formatMatchResult } from "@/lib/matchSummary";
+import { winsNeededFor } from "@/lib/matchOutcome";
 import AppShell from "@/components/AppShell";
 import ListNavRail from "@/components/ListNavRail";
 import MatchInfoRail, { MatchListSelection } from "@/components/MatchInfoRail";
@@ -168,6 +169,8 @@ export default function TournamentDetail() {
                     dateText={formatMatchDateTime(match.dateTime)}
                     secondaryText={formatMatchResult(
                       recordingsByMatch[match.id]?.completedSets ?? [],
+                      // #215：這場比賽的賽制換算成贏局門檻，不能再假設全站都是五戰三勝。
+                      winsNeededFor(match.format),
                     )}
                     selected={selected?.kind === "match" && selected.id === match.id}
                     onSelect={() => setSelected({ kind: "match", id: match.id })}

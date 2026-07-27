@@ -952,10 +952,16 @@ components:
         teamId:
           type: integer
           nullable: true
+        # 賽制：best_of_3（三戰兩勝，先拿 2 局獲勝）／best_of_5（五戰三勝，先拿 3 局獲勝）。
+        # DB 是 notNull + default("best_of_3")（見 lib/db/src/schema/matches.ts），所以回應一定有值，
+        # 放進 required、不用 nullable。
+        format:
+          type: string
+          enum: [best_of_3, best_of_5]
         createdAt:
           type: string
           format: date-time
-      required: [id, date, opponent, createdAt]
+      required: [id, date, opponent, createdAt, format]
 
     NewMatch:
       type: object
@@ -981,6 +987,10 @@ components:
         teamId:
           type: integer
           nullable: true
+        # 賽制，選填：沒帶就吃 DB 的 default("best_of_3")，不用在這裡重複寫一次預設值。
+        format:
+          type: string
+          enum: [best_of_3, best_of_5]
       required: [date, opponent]
 
     UpdateMatch:
@@ -1005,6 +1015,10 @@ components:
         teamId:
           type: integer
           nullable: true
+        # 賽制，選填：PATCH 只帶想改的欄位，不帶就維持原值。
+        format:
+          type: string
+          enum: [best_of_3, best_of_5]
 
     UpdatePlayer:
       type: object

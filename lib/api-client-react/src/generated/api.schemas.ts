@@ -63,6 +63,14 @@ export interface UpdateTeam {
   name?: string;
 }
 
+export type MatchFormat = typeof MatchFormat[keyof typeof MatchFormat];
+
+
+export const MatchFormat = {
+  best_of_3: 'best_of_3',
+  best_of_5: 'best_of_5',
+} as const;
+
 export interface Match {
   id: number;
   name?: string | null;
@@ -72,8 +80,17 @@ export interface Match {
   videoUrl?: string | null;
   tournamentId?: string | null;
   teamId?: number | null;
+  format: MatchFormat;
   createdAt: string;
 }
+
+export type NewMatchFormat = typeof NewMatchFormat[keyof typeof NewMatchFormat];
+
+
+export const NewMatchFormat = {
+  best_of_3: 'best_of_3',
+  best_of_5: 'best_of_5',
+} as const;
 
 export interface NewMatch {
   name?: string | null;
@@ -83,7 +100,16 @@ export interface NewMatch {
   videoUrl?: string | null;
   tournamentId?: string | null;
   teamId?: number | null;
+  format?: NewMatchFormat;
 }
+
+export type UpdateMatchFormat = typeof UpdateMatchFormat[keyof typeof UpdateMatchFormat];
+
+
+export const UpdateMatchFormat = {
+  best_of_3: 'best_of_3',
+  best_of_5: 'best_of_5',
+} as const;
 
 export interface UpdateMatch {
   opponent?: string;
@@ -92,6 +118,7 @@ export interface UpdateMatch {
   videoUrl?: string | null;
   tournamentId?: string | null;
   teamId?: number | null;
+  format?: UpdateMatchFormat;
 }
 
 export interface UpdatePlayer {

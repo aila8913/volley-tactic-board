@@ -106,6 +106,9 @@ export function useCreateMatch() {
           tournamentId,
           // 球隊標籤（null＝未分類）。由表單的球隊選擇器決定，見 MatchFormDialog。
           teamId,
+          // 賽制（#215）：由表單的下拉欄位決定，直接送出，不用 ?? 兜底——表單 schema 已經
+          // 要求 format 必填（見 types/match.ts matchFormSchema），這裡一定有值。
+          format: values.format,
         },
       });
       for (const p of values.players) {
@@ -161,7 +164,13 @@ export function useUpdateMatch() {
     ): Promise<void> => {
       await updateMatch.mutateAsync({
         matchId,
-        data: { opponent: values.opponent, date: localInputToIso(values.dateTime), teamId },
+        data: {
+          opponent: values.opponent,
+          date: localInputToIso(values.dateTime),
+          teamId,
+          // 賽制（#215）：編輯表單也能改賽制，直接跟著送出去。
+          format: values.format,
+        },
       });
       await applyRosterDiff(matchId, existing, values.players);
       queryClient.invalidateQueries({ queryKey: getListMatchesQueryKey() });

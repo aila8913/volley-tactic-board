@@ -9,7 +9,11 @@ import { getMatchWinner, type SetScoreLike } from "./matchOutcome";
 //
 // 三種狀態刻意都給一句話、不回 null：列表卡片的版面固定有這一格，回 null 會讓呼叫端每個地方
 // 都要自己想「那該顯示什麼」，最後就是各頁不一致。「還沒打」本身也是使用者想知道的資訊。
-export function formatMatchResult(completedSets: SetScoreLike[]): string {
+//
+// winsNeeded（#215）：跟 getMatchWinner 同一套理由必填，不給預設值——呼叫端要自己用
+// winsNeededFor(match.format) 算出這場比賽的賽制門檻再傳進來，才不會有「忘了傳、但編譯
+// 照樣過、算出來的勝負卻是錯的」這條路。
+export function formatMatchResult(completedSets: SetScoreLike[], winsNeeded: number): string {
   if (completedSets.length === 0) return "尚未開賽";
 
   // 數的是「贏了幾局」而不是「打了幾局」，跟 getMatchWinner 同一套理由：局比數才是排球
@@ -22,7 +26,7 @@ export function formatMatchResult(completedSets: SetScoreLike[]): string {
   }
 
   const score = `${ourWins}:${opponentWins}`;
-  const winner = getMatchWinner(completedSets);
+  const winner = getMatchWinner(completedSets, winsNeeded);
   // winner 為 null＝還沒有人拿到足以獲勝的局數。這時候不能寫「勝/敗」（比賽還沒定案），
   // 但局比數本身是有意義的，照樣顯示，後面補「進行中」講清楚它還沒結束。
   if (winner === null) return `${score} 進行中`;

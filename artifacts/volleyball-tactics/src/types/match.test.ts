@@ -4,6 +4,9 @@ import { matchFormSchema } from "./match";
 const validInput = {
   opponent: "台大",
   dateTime: "2026-06-25T19:00",
+  // #215：matchFormSchema 新增了必填的 format 欄位，這裡的合法輸入 fixture 也要跟著補上，
+  // 否則下面每一個沿用 validInput 的測試案例都會因為缺這個必填欄位而 safeParse 失敗。
+  format: "best_of_3" as const,
   players: [{ name: "小明", number: 7, role: "S" as const }],
 };
 
