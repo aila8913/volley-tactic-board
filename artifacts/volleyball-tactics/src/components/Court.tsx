@@ -644,7 +644,16 @@ export default function Court() {
                   // 需要的兩個 prop。session 的球員 sourcePlayerId 必為非 null（拖曳/移除要靠它當
                   // 識別）；viewingScene 可能有 null（當初就查無此人），唯讀情境用合成 id 當 key 即可。
                   const id = sp.sourcePlayerId ?? `snap-${i}`;
-                  const player = { id, name: sp.name, number: sp.number, role: sp.role };
+                  // 快照球員（SnapshotPlayer）本來就沒有 personId 這個概念（快照是凍結的姓名/
+                  // 背號/位置，不回 roster 查），這裡只是就地組出 PlayerNode 要的形狀，personId
+                  // 給 null 即可——不影響任何跨場統計，因為畫面渲染根本不會讀這個欄位。
+                  const player = {
+                    id,
+                    name: sp.name,
+                    number: sp.number,
+                    role: sp.role,
+                    personId: null,
+                  };
                   const position = { playerId: id, x: sp.x, y: sp.y };
                   const isFrontRow = sp.y > 0.5 && sp.y < 0.75;
                   return (

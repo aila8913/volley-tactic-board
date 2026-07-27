@@ -26,6 +26,7 @@ export interface Player {
   name: string;
   number: number;
   role: PlayerRole;
+  personId: number | null;
 }
 
 export interface NewPlayer {
@@ -33,6 +34,7 @@ export interface NewPlayer {
   name: string;
   number: number;
   role: PlayerRole;
+  personId?: number | null;
 }
 
 export interface Tournament {
@@ -60,6 +62,19 @@ export interface NewTeam {
 }
 
 export interface UpdateTeam {
+  name?: string;
+}
+
+export interface Person {
+  id: number;
+  name: string;
+}
+
+export interface NewPerson {
+  name: string;
+}
+
+export interface UpdatePerson {
   name?: string;
 }
 
@@ -125,6 +140,7 @@ export interface UpdatePlayer {
   name?: string;
   number?: number;
   role?: PlayerRole;
+  personId?: number | null;
 }
 
 export type ServingSide = typeof ServingSide[keyof typeof ServingSide];
@@ -202,6 +218,48 @@ export interface MatchAnalysisSummary {
   hasLineup: boolean;
 }
 
+export interface PersonTeamBreakdown {
+  teamId: number | null;
+  matchesPlayed: number;
+}
+
+export type EventAction = typeof EventAction[keyof typeof EventAction];
+
+
+export const EventAction = {
+  serve: 'serve',
+  receive: 'receive',
+  set: 'set',
+  attack: 'attack',
+  block: 'block',
+  dig: 'dig',
+} as const;
+
+export interface PersonActionCount {
+  action: EventAction;
+  count: number;
+}
+
+export interface PersonAppearance {
+  matchId: number;
+  opponent: string;
+  date: string;
+  teamId?: number | null;
+  playerId: string;
+  number: number;
+  role: PlayerRole;
+}
+
+export interface PersonAnalysis {
+  personId: number;
+  name: string;
+  matchesPlayed: number;
+  setsStarted: number;
+  teamBreakdown: PersonTeamBreakdown[];
+  actionCounts: PersonActionCount[];
+  appearances: PersonAppearance[];
+}
+
 export type SubstitutionKind = typeof SubstitutionKind[keyof typeof SubstitutionKind];
 
 
@@ -269,18 +327,6 @@ export interface NewLineup {
   zone5PlayerId: string;
   zone6PlayerId: string;
 }
-
-export type EventAction = typeof EventAction[keyof typeof EventAction];
-
-
-export const EventAction = {
-  serve: 'serve',
-  receive: 'receive',
-  set: 'set',
-  attack: 'attack',
-  block: 'block',
-  dig: 'dig',
-} as const;
 
 export type BallType = typeof BallType[keyof typeof BallType];
 

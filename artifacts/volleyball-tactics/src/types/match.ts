@@ -13,6 +13,10 @@ export interface MatchPlayer {
   name: string;
   number: number;
   role: PlayerRole;
+  // 這名單列對應到哪個跨場「真實身分」（見 lib/db/src/schema/people.ts 的 Person）。
+  // null＝這名單列還沒被對應到任何人（例如剛新增、或使用者手動解除對應）。#213 的名單去重
+  // UX 就是圍繞著這個欄位：使用者確認「這是同一人」才會把它填上一個 person id。
+  personId: number | null;
 }
 
 export interface Match {
@@ -60,6 +64,11 @@ export const matchFormSchema = z.object({
           .min(0, "背號不能是負數")
           .max(99, "背號最大 99"),
         role: z.enum(PLAYER_ROLES),
+        // 這一列目前對應到哪個既有身分（Person）。故意不是 optional、而是「有預設值的必填
+        // 欄位」——讓每一列的表單資料都明確帶著這個欄位，不會出現「undefined 到底是沒填，
+        // 還是使用者要解除對應」這種歧義（undefined 在這裡永遠代表「還沒處理過」，null 才是
+        // 「明確地沒有對應」）。#213 去重 UX：使用者按下「是同一人」才會把它改成一個數字。
+        personId: z.number().nullable().default(null),
       }),
     )
     .min(1, "至少需要一名球員"),
@@ -73,6 +82,12 @@ export function matchToFormValues(match: Match): MatchFormValues {
     opponent: match.opponent,
     dateTime: match.dateTime,
     format: match.format,
-    players: match.players.map((p) => ({ id: p.id, name: p.name, number: p.number, role: p.role })),
+    players: match.players.map((p) => ({
+      id: p.id,
+      name: p.name,
+      number: p.number,
+      role: p.role,
+      personId: p.personId,
+    })),
   };
 }

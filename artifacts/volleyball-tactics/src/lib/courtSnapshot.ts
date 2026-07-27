@@ -101,6 +101,12 @@ const matchPlayerSchema = z.object({
   name: z.string(),
   number: z.number(),
   role: playerRoleSchema,
+  // 這裡解析的是「舊格式的存檔」（legacySavedTacticDataSchema），那些存檔早於 #213
+  // 的 personId 欄位存在之前就寫入 localStorage 了，檔案裡根本不會有這個欄位。
+  // 用 default(null) 讓舊資料照樣解析成功、且解析出來的型別仍滿足 MatchPlayer
+  // （personId 是必填的 number | null）——這裡本來就只是「快照重播」用，不需要
+  // 真的知道這個球員對應到哪個跨場身分。
+  personId: z.number().nullable().default(null),
 });
 
 const playerPositionSchema = z.object({

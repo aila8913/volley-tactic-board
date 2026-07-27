@@ -114,7 +114,7 @@ export function useCreateMatch() {
       for (const p of values.players) {
         await createPlayer.mutateAsync({
           matchId: created.id,
-          data: { name: p.name, number: p.number, role: p.role },
+          data: { name: p.name, number: p.number, role: p.role, personId: p.personId },
         });
       }
       queryClient.invalidateQueries({ queryKey: getListMatchesQueryKey() });

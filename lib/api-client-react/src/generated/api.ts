@@ -30,6 +30,7 @@ import type {
   NewEvent,
   NewLineup,
   NewMatch,
+  NewPerson,
   NewPlayer,
   NewRally,
   NewSet,
@@ -38,6 +39,8 @@ import type {
   NewTeam,
   NewTimeout,
   NewTournament,
+  Person,
+  PersonAnalysis,
   Player,
   Rally,
   RotationStat,
@@ -48,6 +51,7 @@ import type {
   Tournament,
   UpdateEvent,
   UpdateMatch,
+  UpdatePerson,
   UpdatePlayer,
   UpdateSet,
   UpdateTactic,
@@ -1090,6 +1094,296 @@ export const useDeleteTeam = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getDeleteTeamMutationOptions(options));
+    }
+
+export const getListPeopleUrl = () => {
+
+
+
+
+  return `/api/people`
+}
+
+/**
+ * @summary List people (cross-match player identities, used for roster de-duplication)
+ */
+export const listPeople = async ( options?: RequestInit): Promise<Person[]> => {
+
+  return customFetch<Person[]>(getListPeopleUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListPeopleQueryKey = () => {
+    return [
+    `/api/people`
+    ] as const;
+    }
+
+
+export const getListPeopleQueryOptions = <TData = Awaited<ReturnType<typeof listPeople>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPeople>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListPeopleQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPeople>>> = ({ signal }) => listPeople({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listPeople>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListPeopleQueryResult = NonNullable<Awaited<ReturnType<typeof listPeople>>>
+export type ListPeopleQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List people (cross-match player identities, used for roster de-duplication)
+ */
+
+export function useListPeople<TData = Awaited<ReturnType<typeof listPeople>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listPeople>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListPeopleQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getCreatePersonUrl = () => {
+
+
+
+
+  return `/api/people`
+}
+
+/**
+ * @summary Create a person
+ */
+export const createPerson = async (newPerson: NewPerson, options?: RequestInit): Promise<Person> => {
+
+  return customFetch<Person>(getCreatePersonUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      newPerson,)
+  }
+);}
+
+
+
+
+export const getCreatePersonMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPerson>>, TError,{data: BodyType<NewPerson>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createPerson>>, TError,{data: BodyType<NewPerson>}, TContext> => {
+
+const mutationKey = ['createPerson'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createPerson>>, {data: BodyType<NewPerson>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createPerson(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreatePersonMutationResult = NonNullable<Awaited<ReturnType<typeof createPerson>>>
+    export type CreatePersonMutationBody = BodyType<NewPerson>
+    export type CreatePersonMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Create a person
+ */
+export const useCreatePerson = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createPerson>>, TError,{data: BodyType<NewPerson>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createPerson>>,
+        TError,
+        {data: BodyType<NewPerson>},
+        TContext
+      > => {
+      return useMutation(getCreatePersonMutationOptions(options));
+    }
+
+export const getUpdatePersonUrl = (personId: number,) => {
+
+
+
+
+  return `/api/people/${personId}`
+}
+
+/**
+ * @summary Rename a person
+ */
+export const updatePerson = async (personId: number,
+    updatePerson: UpdatePerson, options?: RequestInit): Promise<Person> => {
+
+  return customFetch<Person>(getUpdatePersonUrl(personId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updatePerson,)
+  }
+);}
+
+
+
+
+export const getUpdatePersonMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updatePerson>>, TError,{personId: number;data: BodyType<UpdatePerson>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updatePerson>>, TError,{personId: number;data: BodyType<UpdatePerson>}, TContext> => {
+
+const mutationKey = ['updatePerson'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updatePerson>>, {personId: number;data: BodyType<UpdatePerson>}> = (props) => {
+          const {personId,data} = props ?? {};
+
+          return  updatePerson(personId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdatePersonMutationResult = NonNullable<Awaited<ReturnType<typeof updatePerson>>>
+    export type UpdatePersonMutationBody = BodyType<UpdatePerson>
+    export type UpdatePersonMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Rename a person
+ */
+export const useUpdatePerson = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updatePerson>>, TError,{personId: number;data: BodyType<UpdatePerson>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updatePerson>>,
+        TError,
+        {personId: number;data: BodyType<UpdatePerson>},
+        TContext
+      > => {
+      return useMutation(getUpdatePersonMutationOptions(options));
+    }
+
+export const getDeletePersonUrl = (personId: number,) => {
+
+
+
+
+  return `/api/people/${personId}`
+}
+
+/**
+ * @summary Delete a person (unsets personId on any players linked to them; does not delete those roster rows or match history)
+ */
+export const deletePerson = async (personId: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeletePersonUrl(personId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeletePersonMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deletePerson>>, TError,{personId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deletePerson>>, TError,{personId: number}, TContext> => {
+
+const mutationKey = ['deletePerson'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deletePerson>>, {personId: number}> = (props) => {
+          const {personId} = props ?? {};
+
+          return  deletePerson(personId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeletePersonMutationResult = NonNullable<Awaited<ReturnType<typeof deletePerson>>>
+
+    export type DeletePersonMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Delete a person (unsets personId on any players linked to them; does not delete those roster rows or match history)
+ */
+export const useDeletePerson = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deletePerson>>, TError,{personId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deletePerson>>,
+        TError,
+        {personId: number},
+        TContext
+      > => {
+      return useMutation(getDeletePersonMutationOptions(options));
     }
 
 export const getListPlayersUrl = (matchId: number,) => {
@@ -3300,6 +3594,83 @@ export function useListMatchAnalysis<TData = Awaited<ReturnType<typeof listMatch
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getListMatchAnalysisQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetPersonAnalysisUrl = (personId: number,) => {
+
+
+
+
+  return `/api/analysis/people/${personId}`
+}
+
+/**
+ * @summary Get a cross-match/cross-team analysis for one person (appearances, action counts, sets started)
+ */
+export const getPersonAnalysis = async (personId: number, options?: RequestInit): Promise<PersonAnalysis> => {
+
+  return customFetch<PersonAnalysis>(getGetPersonAnalysisUrl(personId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPersonAnalysisQueryKey = (personId: number,) => {
+    return [
+    `/api/analysis/people/${personId}`
+    ] as const;
+    }
+
+
+export const getGetPersonAnalysisQueryOptions = <TData = Awaited<ReturnType<typeof getPersonAnalysis>>, TError = ErrorType<unknown>>(personId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPersonAnalysis>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPersonAnalysisQueryKey(personId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPersonAnalysis>>> = ({ signal }) => getPersonAnalysis(personId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(personId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPersonAnalysis>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPersonAnalysisQueryResult = NonNullable<Awaited<ReturnType<typeof getPersonAnalysis>>>
+export type GetPersonAnalysisQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get a cross-match/cross-team analysis for one person (appearances, action counts, sets started)
+ */
+
+export function useGetPersonAnalysis<TData = Awaited<ReturnType<typeof getPersonAnalysis>>, TError = ErrorType<unknown>>(
+ personId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPersonAnalysis>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPersonAnalysisQueryOptions(personId,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

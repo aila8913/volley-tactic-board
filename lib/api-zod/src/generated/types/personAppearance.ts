@@ -7,10 +7,12 @@
  */
 import type { PlayerRole } from './playerRole';
 
-export interface NewPlayer {
-  id?: string;
-  name: string;
+export interface PersonAppearance {
+  matchId: number;
+  opponent: string;
+  date: Date;
+  teamId?: number | null;
+  playerId: string;
   number: number;
   role: PlayerRole;
-  personId?: number | null;
 }

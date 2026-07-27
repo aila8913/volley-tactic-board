@@ -23,12 +23,12 @@ const SIX_POSITIONS: PlayerPosition[] = [
 ];
 
 const ROSTER: MatchPlayer[] = [
-  { id: "p1", name: "王小明", number: 1, role: "S" },
-  { id: "p2", name: "陳大文", number: 2, role: "OH" },
-  { id: "p3", name: "李四", number: 3, role: "MB" },
-  { id: "p4", name: "張三", number: 4, role: "OH" },
-  { id: "p5", name: "林五", number: 5, role: "OPP" },
-  { id: "libero", name: "自由人", number: 9, role: "L" },
+  { id: "p1", name: "王小明", number: 1, role: "S", personId: null },
+  { id: "p2", name: "陳大文", number: 2, role: "OH", personId: null },
+  { id: "p3", name: "李四", number: 3, role: "MB", personId: null },
+  { id: "p4", name: "張三", number: 4, role: "OH", personId: null },
+  { id: "p5", name: "林五", number: 5, role: "OPP", personId: null },
+  { id: "libero", name: "自由人", number: 9, role: "L", personId: null },
 ];
 
 describe("CourtReadOnlyView", () => {

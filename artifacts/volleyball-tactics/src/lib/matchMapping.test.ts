@@ -32,13 +32,35 @@ describe("date mapping", () => {
 describe("server → domain mapping", () => {
   it("maps a player, stringifying its id", () => {
     expect(
-      serverPlayerToDomain({ id: 7, matchId: 3, name: "小明", number: 12, role: "S" }),
+      serverPlayerToDomain({
+        id: 7,
+        matchId: 3,
+        name: "小明",
+        number: 12,
+        role: "S",
+        personId: null,
+      }),
     ).toEqual({
       id: "7",
       name: "小明",
       number: 12,
       role: "S",
+      personId: null,
     });
+  });
+
+  it("maps a player, carrying its personId through untouched", () => {
+    // personId 是「跨場身分」的對應（#213），跟 id/matchId 一樣直接照抄，不用轉換。
+    expect(
+      serverPlayerToDomain({
+        id: 7,
+        matchId: 3,
+        name: "小明",
+        number: 12,
+        role: "S",
+        personId: 42,
+      }),
+    ).toMatchObject({ personId: 42 });
   });
 
   it("maps a match with roster, stringifying id and normalizing tournamentId", () => {
@@ -54,7 +76,7 @@ describe("server → domain mapping", () => {
         tournamentId: null,
         createdAt: iso,
       },
-      [{ id: 7, matchId: 3, name: "小明", number: 12, role: "S" }],
+      [{ id: 7, matchId: 3, name: "小明", number: 12, role: "S", personId: null }],
     );
     expect(domain.id).toBe("3");
     expect(domain.opponent).toBe("台大");
@@ -67,16 +89,16 @@ describe("server → domain mapping", () => {
 
 describe("diffRoster", () => {
   const existing: MatchPlayer[] = [
-    { id: "1", name: "A", number: 1, role: "S" },
-    { id: "2", name: "B", number: 2, role: "OH" },
+    { id: "1", name: "A", number: 1, role: "S", personId: null },
+    { id: "2", name: "B", number: 2, role: "OH", personId: null },
   ];
 
   it("flags a player with no matching id as create", () => {
     const diff = diffRoster(existing, [
       ...existing,
-      { name: "C", number: 3, role: "MB" }, // 沒 id（MatchFormDialog 新增列）→ 新增，不帶 id 欄位，交給 DB 生
+      { name: "C", number: 3, role: "MB", personId: null }, // 沒 id（MatchFormDialog 新增列）→ 新增，不帶 id 欄位，交給 DB 生
     ]);
-    expect(diff.toCreate).toEqual([{ name: "C", number: 3, role: "MB" }]);
+    expect(diff.toCreate).toEqual([{ name: "C", number: 3, role: "MB", personId: null }]);
     expect(diff.toUpdate).toEqual([]);
     expect(diff.toDelete).toEqual([]);
   });
@@ -87,25 +109,46 @@ describe("diffRoster", () => {
     // 而不是自己另生一個——不然前端站位認得的 id 在後端就找不到對應的球員了。
     const diff = diffRoster(existing, [
       ...existing,
-      { id: "new-uuid-123", name: "C", number: 3, role: "MB" },
+      { id: "new-uuid-123", name: "C", number: 3, role: "MB", personId: null },
     ]);
-    expect(diff.toCreate).toEqual([{ name: "C", number: 3, role: "MB", id: "new-uuid-123" }]);
+    expect(diff.toCreate).toEqual([
+      { name: "C", number: 3, role: "MB", personId: null, id: "new-uuid-123" },
+    ]);
     expect(diff.toUpdate).toEqual([]);
     expect(diff.toDelete).toEqual([]);
   });
 
   it("flags a changed existing player as update (playerId as uuid string)", () => {
     const diff = diffRoster(existing, [
-      { id: "1", name: "A", number: 10, role: "S" }, // 背號改了
-      { id: "2", name: "B", number: 2, role: "OH" }, // 沒變
+      { id: "1", name: "A", number: 10, role: "S", personId: null }, // 背號改了
+      { id: "2", name: "B", number: 2, role: "OH", personId: null }, // 沒變
     ]);
-    expect(diff.toUpdate).toEqual([{ playerId: "1", data: { name: "A", number: 10, role: "S" } }]);
+    expect(diff.toUpdate).toEqual([
+      { playerId: "1", data: { name: "A", number: 10, role: "S", personId: null } },
+    ]);
+    expect(diff.toCreate).toEqual([]);
+    expect(diff.toDelete).toEqual([]);
+  });
+
+  // #213 去重 UX 的核心路徑：使用者在名單裡按下「是同一人」，畫面上只有這一列的
+  // personId 從 null 變成某個既有身分的 id，名字/背號/位置都沒動。這個案例漏掉的話，
+  // diffRoster 會判斷成「沒有變化」而整支 update 消失——等於使用者按了等於沒按。
+  it("flags a player whose personId changed from null to a value as update", () => {
+    const diff = diffRoster(existing, [
+      { id: "1", name: "A", number: 1, role: "S", personId: 42 }, // 只有 personId 變了
+      { id: "2", name: "B", number: 2, role: "OH", personId: null },
+    ]);
+    expect(diff.toUpdate).toEqual([
+      { playerId: "1", data: { name: "A", number: 1, role: "S", personId: 42 } },
+    ]);
     expect(diff.toCreate).toEqual([]);
     expect(diff.toDelete).toEqual([]);
   });
 
   it("flags a removed player as delete", () => {
-    const diff = diffRoster(existing, [{ id: "1", name: "A", number: 1, role: "S" }]);
+    const diff = diffRoster(existing, [
+      { id: "1", name: "A", number: 1, role: "S", personId: null },
+    ]);
     expect(diff.toDelete).toEqual(["2"]);
     expect(diff.toCreate).toEqual([]);
     expect(diff.toUpdate).toEqual([]);

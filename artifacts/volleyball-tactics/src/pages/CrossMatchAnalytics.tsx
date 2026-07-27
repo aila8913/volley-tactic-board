@@ -72,10 +72,18 @@ export default function CrossMatchAnalytics() {
             <BarChart3 className="h-5 w-5 text-[#c6f135]" />
             數據分析 · 跨場彙總
           </h1>
-          {/* 這頁不強求完整導覽軌（見上方 AppShell 註解），至少留一條回列表的路。 */}
-          <Link href="/" className={SECONDARY_BUTTON_CLASS}>
-            回比賽列表
-          </Link>
+          <div className="flex items-center gap-2">
+            {/* 往「視圖③：球員跨場分析」(#213) 的入口——跟這頁（視圖②：跨場彙總）是
+                平級的兩種聚合視角，一個以「場」為單位、一個以「人」為單位。左側子導覽
+                （比賽/球員/隊伍分析）留給 #214 再做，這裡先給一顆按鈕當入口。 */}
+            <Link href="/analytics/people" className={SECONDARY_BUTTON_CLASS}>
+              球員分析
+            </Link>
+            {/* 這頁不強求完整導覽軌（見上方 AppShell 註解），至少留一條回列表的路。 */}
+            <Link href="/" className={SECONDARY_BUTTON_CLASS}>
+              回比賽列表
+            </Link>
+          </div>
         </header>
 
         <div className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-6">

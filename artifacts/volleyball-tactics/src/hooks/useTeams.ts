@@ -18,7 +18,10 @@ import type { Team } from "@workspace/api-client-react";
 // 後端回傳的 Team（id/name）結構單純，不需要 mapping 層，直接當 domain 型別用。
 export function useTeamList() {
   const { data, isLoading, isError } = useListTeams();
-  const teams: Team[] = data ?? [];
+  // Array.isArray 而不是 `data ?? []`，理由見 usePeople.ts 的同一段註解（#213 踩到）：
+  // 後端 endpoint 沒掛上時會掉進 SPA fallback 回 HTML 字串，`?? []` 擋不掉，會一路傳到
+  // teams.map(...) 才炸。這支目前不會發生（/teams 早就上線了），但同一個形狀留著同一個坑。
+  const teams: Team[] = Array.isArray(data) ? data : [];
   return { teams, isLoading, isError };
 }
 
