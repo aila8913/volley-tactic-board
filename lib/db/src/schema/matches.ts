@@ -1,8 +1,13 @@
-import { pgTable, serial, integer, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { pgTable, serial, integer, text, timestamp, uuid, pgEnum } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { teamsTable } from "./teams";
 import { tournamentsTable } from "./tournaments";
+
+// 賽制：三戰兩勝（先拿 2 局）或五戰三勝（先拿 3 局）。
+// 用 pgEnum 而不是普通文字欄位，是 repo 既有慣例（見 players.ts 的 playerRoleEnum 註解）：
+// 讓 DB 層直接擋掉打錯字的值（例如 "best-of-3" 或 "bo3"），不用每個地方都手動檢查。
+export const matchFormatEnum = pgEnum("match_format", ["best_of_3", "best_of_5"]);
 
 // 一場比賽。videoUrl 留空代表目前還沒有可以做「賽後補填」的影片連結。
 export const matchesTable = pgTable("matches", {
@@ -36,6 +41,16 @@ export const matchesTable = pgTable("matches", {
   // onDelete: "set null"：刪掉一個 team 時，只把指著它的 matches.teamId 設回 null
   // （比賽變成「未分類」），不會連帶刪掉比賽本身 —— 比賽紀錄比球隊標籤更重要，不該被牽連刪除。
   teamId: integer("team_id").references(() => teamsTable.id, { onDelete: "set null" }),
+  // 賽制是「這場比賽」固有的屬性，不能從局比數反推——例如看到 2:1，沒辦法分辨這是
+  // 三戰兩勝已經打完（決勝局 2:1）、還是五戰三勝打到一半（還沒到決勝局）。#215 之前
+  // matchOutcome.ts 曾經把「贏 3 局才算贏」寫死當全站唯一規則，結果三戰兩勝的比賽在
+  // 比賽列表被誤標成「進行中」——這就是「用局數猜賽制」猜不準的實例，所以賽制得存成
+  // 欄位，由使用者在建立比賽時明確選定，而不是靠事後推算。
+  // notNull + default("best_of_3")：這個 app 主要使用者是系隊/校隊，練習賽跟盃賽初賽
+  // 絕大多數是三戰兩勝，預設值對準最常見情境；同時 notNull 讓既有資料（#215 之前建立、
+  // 根本沒有這個概念的舊比賽）在 push 這次 schema 異動時，DB 自動幫每一列補上這個預設值，
+  // 不用另外寫遷移腳本去逐筆回填。
+  format: matchFormatEnum("format").notNull().default("best_of_3"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 

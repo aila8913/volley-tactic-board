@@ -41,6 +41,8 @@ export function serverMatchToDomain(m: ApiMatch, players: ApiPlayer[] = []): Mat
     createdAt: m.createdAt,
     tournamentId: m.tournamentId ?? null,
     teamId: m.teamId ?? null,
+    // 賽制（#215）：後端 DB notNull，一定有值，直接原樣帶過來，不用 ?? 兜底。
+    format: m.format,
   };
 }
 

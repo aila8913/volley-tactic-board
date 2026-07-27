@@ -499,6 +499,11 @@ async function main() {
         opponent,
         date: new Date(dateIso),
         teamId,
+        // #215：這批 mock 資料本來就是三戰兩勝的比賽——這正是 issue #215 被發現的方式
+        // （寫死五戰三勝的舊邏輯，把這些 seed 出來的三戰兩勝比賽誤標成「進行中」）。明確帶
+        // format，不靠 DB default 悄悄補上，讓 seed 資料的賽制在這裡看得到、之後改起來也
+        // 有跡可循。
+        format: "best_of_3",
       })
       .returning({ id: matchesTable.id });
     // 要 .returning id：event 需要指向這場比賽裡「哪一個球員」做了決定球，那個外鍵存的是

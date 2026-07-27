@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { MatchFormat } from "@/lib/matchOutcome";
 
 // 跟 lib/db/src/schema/players.ts 的 playerRoleEnum 保持一致。
 // 位置只分 5 大類，同一類可以有任意人數（例如板凳上可能有 3 個 OH、0 個 MB），
@@ -30,11 +31,20 @@ export interface Match {
   // 球隊是用「下拉挑既有／臨時建新」的選擇器管理，不是普通的受控欄位（新建的球隊在送出前還沒有
   // id），所以 MatchFormDialog 用獨立的本地 state 處理，見該檔案。
   teamId: number | null;
+  // 賽制（#215）：三戰兩勝／五戰三勝，決定「贏幾局才算贏」（見 lib/matchOutcome.ts 的
+  // winsNeededFor）。DB 是 notNull，所以這裡不是 nullable。
+  format: MatchFormat;
 }
 
 export const matchFormSchema = z.object({
   opponent: z.string().min(1, "請輸入對手名稱"),
   dateTime: z.string().min(1, "請選擇比賽日期時間"),
+  // 跟 teamId/tournamentId 不一樣，賽制放得進表單 schema：teamId/tournamentId 是
+  // 「挑既有／臨時建立」的非同步選擇器（新建的球隊/資料夾在送出前還沒有 id，得用獨立的
+  // 本地 state 管，見上面 Match.teamId 的註解跟 MatchFormDialog.tsx），但賽制只是一個
+  // 從固定兩個選項中選一個的受控下拉欄位，沒有「還沒建立好」這種中間狀態，跟 opponent、
+  // dateTime 這些欄位是同一類東西，所以直接讓 react-hook-form 管它就好。
+  format: z.enum(["best_of_3", "best_of_5"]),
   players: z
     .array(
       z.object({
@@ -62,6 +72,7 @@ export function matchToFormValues(match: Match): MatchFormValues {
   return {
     opponent: match.opponent,
     dateTime: match.dateTime,
+    format: match.format,
     players: match.players.map((p) => ({ id: p.id, name: p.name, number: p.number, role: p.role })),
   };
 }

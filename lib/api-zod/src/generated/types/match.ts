@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { MatchFormat } from './matchFormat';
 
 export interface Match {
   id: number;
@@ -15,5 +16,6 @@ export interface Match {
   videoUrl?: string | null;
   tournamentId?: string | null;
   teamId?: number | null;
+  format: MatchFormat;
   createdAt: Date;
 }

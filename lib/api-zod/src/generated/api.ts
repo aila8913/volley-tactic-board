@@ -29,6 +29,7 @@ export const ListMatchesResponseItem = zod.object({
   "videoUrl": zod.string().nullish(),
   "tournamentId": zod.string().uuid().nullish(),
   "teamId": zod.number().nullish(),
+  "format": zod.enum(['best_of_3', 'best_of_5']),
   "createdAt": zod.coerce.date()
 })
 export const ListMatchesResponse = zod.array(ListMatchesResponseItem)
@@ -44,7 +45,8 @@ export const CreateMatchBody = zod.object({
   "location": zod.string().nullish(),
   "videoUrl": zod.string().nullish(),
   "tournamentId": zod.string().uuid().nullish(),
-  "teamId": zod.number().nullish()
+  "teamId": zod.number().nullish(),
+  "format": zod.enum(['best_of_3', 'best_of_5']).optional()
 })
 
 
@@ -64,6 +66,7 @@ export const GetMatchResponse = zod.object({
   "videoUrl": zod.string().nullish(),
   "tournamentId": zod.string().uuid().nullish(),
   "teamId": zod.number().nullish(),
+  "format": zod.enum(['best_of_3', 'best_of_5']),
   "createdAt": zod.coerce.date()
 })
 
@@ -81,7 +84,8 @@ export const UpdateMatchBody = zod.object({
   "location": zod.string().nullish(),
   "videoUrl": zod.string().nullish(),
   "tournamentId": zod.string().uuid().nullish(),
-  "teamId": zod.number().nullish()
+  "teamId": zod.number().nullish(),
+  "format": zod.enum(['best_of_3', 'best_of_5']).optional()
 })
 
 export const UpdateMatchResponse = zod.object({
@@ -93,6 +97,7 @@ export const UpdateMatchResponse = zod.object({
   "videoUrl": zod.string().nullish(),
   "tournamentId": zod.string().uuid().nullish(),
   "teamId": zod.number().nullish(),
+  "format": zod.enum(['best_of_3', 'best_of_5']),
   "createdAt": zod.coerce.date()
 })
 

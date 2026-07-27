@@ -18,6 +18,7 @@ import { Spinner } from "@/components/ui/spinner";
 import AppShell from "@/components/AppShell";
 import NavRail, { matchBackHref } from "@/components/NavRail";
 import AnalyticsRotationRail from "@/components/AnalyticsRotationRail";
+import { winsNeededFor } from "@/lib/matchOutcome";
 import { useMatchWithRoster } from "@/hooks/useMatches";
 import { useMatchRecording } from "@/hooks/useMatchRecording";
 import { ACTIONS, ACTION_LABELS, buildPlayerMatrix, buildRotationStats } from "@/lib/statsMapping";
@@ -328,7 +329,13 @@ export default function MatchAnalytics() {
           captureDisabled
         />
       }
-      aside={<AnalyticsRotationRail record={record} roster={match.players} />}
+      aside={
+        <AnalyticsRotationRail
+          record={record}
+          roster={match.players}
+          winsNeeded={winsNeededFor(match.format)}
+        />
+      }
       className="bg-[#0a0b07] font-dash text-[#f5f5f0]"
       style={{
         backgroundImage:

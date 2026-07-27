@@ -41,6 +41,9 @@ import { useToast } from "@/hooks/use-toast";
 const emptyDefaults: MatchFormValues = {
   opponent: "",
   dateTime: "",
+  // 預設三戰兩勝：跟 DB 的 default("best_of_3") 呼應（見 lib/db/src/schema/matches.ts）——
+  // 系隊/校隊的練習賽、盃賽初賽多半是三戰兩勝，新增比賽表單第一次打開時直接對準最常見情境。
+  format: "best_of_3",
   players: [{ name: "", number: 0, role: "S" }],
 };
 
@@ -169,6 +172,32 @@ export default function MatchFormDialog({
                   <FormControl>
                     <Input type="datetime-local" {...field} />
                   </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* 賽制（#215）：跟 opponent/dateTime 一樣是普通的 react-hook-form 受控欄位
+                （見 types/match.ts matchFormSchema 的註解：這欄沒有「還沒建立好」的中間狀態，
+                不像 teamId 需要獨立本地 state），所以直接走 FormField，用法跟下面球員名單裡
+                的角色下拉一致。 */}
+            <FormField
+              control={form.control}
+              name="format"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>賽制</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="best_of_3">三戰兩勝</SelectItem>
+                      <SelectItem value="best_of_5">五戰三勝</SelectItem>
+                    </SelectContent>
+                  </Select>
                   <FormMessage />
                 </FormItem>
               )}

@@ -66,6 +66,12 @@ router.post("/matches", async (req, res) => {
       tournamentId: body.tournamentId ?? null,
       // 球隊標籤 id（可為 null＝未分類）。擁有權同樣已在上面驗過。
       teamId: body.teamId ?? null,
+      // 賽制（#215）：跟 teamId 不同，這欄不是外鍵、不用驗擁有權，也不用像其他欄位一樣
+      // 給 ?? null 的 fallback——沒帶就直接不寫進這個 key，讓 DB 的 default("best_of_3")
+      // 自己接手。如果這裡改成 body.format ?? "best_of_3"，就會多出「應用層也記一份預設值」
+      // 的第二個地方，之後兩邊的預設值一旦想法飄開（例如只改了 DB 沒改到這裡）就會出現
+      // 兩套不一致的行為，所以刻意讓「沒給值」這件事只由 DB 處理一次。
+      ...(body.format !== undefined && { format: body.format }),
     })
     .returning();
 
@@ -130,6 +136,8 @@ router.patch("/matches/:matchId", async (req, res) => {
       ...(body.videoUrl !== undefined && { videoUrl: body.videoUrl }),
       ...(body.tournamentId !== undefined && { tournamentId: body.tournamentId }),
       ...(body.teamId !== undefined && { teamId: body.teamId }),
+      // 賽制（#215）：沒帶就不動這一欄，維持原本的賽制不變。
+      ...(body.format !== undefined && { format: body.format }),
     })
     .where(and(eq(matchesTable.id, matchId), eq(matchesTable.userId, req.userId)))
     .returning();
