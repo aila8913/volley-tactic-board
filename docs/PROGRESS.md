@@ -22,8 +22,10 @@
 > 平行 PR 就落在不同行段、git 幾乎都能自動合併，不用真的把檔案拆兩份、也保住一眼 catch-up。
 > 上面的 `_Last updated_` 是共用一行摘要（誰更新了什麼），保持精簡、別長成段落。
 
-\_Last updated: 2026-07-28 (aila) — #213 球員跨場/跨隊分析（people 應用層＋名單去重 UX＋視圖③）
-落地，#65 傘只剩比率/差異化統計；同時開了 #218（比賽結束的操作節點與畫面）。前一批 2026-07-27
+\_Last updated: 2026-07-28 (aila) — 架構掃描開出 #225–#232 八張並新增兩個 milestone（M2.5/M3.5），
+`docs/adr/` 上線（PR #233/#234，三張既有決定＋CLAUDE.md 指向）。同日稍早 #213 球員跨場/跨隊分析
+（people 應用層＋名單去重 UX＋視圖③）落地，#65 傘只剩比率/差異化統計；同時開了 #218（比賽結束的
+操作節點與畫面）。前一批 2026-07-27
 (aila) — #215 賽制欄位化（`matches.format` enum），並補入 PR #216（分析頁全頁範圍選擇器＋seed）
 與 PR #217（tang：計分頁視覺打磨＋左欄導覽圖示化）、壓縮 07-20 以前的條目。前一批 2026-07-26
 (aila) — teams 端到端（PR #208）＋數據分析入口改常駐紀錄本（PR #212）。\_
@@ -110,11 +112,29 @@ lives in git log + the issues named).
   `/analytics/people`）。**仍未做**：導覽重構（頁內選比賽下拉＋日期篩選＋左側子導覽）是 **#214**
   ——#213 刻意不碰 `NavRail.tsx`，把左側子導覽整塊留給它，避免兩個 issue 在同一檔案打架；比率統計
   （side-out%）與差異化（到位率/球線熱區）仍是**誠實空狀態**，等 #51/#21 與發球序推導。
-  #65 傘只剩比率/差異化有著落才收。
+  **#65 傘已於 07-28 關閉**：三個視圖都上線、剩下的內容全部有各自的 issue 接手（得/失分→#51、
+  球線→#21、比率統計→**#235**、導覽→#214、人員合併/管理頁→#221/#224）。#235 是收傘時發現的孤兒
+  （#65 body 列的「到位率」類比率統計原本沒人接）——重點是**資料已經夠了、不用改 schema**：
+  發球方可由 `sets.firstServer` 當種子 ＋「第 n 分的發球方＝第 n-1 分的贏家」逐分推導出來。
 - **`lib/db/src/seed-testdata.ts` 是分析頁的驗證資料來源**（全部三戰兩勝、刻意留一場進行中；每分補一顆
   決定球 event 讓球員矩陣有數字；`buildRallies` 保證「賽末點收在最後一球」，不再出現「我方達標後對手
   還在加分」的不可能畫面）。
-- **專案 roadmap 已上線。** 時間序住在 repo **Milestones M1–M5**（軟目標日 7/18→9/11，非死線），當下
+- **架構決策紀錄上線＝`docs/adr/`（PR #233/#234，07-28）。** 判準是**「這個決定被推翻過、或未來的人
+  看到程式碼會很自然想改回去嗎？」**——不是設計文件也不是進度紀錄。首批三張都是既有決定，先前只活在
+  已關閉的 issue 留言裡：ADR-0001 戰術板嚴格單向＋快照 denormalize（#154，含中途 overlay→左欄工具頁
+  的方向修正——**UI 形式改了、不變式沒改**，只看 #154 開頭很容易誤判整張作廢）、ADR-0002 分析→戰術板
+  回跳閉環取消（#76）、ADR-0003 rally 輪次物化成欄位（#76 ①，**違反「衍生值別存」的一般預設**，故最
+  需要留理由）。每張末尾有「不要重新提議」小節，CLAUDE.md 已加規則指向這裡。**規矩：已 Accepted 的
+  不改不刪，被推翻時新增一張並把舊的標 `Superseded by ADR-NNNN`。**
+- **架構掃描（`improve-codebase-architecture`）產出 #225–#232，兩個新 milestone。** 掃描依 git log
+  熱點（計分／戰術板／輪轉、api-server routes、analysis）。**M2.5 收斂重複規則**（8/2）＝三張 Strong：
+  #226 得分/輪轉規則現有四份實作＋第五份存在 DB 欄位、#227 球場座標（`*100/*200` 內嵌 12 處、CTM 換算
+  5 份、前排門檻已分歧成 `<0.75` 與 `<=0.75` 只是還沒現形）、#228 route handler 儀式（404 樣板 ×33、
+  ownership 守衛 ×25 全靠人記得寫）。**M3.5 可測性與資料流**（8/16）＝#229 analysis 拆查詢與合併、
+  #230 寫入改 write log（吸收已關的 #184）、#231 先發四份表示法收斂、#232 後端可測性。
+  **#225（tactics 路由缺 ownership）排 M3，是 bug 不是重構**——而且是 **#127 那條判準的復發**：外鍵保證
+  referential integrity，不保證 ownership，`tactics.ts` 是當初漏網的檔案，整份沒 import `ownership`。
+- **專案 roadmap 已上線。** 時間序住在 repo **Milestones M1–M5**（現為 M1–M5＋M1.5/M2.5/M3.5）（軟目標日 7/18→9/11，非死線），當下
   狀態住在 [GitHub Project #4](https://github.com/users/aila8913/projects/4)。**注意：Todo 欄目前是空的**
   （#213–#217 都沒設 status），所以「下一步做什麼」這輪要重新決定，不能直接看 Todo 欄。維護規則與 CLI
   id 在 `.claude/skills/wrap-up/SKILL.md` step 5。尚待 PO 在網頁完成：Workflows 自動化＋三個 view。
@@ -171,7 +191,7 @@ gh issue list --state open                   # 全部
   `#FF8A5C` 無落點）。這是 spec 把 mode D 叫「對手佈陣」的那層，#177 沒做。
 - **#120**——剩分析頁站位列的可寫/彙總版，**blocked #76**（資訊軸未定）。
 
-**重心在 M2 數據分析（#65 傘）**：#213 已交付，**#214（分析頁導覽重構）是最現成的下一步**——#213 刻意
+**重心在 M2 數據分析（#65 傘已收，07-28）**：#213 已交付，**#214（分析頁導覽重構）是最現成的下一步**——#213 刻意
 沒動 `NavRail.tsx`，左側子導覽（比賽/球員/隊伍分析）整塊留給它，現在有三個視圖了正是動它的時機。
 #213 衍生的兩個缺口：**#221 人員合併**（去重刻意接受「未確認就建新身分」，累積下來需要合併能力）與
 **#222 `RosterEditDialog` 沒有去重 UX**（從戰術板那條路徑新增的球員 `personId` 永遠是 null，兩條新增
@@ -181,11 +201,16 @@ gh issue list --state open                   # 全部
 其餘 open 的技術債與待辦：
 **#168（引入 `@testing-library/react`）** ——現行 `renderToStaticMarkup` 慣例無法觸發事件、讀不到 Radix
 Portal，飛出選單與帶 mutation 副作用的 controller 全在自動測試盲區（#201 的計分頁死結修復就落在這裡，
-僅手動驗證）。**#40**（undo/redo 不涵蓋輪轉拖曳，與 #147 同塊邏輯但不同 store）。
+僅手動驗證）。**架構掃描把這個盲區量化了，它是 M2.5/M3.5 的實質前置**：每一支刻意抽到 `lib/` 的純函式
+都有測試，每一個握著座標數學、指標事件、輪轉/自由球員規則的元件都沒有（`Court.tsx` 727 行、
+`ScoreSheetCourt.tsx` 594 行、`useRotationTable.ts` 364 行全部零測試）；唯一有測試的 renderer
+`CourtReadOnlyView.tsx` **沒有任何 production caller**。**測試覆蓋的是安全的部分，沒覆蓋的是危險的部分。**
+**#40**（undo/redo 不涵蓋輪轉拖曳，與 #147 同塊邏輯但不同 store）——建議排在 **#231 之後**：先發表示法
+收斂成一份、座標降級為衍生值之後，undo 要回捲的目標才明確，屆時這張可能小很多。
 **#64**（背景寫入失敗不 reconcile）——#201 在 `useScoreSheet.start()` 補了 guard，**堵掉「單機就能製造
-serving≠null 但 record.lineup=null」那條路**，但真正的 reconcile 仍未做；關聯部署 #26／離線契約 #75，
-兩者仍屬 priority:essential 的自然接續。
-**#184**（唯讀面板不該掛整套記分 mutation hooks）。
+serving≠null 但 record.lineup=null」那條路**，但真正的 reconcile 仍未做；**#230 是它的結構前提**（現在
+六個 action 各自重寫寫入四步、三疊平行 id ref，沒有一條有序紀錄可以拿來對帳）。關聯部署 #26／離線契約
+#75，兩者仍屬 priority:essential 的自然接續。
 進階版差異化（M4）：#51 動作子分類、#21 球線座標、#99 站位快照——同屬 advanced tier，可一起設計。
 
 **已修掉但判準值得留著的**：#127（後端沒驗 tournamentId 擁有權）——**外鍵保證 referential integrity
@@ -196,6 +221,10 @@ serving≠null 但 record.lineup=null」那條路**，但真正的 reconcile 仍
 
 ### 開發 (aila)
 
+- **PR #233 / #234**（`docs/adr/` 上線，07-28）— 見上方 Current state。**#184 同日關閉**（唯讀 hydrate
+  hook）：範圍併進 #230，理由是只做讀那半的話，`useMatchRecording.ts:68-73` 那份手抄的讀路徑複本還活著
+  ——它少傳 `lineups`/`timeouts` 兩個參數，**同一支 `reconstructRecording`、同一場比賽會給出兩個不同答案**
+  （分析頁的 `record.lineup` 永遠 null、`record.timeouts` 永遠 `[]`）。這個 bug 只有讀寫一起看才會被消掉。
 - **#213**（球員跨場/跨隊分析，07-28）— 三塊：(1) **people 應用層**——`routes/people.ts` CRUD 鏡射
   teams、`personBelongsToUser` 防 IDOR、`players` 的 POST/PATCH 可寫 `personId`（判斷用 `!== undefined`
   而非 truthy，因為 `null` 是合法值＝解除歸屬，truthy 會讓解除靜默失效）。(2) **去重 UX**——見上方
