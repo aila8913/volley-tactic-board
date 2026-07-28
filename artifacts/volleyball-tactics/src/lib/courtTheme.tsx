@@ -9,12 +9,15 @@
 // ——CSS class 天生就是共用的，任何球場只要掛上那兩個 class 就有同樣的效果，不需要再抽一次。
 // 見 docs/design-spec.md 第 5 節（球場畫布）＋第 4 節（Glassmorphism）。
 
-// 球場底色深青漸層（design-spec.md 第 5 節，2026-07-15 定案的方案 B）。stopOpacity 不是 100%：
-// 毛玻璃地板要讓 wrapper 後面被模糊的背景透一點出來，底色全不透明的話毛玻璃等於白做。
+// 球場底色（2026-07-27 改成單一平色，取代原本三段深青漸層——使用者拿 Artifact 比較過
+// 平色／保留漸層兩版，都覺得不錯，決定先上平色，漸層版留到 #220 之後再討論要不要換）。
+// 三個 stop 顏色相同、只是同一份 <linearGradient> 機制沿用（呼叫端還是走
+// CourtGradientDefs），opacity 保留原本三段的些微差異——毛玻璃地板要讓 wrapper 後面被
+// 模糊的背景透一點出來，底色全不透明的話毛玻璃等於白做，這個理由色相怎麼換都還成立。
 export const COURT_GRADIENT_STOPS = [
-  { offset: "0%", color: "#12403f", opacity: 0.42 },
-  { offset: "50%", color: "#1c5654", opacity: 0.38 },
-  { offset: "100%", color: "#2a6e6a", opacity: 0.42 },
+  { offset: "0%", color: "#1B6E62", opacity: 0.42 },
+  { offset: "50%", color: "#1B6E62", opacity: 0.38 },
+  { offset: "100%", color: "#1B6E62", opacity: 0.42 },
 ] as const;
 
 // 球場外框線、球網、攻擊線、「對手/我方」字：統一用米白半透明（原本黑色 #111 在深色球場上

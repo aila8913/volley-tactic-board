@@ -11,7 +11,7 @@ import ScoreSheetCourt, { TouchedTarget } from "@/components/ScoreSheetCourt";
 import RadialMenu, { RadialMenuOption } from "@/components/RadialMenu";
 import ScoreSheetStats from "@/components/ScoreSheetStats";
 import RotationRailPanel from "@/components/RotationRailPanel";
-import { PlayAction } from "@/types/scoresheet";
+import { PlayAction, Side } from "@/types/scoresheet";
 import { isSetComplete, disabledActions } from "@/lib/scoreSheetMapping";
 import {
   captureLineupFromRotations,
@@ -57,7 +57,7 @@ const MAX_TIMEOUTS_PER_SET = 2;
 // default/outline/ghost 三種語意：
 // - PRIMARY：唯一的強調 CTA（例如「我方先發」），萊姆綠實心圓角。
 // - SECONDARY：次要但仍需要邊框的按鈕（「對手先發」、暫停…），透明玻璃底。
-// - GHOST：工具列等級的次要動作（復原/沒看到/下一局/結束比賽），只用文字顏色區分狀態。
+// - GHOST：工具列等級的次要動作（復原/下一局/結束比賽），只用文字顏色區分狀態。
 const PRIMARY_BUTTON_CLASS =
   "inline-flex items-center justify-center rounded-full bg-[#c6f135] px-5 py-2 text-sm " +
   "font-semibold text-[#0a0b07] transition hover:brightness-110 disabled:pointer-events-none " +
@@ -74,13 +74,16 @@ const GHOST_BUTTON_CLASS =
   "inline-flex items-center justify-center rounded-full px-3 py-1.5 text-xs font-bold " +
   "text-[#a9b096] transition hover:text-[#c6f135] disabled:pointer-events-none disabled:opacity-30";
 
-// 快速記一球的手勢流程：點球員/對手(全體) → 選「動作」→ 選「得/失分」。
+// 快速記一球的手勢流程：點球員(球場畫線)/我方比分卡/對手比分卡 → 選「動作」→ 選「得/失分」。
+// 「我方(全體)」「對手(全體)」原本是球場上的虛線框，使用者後來決定改成直接點右欄的比分卡
+// 觸發——省掉球場上的額外元素，也更省版面（見 handleScoreCardTouch）。
+// action 在 outcome 這一步是 optional：比分卡觸發的動作選單多一顆「沒看到」（見
+// ACTION_OPTIONS 使用處），選它代表「知道是哪一方，但不知道實際動作」，直接跳到選
+// 得/失分、不記錄 action，這樣至少還留得住「哪一方」這個資訊（比原本完全不記錄任何東西
+// 的舊版「沒看到」更完整）。
 type Gesture =
   | { step: "action"; target: TouchedTarget }
-  | { step: "outcome"; target: TouchedTarget; action: PlayAction }
-  // 「沒看到」：只知道螢幕上點下去的位置（給 RadialMenu 當中心點），沒有 target 也沒有
-  // action——直接跳去選得/失分，不記錄是誰、做了什麼動作。
-  | { step: "outcome-only"; screenX: number; screenY: number };
+  | { step: "outcome"; target: TouchedTarget; action?: PlayAction };
 
 export default function ScoreSheet() {
   const { id } = useParams<{ id: string }>();
@@ -261,42 +264,45 @@ export default function ScoreSheet() {
     setGesture({ step: "action", target });
   };
 
-  const handleActionSelect = (action: PlayAction) => {
+  // 右欄比分卡本身可以點：不挑細節、只記「這一球是哪一方做的」，取代原本球場上的
+  // 「我方(全體)」「對手(全體)」虛線框（使用者決定改放這裡，省球場版面）。跟球場的
+  // 「畫線連到目標」手勢不同、是單純點擊，但終點一樣進 handlePlayerTouch，後面選動作／
+  // 選得失分那兩步完全共用同一套邏輯，不用另外寫一條平行路徑。
+  // gesture !== null 時代表選單已經開著，不重複觸發；currentSet 不存在（開賽前的「誰
+  // 先發球」畫面也會渲染 scoreDisplay）時記錄沒有意義，一併擋掉。
+  const handleScoreCardTouch = (side: Side) => (e: ReactPointerEvent) => {
+    if (gesture !== null || !currentSet) return;
+    handlePlayerTouch({ side, screenX: e.clientX, screenY: e.clientY });
+  };
+
+  const handleActionSelect = (action: PlayAction | "noSight") => {
     if (!gesture || gesture.step !== "action") return;
-    setGesture({ step: "outcome", target: gesture.target, action });
+    setGesture({
+      step: "outcome",
+      target: gesture.target,
+      // 「沒看到」代表知道是哪一方、但不知道實際動作——action 留空，handleOutcomeSelect
+      // 那邊 touchedBy.side 還是會照樣記下去，不是完全不記錄。
+      action: action === "noSight" ? undefined : action,
+    });
   };
 
   const handleOutcomeSelect = (outcome: Outcome) => {
-    if (!gesture) return;
-    if (gesture.step === "outcome") {
-      // 「得分／失分」是相對於這一球的動作方（target.side）來看，不是永遠對應
-      // 我方：對手(全體)做了這個動作時，「得分」代表對手拿到這一分，得加的是
-      // 對手的分數；「失分」代表對手沒拿到這一分（我方拿到）。動作方是我方球員
-      // 時邏輯相反過來，一樣是「這個動作方自己得分還是失分」。
-      const actorSide = gesture.target.side;
-      const side = outcome === "win" ? actorSide : actorSide === "us" ? "opponent" : "us";
-      score(side, {
-        action: gesture.action,
-        touchedBy: {
-          side: gesture.target.side,
-          playerId: gesture.target.playerId,
-          zone: gesture.target.zone,
-        },
-      });
-    } else if (gesture.step === "outcome-only") {
-      // 「沒看到」沒有動作方可以參照，固定用我方視角（得分=我方加分）。
-      // 不帶 meta，score 本來就支援（見 useScoreSheet.ts 的
-      // meta?: Pick<PointRecord, "action" | "touchedBy">），只更新比分/輪轉，
-      // 不會生出任何動作/球員的紀錄。
-      score(outcome === "win" ? "us" : "opponent");
-    }
+    if (!gesture || gesture.step !== "outcome") return;
+    // 「得分／失分」是相對於這一球的動作方（target.side）來看，不是永遠對應
+    // 我方：對手(全體)做了這個動作時，「得分」代表對手拿到這一分，得加的是
+    // 對手的分數；「失分」代表對手沒拿到這一分（我方拿到）。動作方是我方球員
+    // 時邏輯相反過來，一樣是「這個動作方自己得分還是失分」。
+    const actorSide = gesture.target.side;
+    const side = outcome === "win" ? actorSide : actorSide === "us" ? "opponent" : "us";
+    score(side, {
+      action: gesture.action,
+      touchedBy: {
+        side: gesture.target.side,
+        playerId: gesture.target.playerId,
+        zone: gesture.target.zone,
+      },
+    });
     setGesture(null);
-  };
-
-  // 「沒看到」按鈕：跳過選動作，直接用按鈕本身的螢幕座標當 RadialMenu 中心，
-  // 彈出得/失分選單。
-  const handleNoSight = (e: ReactPointerEvent) => {
-    setGesture({ step: "outcome-only", screenX: e.clientX, screenY: e.clientY });
   };
 
   const handleLiberoSubstitute = (targetPlayerId: string) => {
@@ -394,12 +400,18 @@ export default function ScoreSheet() {
         改成 items-start 對齊上緣，而不是原本跟著比分卡置底；局數框矮很多，跟著同一條上緣
         對齊，整排看起來才像掛在同一條線上、不是各自對齊各自的。 */}
       <div className="flex items-start gap-3">
+        {/* 比分卡現在也是「我方(全體)」的記錄入口（見 handleScoreCardTouch）：點下去跳過球場
+          畫線，直接開「選動作」選單，只知道是我方做的、不挑是場上哪一位球員。cursor-pointer
+          只在真的能記錄時（有 currentSet）才加，開賽前的「誰先發球」畫面共用同一份 JSX，
+          那裡點下去本來就會被 handleScoreCardTouch 內部的 !currentSet 檔掉，游標樣式跟著
+          誠實反映當下能不能點。 */}
         <div
+          onPointerDown={handleScoreCardTouch("us")}
           className={`flex flex-col items-center gap-1 rounded-2xl border px-5 py-3 transition-shadow ${
             currentSet?.serving === "us"
               ? "border-[#C6F135] shadow-[0_0_18px_rgba(198,241,53,0.4)]"
               : "border-white/[0.14] shadow-lg shadow-black/30"
-          } bg-black/30`}
+          } ${currentSet ? "cursor-pointer" : ""} bg-black/30`}
         >
           <span className="font-score text-5xl tabular-nums text-[#C6F135]">
             {currentSet?.ourScore ?? 0}
@@ -434,11 +446,12 @@ export default function ScoreSheet() {
         )}
 
         <div
+          onPointerDown={handleScoreCardTouch("opponent")}
           className={`flex flex-col items-center gap-1 rounded-2xl border px-5 py-3 transition-shadow ${
             currentSet?.serving === "opponent"
               ? "border-[#ef4444] shadow-[0_0_18px_rgba(239,68,68,0.4)]"
               : "border-white/[0.14] shadow-lg shadow-black/30"
-          } bg-black/30`}
+          } ${currentSet ? "cursor-pointer" : ""} bg-black/30`}
         >
           <span className="font-score text-5xl tabular-nums text-[#ef4444]">
             {currentSet?.opponentScore ?? 0}
@@ -663,9 +676,10 @@ export default function ScoreSheet() {
                   </button>
                 </div>
 
-                {/* 復原/沒看到/下一局/結束比賽：右欄空間夠，排成 2×2 讓每顆都好按（原本擠在
-                  一橫排、球場往左放大後這裡更有餘裕）。 */}
-                <div className="grid w-full grid-cols-2 gap-2">
+                {/* 復原/下一局/結束比賽：原本 2×2 還有一顆「沒看到」，現在併進球場改成
+                  「我方(全體)」（跟「對手(全體)」對稱的虛線框，走一模一樣的選動作／選得失分
+                  流程，見 ScoreSheetCourt.tsx 的 hitTargets 說明），剩三顆排成一列。 */}
+                <div className="grid w-full grid-cols-3 gap-2">
                   {/* 一顆「復原」鈕，一次退最近一個動作（得分／一般換人／手動 libero／暫停），
                     連按就一路往回（issue #41）。可用與否看復原堆疊深度，不是只看記了幾顆球
                     ——這樣剛換完人、還沒記下一球時也退得掉那次換人。 */}
@@ -675,9 +689,6 @@ export default function ScoreSheet() {
                     onClick={handleUndo}
                   >
                     復原
-                  </button>
-                  <button className={GHOST_BUTTON_CLASS} onPointerDown={handleNoSight}>
-                    沒看到
                   </button>
                   <button className={GHOST_BUTTON_CLASS} onClick={handleNextSet}>
                     下一局
@@ -700,12 +711,22 @@ export default function ScoreSheet() {
             // #50：六顆動作永遠留在固定方位（肌肉記憶），只把當下不可能的那顆「反灰」（不是
             // 拿掉）。disabledActions 依 發球方/動作方 算出要反灰的動作（規則#1 發球/接發互斥，
             // 恰好一顆）。選項數固定 6 個，RadialMenu 的環狀角度不會因為反灰而跑掉。
-            options={ACTION_OPTIONS.map((o) => ({
-              ...o,
-              disabled: disabledActions(currentSet?.serving ?? null, gesture.target.side).includes(
-                o.value,
-              ),
-            }))}
+            options={[
+              ...ACTION_OPTIONS.map((o) => ({
+                ...o,
+                disabled: disabledActions(
+                  currentSet?.serving ?? null,
+                  gesture.target.side,
+                ).includes(o.value),
+              })),
+              // 「沒看到」只在比分卡觸發（沒有 playerId 也沒有 zone，代表「不挑細節、只知道
+              // 是哪一方」）時才多這一顆——球場上點了明確的球員/號位，代表已經知道是誰做的，
+              // 沒有「沒看到」的空間；只有這種「已知哪一方、但沒指定球員」的情境，才需要多
+              // 一條連動作都不確定的逃生口。
+              ...(!gesture.target.playerId && gesture.target.zone === undefined
+                ? [{ value: "noSight" as const, label: "沒看到" }]
+                : []),
+            ]}
             onSelect={handleActionSelect}
             onCancel={() => setGesture(null)}
           />
@@ -713,15 +734,6 @@ export default function ScoreSheet() {
         {gesture?.step === "outcome" && (
           <RadialMenu
             center={{ x: gesture.target.screenX, y: gesture.target.screenY }}
-            options={OUTCOME_OPTIONS}
-            onSelect={handleOutcomeSelect}
-            onCancel={() => setGesture(null)}
-            startAngle={180}
-          />
-        )}
-        {gesture?.step === "outcome-only" && (
-          <RadialMenu
-            center={{ x: gesture.screenX, y: gesture.screenY }}
             options={OUTCOME_OPTIONS}
             onSelect={handleOutcomeSelect}
             onCancel={() => setGesture(null)}

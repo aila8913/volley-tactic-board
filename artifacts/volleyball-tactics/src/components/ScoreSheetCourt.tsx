@@ -134,22 +134,13 @@ export default function ScoreSheetCourt({
     xNorm: number;
     yNorm: number;
   };
-  // 「對手(全體)」的固定位置：對手半場左上角空白處，跟 6 個號位圈(y 30~80)、
-  // 「對手」標題文字(x=50, y=15)都不重疊。沒有 playerId 也沒有 zone——代表
-  // 「這球是對手做的，但不挑是哪個位置/哪個人」，對應 side=opponent、playerId
-  // 留空的簡易版記錄情境（對手自己失誤導致我方得分時，我們沒有對手名單可以指定）。
-  const OPPONENT_ALL_X = 12;
-  const OPPONENT_ALL_Y = 12;
-
+  // 「對手(全體)」／「我方(全體)」這兩個「不挑細節、只記哪一方」的簡易記錄入口，
+  // 已經搬出球場、改成右欄比分卡本身可以點（見 pages/ScoreSheet.tsx 的
+  // handleScoreCardTouch）——球場內只留「畫線連到明確目標」這一種手勢，不用再在球場上
+  // 擠出額外的虛線框佔位。這裡的 hitTargets 因此只剩「明確知道是哪個號位/哪個球員」
+  // 的目標。
   const hitTargets = useMemo<HitTarget[]>(
     () => [
-      {
-        side: "opponent" as const,
-        x: OPPONENT_ALL_X,
-        y: OPPONENT_ALL_Y,
-        xNorm: OPPONENT_ALL_X / 100,
-        yNorm: OPPONENT_ALL_Y / 200,
-      },
       ...opponentZones.map((slot) => ({
         side: "opponent" as const,
         zone: slot.zone,
@@ -354,48 +345,32 @@ export default function ScoreSheetCourt({
             strokeWidth="1"
             strokeDasharray="3 3"
           />
-          <text x="50" y="15" fontSize="6" fill={COURT_LINE_COLOR} textAnchor="middle">
-            對手
-          </text>
-          <text x="50" y="192" fontSize="6" fill={COURT_LINE_COLOR} textAnchor="middle">
-            我方
-          </text>
 
-          {/* 對手(全體)：虛線框，跟下面號位圈的實心圓區分——這是「不挑細節」的選項 */}
-          <g transform={`translate(${OPPONENT_ALL_X},${OPPONENT_ALL_Y})`}>
-            <rect
-              x="-10"
-              y="-6"
-              width="20"
-              height="12"
-              rx="3"
-              fill="rgba(10,11,7,0.4)"
-              stroke="#a9b096"
-              strokeWidth="1"
-              strokeDasharray="2 1"
-            />
-            <text y="2" fontSize="3.5" fontWeight="bold" fill="#a9b096" textAnchor="middle">
-              對手
-            </text>
-          </g>
-
-          {/* 對手號位圈 */}
+          {/* 對手號位圈：跟我方球員圈共用 PlayerMarker（深色玻璃底＋實色邊框＋圈內數字），
+              不再用虛線外框——使用者覺得虛線太醜、要求跟我方同款只是換色。對手沒有名單，
+              沒有背號/姓名可顯示，圈裡放的是號位數字，姓名那一行留空；邊框色底色是
+              design-spec.md 第 2 節定的「對方球隊色：珊瑚紅 #EF4444」（中途繞了一圈試過
+              #FF8A5C，那個色碼其實沒有出現在 design-spec 裡，是 #199 issue 討論串誤寫的，
+              已在該 issue 留言修正，見 07-27 comment），但實機看純色滿飽和度在球場的深青綠
+              背景上太搶眼、跟綠色互補衝突明顯，改成 70% 不透明度柔和一點（用 Artifact 排了
+              幾個透明度/色相方案給使用者比較過，這個是選定的版本）。
+              發球時的光暈模糊半徑也單獨調過：PlayerMarker 預設 3（原始值，白色/萊姆綠/橘色
+              套這個數字一直都好看），但紅色在同一個數字下太誇張，這裡用 glowBlur 覆寫成
+              0.75——只影響對手，我方球員（含 PlayerNode.tsx 戰術板的選取態）維持預設不變。 */}
           {opponentZones.map((slot) => {
             const isServer = serving === "opponent" && slot.currentZone === 1;
             const x = slot.x * 100;
             const y = slot.y * 200;
             return (
               <g key={`opp-${slot.zone}`} transform={`translate(${x},${y})`}>
-                <circle
-                  r={isServer ? 7.5 : 6}
-                  fill={slot.y < 0.5 ? "rgba(245,245,240,0.1)" : "rgba(245,245,240,0.06)"}
-                  stroke="#a9b096"
-                  strokeWidth={isServer ? 1.5 : 1}
-                  strokeDasharray="2 1"
+                <PlayerMarker
+                  number={slot.zone}
+                  name=""
+                  color="rgba(239, 68, 68, 0.7)"
+                  radius={isServer ? 7.5 : 6}
+                  emphasized={isServer}
+                  glowBlur={0.75}
                 />
-                <text y="2" fontSize="4" fontWeight="bold" fill="#a9b096" textAnchor="middle">
-                  {slot.zone}
-                </text>
                 {isServer && (
                   <text y="-9" fontSize="6" textAnchor="middle">
                     🏐
