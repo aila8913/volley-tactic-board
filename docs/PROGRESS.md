@@ -22,12 +22,11 @@
 > 平行 PR 就落在不同行段、git 幾乎都能自動合併，不用真的把檔案拆兩份、也保住一眼 catch-up。
 > 上面的 `_Last updated_` 是共用一行摘要（誰更新了什麼），保持精簡、別長成段落。
 
-\_Last updated: 2026-07-27 (aila) — #215 賽制欄位化（`matches.format` enum、既有資料預設
-`best_of_3`），修掉三戰兩勝比賽在比賽列表被誤標「進行中」；同時補入前兩批未入帳的 PR #216
-（分析頁全頁範圍選擇器＋seed 測試資料）與 PR #217（tang：計分頁視覺打磨＋左欄導覽圖示化），
-並壓縮 07-20 以前的條目。前一批 2026-07-26 (aila) — teams 分組標籤端到端（PR #208）＋數據分析
-入口改常駐紀錄本（PR #212）。前一批 2026-07-26 (tang) — 計分頁球場置中修正＋`PlayerMarker`
-共用（PR #210）。\_
+\_Last updated: 2026-07-28 (aila) — #213 球員跨場/跨隊分析（people 應用層＋名單去重 UX＋視圖③）
+落地，#65 傘只剩比率/差異化統計；同時開了 #218（比賽結束的操作節點與畫面）。前一批 2026-07-27
+(aila) — #215 賽制欄位化（`matches.format` enum），並補入 PR #216（分析頁全頁範圍選擇器＋seed）
+與 PR #217（tang：計分頁視覺打磨＋左欄導覽圖示化）、壓縮 07-20 以前的條目。前一批 2026-07-26
+(aila) — teams 端到端（PR #208）＋數據分析入口改常駐紀錄本（PR #212）。\_
 
 ## Current state
 
@@ -89,20 +88,29 @@ lives in git log + the issues named).
   （換人，存比分快照）、`timeouts`（#44，比分快照＋side，純記錄事件不記時長）、`events.outcome`
   （得/失/球續 enum）、`people`＋`teams`（跨場跨隊身分／分組標籤，`players.personId`/`matches.teamId`
   nullable FK、`onDelete: set null` 保留歷史事實）、**`matches.format`（#215，賽制 enum）** 全部 live。
+  `people`／`players.personId` **已補上應用層**（#213）：`/people` CRUD＋名單去重 UX＋`personBelongsToUser`，
+  不再是「建了表沒人用」的狀態。
 - **賽制成為比賽的固有欄位（#215，07-27）。** `matches.format` 是 `pgEnum("match_format",
 ["best_of_3","best_of_5"])`、`notNull().default("best_of_3")`——既有資料 push 時自動補值，不需要
   資料補丁。`getMatchWinner(sets, winsNeeded)` 的第二個參數**刻意必填、不給預設值**：#215 的病根正是
   一個「看似合理的預設」（寫死 3＝五戰三勝）讓所有呼叫端都不必想這件事。**判準值得記住：當一個參數
   的正確值取決於呼叫端情境時，必填比預設安全——「合理的預設值」和「沉默的錯誤答案」常常是同一個東西。**
+- **人員去重的預設方向（#213，07-28）——上一條判準的補完。** 名單打字時命中同名 person 會顯示建議，
+  **按下才綁；但送出時仍沒有 `personId` 的列會自動建一個新 person**。看似違反上一條，其實不是，關鍵是
+  **方向不對稱**：自動建**新身分**安全（最壞是同一人散成多筆待合併，資料仍正確）；自動**合併到既有身分**
+  不安全（猜錯就把兩人生涯數據永久混在一起且難以發現）。**判準：能不能給預設值，取決於預設的那個方向
+  會不會產生錯誤答案**——#215 兩個方向都會錯所以必填，這裡只有一個方向會錯所以另一個方向可以當預設。
 - **#65 數據分析頁：視圖①②已上線＋teams 端到端＋入口＝常駐紀錄本。** 視圖①單場分析
   （`pages/MatchAnalytics.tsx`）＝比分總覽＋球員決定球矩陣＋換人統計＋各輪次得失分；**比分總覽已改成
   全頁範圍選擇器**（PR #216：點某局就把底下所有區塊篩到那局、「全場」按鈕顯示局數比數，全頁由單一
   `scope` state 驅動；各輪次得失分連帶改前端算 `buildRotationStats`，因為後端聚合只能算整場、跟不了
   選局）。視圖②跨場彙總（`pages/CrossMatchAnalytics.tsx`＋`GET /analysis/matches`）＝一支請求列全部
   場次摘要＋球隊過濾。入口改 context-aware（左欄「數」永遠可到：有比賽→單場、沒選→跨場）。
-  **仍未做**：視圖③（球員跨場跨隊，需 `players.personId` 去重應用層）已拆成獨立 **#213**；導覽重構
-  （頁內選比賽下拉＋日期篩選＋左側子導覽）是 **#214**；比率統計（side-out%）與差異化（到位率/球線
-  熱區）仍是**誠實空狀態**，等 #51/#21 與發球序推導。#65 傘等 #213＋比率/差異化有著落才收。
+  **視圖③已於 #213 落地**（`pages/PersonAnalytics.tsx`＋`GET /analysis/people/:personId`，路由
+  `/analytics/people`）。**仍未做**：導覽重構（頁內選比賽下拉＋日期篩選＋左側子導覽）是 **#214**
+  ——#213 刻意不碰 `NavRail.tsx`，把左側子導覽整塊留給它，避免兩個 issue 在同一檔案打架；比率統計
+  （side-out%）與差異化（到位率/球線熱區）仍是**誠實空狀態**，等 #51/#21 與發球序推導。
+  #65 傘只剩比率/差異化有著落才收。
 - **`lib/db/src/seed-testdata.ts` 是分析頁的驗證資料來源**（全部三戰兩勝、刻意留一場進行中；每分補一顆
   決定球 event 讓球員矩陣有數字；`buildRallies` 保證「賽末點收在最後一球」，不再出現「我方達標後對手
   還在加分」的不可能畫面）。
@@ -163,8 +171,12 @@ gh issue list --state open                   # 全部
   `#FF8A5C` 無落點）。這是 spec 把 mode D 叫「對手佈陣」的那層，#177 沒做。
 - **#120**——剩分析頁站位列的可寫/彙總版，**blocked #76**（資訊軸未定）。
 
-**重心已移到 M2 數據分析（#65 傘）**：#213（視圖③球員跨場跨隊）與 #214（分析頁導覽重構）是兩顆最現成
-的下一步，且會互相影響版面，動工前值得先定順序。
+**重心在 M2 數據分析（#65 傘）**：#213 已交付，**#214（分析頁導覽重構）是最現成的下一步**——#213 刻意
+沒動 `NavRail.tsx`，左側子導覽（比賽/球員/隊伍分析）整塊留給它，現在有三個視圖了正是動它的時機。
+#213 衍生的兩個缺口：**#221 人員合併**（去重刻意接受「未確認就建新身分」，累積下來需要合併能力）與
+**#222 `RosterEditDialog` 沒有去重 UX**（從戰術板那條路徑新增的球員 `personId` 永遠是 null，兩條新增
+路徑行為不一致，且沒有任何提示）。**#218**（一場比賽「結束」的操作節點與畫面）——目前「結束比賽」只是導去分析頁的 `<Link>`，
+**最後一局不會被封存**（`completedSets` 只在按「下一局」時累積），是資料缺口不只是 UX 缺口。
 
 其餘 open 的技術債與待辦：
 **#168（引入 `@testing-library/react`）** ——現行 `renderToStaticMarkup` 慣例無法觸發事件、讀不到 Radix
@@ -184,6 +196,17 @@ serving≠null 但 record.lineup=null」那條路**，但真正的 reconcile 仍
 
 ### 開發 (aila)
 
+- **#213**（球員跨場/跨隊分析，07-28）— 三塊：(1) **people 應用層**——`routes/people.ts` CRUD 鏡射
+  teams、`personBelongsToUser` 防 IDOR、`players` 的 POST/PATCH 可寫 `personId`（判斷用 `!== undefined`
+  而非 truthy，因為 `null` 是合法值＝解除歸屬，truthy 會讓解除靜默失效）。(2) **去重 UX**——見上方
+  Current state 的不對稱判準；順帶修掉 `RosterEditDialog` 不帶 `personId` 會靜默清掉既有對應的 bug。
+  (3) **視圖③**——`GET /analysis/people/:personId`＋`pages/PersonAnalytics.tsx`，**只做資料真的支援的
+  五項**（出賽場數／跨隊／各場背號位置／觸球動作分布／先發局數），**刻意不做「這個人得幾分」**——
+  `events.outcome` 恆為 null（#51），做出來只能是近似值假裝，頁面上明講這個限制而不是靜默留白。
+  三種 grain（match／event／set）照 `/analysis/matches` 既有做法拆成三支查詢在 JS 合併。
+  **實測踩到的坑**：`usePeople` 原本寫 `data ?? []`，擋不掉「後端回非陣列」——api-server 沒重啟時請求
+  掉進 SPA fallback 拿回 `index.html` 字串，一路傳到 `people.find(...)` 才炸，錯誤訊息指著使用端、離
+  病根很遠。已改 `Array.isArray` 並連帶補 `useTeams`（同形狀、同坑，只是 `/teams` 早就上線沒發作）。
 - **#215**（賽制欄位化，07-27）— `matches.format` pgEnum（`best_of_3`/`best_of_5`，
   `notNull().default("best_of_3")`）貫穿 db → openapi → codegen → routes → domain 型別 → 純函式 →
   四個呼叫端 → `MatchFormDialog` 賽制下拉 → seed。`WINS_NEEDED_TO_CLINCH` 寫死值刪除，
