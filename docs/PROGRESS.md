@@ -22,13 +22,9 @@
 > 平行 PR 就落在不同行段、git 幾乎都能自動合併，不用真的把檔案拆兩份、也保住一眼 catch-up。
 > 上面的 `_Last updated_` 是共用一行摘要（誰更新了什麼），保持精簡、別長成段落。
 
-\_Last updated: 2026-07-28 (aila) — 架構掃描開出 #225–#232 八張並新增兩個 milestone（M2.5/M3.5），
-`docs/adr/` 上線（PR #233/#234，三張既有決定＋CLAUDE.md 指向）。同日稍早 #213 球員跨場/跨隊分析
-（people 應用層＋名單去重 UX＋視圖③）落地，#65 傘只剩比率/差異化統計；同時開了 #218（比賽結束的
-操作節點與畫面）。前一批 2026-07-27
-(aila) — #215 賽制欄位化（`matches.format` enum），並補入 PR #216（分析頁全頁範圍選擇器＋seed）
-與 PR #217（tang：計分頁視覺打磨＋左欄導覽圖示化）、壓縮 07-20 以前的條目。前一批 2026-07-26
-(aila) — teams 端到端（PR #208）＋數據分析入口改常駐紀錄本（PR #212）。\_
+\_Last updated: 2026-07-28 (aila) — #174 Stage B（資料夾統計格）實作完成待 ship；roadmap 收束：M2 milestone
+關閉、M1.5 只剩 #176 已移 M3、孤兒 issue #199/#218 歸位、新開 #238；同日稍早 `docs/adr/` 上線與架構掃描
+八張（#225–#232）。\_
 
 ## Current state
 
@@ -77,15 +73,16 @@ lives in git log + the issues named).
     （空狀態／資料夾摘要／比賽輪轉表）由列表頁與資料夾內頁共用。實作前發現**規格與資料對不上**：
     `CompletedSet` 沒存 lineup，已補 `CompletedSet.lineup` ＋共用的 `findLineupSnapshotForSet`。
     選取語意一般化成 `selected { kind, id }`、**不自動選第一場**（使用者未表達意圖前不該讓站位進
-    可寫狀態）。跨欄拖曳已由 PR #189 完成；**剩 Stage B（統計格）blocked on M2，故不關。**
-  - **環 4（#175）／環 5（#176，**仍 open**：剩繪圖工具正式圖示 blocked @tangyi1025）／
-    環 6（#177）** 皆已落地，見下方 Recently closed。**環 7（#178）需先補線框稿。**
+    可寫狀態）。跨欄拖曳已由 PR #189 完成；**Stage B（統計格）已於 07-28 實作完成**（見下方 Recently
+    closed），ship 後 #174 與 #120 一併關。
+  - **環 4（#175）／環 5（#176，**仍 open**：剩繪圖工具正式圖示 blocked @tangyi1025，07-28 已移入 M3）／
+    環 6（#177）** 皆已落地，見下方 Recently closed。**環 7（#178）需先補線框稿（在 M3）。**
 - **#120 計分頁右欄兩階段落地（**仍 open**）。** `CourtReadOnlyView` 常駐唯讀站位（**純展示、不訂閱
   任何 store**）＋`RotationRailPanel` 改為**受控元件**——改動直接進共用真相，草稿 state 與「確定」鈕
   整組移除，連帶消滅「排到一半被無關 re-render 洗掉」那類 bug。**`lib/rotationLogic.ts` 連續兩次 UI
   重寫都一行未動**——把領域邏輯抽出元件的回報。**換局換輪視窗已作廢**（右欄本來就能就地改，彈窗是
-  多餘轉場）。分析頁站位列已由 #193 交付**唯讀**版（`AnalyticsRotationRail`）；#120 仍 open 是因為原
-  構想的可寫/彙總版待 #76 定調資訊軸。
+  多餘轉場）。分析頁站位列已由 #193 交付**唯讀**版（`AnalyticsRotationRail`）。**#120 的收尾條件是 #174
+  環 3**（見 #120 的 07-21 留言：列表頁與資料夾內頁掛上右欄後才算滿足），不是 #76——#76 已關（ADR-0002）。
 - **Schema foundations for stats are in place:** `lineups`（起始先發，一局一 row）、`substitutions`
   （換人，存比分快照）、`timeouts`（#44，比分快照＋side，純記錄事件不記時長）、`events.outcome`
   （得/失/球續 enum）、`people`＋`teams`（跨場跨隊身分／分組標籤，`players.personId`/`matches.teamId`
@@ -134,10 +131,12 @@ lives in git log + the issues named).
   #230 寫入改 write log（吸收已關的 #184）、#231 先發四份表示法收斂、#232 後端可測性。
   **#225（tactics 路由缺 ownership）排 M3，是 bug 不是重構**——而且是 **#127 那條判準的復發**：外鍵保證
   referential integrity，不保證 ownership，`tactics.ts` 是當初漏網的檔案，整份沒 import `ownership`。
-- **專案 roadmap 已上線。** 時間序住在 repo **Milestones M1–M5**（現為 M1–M5＋M1.5/M2.5/M3.5）（軟目標日 7/18→9/11，非死線），當下
-  狀態住在 [GitHub Project #4](https://github.com/users/aila8913/projects/4)。**注意：Todo 欄目前是空的**
-  （#213–#217 都沒設 status），所以「下一步做什麼」這輪要重新決定，不能直接看 Todo 欄。維護規則與 CLI
-  id 在 `.claude/skills/wrap-up/SKILL.md` step 5。尚待 PO 在網頁完成：Workflows 自動化＋三個 view。
+- **專案 roadmap 已上線。** 時間序住在 repo **Milestones M1–M5**（現為 M1–M5＋M1.5/M2.5/M3.5）（軟目標日
+  7/18→9/11，非死線），當下狀態住在 [GitHub Project #4](https://github.com/users/aila8913/projects/4)。
+  **M1／M2 milestone 已關閉；M1.5 只剩 #174/#120 待 ship 帶關，關掉後整個 milestone 收掉**（#176 已移 M3，
+  它卡在 @tangyi1025 的圖示、不該讓一個純外部阻塞項把階段一直掛在逾期狀態）。**Todo 欄已填上 M2.5 的
+  #226/#227/#228**——下一步直接看 Todo 欄就好，不用再重推。維護規則與 CLI id 在
+  `.claude/skills/wrap-up/SKILL.md` step 5＋`reference.md`。尚待 PO 在網頁完成：Workflows 自動化＋三個 view。
 - **記錄成本預算（#74，已關）＝`docs/recording-cost-budget.md`**：簡易/進階是懸崖式硬分界——簡易版
   一分打完後在死球空檔記**恰好一筆決定球**＋排先發＋換人/暫停＋「沒看到」escape valve；任何 per-touch／
   座標／到位分／子分類全歸進階版（賽後影片補填）。PO 拍板嚴守此界、不開 simple+。
@@ -176,27 +175,29 @@ Backlog lives in **GitHub Issues, phase-ordered via Milestones M1–M5** — thi
 duplicates it. Current phase = lowest-numbered milestone with open issues:
 
 ```
-gh issue list --milestone "M1 簡易版收尾"   # 當前階段
-gh issue list --state open                   # 全部
+gh issue list --milestone "M2.5 架構深化：收斂重複規則"   # 當前階段
+gh issue list --state open                                 # 全部
 ```
 
-**M1 實作項已清空**（去汙染家族 #115/#117/#118/#119、undo 一次退兩步 #147、暫停 #44 全數落地）。
-**M1.5「戰術板 UI 大改版」＝七環（#172–#178）**，規格住 `docs/layout-spec.md`、相依鏈
-`環1 →（環2 ‖ 環3 ‖ 環4）→ 環5 → 環6`。環 1–6 已全部落地，剩下的 open 尾巴：
+**M1／M2 milestone 皆已關閉，M1.5 只等 #174/#120 隨 ship 收尾。** M1.5「戰術板 UI 大改版」＝七環
+（#172–#178），規格住 `docs/layout-spec.md`、相依鏈 `環1 →（環2 ‖ 環3 ‖ 環4）→ 環5 → 環6`；環 1–6
+結構工作全部落地，剩的兩張尾巴（#176 繪圖工具圖示 blocked @tangyi1025、#178 環 7 響應式需線框稿）
+已移入 **M3**，因為兩者都卡在 M1.5 內部推不動的外部輸入。**#199**（戰術板對手球員分色渲染——Court
+從未渲染對手、snapshot player 無 `side`；spec 把 mode D 叫「對手佈陣」的那層 #177 沒做）07-28 補上
+milestone，歸 **M5**。
 
-- **#178（環 7 響應式）**——需先補線框稿。
-- **#176（環 5）**——只剩繪圖工具正式圖示，blocked @tangyi1025。
-- **#174（環 3）**——只剩 Stage B（統計格），blocked on M2。
-- **#199**——戰術板**對手球員分色渲染**（Court 從未渲染對手、snapshot player 無 `side`、珊瑚橘
-  `#FF8A5C` 無落點）。這是 spec 把 mode D 叫「對手佈陣」的那層，#177 沒做。
-- **#120**——剩分析頁站位列的可寫/彙總版，**blocked #76**（資訊軸未定）。
+**當前階段＝M2.5「收斂重複規則」（軟目標日 8/1）**，Project #4 的 Todo 欄就是這三張：**#226**（得分/
+輪轉規則四份實作＋第五份存在 DB 欄位）、**#227**（球場座標 `*100/*200` 內嵌 12 處、前排門檻已分歧成
+`<0.75` 與 `<=0.75`）、**#228**（route handler 儀式：404 樣板 ×33、ownership 守衛 ×25 全靠人記得寫）。
+新加入的 **#238**（比賽狀態詞彙與判準收斂）是同一類問題的小號版本，且**已經飄出錯誤答案**：比賽列表用
+`completedSets.length === 0`、資料夾統計格用 `setsPlayed > 0`，同一場打到第一局一半的比賽在兩處分別
+顯示「尚未開賽」與「進行中」。
 
-**重心在 M2 數據分析（#65 傘已收，07-28）**：#213 已交付，**#214（分析頁導覽重構）是最現成的下一步**——#213 刻意
-沒動 `NavRail.tsx`，左側子導覽（比賽/球員/隊伍分析）整塊留給它，現在有三個視圖了正是動它的時機。
-#213 衍生的兩個缺口：**#221 人員合併**（去重刻意接受「未確認就建新身分」，累積下來需要合併能力）與
-**#222 `RosterEditDialog` 沒有去重 UX**（從戰術板那條路徑新增的球員 `personId` 永遠是 null，兩條新增
-路徑行為不一致，且沒有任何提示）。**#218**（一場比賽「結束」的操作節點與畫面）——目前「結束比賽」只是導去分析頁的 `<Link>`，
-**最後一局不會被封存**（`completedSets` 只在按「下一局」時累積），是資料缺口不只是 UX 缺口。
+M2 雖已收 milestone，衍生待辦仍在各自 issue：**#214**（分析頁導覽重構，M5）、**#221/#224**（人員合併與
+管理頁，M3）、**#235**（side-out% 等比率統計，M5——資料已足夠，發球方可由 `sets.firstServer` 當種子
+逐分推導）、**#222**（`RosterEditDialog` 沒有去重 UX，從戰術板那條路徑新增的球員 `personId` 永遠 null）。
+**#218**（一場比賽「結束」的操作節點與畫面）——目前「結束比賽」只是導去分析頁的 `<Link>`，**最後一局
+不會被封存**（`completedSets` 只在按「下一局」時累積），是資料缺口不只是 UX 缺口。
 
 其餘 open 的技術債與待辦：
 **#168（引入 `@testing-library/react`）** ——現行 `renderToStaticMarkup` 慣例無法觸發事件、讀不到 Radix
@@ -221,6 +222,18 @@ serving≠null 但 record.lineup=null」那條路**，但真正的 reconcile 仍
 
 ### 開發 (aila)
 
+- **#174 Stage B**（資料夾統計格，07-28，**待 ship**）— 右欄兩塊：比賽選中時各局比分藥丸（吃已在手上的
+  `record.completedSets`，不多打 API），資料夾選中時「N 場 · X 勝 Y 敗 ＋ 總局數 ＋ 逐場清單」。
+  **單局統計格 PO 決定不做**（比分已在 `RotationRailPanel` 標題列）。彙總規則抽成
+  `lib/tournamentSummary.ts` 純函式並附測試，**刻意只吃自訂的最小形狀**（matchId/opponent/dateTime/
+  format/completedSets/setsPlayed/hasLineup）而非 `Match`/`MatchAnalysisSummary`——沿用 `matchOutcome.ts`
+  的哲學：排球規則不該反過來認識 API 回應長什麼樣。**「贏幾場」與「贏幾局」是兩個單位分開累加**，
+  未分勝負的比賽不計場次但局數照算，否則資料夾戰績會被打到一半的比賽灌水。`GET /analysis/matches`
+  沒有 `format` 欄位，靠 `MatchList.tsx:63` 既有的 `summaryByMatch` join 補（不新增 endpoint）。
+  **PO 當場抓到的錯**：初版只看 `winner === null` 就標「進行中」，連沒開打的比賽也被誤標；改成看
+  `setsPlayed`（後端 `count(*) filter (where first_server is not null)`＝真的開過球的局）＋`hasLineup`
+  推導五態 `won/lost/in_progress/lineup_only/not_started`，並用 `Record<Status, …>` 查表取代三元鏈
+  以拿到窮盡檢查。這次修正**只做在資料夾這一側**，與比賽列表的分歧已立 **#238**。
 - **PR #233 / #234**（`docs/adr/` 上線，07-28）— 見上方 Current state。**#184 同日關閉**（唯讀 hydrate
   hook）：範圍併進 #230，理由是只做讀那半的話，`useMatchRecording.ts:68-73` 那份手抄的讀路徑複本還活著
   ——它少傳 `lineups`/`timeouts` 兩個參數，**同一支 `reconstructRecording`、同一場比賽會給出兩個不同答案**

@@ -5,9 +5,16 @@ import { useMatchList, useMatchWithRoster } from "@/hooks/useMatches";
 import { useTournamentList } from "@/hooks/useTournaments";
 import { useRotationTable } from "@/hooks/useRotationTable";
 import { useScoreSheet, useScoreSheetController } from "@/hooks/useScoreSheet";
+import { useCrossMatchAnalysis } from "@/hooks/useCrossMatchAnalysis";
 import { readLineupFromRotations } from "@/lib/rotationLogic";
 import { getMatchWinner, winsNeededFor } from "@/lib/matchOutcome";
+import {
+  computeTournamentStats,
+  type TournamentMatchResult,
+  type TournamentMatchStatus,
+} from "@/lib/tournamentSummary";
 import type { LineupSnapshot } from "@/types/scoresheet";
+import type { Match } from "@/types/match";
 
 // 比賽列表（MatchList）／資料夾內頁（TournamentDetail）共用的「選取」語意（issue #174）。
 // 這兩個頁面的右欄內容完全一樣（同一個元件），差別只在資料夾內頁不會出現 kind:"tournament"
@@ -49,22 +56,22 @@ export default function MatchInfoRail({ selected }: MatchInfoRailProps) {
 
   if (selected.kind === "tournament") {
     const tournament = tournaments.find((t) => t.id === selected.id);
-    const matchCount = matches.filter((m) => m.tournamentId === selected.id).length;
+    const matchesInFolder = matches.filter((m) => m.tournamentId === selected.id);
     return (
-      <div className={`${RAIL_BASE_CLASS} gap-1 px-3 py-3`}>
-        <div className="flex items-center gap-2">
+      <div className={`${RAIL_BASE_CLASS} px-3 py-3`}>
+        <div className="flex shrink-0 items-center gap-2">
           <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-[#C6F135]/15 text-[#C6F135]">
             <Folder className="h-4 w-4" />
           </span>
           <div className="min-w-0">
             <h2 className="truncate text-sm font-bold">{tournament?.name ?? "資料夾"}</h2>
-            <p className="text-xs text-[#9AA08C]">{matchCount} 場比賽</p>
+            <p className="text-xs text-[#9AA08C]">{matchesInFolder.length} 場比賽</p>
           </div>
         </div>
-        {/* TODO(issue #174 Stage B)：資料夾層級的跨場統計（例如這個資料夾裡整體勝率、
-          球員上場時間矩陣之類）blocked on M2——那批統計欄位這裡故意不先發明，等 M2 把
-          統計口徑訂出來後再補。Stage A 先只做「這是哪個資料夾、裡面幾場比賽」這個最基本
-          的摘要佔位，讓右欄不會整個消失（issue 原文：「進資料夾後右欄就消失會很突兀」）。 */}
+        {/* issue #174 Stage B：資料夾層級的跨場戰績。拆成獨立元件（而不是直接在這裡算）
+          是為了讓 useCrossMatchAnalysis 只在真的需要（選到資料夾時）才掛，跟 kind==="match"
+          分支拆出 MatchRotationSection 的理由一樣。 */}
+        <TournamentStatsSection matches={matchesInFolder} />
       </div>
     );
   }
@@ -205,21 +212,161 @@ function MatchRotationSection({ matchId }: { matchId: string }) {
   }
 
   return (
-    <RotationRailPanel
-      lineup={lineup}
-      roster={match?.players ?? []}
-      rotation={clampedIndex}
-      axis="set"
-      readOnly={readOnly}
-      onLineupChange={onLineupChange}
-      onStep={(delta) =>
-        setManualSetIndex(Math.min(Math.max(clampedIndex + delta, 0), totalSets - 1))
-      }
-      canStepPrev={clampedIndex > 0}
-      canStepNext={clampedIndex < totalSets - 1}
-      title={isHydrating ? "場上站位（載入中…）" : "場上站位"}
-      setStatus={setStatus}
-      score={score}
-    />
+    <>
+      {/* issue #174 Stage B「統計格」：逐局藥丸，放在場上站位面板上方。刻意只讀
+        completedSets（這個元件已經透過上面的 useScoreSheetController 重建過整場資料），
+        不為此另外打一次 API——這正是拆出 MatchRotationSection 的理由之一（見上方
+        MatchInfoRail 的說明），這裡本來就手上有整場已完成局的資料。
+        completedSets 是空陣列時（連一局都還沒打完）整格不渲染：比賽都還沒開始，沒有
+        局比分可以看，硬要畫一排空藥丸只是雜訊。比賽進行中也會顯示到這裡（只是少幾顆），
+        這是刻意的——中途把已經打完的局藏起來反而奇怪，教練這時候更需要回顧前面幾局。 */}
+      {completedSets.length > 0 && (
+        <section
+          className="shrink-0 border-b border-white/[0.10] px-3 py-3"
+          data-testid="set-score-pills"
+        >
+          <h2 className="mb-2 text-sm font-bold text-[#F5F5F0]">各局比分</h2>
+          {/* flex + flex-1（而不是 flex-wrap）：局數最多只有 5 局（五戰三勝上限），
+            用 flex-1 讓每顆藥丸平分容器寬度，不管幾顆都剛好塞滿一整排，不會因為
+            局數變多而擠出 aside 的寬度需要橫向捲動。 */}
+          <div className="flex gap-1">
+            {completedSets.map((set, index) => {
+              // 顏色是這一局的勝負，不是文字——PO 原話「勝負用顏色表示」，藥丸本身
+              // 就是結果，不再疊一層「勝/敗」文字或加總分數製造多餘資訊。
+              const weWonThisSet = set.ourScore > set.opponentScore;
+              return (
+                <span
+                  key={index}
+                  className={`flex-1 rounded-full px-1 py-1 text-center text-[11px] font-bold tabular-nums ${
+                    weWonThisSet
+                      ? "bg-[#C6F135]/15 text-[#C6F135]"
+                      : "bg-white/[0.06] text-[#9AA08C]"
+                  }`}
+                >
+                  {set.ourScore}:{set.opponentScore}
+                </span>
+              );
+            })}
+          </div>
+        </section>
+      )}
+      <RotationRailPanel
+        lineup={lineup}
+        roster={match?.players ?? []}
+        rotation={clampedIndex}
+        axis="set"
+        readOnly={readOnly}
+        onLineupChange={onLineupChange}
+        onStep={(delta) =>
+          setManualSetIndex(Math.min(Math.max(clampedIndex + delta, 0), totalSets - 1))
+        }
+        canStepPrev={clampedIndex > 0}
+        canStepNext={clampedIndex < totalSets - 1}
+        title={isHydrating ? "場上站位（載入中…）" : "場上站位"}
+        setStatus={setStatus}
+        score={score}
+      />
+    </>
+  );
+}
+
+// ── 資料夾層級的統計格（issue #174 Stage B）──
+//
+// 拆成獨立元件的理由跟 MatchRotationSection 一樣：useCrossMatchAnalysis 這個 hook 只有
+// selected.kind === "tournament" 時才需要掛，拆出來才不用在 MatchInfoRail 本體就無條件呼叫它。
+function TournamentStatsSection({ matches }: { matches: Match[] }) {
+  const { summaries } = useCrossMatchAnalysis();
+  // summaries 的 matchId 是後端 serial（數字），domain Match.id 是字串形式，
+  // 轉成字串當 key 才能對得起來——跟 MatchList.tsx 的 summaryByMatch 是同一個轉換。
+  const summaryByMatch = new Map(summaries.map((s) => [String(s.matchId), s]));
+
+  // 把「這個資料夾底下每一場比賽」轉成 computeTournamentStats 要吃的最小形狀：
+  // 完整的勝負規則（怎麼算贏、局數怎麼加總）都收在 lib/tournamentSummary.ts 那支純函式，
+  // 這裡只負責兜資料，不重寫一次規則。
+  const stats = computeTournamentStats(
+    matches.map((m) => {
+      // 同一場比賽下面要讀三個欄位（completedSets/setsPlayed/hasLineup），先取一次存
+      // 起來，不要在物件字面量的三個欄位各自呼叫一次 summaryByMatch.get(m.id)——
+      // Map.get 雖然是 O(1)，但三次查找三份程式碼，改動時容易漏改其中一處。
+      const summary = summaryByMatch.get(m.id);
+      return {
+        matchId: m.id,
+        opponent: m.opponent,
+        dateTime: m.dateTime,
+        format: m.format,
+        // 查不到摘要（例如這場比賽還完全沒打過球）就當作沒有已完成局，跟 MatchList.tsx
+        // matchResultText 的 fallback 邏輯一致。
+        completedSets: summary?.setResults ?? [],
+        // 同樣道理：查不到摘要就當作沒開打過、也沒排過先發。
+        setsPlayed: summary?.setsPlayed ?? 0,
+        hasLineup: summary?.hasLineup ?? false,
+      };
+    }),
+  );
+
+  if (stats.matchCount === 0) {
+    return <p className="mt-3 shrink-0 text-xs text-[#9AA08C]">這個資料夾裡還沒有比賽</p>;
+  }
+
+  return (
+    <div className="mt-3 flex min-h-0 flex-1 flex-col">
+      <div className="shrink-0 space-y-1">
+        <p className="text-xs text-[#9AA08C]">
+          {stats.matchCount} 場 · {stats.ourWins} 勝 {stats.opponentWins} 敗
+        </p>
+        <p className="text-xs text-[#9AA08C]">
+          總局數{" "}
+          <span className="font-bold tabular-nums text-[#F5F5F0]">
+            {stats.totalOurSets} : {stats.totalOpponentSets}
+          </span>
+        </p>
+      </div>
+      <div className="my-2 shrink-0 border-t border-white/[0.10]" />
+      {/* 逐場清單獨立捲動，標題摘要固定不跟著捲——資料夾裡比賽一多，這塊清單可能比
+        aside 的高度長，不能把上面的摘要也一起推出視野外。 */}
+      <ul className="min-h-0 flex-1 space-y-1 overflow-y-auto pr-0.5">
+        {stats.matches.map((m) => (
+          <TournamentMatchRow key={m.matchId} match={m} />
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// 五種狀態對應的顏色跟文字（issue #174 Stage B）。第一版只看 winner === null 就一律顯示
+// 「進行中」，會把「排好先發但還沒開賽」「連先發都沒排」這兩種更早的狀態也誤標成
+// 「進行中」，所以改成看 status。跟 RotationRailPanel 的 SET_STATUS_META 同一套用色邏輯（歷史/已定案＝中性色、
+// 進行中＝天藍、我方贏＝萊姆綠），讓使用者在不同畫面看到同一種狀態時顏色是一致的；還沒
+// 開打的兩種狀態（已排先發／未開始）用同一種中性色再降一階透明度，跟「已經打完」的中性色
+// 拉出一點區隔，但不需要另外發明一種新顏色。
+//
+// won/lost 需要把這場的局比數（scoreText）插進文字裡，其他三種是固定文字，兩種情況沒辦法
+// 共用同一種「靜態字串」欄位。這裡選擇讓 label 一律是函式（就算 in_progress/lineup_only/
+// not_started 用不到參數也一樣），而不是「靜態字串 + 一個布林旗標」——因為呼叫端
+// （下面的 resultLabel）不用先判斷「這個狀態要不要吃分數」，直接呼叫 meta.label(scoreText)
+// 就好，少一層 if。
+const STATUS_META: Record<
+  TournamentMatchStatus,
+  { label: (scoreText: string) => string; className: string }
+> = {
+  won: { label: (scoreText) => `勝 ${scoreText}`, className: "text-[#C6F135]" },
+  lost: { label: (scoreText) => `敗 ${scoreText}`, className: "text-[#9AA08C]" },
+  in_progress: { label: () => "進行中", className: "text-sky-300" },
+  lineup_only: { label: () => "已排先發", className: "text-[#9AA08C]/70" },
+  not_started: { label: () => "未開始", className: "text-[#9AA08C]/70" },
+};
+
+// 逐場清單的一列：對手名 + 這場的戰績（勝/敗/進行中/已排先發/未開始，見上面 STATUS_META）。
+function TournamentMatchRow({ match }: { match: TournamentMatchResult }) {
+  const scoreText = `${match.ourSetWins}:${match.opponentSetWins}`;
+  const meta = STATUS_META[match.status];
+
+  return (
+    <li className="flex items-center justify-between gap-2 text-xs">
+      <span className="truncate text-[#F5F5F0]">{match.opponent}</span>
+      <span className={`shrink-0 font-bold tabular-nums ${meta.className}`}>
+        {meta.label(scoreText)}
+      </span>
+    </li>
   );
 }
