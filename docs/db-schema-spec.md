@@ -7,14 +7,15 @@
 ## 資料表關係
 
 ```
-People (跨場跨隊的一個「人」)          Team (球隊 / 分組標籤)
-    ▲ personId (可空)                     ▲ teamId (可空)
-    │                                     │
-Match (一場比賽) ────────── teamId ───────┘
+People (跨場跨隊的一個「人」)     Team (球隊 / 分組標籤)   Tournament (資料夾)
+    ▲ personId (可空)                ▲ teamId (可空)          ▲ tournamentId (可空)
+    │                                │                        │
+Match (一場比賽) ──────────────────┴────────────────────────┘
 ├── Player[]   一場比賽的名單列 ── personId ──▶ People
 └── Set[]      一局
-    ├── Lineup          這局的起始先發（一局一 row，六個號位）
+    ├── Lineup          這局的先發（一局一 row，六個號位）
     ├── Substitution[]  這局發生的換人（一般 / 自由球員）
+    ├── Timeout[]       這局叫的暫停
     └── Rally[]         一分（一個來回）
         └── Event[]     一球
 
@@ -27,11 +28,13 @@ Tactics (戰術板存檔)  ← 獨立那條線，比賽紀錄之前就存在
 | `players`       | `lib/db/src/schema/players.ts`       | 一場比賽的名單列，角色同前端 `PLAYER_ROLES`（S/OH/MB/OPP/L）；`personId`（可空 FK → `people`） |
 | `sets`          | `lib/db/src/schema/sets.ts`          | 局（最多 5 局），含 `firstServer`（home/away，重播輪轉的唯一種子）                             |
 | `lineups`       | `lib/db/src/schema/lineups.ts`       | 一局的起始先發，**一局一 row**（`setId` unique），六個 `zone{1..6}PlayerId` notNull FK         |
-| `substitutions` | `lib/db/src/schema/substitutions.ts` | 一次換人，`kind` = regular/libero，時機存**比分快照**（homeScore/awayScore），非 rallyId       |
+| `substitutions` | `lib/db/src/schema/substitutions.ts` | 一次換人，`kind` = regular/libero；**時機**存 homeScore/awayScore，非 rallyId                  |
+| `timeouts`      | `lib/db/src/schema/timeouts.ts`      | 一次暫停，只記哪一局/哪一方/**時機**（同上），不記時長                                         |
 | `rallies`       | `lib/db/src/schema/rallies.ts`       | 一分；記錄的是該分**開始前**的比分                                                             |
 | `events`        | `lib/db/src/schema/events.ts`        | 一球；`side`(home/away)、`outcome`(得/失/球續，可空)、座標對前端 viewBox (0~100 x 0~200)       |
 | `people`        | `lib/db/src/schema/people.ts`        | 跨場跨隊的唯一「人」身分（`id`/`userId`/`name`）——把散落各場的名單列串成同一個人               |
 | `teams`         | `lib/db/src/schema/teams.ts`         | 球隊 / 分組標籤（`id`/`userId`/`name`）——讓統計可以按隊切片                                    |
+| `tournaments`   | `lib/db/src/schema/tournaments.ts`   | **資料夾**——把多場比賽收在一起，沒有賽期/賽制等真實賽事語意（見 ADR-0004）                     |
 | `tactics`       | `lib/db/src/schema/tactics.ts`       | 戰術板存檔（站位/標記/防守範圍），與比賽紀錄各自獨立                                           |
 
 ## 為什麼這樣設計（非顯而易見的決定）
@@ -46,12 +49,14 @@ Tactics (戰術板存檔)  ← 獨立那條線，比賽紀錄之前就存在
 - **`events.tags` 用 Postgres 原生陣列型別**：預設標籤跟使用者自訂標籤都存進同一個欄位，不需要另外
   開一張標籤表、再用 join 查詢。
 - **`events.quality` 是 0~3 分**：沿用排球記錄慣例的評分刻度（0 = 直接失誤、3 = 完美到位），用來計算
-  「到位率」。門檻值（幾分以上算到位）目前未定案，見 [product-spec.md](./product-spec.md) 待確認事項。
+  「到位率」。門檻**暫定 ≥ 2 分算「到位」**（對齊 FIVB VIS 的 OK），仍待教練確認，見
+  [event-grammar-spec.md](./event-grammar-spec.md) 決策 9 與 [`CONTEXT.md`](../CONTEXT.md) 的「到位」。
 - **型別命名 `MatchSet` / `MatchEvent` 而不是 `Set` / `Event`**：避免跟 JavaScript 內建的 `Set`、
   瀏覽器內建的 DOM `Event` 撞名。
 
 ## 落地狀態
 
 以上所有表都已 `pnpm --filter @workspace/db run push` 到 dev DB，對應的後端 API routes 也全部
-實作完成（見 [api-spec.md](./api-spec.md)）。仍未做的是 schema 之上的**應用層**：`people`/`teams`
-的 openapi/codegen 與前端讀寫、建名單去重 UX、舊比賽回填身分——追蹤於 #65 後續階段與 #102 留言。
+實作完成（見 [api-spec.md](./api-spec.md)）。`people`/`teams` 的應用層也已落地：openapi/codegen、
+前端讀寫、建名單去重 UX、球員跨場/跨隊分析（#213）、比賽按隊切片（#208）都已交付。剩下的是舊比賽
+回填身分（既有名單列的 `personId` 仍是 null），追蹤於 #240。

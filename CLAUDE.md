@@ -55,8 +55,8 @@ docs/        specs and decision records
 - `PORT` — required by both the API server and the Vite frontends
 - `BASE_PATH` — required by the Vite frontends (used as the Vite `base`)
 
-No `.env.example` exists yet; these are documented only in code (`lib/db/src/index.ts`, `vite.config.ts`)
-and in `replit.md`.
+No `.env.example` exists yet. The human-facing list lives in `README.md`'s 「快速上手」 section (with a
+copy-pasteable `.env` block); the enforcing code is `lib/db/src/index.ts` and `vite.config.ts`.
 
 ## Current gaps (don't assume otherwise)
 
@@ -93,6 +93,12 @@ Windows while passing in CI.
   bump these independently.
 - `pnpm-workspace.yaml` enforces a 1-day minimum npm package release age as a supply-chain safeguard
   (`minimumReleaseAge`). Don't remove or bypass it when adding dependencies.
+- **Read `CONTEXT.md` (repo root) before writing docs, comments, or UI copy.** It is the domain
+  glossary: for each concept it names the one official term and lists the synonyms to stop using
+  (`_Avoid_`). Chinese wording in this repo drifted badly before it existed (簡易版/基礎版 for the
+  same mode, 陣容 meaning two different things), so match its vocabulary rather than inventing a
+  synonym. It is a glossary only — no implementation details, no status, no decisions (those go to
+  `docs/adr/`). When a new domain term gets pinned down mid-work, add it there as it happens.
 - **Read `docs/adr/` before proposing structural changes.** Those files record decisions that were
   already argued through and settled — each one ends with a「不要重新提議」section naming the
   approaches not to suggest again. Don't re-litigate them; if the friction is real enough to warrant
