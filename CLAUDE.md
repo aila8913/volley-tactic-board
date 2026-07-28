@@ -33,6 +33,8 @@ lib/         shared packages, imported by artifacts (not run directly)
   api-client-react/   generated — do not hand-edit, regenerate via codegen
   api-zod/            generated — do not hand-edit, regenerate via codegen
 scripts/     one-off TS scripts run via tsx
+docs/        specs and decision records
+  adr/                architecture decision records — read before proposing structural changes
 ```
 
 ## Commands
@@ -91,6 +93,13 @@ Windows while passing in CI.
   bump these independently.
 - `pnpm-workspace.yaml` enforces a 1-day minimum npm package release age as a supply-chain safeguard
   (`minimumReleaseAge`). Don't remove or bypass it when adding dependencies.
+- **Read `docs/adr/` before proposing structural changes.** Those files record decisions that were
+  already argued through and settled — each one ends with a「不要重新提議」section naming the
+  approaches not to suggest again. Don't re-litigate them; if the friction is real enough to warrant
+  reopening one, say so explicitly and cite the ADR rather than quietly proposing the thing it rules
+  out. When a decision gets overturned, add a new ADR and mark the old one `Superseded by ADR-NNNN` —
+  never edit or delete an accepted one. `docs/adr/README.md` has the judgement call for what earns
+  an ADR (roughly: it was overturned once, or the code invites changing it back).
 
 ## Team & collaboration rules
 
