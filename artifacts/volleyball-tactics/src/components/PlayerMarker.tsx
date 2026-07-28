@@ -17,6 +17,12 @@ interface PlayerMarkerProps {
   // 強調態（戰術板：被選取；計分表：目前發球）共用同一套放大＋加粗邊框＋發光的處理，
   // 讓兩邊「這個人現在特別重要」的視覺語言一致。
   emphasized?: boolean;
+  // 發光的模糊半徑，只有 emphasized 時有意義。預設 3（原始值）——白色/萊姆綠/橘色這些
+  // 有色相的顏色在這個模糊半徑下讀起來是柔光，效果一直都好；但同樣的數字套在紅色上
+  // （計分頁對手發球圈）反而太誇張，紅色改用 0.75。不同顏色需要不同模糊半徑才「看起來
+  // 舒服」是實機比較出來的結論，不是同一個數字打天下，所以開一個 prop 讓呼叫端各自決定，
+  // 不在這裡用 color 硬猜該套多少（那樣以後多一種顏色又要回來改這個元件）。
+  glowBlur?: number;
 }
 
 export default function PlayerMarker({
@@ -25,6 +31,7 @@ export default function PlayerMarker({
   color,
   radius = 6,
   emphasized = false,
+  glowBlur = 3,
 }: PlayerMarkerProps) {
   const r = emphasized ? radius + 1.5 : radius;
   return (
@@ -34,7 +41,7 @@ export default function PlayerMarker({
         fill="rgba(10, 11, 7, 0.62)"
         stroke={color}
         strokeWidth={emphasized ? 2 : 1.2}
-        style={emphasized ? { filter: `drop-shadow(0 0 3px ${color})` } : undefined}
+        style={emphasized ? { filter: `drop-shadow(0 0 ${glowBlur}px ${color})` } : undefined}
       />
       <text
         y="1.6"

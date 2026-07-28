@@ -24,7 +24,13 @@ interface RadialMenuProps<T extends string> {
   startAngle?: number;
 }
 
-const OFFSET = 56; // px，選項按鈕離中心點的距離
+// px，選項按鈕離中心點的距離。原本是固定 56——選項數固定 6 顆時夠用，但計分頁的動作
+// 選單現在會視情境多一顆「沒看到」變成 7 顆（見 pages/ScoreSheet.tsx），同一個半徑塞
+// 7 顆會比 6 顆擠（弧長變短）。改成隨選項數等比例放大：以 6 顆的弧長當基準，維持每顆
+// 按鈕之間的弧長大致不變，options.length ≤ 6 時（目前只有得/失分 2 顆、動作 6 顆兩種）
+// 算出來的半徑不會小於原本的 56，不影響既有選單。
+const BASE_OFFSET = 56;
+const BASE_OPTION_COUNT = 6;
 
 // 比賽期間快速操作用的圓形彈出選單：點在球場上的球員，選項會繞著他彈出來，
 // 不用開選單、不用捲動列表，單手點一下就能記一球（見 pages/ScoreSheet.tsx 的
@@ -37,6 +43,9 @@ export default function RadialMenu<T extends string>({
   startAngle = -90,
 }: RadialMenuProps<T>) {
   const step = 360 / options.length;
+  // Math.max 卡下限：選項比基準少（例如得/失分只有 2 顆）時維持原本的 56，不會縮水，
+  // 只有超過基準（例如動作選單多出「沒看到」變 7 顆）才會等比例放大。
+  const offset = Math.max(BASE_OFFSET, (BASE_OFFSET * options.length) / BASE_OPTION_COUNT);
 
   // 進場彈出動畫：選單一開，所有按鈕先疊在中心點（transform 只有置中、opacity:0），
   // 下一影格才把 mounted 翻成 true、transform 換成各自的最終方位——CSS transition
@@ -59,8 +68,8 @@ export default function RadialMenu<T extends string>({
     >
       {options.map((opt, i) => {
         const angle = ((startAngle + i * step) * Math.PI) / 180;
-        const dx = OFFSET * Math.cos(angle);
-        const dy = OFFSET * Math.sin(angle);
+        const dx = offset * Math.cos(angle);
+        const dy = offset * Math.sin(angle);
         // spring 感的 easing：CSS 沒有真的物理彈簧曲線，這條 cubic-bezier 最後一段會
         // 略為超出終點再彈回來，視覺上接近彈簧回彈；每顆鈕的 transition-delay 依 index
         // 錯開 20ms，六顆鈕會依序「爆」出去，而不是同時瞬間到位。
