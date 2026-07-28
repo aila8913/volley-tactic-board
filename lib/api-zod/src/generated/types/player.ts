@@ -13,4 +13,5 @@ export interface Player {
   name: string;
   number: number;
   role: PlayerRole;
+  personId: number | null;
 }

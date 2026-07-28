@@ -222,6 +222,66 @@ paths:
         "204":
           description: Deleted
 
+  /people:
+    get:
+      operationId: listPeople
+      tags: [people]
+      summary: List people (cross-match player identities, used for roster de-duplication)
+      responses:
+        "200":
+          description: List of people
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Person"
+    post:
+      operationId: createPerson
+      tags: [people]
+      summary: Create a person
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewPerson"
+      responses:
+        "201":
+          description: Created person
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Person"
+
+  /people/{personId}:
+    parameters:
+      - $ref: "#/components/parameters/PersonId"
+    patch:
+      operationId: updatePerson
+      tags: [people]
+      summary: Rename a person
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePerson"
+      responses:
+        "200":
+          description: Updated person
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Person"
+    delete:
+      operationId: deletePerson
+      tags: [people]
+      summary: Delete a person (unsets personId on any players linked to them; does not delete those roster rows or match history)
+      responses:
+        "204":
+          description: Deleted
+
   /matches/{matchId}/players:
     parameters:
       - $ref: "#/components/parameters/MatchId"
@@ -746,6 +806,29 @@ paths:
                 items:
                   $ref: "#/components/schemas/MatchAnalysisSummary"
 
+  # M2 分析頁「視圖③：球員跨場/跨隊分析」(#213)。跟 /analysis/matches 一樣是純讀的報表型聚合，
+  # 但這裡的聚合單位是「人」（people.id）而非「比賽」——把一個人跨越多場、可能跨隊的出賽紀錄、
+  # 各場背號/位置、觸球動作分布、先發局數全部彙整成一份，讓 people 這層「跨場身分」真的有地方
+  # 被用到（否則 #212 建的 people CRUD 只是白建一張表）。
+  #
+  # 刻意「資料真的支援的才做」：events.outcome（得分/失分）目前恆為 null（見上面 /rotations
+  # 的長註解，#51 待補），所以這裡不提供「這個人得幾分/失幾分」這種戰績類統計，只回傳
+  # action 次數分布這種真正有資料撐得住的欄位——不要用近似值假裝出精細數據。
+  /analysis/people/{personId}:
+    parameters:
+      - $ref: "#/components/parameters/PersonId"
+    get:
+      operationId: getPersonAnalysis
+      tags: [analysis]
+      summary: Get a cross-match/cross-team analysis for one person (appearances, action counts, sets started)
+      responses:
+        "200":
+          description: Aggregated cross-match stats for this person.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PersonAnalysis"
+
 components:
   parameters:
     MatchId:
@@ -812,6 +895,13 @@ components:
       required: true
       schema:
         type: integer
+    # person id 一樣是整數（serial）——跟 team 同理，見 lib/db/src/schema/people.ts。
+    PersonId:
+      name: personId
+      in: path
+      required: true
+      schema:
+        type: integer
 
   schemas:
     HealthStatus:
@@ -843,7 +933,13 @@ components:
           type: integer
         role:
           $ref: "#/components/schemas/PlayerRole"
-      required: [id, matchId, name, number, role]
+        # 這名單列對應到哪個跨場「真實身分」（見 lib/db/src/schema/people.ts 的 Person）。
+        # null 代表這個名單列還沒被對應到任何身分（例如剛建立、或使用者主動解除對應）。
+        # 一定會回這個欄位（放進 required），讓前端不用另外判斷 undefined vs null。
+        personId:
+          type: integer
+          nullable: true
+      required: [id, matchId, name, number, role, personId]
 
     NewPlayer:
       type: object
@@ -860,6 +956,10 @@ components:
           type: integer
         role:
           $ref: "#/components/schemas/PlayerRole"
+        # 選填：新增名單列時可以順便指定對應到哪個既有身分；不帶就是 null（尚未對應）。
+        personId:
+          type: integer
+          nullable: true
       required: [name, number, role]
 
     Tournament:
@@ -916,6 +1016,33 @@ components:
     UpdateTeam:
       type: object
       # 球隊目前也只有名稱可改；name 選填以保持 PATCH「只帶想改的」語意。
+      properties:
+        name:
+          type: string
+
+    # person＝跨比賽的「真實身分」（見 lib/db/src/schema/people.ts），用來讓同一個人在不同場次的
+    # 名單列（players）能被認出是同一人，之後才能做跨場統計。形狀跟 Team 一樣精簡：只有 id/name，
+    # 沒有 createdAt。
+    Person:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+      required: [id, name]
+
+    NewPerson:
+      type: object
+      # id 不收 client 生的（serial 由 DB 自動遞增），所以新增只需要 name。
+      properties:
+        name:
+          type: string
+      required: [name]
+
+    UpdatePerson:
+      type: object
+      # person 目前也只有名稱可改；name 選填以保持 PATCH「只帶想改的」語意。
       properties:
         name:
           type: string
@@ -1022,7 +1149,7 @@ components:
 
     UpdatePlayer:
       type: object
-      # 部分更新一名球員：三個欄位都是 optional，只帶想改的。
+      # 部分更新一名球員：欄位都是 optional，只帶想改的。
       properties:
         name:
           type: string
@@ -1030,6 +1157,11 @@ components:
           type: integer
         role:
           $ref: "#/components/schemas/PlayerRole"
+        # 選填、且 nullable：帶數字＝改對應到另一個身分；帶 null＝解除對應；
+        # 完全不帶這個欄位＝不動它。三種狀態都要能表達，所以不能只用「有沒有帶」二分。
+        personId:
+          type: integer
+          nullable: true
 
     # 這一局由哪一方先發球（home = 我方、away = 對方）。前端計分表的比分/輪轉/發球方
     # 都能從「先發方 + 各 rally 的 winner」重算，唯獨先發方推不出來，所以存在 set 上。
@@ -1181,6 +1313,91 @@ components:
           type: boolean
       required:
         [matchId, opponent, date, setsPlayed, ourPoints, opponentPoints, setResults, hasLineup]
+
+    # GET /analysis/people/{personId} 的一列：這個人在某支球隊（teamId，null＝未分類）
+    # 底下出賽了幾場——回答「這個人跨隊嗎、各隊各出賽幾場」。grain 是 match（見後端路由
+    # 註解的「拆成單一 grain 查詢」那段），所以這裡只彙總場數，不重複列出動作/局數細節。
+    PersonTeamBreakdown:
+      type: object
+      properties:
+        teamId:
+          type: integer
+          nullable: true
+        matchesPlayed:
+          type: integer
+      required: [teamId, matchesPlayed]
+
+    # GET /analysis/people/{personId} 的一列：這個人各種觸球動作（發/接/舉/攻/攔/防）的次數，
+    # 跨所有場次加總。grain 是 event（見後端路由註解），純粹數 events.action 的分布，
+    # 不含品質/得失分——那些欄位要嘛沒資料（outcome 恆 null）、要嘛跟這頁「一覽全貌」的
+    # 定位不符，留給單場分析頁（MatchAnalytics.tsx）做更細的攻防解讀。
+    PersonActionCount:
+      type: object
+      properties:
+        action:
+          $ref: "#/components/schemas/EventAction"
+        count:
+          type: integer
+      required: [action, count]
+
+    # GET /analysis/people/{personId} 的一列：這個人在某一場比賽裡的一筆名單列——背號、位置、
+    # 屬於哪支球隊。people 這層存在的意義正是「同一個人不同場可能不同背號/位置」，所以這裡
+    # 刻意保留逐場的原始名單列，而不是只回一個「目前」的背號/位置。playerId 讓前端能把這一列
+    # 跟該場比賽底下的其他資料（例如換人紀錄）對起來，雖然這頁目前用不到。
+    PersonAppearance:
+      type: object
+      properties:
+        matchId:
+          type: integer
+        opponent:
+          type: string
+        date:
+          type: string
+          format: date-time
+        teamId:
+          type: integer
+          nullable: true
+        playerId:
+          type: string
+          format: uuid
+        number:
+          type: integer
+        role:
+          $ref: "#/components/schemas/PlayerRole"
+      required: [matchId, opponent, date, playerId, number, role]
+
+    # GET /analysis/people/{personId} 的整體回應：一個人跨場/跨隊的彙總視圖（#213 視圖③）。
+    # matchesPlayed／setsStarted／teamBreakdown／actionCounts／appearances 分別來自後端
+    # 路由裡各自獨立的單一 grain 查詢（match／set／team+match／event／player row），在應用層
+    # 合併——理由跟 /analysis/matches 的長註解一樣：不同 grain 硬湊進同一支 SQL join 會被
+    # 笛卡兒積撐大，算出來的數字會是假的。
+    PersonAnalysis:
+      type: object
+      properties:
+        personId:
+          type: integer
+        name:
+          type: string
+        matchesPlayed:
+          type: integer
+        # 先發局數：lineups 六個號位（zone1~6）任一命中這個人在任一場的 playerId，
+        # 就算這一局他先發過。跨場加總，不分球隊。
+        setsStarted:
+          type: integer
+        teamBreakdown:
+          type: array
+          items:
+            $ref: "#/components/schemas/PersonTeamBreakdown"
+        actionCounts:
+          type: array
+          items:
+            $ref: "#/components/schemas/PersonActionCount"
+        appearances:
+          type: array
+          items:
+            $ref: "#/components/schemas/PersonAppearance"
+      required:
+        [personId, name, matchesPlayed, setsStarted, teamBreakdown, actionCounts, appearances]
 
     # 換人的種類，見 lib/db/src/schema/substitutions.ts 的 substitutionKindEnum 註解：
     # regular = 一般換人；libero = 自由球員上/下（規則上不算正式換人次數，但記錄結構相同）。

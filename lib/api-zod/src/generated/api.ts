@@ -200,6 +200,49 @@ export const DeleteTeamParams = zod.object({
 
 
 /**
+ * @summary List people (cross-match player identities, used for roster de-duplication)
+ */
+export const ListPeopleResponseItem = zod.object({
+  "id": zod.number(),
+  "name": zod.string()
+})
+export const ListPeopleResponse = zod.array(ListPeopleResponseItem)
+
+
+/**
+ * @summary Create a person
+ */
+export const CreatePersonBody = zod.object({
+  "name": zod.string()
+})
+
+
+/**
+ * @summary Rename a person
+ */
+export const UpdatePersonParams = zod.object({
+  "personId": zod.coerce.number()
+})
+
+export const UpdatePersonBody = zod.object({
+  "name": zod.string().optional()
+})
+
+export const UpdatePersonResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string()
+})
+
+
+/**
+ * @summary Delete a person (unsets personId on any players linked to them; does not delete those roster rows or match history)
+ */
+export const DeletePersonParams = zod.object({
+  "personId": zod.coerce.number()
+})
+
+
+/**
  * @summary List players for a match
  */
 export const ListPlayersParams = zod.object({
@@ -211,7 +254,8 @@ export const ListPlayersResponseItem = zod.object({
   "matchId": zod.number(),
   "name": zod.string(),
   "number": zod.number(),
-  "role": zod.enum(['S', 'OH', 'MB', 'OPP', 'L'])
+  "role": zod.enum(['S', 'OH', 'MB', 'OPP', 'L']),
+  "personId": zod.number().nullable()
 })
 export const ListPlayersResponse = zod.array(ListPlayersResponseItem)
 
@@ -227,7 +271,8 @@ export const CreatePlayerBody = zod.object({
   "id": zod.string().uuid().optional(),
   "name": zod.string(),
   "number": zod.number(),
-  "role": zod.enum(['S', 'OH', 'MB', 'OPP', 'L'])
+  "role": zod.enum(['S', 'OH', 'MB', 'OPP', 'L']),
+  "personId": zod.number().nullish()
 })
 
 
@@ -242,7 +287,8 @@ export const UpdatePlayerParams = zod.object({
 export const UpdatePlayerBody = zod.object({
   "name": zod.string().optional(),
   "number": zod.number().optional(),
-  "role": zod.enum(['S', 'OH', 'MB', 'OPP', 'L']).optional()
+  "role": zod.enum(['S', 'OH', 'MB', 'OPP', 'L']).optional(),
+  "personId": zod.number().nullish()
 })
 
 export const UpdatePlayerResponse = zod.object({
@@ -250,7 +296,8 @@ export const UpdatePlayerResponse = zod.object({
   "matchId": zod.number(),
   "name": zod.string(),
   "number": zod.number(),
-  "role": zod.enum(['S', 'OH', 'MB', 'OPP', 'L'])
+  "role": zod.enum(['S', 'OH', 'MB', 'OPP', 'L']),
+  "personId": zod.number().nullable()
 })
 
 
@@ -725,5 +772,37 @@ export const ListMatchAnalysisResponseItem = zod.object({
   "hasLineup": zod.boolean()
 })
 export const ListMatchAnalysisResponse = zod.array(ListMatchAnalysisResponseItem)
+
+
+/**
+ * @summary Get a cross-match/cross-team analysis for one person (appearances, action counts, sets started)
+ */
+export const GetPersonAnalysisParams = zod.object({
+  "personId": zod.coerce.number()
+})
+
+export const GetPersonAnalysisResponse = zod.object({
+  "personId": zod.number(),
+  "name": zod.string(),
+  "matchesPlayed": zod.number(),
+  "setsStarted": zod.number(),
+  "teamBreakdown": zod.array(zod.object({
+  "teamId": zod.number().nullable(),
+  "matchesPlayed": zod.number()
+})),
+  "actionCounts": zod.array(zod.object({
+  "action": zod.enum(['serve', 'receive', 'set', 'attack', 'block', 'dig']),
+  "count": zod.number()
+})),
+  "appearances": zod.array(zod.object({
+  "matchId": zod.number(),
+  "opponent": zod.string(),
+  "date": zod.coerce.date(),
+  "teamId": zod.number().nullish(),
+  "playerId": zod.string().uuid(),
+  "number": zod.number(),
+  "role": zod.enum(['S', 'OH', 'MB', 'OPP', 'L'])
+}))
+})
 
 

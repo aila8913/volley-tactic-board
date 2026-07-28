@@ -11,4 +11,5 @@ export interface UpdatePlayer {
   name?: string;
   number?: number;
   role?: PlayerRole;
+  personId?: number | null;
 }

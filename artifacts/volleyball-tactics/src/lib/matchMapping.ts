@@ -29,7 +29,7 @@ export function isoToLocalInput(iso: string): string {
 
 // ── DTO → domain ──
 export function serverPlayerToDomain(p: ApiPlayer): MatchPlayer {
-  return { id: String(p.id), name: p.name, number: p.number, role: p.role };
+  return { id: String(p.id), name: p.name, number: p.number, role: p.role, personId: p.personId };
 }
 
 export function serverMatchToDomain(m: ApiMatch, players: ApiPlayer[] = []): Match {
@@ -71,7 +71,15 @@ export interface RosterDiff {
 
 // next 用比 MatchPlayer 寬鬆的型別：表單裡新增的球員列沒有 id（id 為 undefined），
 // 只有既有球員才帶得到 String(serverId) 的 id。id 對不到 existing 就當新增。
-export type RosterInput = { id?: string; name: string; number: number; role: MatchPlayer["role"] };
+// personId 納入這個型別是為了讓 #213 的去重 UX（使用者按「是同一人」把某列對應到既有身分）
+// 能透過 diffRoster 正確地被歸類成「需要更新」，而不是被當成沒變化而漏送。
+export type RosterInput = {
+  id?: string;
+  name: string;
+  number: number;
+  role: MatchPlayer["role"];
+  personId: number | null;
+};
 
 export function diffRoster(existing: MatchPlayer[], next: readonly RosterInput[]): RosterDiff {
   const existingById = new Map(existing.map((p) => [p.id, p]));
@@ -89,6 +97,7 @@ export function diffRoster(existing: MatchPlayer[], next: readonly RosterInput[]
         name: p.name,
         number: p.number,
         role: p.role,
+        personId: p.personId,
         ...(p.id !== undefined && { id: p.id }),
       });
       continue;
@@ -97,10 +106,18 @@ export function diffRoster(existing: MatchPlayer[], next: readonly RosterInput[]
     // playerId 用 prev.id（MatchPlayer.id 型別上保證是 string）而不是 p.id：
     // TS 沒辦法把上面那行的 ternary narrowing 帶到這裡，p.id 在這裡型別仍是 string | undefined，
     // 但既然對得到 prev，代表 p.id 當初一定有值、且等於 prev.id，用 prev.id 等價又不用斷言。
-    if (prev.name !== p.name || prev.number !== p.number || prev.role !== p.role) {
+    // personId 也要納入比較——這正是「使用者按下『是同一人』」這個動作在資料上的樣子：
+    // 名字/背號/位置都沒變，只有 personId 從 null 變成某個 id，若漏比對這欄，這個動作
+    // 就會被 diffRoster 判定成「沒有變化」而整個消失，使用者等於按了等於沒按。
+    if (
+      prev.name !== p.name ||
+      prev.number !== p.number ||
+      prev.role !== p.role ||
+      prev.personId !== p.personId
+    ) {
       toUpdate.push({
         playerId: prev.id,
-        data: { name: p.name, number: p.number, role: p.role },
+        data: { name: p.name, number: p.number, role: p.role, personId: p.personId },
       });
     }
   }

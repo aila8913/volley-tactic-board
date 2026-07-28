@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { useForm, useFieldArray } from "react-hook-form";
+import { useForm, useFieldArray, useWatch, type UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Trash2 } from "lucide-react";
+import { Trash2, X } from "lucide-react";
+import type { Person } from "@workspace/api-client-react";
 import {
   Dialog,
   DialogContent,
@@ -29,6 +30,7 @@ import {
 } from "@/components/ui/select";
 import { useCreateMatch, useUpdateMatch, useMatchWithRoster } from "@/hooks/useMatches";
 import { useTeamList, useCreateTeam } from "@/hooks/useTeams";
+import { usePersonList, useCreatePerson } from "@/hooks/usePeople";
 import {
   Match,
   matchFormSchema,
@@ -44,13 +46,74 @@ const emptyDefaults: MatchFormValues = {
   // 預設三戰兩勝：跟 DB 的 default("best_of_3") 呼應（見 lib/db/src/schema/matches.ts）——
   // 系隊/校隊的練習賽、盃賽初賽多半是三戰兩勝，新增比賽表單第一次打開時直接對準最常見情境。
   format: "best_of_3",
-  players: [{ name: "", number: 0, role: "S" }],
+  players: [{ name: "", number: 0, role: "S", personId: null }],
 };
 
 // 球隊下拉的兩個特殊值。Radix Select 不允許 SelectItem 用空字串當 value（會丟錯），
 // 所以「未指定」用一個 sentinel 字串，而不是 ""。"__new__" 是「臨時建一支新球隊」那一列。
 const TEAM_NONE = "__none__";
 const TEAM_NEW = "__new__";
+
+// 球員名單去重 UX（#213）：在姓名輸入框下方，比對這一列的姓名跟既有的 people（跨場身分）
+// 是否「trim 後不分大小寫完全相同」。
+//   - 還沒對應到任何人、且比對到同名的既有身分 → 顯示建議 chip，要使用者親自按「是同一人」
+//     才會寫入 personId。絕不自動綁定：自動綁對了省一步，綁錯了會把兩個不同人的生涯數據
+//     混在一起，而且事後很難發現，所以這一步一定要使用者明示。
+//   - 已經對應到某個人 → 顯示「已對應：XXX」＋一個可以解除的 ✕（解除＝把 personId 設回 null）。
+//   - 沒對到、也還沒對應過 → 什麼都不顯示，保持名單編輯的清爽。
+function PlayerRosterMatchHint({
+  form,
+  index,
+  people,
+}: {
+  form: UseFormReturn<MatchFormValues>;
+  index: number;
+  people: Person[];
+}) {
+  // useWatch 而不是直接讀 form.getValues：要讓這個提示隨著使用者打字/按鈕即時更新，
+  // 而 react-hook-form 預設不會因為某個欄位變動就重繪整個表單（那樣效能太差），
+  // 訂閱特定欄位才能拿到「這欄變了就重繪我」的效果。
+  const name = useWatch({ control: form.control, name: `players.${index}.name` });
+  const personId = useWatch({ control: form.control, name: `players.${index}.personId` });
+
+  if (personId != null) {
+    const matched = people.find((p) => p.id === personId);
+    return (
+      <div className="flex items-center gap-1 pl-1 text-xs text-muted-foreground">
+        <span>已對應：{matched?.name ?? `#${personId}`}</span>
+        <button
+          type="button"
+          onClick={() => form.setValue(`players.${index}.personId`, null, { shouldDirty: true })}
+          className="rounded-sm hover:text-destructive"
+          aria-label="解除對應"
+        >
+          <X className="h-3 w-3" />
+        </button>
+      </div>
+    );
+  }
+
+  const trimmed = name?.trim() ?? "";
+  if (!trimmed) return null;
+
+  const candidate = people.find((p) => p.name.trim().toLowerCase() === trimmed.toLowerCase());
+  if (!candidate) return null;
+
+  return (
+    <div className="flex items-center gap-2 pl-1 text-xs text-muted-foreground">
+      <span>這是先前記錄過的「{candidate.name}」嗎？</span>
+      <button
+        type="button"
+        onClick={() =>
+          form.setValue(`players.${index}.personId`, candidate.id, { shouldDirty: true })
+        }
+        className="rounded border border-input px-1.5 py-0.5 text-foreground hover:bg-accent"
+      >
+        是同一人
+      </button>
+    </div>
+  );
+}
 
 interface MatchFormDialogProps {
   open: boolean;
@@ -82,6 +145,11 @@ export default function MatchFormDialog({
   const createTeam = useCreateTeam();
   const [teamSelection, setTeamSelection] = useState<string>(TEAM_NONE);
   const [newTeamName, setNewTeamName] = useState("");
+
+  // 跨場身分（Person）列表，給名單去重 UX 比對「這個名字是不是先前記錄過的某個人」用；
+  // 也給 onSubmit 在送出時「幫還沒對應的名單列自動建一個新身分」用。
+  const { people } = usePersonList();
+  const createPerson = useCreatePerson();
 
   // 編輯模式才需要抓「伺服器目前的完整名單」——用來預填表單、也用來讓儲存時算出名單差異
   // （新增/修改/刪除哪些球員）。列表傳進來的 match 只有身份、沒有名單（避免列表 N+1）。
@@ -126,10 +194,28 @@ export default function MatchFormDialog({
         teamId = Number(teamSelection);
       }
 
+      // 名單去重（#213）：「合併到既有身分」只能由使用者在上面按「是同一人」明確指定
+      // （見 PlayerRosterMatchHint），這裡絕不自己猜著合併。但送出時如果某列還是沒有
+      // personId，就自動幫他建一個新的 person 並綁上——這個不對稱是刻意的：
+      //   - 建新身分永遠安全：最壞情況只是同一個人多了一筆待合併的身分，
+      //     資料還是對的，只是分散在兩個 id 底下，之後仍可人工合併回來。
+      //   - 自動合併到既有身分不安全：一旦猜錯人，兩個不同人的生涯數據就會被混在一起，
+      //     而且事後很難發現、很難修正。
+      // 所以「建新」可以是預設值，「合併」必須使用者明示——跟 #215 那條「合理預設值 vs
+      // 沉默的錯誤答案」是同一條判準：這裡敢給預設，正是因為預設的方向不會產生錯誤答案。
+      const playersWithPersonId = await Promise.all(
+        values.players.map(async (p) => {
+          if (p.personId != null) return p;
+          const personId = await createPerson(p.name);
+          return { ...p, personId };
+        }),
+      );
+      const resolvedValues: MatchFormValues = { ...values, players: playersWithPersonId };
+
       if (match) {
-        await updateMatch(Number(match.id), values, existingPlayers, teamId);
+        await updateMatch(Number(match.id), resolvedValues, existingPlayers, teamId);
       } else {
-        await createMatch(values, tournamentId, teamId);
+        await createMatch(resolvedValues, tournamentId, teamId);
       }
       onOpenChange(false);
     } catch {
@@ -233,69 +319,73 @@ export default function MatchFormDialog({
             <div className="space-y-3">
               <Label>球員名單</Label>
               {fields.map((field, index) => (
-                <div key={field.id} className="flex items-start gap-2">
-                  <FormField
-                    control={form.control}
-                    name={`players.${index}.name`}
-                    render={({ field }) => (
-                      <FormItem className="flex-1">
-                        <FormControl>
-                          <Input placeholder="球員姓名" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name={`players.${index}.number`}
-                    render={({ field }) => (
-                      <FormItem className="w-20">
-                        <FormControl>
-                          <Input type="number" placeholder="背號" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name={`players.${index}.role`}
-                    render={({ field }) => (
-                      <FormItem className="w-28">
-                        <Select onValueChange={field.onChange} value={field.value}>
+                <div key={field.id} className="space-y-1">
+                  <div className="flex items-start gap-2">
+                    <FormField
+                      control={form.control}
+                      name={`players.${index}.name`}
+                      render={({ field }) => (
+                        <FormItem className="flex-1">
                           <FormControl>
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
+                            <Input placeholder="球員姓名" {...field} />
                           </FormControl>
-                          <SelectContent>
-                            {PLAYER_ROLES.map((role) => (
-                              <SelectItem key={role} value={role}>
-                                {role}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    disabled={fields.length <= 1}
-                    onClick={() => remove(index)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name={`players.${index}.number`}
+                      render={({ field }) => (
+                        <FormItem className="w-20">
+                          <FormControl>
+                            <Input type="number" placeholder="背號" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name={`players.${index}.role`}
+                      render={({ field }) => (
+                        <FormItem className="w-28">
+                          <Select onValueChange={field.onChange} value={field.value}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {PLAYER_ROLES.map((role) => (
+                                <SelectItem key={role} value={role}>
+                                  {role}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      disabled={fields.length <= 1}
+                      onClick={() => remove(index)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  {/* 這一列的同名對應提示／已對應狀態，見 PlayerRosterMatchHint 上方註解。 */}
+                  <PlayerRosterMatchHint form={form} index={index} people={people} />
                 </div>
               ))}
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => append({ name: "", number: 0, role: "S" })}
+                onClick={() => append({ name: "", number: 0, role: "S", personId: null })}
               >
                 新增球員
               </Button>
