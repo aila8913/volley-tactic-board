@@ -39,7 +39,7 @@ openvolley 全部功能其實是一條資料管線的四段：
 | `vscoututils`                    | R      | scout 檔的工具函式                                                                          | 內部支援套件                                                                                                                                 |
 | `auvolley`                       | R      | Athletes Unlimited 計分制                                                                   | 特殊賽制，略                                                                                                                                 |
 
-**啟示**：不必自創分類法，挑 DataVolley 欄位中對系隊有意義的子集落地即可（基礎版先 skill_type +
+**啟示**：不必自創分類法，挑 DataVolley 欄位中對系隊有意義的子集落地即可（簡易版先 skill_type +
 evaluation + phase）。座標用三點 start/mid/end 表達弧線，回答了 #21「直線 vs 曲線」。
 
 ## ③ 統計／分析 —— 對照我們的 #65 分析頁
@@ -54,7 +54,7 @@ evaluation + phase）。座標用三點 start/mid/end 表達弧線，回答了 #
 **openvolley 統計功能全景（由淺到深）：**
 
 1. **各技術基礎統計**（每球員/隊/局）：攻擊效率(kill−err−blocked/總數)、kill%、接發到位率/完美率、
-   發球 ace/err、攔網、舉球分配、防守。→ 我們的**基礎版**該有。
+   發球 ace/err、攔網、舉球分配、防守。→ 我們的**簡易版**該有。
 2. **依情境切分**：Sideout(接發輪) vs Breakpoint(發球輪)、一攻 vs 反擊(transition)、依輪轉/setter
    位置拆。→ 殺手級維度（「哪一輪、哪個情境在漏分」），值得抄。
 3. **空間視覺化統計**：落點 heatmap、cone plot(攻擊球線扇形)、zone/subzone 落點、線段軌跡。

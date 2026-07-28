@@ -22,9 +22,9 @@
 > 平行 PR 就落在不同行段、git 幾乎都能自動合併，不用真的把檔案拆兩份、也保住一眼 catch-up。
 > 上面的 `_Last updated_` 是共用一行摘要（誰更新了什麼），保持精簡、別長成段落。
 
-\_Last updated: 2026-07-28 (aila) — #174 Stage B（資料夾統計格）實作完成待 ship；roadmap 收束：M2 milestone
-關閉、M1.5 只剩 #176 已移 M3、孤兒 issue #199/#218 歸位、新開 #238；同日稍早 `docs/adr/` 上線與架構掃描
-八張（#225–#232）。\_
+\_Last updated: 2026-07-28 (aila) — 領域詞彙表 `CONTEXT.md`＋ADR-0004 上線、三個入口掛勾、刪 `replit.md`
+與過期 ERD、新開 #240（回填 personId）；同日稍早 #174 Stage B 待 ship、roadmap 收束、`docs/adr/` 上線與
+架構掃描八張（#225–#232）。\_
 
 ## Current state
 
@@ -57,7 +57,9 @@ lives in git log + the issues named).
   （`docs/*-spec.md`、issue 留言）值得維護，「描述程式碼現在怎麼跑」的衍生文件不值得**——它註定
   落後，而落後時**主動誤導**（#163 整張 issue 就在處理這件事：它描述的 API 不是「舊」而是已被刪除，
   照著讀會實作出一條被 CI 焊死禁止的資料流）。onboarding 入口改成「跑起來自己點一遍」＋
-  `docs/requirements-pattern-language.md`。
+  `docs/requirements-pattern-language.md`。**同判準於 07-28 再砍一份：`docs/match-recording-erd.html`
+  （582 行手繪 ERD）只畫 6 張表，實際 schema 已有 13 張——它獨有的推論早就寫進
+  `backend-architecture.md` 本文，刪掉不損失資訊。**
 - **版面規格立法：`docs/layout-spec.md`**（2048×1440 畫布換算表、三欄骨架、四種模式 A/B/C/D）。
   **分工判準：版面聽 layout-spec.md、視覺聽 design-spec.md。** M1.5 拆成環 0–6（#172–#178）。
   - **環 1（#172，已關）**：`components/AppShell.tsx` 成為三欄骨架的唯一擁有者，各頁只往插槽
@@ -123,6 +125,15 @@ lives in git log + the issues named).
   回跳閉環取消（#76）、ADR-0003 rally 輪次物化成欄位（#76 ①，**違反「衍生值別存」的一般預設**，故最
   需要留理由）。每張末尾有「不要重新提議」小節，CLAUDE.md 已加規則指向這裡。**規矩：已 Accepted 的
   不改不刪，被推翻時新增一張並把舊的標 `Superseded by ADR-NNNN`。**
+- **領域詞彙表上線＝根目錄 `CONTEXT.md`（07-28）＋ADR-0004。** 每個概念釘一個官方用詞＋`_Avoid_`
+  同義詞清單（記錄模式叫「簡易版」不叫「基礎版」；歧義的「陣容」一律拆成「先發」與「在場六人」；
+  「輪次」1–6，`rallies.homeRotation` 的 0-based 只是實作細節）。ADR-0004 把 `tournaments` 定義成
+  **資料夾**——不加賽期/主辦/賽制/名次欄位，表名也不改。CLAUDE.md／README.md／`docs/spec-index.md`
+  三個入口都已指向它。**判準值得記住：詞彙表管的是概念層，機制層的詞不能順手一起禁掉**——「時機」
+  （換人/暫停何時發生）與「比分快照」（它存成 homeScore/awayScore 而非 rallyId）是兩層，原本把後者
+  列入 `_Avoid_`，等於讓那個不可逆設計決策沒詞可講，已改成兩者並存。
+  同日順手清掉的過期物：`replit.md`（與 CLAUDE.md 重複且已開始說謊）、`index.html` 三處
+  `built on Replit` placeholder meta（`robots: index,follow`，會被搜尋引擎收錄）＋`lang="en"`。
 - **架構掃描（`improve-codebase-architecture`）產出 #225–#232，兩個新 milestone。** 掃描依 git log
   熱點（計分／戰術板／輪轉、api-server routes、analysis）。**M2.5 收斂重複規則**（8/2）＝三張 Strong：
   #226 得分/輪轉規則現有四份實作＋第五份存在 DB 欄位、#227 球場座標（`*100/*200` 內嵌 12 處、CTM 換算

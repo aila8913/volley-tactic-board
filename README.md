@@ -8,6 +8,14 @@
 [`docs/requirements-pattern-language.md`](docs/requirements-pattern-language.md)；做 UI/UX 的人
 從 [`docs/design-spec.md`](docs/design-spec.md) 開始。
 
+**要動筆之前先看兩份：**
+
+- [`CONTEXT.md`](CONTEXT.md)——領域詞彙表。這個專案的排球術語有一份官方用詞（例如記錄模式叫
+  「簡易版」不叫「基礎版」；「陣容」一律拆成「先發」與「在場六人」）。寫文件、註解、UI 文案時
+  照這份用，不要自己另創同義詞。
+- [`docs/adr/`](docs/adr/)——架構決策紀錄。每一張都是已經吵完拍板的決定，結尾有「不要重新提議」
+  一節。覺得某個設計很怪、想改掉之前，先確認它是不是已經有 ADR 講過為什麼不能改回去。
+
 （曾經有一份 `docs/flow-diagrams.html` 畫三個畫面的操作流程與狀態機，2026-07-21 移除——它描述的是
 「程式碼現在的行為」，而那種衍生文件只會落後、落後時還會主動誤導人實作出已被禁止的資料流。行為以
 程式碼為準，決策理由住在 `docs/*-spec.md` 與 GitHub issue。）

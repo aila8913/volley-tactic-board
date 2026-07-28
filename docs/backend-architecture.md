@@ -4,7 +4,7 @@
 > `lib/api-spec/openapi.yaml`（API 合約）跟 `lib/db/src/schema/*.ts`（DB schema）；
 > 這份文件補的是它們之間的**取捨、落差、跟落地順序**。相關文件：
 > [api-spec.md](./api-spec.md)（endpoint 導覽）、[db-schema-spec.md](./db-schema-spec.md)
-> （資料表關係）、[match-recording-erd.html](./match-recording-erd.html)（events 表共用 schema 的 ERD）。
+> （資料表關係）。
 
 > **狀態（2026-07-11）：本藍圖的 Phase 0–3 已全部完成，#58 已關。** 下面的「現況：三層模型的落差」
 > 描述的是**動工前的起點**（保留下來是為了理解為什麼要分階段），不是現在的狀態。現在三層已打通、
@@ -47,11 +47,11 @@
 
 ### events 表原本裝不下簡易版資料（已在 Phase 0 修掉）
 
-`docs/match-recording-erd.html` 早就預判到：簡易版 ScoreSheet 的「對手(全體)」動作沒有球員可指、
+Phase 0 之前就預判到的問題：簡易版 ScoreSheet 的「對手(全體)」動作沒有球員可指、
 「沒看到」路徑不記座標，但 events 表原本 `playerId` 與 `fromX/Y/toX/Y` 都是 notNull，而且沒有欄位
 能區分「這球是我方還對方執行的」（`rallies.winner` 是「誰得分」，跟「誰做這球動作」是兩回事）。
 
-**修法（照 ERD）：** 加 `events.side`（home/away, notNull）、把 `playerId` 與四個座標改 nullable。
+**修法：** 加 `events.side`（home/away, notNull）、把 `playerId` 與四個座標改 nullable。
 
 ## 分階段落地計畫
 

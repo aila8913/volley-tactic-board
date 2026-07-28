@@ -1283,8 +1283,8 @@ components:
     #
     # setResults：只含「已結束局」(排除進行中的最後一局)，鏡射前端 reconstructRecording
     # 的「最後一局＝進行中、其餘＝已結束」慣例，讓卡片顯示的局比數跟點進去計分頁後一致。
-    # hasLineup：這場是否已有任一局凍結過先發陣容(lineups 表有 row)，給卡片決定要不要亮
-    # 「尚未排先發」黃標。注意輪轉表上「排好但還沒開賽」的暫存陣容不進 DB(見
+    # hasLineup：這場是否已有任一局凍結過先發(lineups 表有 row)，給卡片決定要不要亮
+    # 「尚未排先發」黃標。注意輪轉表上「排好但還沒開賽」的暫存站位不進 DB(見
     # useRotationTable.ts 的 partialize)，所以 server 只認已凍結進 lineups 的那種。
     MatchAnalysisSummary:
       type: object

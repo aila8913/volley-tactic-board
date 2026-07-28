@@ -12,8 +12,9 @@ import { peopleTable } from "./people";
 // 不用每個地方都手動檢查。
 export const playerRoleEnum = pgEnum("player_role", ["S", "OH", "MB", "OPP", "L"]);
 
-// 球員名單掛在「比賽」底下，不是獨立的「球隊」實體 —— 同一支隊伍每場比賽的先發/名單都可能不同，
-// 目前不需要跨比賽共用球員資料，所以先用最簡單的模型。
+// 名單掛在「比賽」底下，不是獨立的「球隊」實體 —— 同一支隊伍每場比賽的先發/名單都可能不同。
+// 一筆 players = 「某場比賽名單上的一列」（這場的背號與位置）；跨比賽「這是同一個人」
+// 靠 personId 指回 people（見 people.ts、CONTEXT.md 的「人 / 球員」）。
 export const playersTable = pgTable("players", {
   // id 從自動遞增整數（serial）改成 uuid：讓「前端」也能自己生一個 id，而不是永遠要等後端
   // insert 完、拿到 DB 配的號碼才知道這個球員的 id 是誰。

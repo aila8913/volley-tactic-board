@@ -7,7 +7,8 @@ import { z } from "zod/v4";
 // people 才是跨比賽、跨球隊「這是同一個人」的錨點 —— 之後要做「這個人打了幾場」
 // 「這個人跨隊的生涯數據」（#65 視圖二、視圖三規劃的球員個人分析）時，
 // 就是靠 players.personId 指回同一筆 people，把散落在各場比賽的紀錄串起來。
-// 目前先建表但還不強制使用（players.personId 是 nullable），前端也還沒接。
+// players.personId 維持 nullable（不強制綁人，隨手建的名單不必先想身分），
+// 但前端已接：名單去重與跨場/跨隊球員分析（#213）就是靠它串的。
 export const peopleTable = pgTable("people", {
   id: serial("id").primaryKey(),
   // 跟 matches 一樣，mock auth 階段固定存 "mock-user-001"，之後換成真正的 JWT sub。
