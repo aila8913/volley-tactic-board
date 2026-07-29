@@ -32,6 +32,7 @@ import type {
   CompletedSet,
   LineupSnapshot,
 } from "../types/scoresheet";
+import { applyRally, applyRegularSub, splitCompletedAndCurrent } from "./volleyballRules";
 
 // ── us/opponent ↔ home/away ──
 // 後端所有計分相關的表（rallies.winner、events.side、sets.firstServer）都用 home/away，
@@ -157,37 +158,39 @@ export function reconstructSetFromRallies(
 
   const sorted = [...rallies].sort((a, b) => a.rallyNumber - b.rallyNumber);
 
-  // server 一路追「目前發球方」：從先發方起算，每分結束後由這分的贏家發下一球。
-  let server: Side = apiToSide(apiSet.firstServer);
-  let ourScore = 0;
-  let opponentScore = 0;
-  let ourRotation = 0;
-  let opponentRotation = 0;
+  // 用 lib/volleyballRules.ts 的 applyRally 逐分重放，取代這裡以前手寫的一份「side-out
+  // 才輪轉」邏輯——跟 useScoreSheet.ts 的 scorePoint 現在共用同一個純函式，兩邊規則
+  // 保證同步（見 volleyballRules.ts 開頭的說明；volleyballRules.test.ts 有 live/replay
+  // parity 測試釘住這件事）。ruleState 從先發方起算，每分結束後更新成 applyRally 回傳的新值。
+  let ruleState = {
+    ourScore: 0,
+    opponentScore: 0,
+    serving: apiToSide(apiSet.firstServer),
+    ourRotation: 0,
+    opponentRotation: 0,
+  };
   const history: PointRecord[] = [];
 
   for (const rally of sorted) {
     const winnerSide = apiToSide(rally.winner);
-    const wasSideOut = winnerSide !== server;
-    if (wasSideOut && winnerSide === "us") ourRotation = (ourRotation + 1) % 6;
-    if (wasSideOut && winnerSide === "opponent") opponentRotation = (opponentRotation + 1) % 6;
+    const { state: nextRuleState, wasSideOut } = applyRally(ruleState, winnerSide);
 
     const events = eventsByRallyId?.get(rally.id);
     const meta = events && events.length > 0 ? eventToMeta(events[0]) : undefined;
     history.push({ side: winnerSide, wasSideOut, serverId: rally.id, ...meta });
 
-    if (winnerSide === "us") ourScore++;
-    else opponentScore++;
-    server = winnerSide;
+    ruleState = nextRuleState;
   }
 
   return {
     setNumber: apiSet.setNumber,
-    ourScore,
-    opponentScore,
-    // 沒有任何 rally 時 server 還是先發方，發球方就是先發方；有 rally 時是最後一分的贏家。
-    serving: server,
-    ourRotation,
-    opponentRotation,
+    ourScore: ruleState.ourScore,
+    opponentScore: ruleState.opponentScore,
+    // 沒有任何 rally 時 ruleState.serving 還是先發方（迴圈沒跑，初始值原封不動），
+    // 有 rally 時是最後一分的贏家（applyRally 每次都把 serving 設成贏家）。
+    serving: ruleState.serving,
+    ourRotation: ruleState.ourRotation,
+    opponentRotation: ruleState.opponentRotation,
     history,
     serverId: apiSet.id,
   };
@@ -218,11 +221,10 @@ export function regularSubToApi(
 // 換過幾次人就有幾筆。但 UI 的 regularSubs 是「淨疊加」（見 types/scoresheet.ts 的註解）：
 // 只關心「現在」場上實際站的是誰，不是完整的換人流水帳。
 // 所以重建時要照發生順序（呼叫端已依 homeScore/awayScore 排序，等同時間順序）「重放」
-// 一次 ScoreSheet.handleRegularSub 當初做的同一套 dedup 邏輯：每次換人都先把「(舊)inPlayerId
-// 剛好等於這次 outPlayerId」的舊紀錄濾掉，再把這筆新紀錄接上去。
-// 這樣 A 被換成 B、B 又被換成 C 時，會先把「out:A,in:B」那筆濾掉（因為它的 in=B=這次的
-// out），只留下「out:A,in:C」——最終結果永遠是「原本場上是誰、現在場上是誰」，
-// 不會纍積出一串中間過程。
+// 一次淨疊加摺疊——這套摺疊邏輯本體現在是 lib/volleyballRules.ts 的 applyRegularSub，
+// 跟 useScoreSheet.ts 的 recordRegularSub 共用同一份實作，不再是兩邊各寫一份、靠註解
+// 提醒手動同步。連鎖換人（A→B 之後又 B→C）摺疊出來的確切結果、以及它跟直覺不一致的地方，
+// 見 applyRegularSub 的函式註解，不在這裡重複一份（重複的下場就是這次要修的病）。
 // 只處理 kind==='regular'（libero 上下場的重建是 #43 的範圍，不能混進一般換人清單）；
 // playerInId/playerOutId 為 null 的 regular row 理論上不會出現（一般換人一定知道誰換誰），
 // 保險起見直接跳過、不讓它污染清單。
@@ -233,8 +235,7 @@ export function reconstructRegularSubs(subs: Substitution[]): RegularSub[] {
     if (s.playerInId == null || s.playerOutId == null) continue;
     const inPlayerId = String(s.playerInId);
     const outPlayerId = String(s.playerOutId);
-    const cleaned = result.filter((r) => r.inPlayerId !== outPlayerId);
-    result = [...cleaned, { outPlayerId, inPlayerId }];
+    result = applyRegularSub(result, { outPlayerId, inPlayerId });
   }
   return result;
 }
@@ -388,13 +389,24 @@ export function reconstructRecording(
     return emptyRecord();
   }
 
-  // 慣例：最後一局（setNumber 最大）當「進行中」，前面的都當「已結束」。schema 沒有
-  // 「這局結束了嗎」的旗標，但因為「按下一局」的當下就會建一筆 firstServer=null 的空
-  // set row（#63 修法，見 lib/db/src/schema/sets.ts 與 reconstructSetFromRallies 的
-  // 空局防呆），「使用者已經進到的每一局」都保證有對應的 DB row，所以這裡「最後一局
-  // 當進行中」的假設永遠成立——不會再有「剛按下一局但還沒開球」卻沒寫進後端、
-  // reload 後被誤判成上一局還在進行中的情況。
-  const completedSets: CompletedSet[] = sets.slice(0, -1).map((s, i) => {
+  // 「最後一局＝進行中，其餘＝已結束」的慣例，理由與失效條件現在都寫在
+  // lib/volleyballRules.ts 的 splitCompletedAndCurrent 裡，這裡只呼叫它。
+  //
+  // 只對 sets 切、不對 ralliesBySetIndex 切：這兩個陣列雖然「同索引對齊」，但長度不保證
+  // 相同（呼叫端是各 set 各發一支 query，某支還沒回來時那格可能不存在——原本的碼到處寫
+  // `?? []` 就是在防這件事）。如果對 ralliesBySetIndex 也呼叫一次 splitCompletedAndCurrent，
+  // 切點會變成「它自己的最後一格」而不是「sets 的最後一格」，兩邊長度一旦不同，就會把某個
+  // 已結束局的 rally 當成進行中那局的 rally——比原本的寫法更危險。所以 rally 一律還是用
+  // sets 的索引去取，切分只發生在 sets 這一個陣列上。
+  const { completed: completedSetRows, current: currentSetRow } = splitCompletedAndCurrent(sets);
+  // sets.length > 0 已在上面提早 return 擋掉，所以 current 必定有值；但
+  // splitCompletedAndCurrent 是泛型函式，簽名上表達不出這個保證，這裡用一道真的 guard
+  // （而不是 `?? 假資料` 或 `as` 斷言）讓型別收斂——這樣萬一之後有人改動上面的
+  // early return，這行會誠實地走進 emptyRecord()，而不是拿一份捏造的資料繼續算下去。
+  if (!currentSetRow) return emptyRecord();
+  const currentSetIndex = sets.length - 1;
+
+  const completedSets: CompletedSet[] = completedSetRows.map((s, i) => {
     const st = reconstructSetFromRallies(s, ralliesBySetIndex[i] ?? [], eventsByRallyId);
     return {
       setNumber: st.setNumber,
@@ -409,29 +421,28 @@ export function reconstructRecording(
   // 已結束各局的換人次數：對每個已結束的 set，重放它的換人紀錄、取淨疊加清單的長度
   // （跟 nextSet 動作把 record.regularSubs.length 推進 subCountsHistory 是同一個數字，
   // 只是這裡是從後端資料重算，而不是延續 store 裡當下的值）。陣列順序對齊 completedSets。
-  const subCountsHistory: number[] = sets
-    .slice(0, -1)
-    .map((s) => reconstructRegularSubs(subsBySetId.get(s.id) ?? []).length);
+  const subCountsHistory: number[] = completedSetRows.map(
+    (s) => reconstructRegularSubs(subsBySetId.get(s.id) ?? []).length,
+  );
   // 已結束各局的暫停次數，對齊 subCountsHistory 的作法：對每個已結束的 set 數它的暫停筆數。
-  const timeoutCountsHistory: number[] = sets
-    .slice(0, -1)
-    .map((s) => (timeoutsBySetId.get(s.id) ?? []).length);
-  const lastIdx = sets.length - 1;
+  const timeoutCountsHistory: number[] = completedSetRows.map(
+    (s) => (timeoutsBySetId.get(s.id) ?? []).length,
+  );
   const currentSet = reconstructSetFromRallies(
-    sets[lastIdx],
-    ralliesBySetIndex[lastIdx] ?? [],
+    currentSetRow,
+    ralliesBySetIndex[currentSetIndex] ?? [],
     eventsByRallyId,
   );
   // 進行中這一局的換人淨疊加清單，直接重放這一局的換人紀錄即可。
-  const regularSubs = reconstructRegularSubs(subsBySetId.get(sets[lastIdx].id) ?? []);
+  const regularSubs = reconstructRegularSubs(subsBySetId.get(currentSetRow.id) ?? []);
   // 進行中這一局的暫停清單（issue #44），直接把這一局的暫停紀錄翻回前端形狀。
-  const currentTimeouts = reconstructTimeouts(timeoutsBySetId.get(sets[lastIdx].id) ?? []);
+  const currentTimeouts = reconstructTimeouts(timeoutsBySetId.get(currentSetRow.id) ?? []);
 
   // 先發快照：一 row 一局（setId），只認「目前這一局自己的」先發（先發每局可不同，不沿用別局）。
   // 進行中這一局若已有先發（已選過先發方）就讀回它；若還沒（例如剛按下一局、firstServer=null 的
   // 空 set，此時還沒選先發方也就還沒寫 lineup）就給 null——此時畫面停在「這局由誰先發球？」、
   // 還不需要顯示球場，等教練選先發方時 start() 會從當下輪轉表擷取這一局的新先發。
-  const lineup: LineupSnapshot | null = findLineupSnapshotForSet(lineups, sets[lastIdx].id);
+  const lineup: LineupSnapshot | null = findLineupSnapshotForSet(lineups, currentSetRow.id);
 
   return {
     currentSet,
