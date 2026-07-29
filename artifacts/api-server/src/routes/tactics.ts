@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
 import { db, tacticsTable } from "@workspace/db";
 import { mockAuth } from "../middleware/mockAuth";
+import { matchBelongsToUser } from "../lib/ownership";
 import {
   CreateTacticBody,
   UpdateTacticBody,
@@ -41,6 +42,19 @@ router.get("/tactics", async (req, res) => {
 // POST /tactics — 新建戰術
 router.post("/tactics", async (req, res) => {
   const body = CreateTacticBody.parse(req.body);
+
+  // 要把戰術歸屬到某場比賽的話，先確認那場比賽是「這個使用者的」（#225，同 #127 的判準）。
+  // tacticsTable.matchId 是真的外鍵，但**外鍵保證的是 referential integrity（這個 id 真的指到
+  // 一列存在的比賽），不保證 ownership（那場是不是你的）**——少了這關，A 就能把自己的戰術掛到
+  // B 的 matchId 底下（IDOR），而且 FK 是 onDelete: cascade，B 刪掉那場比賽會連帶刪掉 A 的戰術。
+  // matchId 在 CreateTacticBody 是 nullish（可不帶＝全域戰術、可為 null），`!= null` 這個寬鬆
+  // 比較剛好一次涵蓋 undefined 與 null 兩種「沒有比賽可驗」的情況。
+  // 回 404 而不是 403：對不屬於你的資源回「不存在」比回「存在但你不能碰」保守——
+  // 後者等於用錯誤碼幫攻擊者確認了那個 id 真的有東西。
+  if (body.matchId != null && !(await matchBelongsToUser(body.matchId, req.userId))) {
+    res.status(404).json({ error: "Match not found" });
+    return;
+  }
 
   const [created] = await db
     .insert(tacticsTable)
@@ -105,11 +119,21 @@ router.put("/tactics/:tacticId", async (req, res) => {
 router.delete("/tactics/:tacticId", async (req, res) => {
   const { tacticId } = DeleteTacticParams.parse(req.params);
 
-  await db
+  // where 綁了 userId，所以刪不到別人的戰術——但「刪不到」和「刪掉了」在 SQL 層長得一模一樣：
+  // 兩者都是不報錯地跑完。要分辨只能看**實際刪掉幾列**，所以加 .returning() 把被刪的列要回來
+  // （#225）。少了這一步，DELETE 不存在的／別人的戰術都會回 204「成功」，等於對呼叫端說謊。
+  // 這是 DELETE /matches/:matchId 早就有的做法（matches.ts:159-167），tactics 是漏網的那份。
+  const deleted = await db
     .delete(tacticsTable)
-    .where(and(eq(tacticsTable.id, tacticId), eq(tacticsTable.userId, req.userId)));
+    .where(and(eq(tacticsTable.id, tacticId), eq(tacticsTable.userId, req.userId)))
+    .returning({ id: tacticsTable.id });
 
-  res.status(204).send();
+  if (deleted.length === 0) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+
+  res.status(204).end();
 });
 
 export default router;
