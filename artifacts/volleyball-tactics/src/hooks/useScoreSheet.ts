@@ -32,6 +32,7 @@ import {
   makeEmptySet,
   emptyRecord,
 } from "../lib/scoreSheetMapping";
+import { applyRally, applyRegularSub, type RuleState } from "../lib/volleyballRules";
 
 // 計分表的狀態層。以前這裡是 Zustand + persist（localStorage）；Phase 3b 把真相來源搬到後端
 // sets/rallies/events。做法是「本地優先 + 背景寫入」：
@@ -127,16 +128,25 @@ export const useScoreSheet = create<ScoreSheetStore>()((set) => ({
       const current = record.currentSet;
       if (current.serving === null) return state;
 
-      // 排球輪轉規則：只有原本沒發球的一方贏得這一分（side-out，奪回發球權）才會輪轉；
-      // 發球方自己再得分只加分、不輪轉——輪轉永遠發生在「剛拿到發球權」的那一刻。
-      // 我方、對手各自獨立輪轉，互不影響。
-      const wasSideOut = side !== current.serving;
-      const ourRotation =
-        wasSideOut && side === "us" ? (current.ourRotation + 1) % 6 : current.ourRotation;
-      const opponentRotation =
-        wasSideOut && side === "opponent"
-          ? (current.opponentRotation + 1) % 6
-          : current.opponentRotation;
+      // 排球輪轉規則本體已經抽到 lib/volleyballRules.ts 的 applyRally——這裡只是把
+      // currentSet 的五個規則欄位組成它要的 RuleState、把算出來的新值攤回 currentSet。
+      // 這樣改，是因為 replay 端（scoreSheetMapping.ts 的 reconstructSetFromRallies）
+      // 要重放整場歷史算出一模一樣的結果，以前兩邊各手寫一份「side-out 才輪轉」的邏輯，
+      // 現在共用同一個純函式，改一次兩邊保證同步（見 volleyballRules.ts 開頭的說明）。
+      //
+      // 特地重新組一個物件字面量（而不是直接把 current 整包傳進去）：上面那行 guard
+      // 只窄化了「current.serving」這一次讀取的型別，不會讓 current 這個變數本身的型別
+      // 從 SetRecordingState（serving: Side | null）變成 RuleState（serving: Side）——
+      // TypeScript 的控制流分析不會把單一屬性的窄化套用到整個物件上，重新取一次
+      // current.serving 塞進新物件字面量，才能讓這次讀取被記錄的窄化生效。
+      const ruleStateBefore: RuleState = {
+        ourScore: current.ourScore,
+        opponentScore: current.opponentScore,
+        serving: current.serving,
+        ourRotation: current.ourRotation,
+        opponentRotation: current.opponentRotation,
+      };
+      const { state: nextRuleState, wasSideOut } = applyRally(ruleStateBefore, side);
 
       return {
         recordingsByMatch: {
@@ -145,12 +155,7 @@ export const useScoreSheet = create<ScoreSheetStore>()((set) => ({
             ...record,
             currentSet: {
               ...current,
-              ourScore: side === "us" ? current.ourScore + 1 : current.ourScore,
-              opponentScore:
-                side === "opponent" ? current.opponentScore + 1 : current.opponentScore,
-              serving: side,
-              ourRotation,
-              opponentRotation,
+              ...nextRuleState,
               history: [...current.history, { side, wasSideOut, ...meta }],
             },
           },
@@ -255,16 +260,15 @@ export const useScoreSheet = create<ScoreSheetStore>()((set) => ({
   recordRegularSub: (matchId, outPlayerId, inPlayerId) =>
     set((state) => {
       const record = getOrInitRecord(state.recordingsByMatch, matchId);
-      // 淨疊加 dedup：如果剛好有一筆舊紀錄的「換上場的人」正好等於這次「換下場的人」
-      // （代表這個位置正在被連續操作），先把那筆舊紀錄濾掉，只保留最新結果——
-      // 跟 lib/scoreSheetMapping.ts 的 reconstructRegularSubs 是同一套邏輯，重建時才能對得上。
-      const cleaned = record.regularSubs.filter((s) => s.inPlayerId !== outPlayerId);
+      // 淨疊加摺疊本體已經抽到 lib/volleyballRules.ts 的 applyRegularSub：這裡跟
+      // scoreSheetMapping.ts 的 reconstructRegularSubs（reload 時 reduce 整份換人流水帳）
+      // 現在真的是呼叫同一份實作，不再是「兩份邏輯手動保持同步」的註解承諾。
       return {
         recordingsByMatch: {
           ...state.recordingsByMatch,
           [matchId]: {
             ...record,
-            regularSubs: [...cleaned, { outPlayerId, inPlayerId }],
+            regularSubs: applyRegularSub(record.regularSubs, { outPlayerId, inPlayerId }),
           },
         },
       };
