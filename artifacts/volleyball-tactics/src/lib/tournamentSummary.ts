@@ -3,7 +3,13 @@
 // 跟 matchSummary.ts / matchOutcome.ts 同一個理由抽成純函式：這是「一個資料夾底下這幾場
 // 比賽合起來戰績多少」的規則，跟 UI 怎麼排版無關，抽出來才能脫離元件單獨測試，也才不會
 // 之後資料頁（M2）要用同一份戰績數字時，右欄跟資料頁各自重寫一份、慢慢飄成兩套答案。
-import { getMatchWinner, winsNeededFor, type MatchFormat, type SetScoreLike } from "./matchOutcome";
+import {
+  countSetWins,
+  getMatchWinner,
+  winsNeededFor,
+  type MatchFormat,
+  type SetScoreLike,
+} from "./matchOutcome";
 
 // 算一場比賽戰績需要的最小欄位——刻意不吃完整的 Match/MatchAnalysisSummary 型別，
 // 跟 matchOutcome.ts 開頭的理由一樣：這裡只認識「排球賽制」這個 domain 概念，不該
@@ -92,15 +98,11 @@ export function computeTournamentStats(inputs: TournamentMatchInput[]): Tourname
   let totalOpponentSets = 0;
 
   const matches: TournamentMatchResult[] = inputs.map((m) => {
-    // 這場比賽「贏了幾局」——跟 formatMatchResult 同一套算法（數贏局數而不是打了幾局），
-    // 這裡沒有直接呼叫 formatMatchResult，是因為那支回的是給人看的一句話，這裡要的是
-    // 拆開的兩個數字，方便加總進 totalOurSets/totalOpponentSets。
-    let ourSetWins = 0;
-    let opponentSetWins = 0;
-    for (const set of m.completedSets) {
-      if (set.ourScore > set.opponentScore) ourSetWins++;
-      else if (set.opponentScore > set.ourScore) opponentSetWins++;
-    }
+    // 這場比賽「贏了幾局」。這裡沒有直接呼叫 formatMatchResult，是因為那支回的是給人看的
+    // 一句話，這裡要的是拆開的兩個數字，方便加總進 totalOurSets/totalOpponentSets——
+    // #226 PR2 之後兩支都走 countSetWins，所以「同一套算法」是靠共用實作保證的，
+    // 不再只是註解上的口頭約定。
+    const { ourWins: ourSetWins, opponentWins: opponentSetWins } = countSetWins(m.completedSets);
     totalOurSets += ourSetWins;
     totalOpponentSets += opponentSetWins;
 
