@@ -320,35 +320,46 @@ export default function MatchAnalytics() {
     <AppShell
       mode="A"
       nav={
-        <NavRail
-          matchId={id ?? ""}
-          backHref={backHref}
-          active="analytics"
-          captureCurrent={captureCurrentForAnalytics}
-          captureLabel="此頁沒有可擷取的站位，僅能從空站位開始"
-          captureDisabled
-        />
+        <div className="relative z-10 h-full">
+          <NavRail
+            matchId={id ?? ""}
+            backHref={backHref}
+            active="analytics"
+            captureCurrent={captureCurrentForAnalytics}
+            captureLabel="此頁沒有可擷取的站位，僅能從空站位開始"
+            captureDisabled
+          />
+        </div>
       }
       aside={
-        <AnalyticsRotationRail
-          record={record}
-          roster={match.players}
-          winsNeeded={winsNeededFor(match.format)}
-        />
+        <div className="relative z-10 h-full">
+          <AnalyticsRotationRail
+            record={record}
+            roster={match.players}
+            winsNeeded={winsNeededFor(match.format)}
+          />
+        </div>
       }
-      className="bg-[#0a0b07] font-dash text-[#f5f5f0]"
+      backdrop={<div className="tb-beam" />}
+      // 背景跟戰術板／計分表（TacticsBoard.tsx／ScoreSheet.tsx）對齊成同一套（tang 2026-07-30
+      // 要求四頁背景統一）：原本這裡跟 MatchList.tsx 一樣停在 #131 改版之前的斜線網格版本，
+      // 說明見 MatchList.tsx 同一處的註解。
+      className="relative font-dash text-[#f5f5f0]"
       style={{
-        backgroundImage:
-          "repeating-linear-gradient(45deg, rgba(245,245,240,0.035) 0 1px, transparent 1px 28px)," +
-          "repeating-linear-gradient(-45deg, rgba(245,245,240,0.035) 0 1px, transparent 1px 28px)",
+        background:
+          "radial-gradient(ellipse 55% 45% at 18% 12%, rgba(198,241,53,0.10), transparent 70%), " +
+          "radial-gradient(ellipse 65% 55% at 88% 92%, rgba(42,110,106,0.30), transparent 70%), " +
+          "linear-gradient(160deg, #0a0b07 0%, #16241c 55%, #0a0b07 100%)",
       }}
     >
       {/* 原本是 min-h-screen（讓整個瀏覽器視窗跟著內容變長、由視窗自己捲）。AppShell 改成
           h-screen 固定版面之後，捲動責任下放到這一層：min-h-0 + flex-1 讓它剛好吃滿中央
           主區的高度、不多不少，再由自己的 overflow-y-auto 捲內容。留著 min-h-screen 的話，
           這塊的最小高度會被釘在 100vh，之後若中央主區上面多一條 header，它就會超出容器
-          一個 header 的高度、把捲軸推到看不見的地方。 */}
-      <div className="min-h-0 w-full flex-1 overflow-y-auto">
+          一個 header 的高度、把捲軸推到看不見的地方。
+          relative z-10：跟 backdrop 的 .tb-beam（position:absolute + z-index:1）疊圖時要贏過去，
+          理由見 TacticsBoard.tsx 同一種寫法的說明。 */}
+      <div className="relative z-10 min-h-0 w-full flex-1 overflow-y-auto">
         <header className="flex items-center justify-center border-b border-white/[0.08] bg-white/[0.02] px-4 py-3 backdrop-blur-sm">
           <h1 className="text-lg font-bold">vs {match.opponent} · 數據分析</h1>
         </header>

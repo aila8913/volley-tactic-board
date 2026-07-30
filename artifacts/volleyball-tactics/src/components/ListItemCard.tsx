@@ -10,9 +10,13 @@ import { Pencil, Trash2 } from "lucide-react";
 // 尺寸意圖：這是給「賽場邊站著用手指快點」的卡片，不是資訊密度優先的表格，所以點擊目標要夠大、
 // 卡距要鬆。但 Figma 基準 1136×252 等比縮下來的 176px 實測太空曠（PO 2026-07-23：「一行式
 // 現在上下太寬了」）——線框稿那個高度是配「卡片裡有多行內容」畫的，我們的內容只有一行，
-// 同樣的高度就變成一大片留白。收斂到 104：仍遠大於觸控最小目標 44px，鬆的意圖保留，
-// 但不再是為了填滿而填滿的空白。
-const CARD_MIN_HEIGHT = "min-h-[104px]";
+// 同樣的高度就變成一大片留白。收斂到 104，之後又收斂到 76＋字級一起縮小（tang 2026-07-30
+// 二次回饋：寬螢幕下標題跟右側日期/比分中間那段空白仍然太大，整體看起來「不專業」）。
+//
+// ⚠️ 這裡還不是定案：tang 覺得比例還是怪，決定不要再這樣一路用數字微調猜——下次要拿 Figma
+// 重新畫這張卡片的線稿，把「寬螢幕下中間留白太多」這種版面比例問題一次想清楚，而不是持續
+// 調整 px 數字。這次先把字級再縮一輪頂著用，實際排版留給那次線稿。
+const CARD_MIN_HEIGHT = "min-h-[76px]";
 
 export type ListItemKind = "tournament" | "match";
 
@@ -77,7 +81,7 @@ export default function ListItemCard({
       // （bg-[#c6f135]/15）生成的 color-mix() 少了必要的色彩空間關鍵字，是無效值。靜態套用
       // 瀏覽器還認得，但拿它當轉場的終點值時 Chrome 會卡在起點色不動——同一個 DOM 節點動態
       // 切 class 才會踩到，而點卡片選取正是這個情境。用 `transition`（= all）就會中招。
-      className={`flex cursor-pointer select-none flex-col rounded-2xl border px-8 font-dash
+      className={`flex cursor-pointer select-none flex-col rounded-2xl border px-6 font-dash
         text-[#f5f5f0] shadow-lg shadow-black/35 backdrop-blur-md
         transition-[border-color,box-shadow] ${
           selected
@@ -87,12 +91,12 @@ export default function ListItemCard({
     >
       {/* 這一層才是「一行式」的那一行：卡片本身改成直向容器（要容納展開區），所以最小高度、
           垂直置中都掛在這裡，不然展開之後上半行會被拉開、跟沒展開的卡片對不齊。 */}
-      <div className={`flex ${CARD_MIN_HEIGHT} items-center gap-8`}>
+      <div className={`flex ${CARD_MIN_HEIGHT} items-center gap-5`}>
         {/* 徽章：資料夾與比賽用不同底色，不只靠一個字區分——掃視一整排卡片時，色塊比單字
             先被看到，這是「一眼分辨兩種項目」真正在起作用的部分。 */}
         <span
           aria-hidden
-          className={`flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-2xl text-xl
+          className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl text-sm
             font-bold ${
               kind === "tournament"
                 ? "bg-[#c6f135]/15 text-[#c6f135]"
@@ -108,7 +112,7 @@ export default function ListItemCard({
           {/* sr-only：徽章對讀螢幕軟體是 aria-hidden（它是視覺符號），所以類型要用文字補回去，
               不然聽起來每張卡片都只是一個標題、分不出是資料夾還是比賽。 */}
           <span className="sr-only">{kind === "tournament" ? "賽事資料夾：" : "比賽："}</span>
-          <h2 className="truncate text-xl font-bold">{title}</h2>
+          <h2 className="truncate text-sm font-bold">{title}</h2>
         </div>
 
         <div className="flex flex-shrink-0 flex-col items-end gap-1 text-right">
@@ -120,9 +124,9 @@ export default function ListItemCard({
             </span>
           )}
           {dateText && (
-            <p className="font-numeric text-sm tabular-nums text-[#a9b096]">{dateText}</p>
+            <p className="font-numeric text-[11px] tabular-nums text-[#a9b096]">{dateText}</p>
           )}
-          <p className="text-base font-semibold text-[#f5f5f0]">{secondaryText}</p>
+          <p className="text-xs font-semibold text-[#f5f5f0]">{secondaryText}</p>
         </div>
 
         <div className="flex flex-shrink-0 gap-1">
@@ -135,10 +139,10 @@ export default function ListItemCard({
               e.stopPropagation();
               onEdit();
             }}
-            className="flex h-9 w-9 items-center justify-center rounded-full text-[#a9b096]
+            className="flex h-8 w-8 items-center justify-center rounded-full text-[#a9b096]
               transition hover:bg-white/[0.12] hover:text-[#f5f5f0]"
           >
-            <Pencil className="h-4 w-4" />
+            <Pencil className="h-3.5 w-3.5" />
           </button>
           <button
             type="button"
@@ -147,10 +151,10 @@ export default function ListItemCard({
               e.stopPropagation();
               onDelete();
             }}
-            className="flex h-9 w-9 items-center justify-center rounded-full text-[#a9b096]
+            className="flex h-8 w-8 items-center justify-center rounded-full text-[#a9b096]
               transition hover:bg-[#ef4444]/15 hover:text-[#ef4444]"
           >
-            <Trash2 className="h-4 w-4" />
+            <Trash2 className="h-3.5 w-3.5" />
           </button>
         </div>
       </div>
