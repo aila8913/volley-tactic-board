@@ -28,6 +28,13 @@ import {
 // mock auth 階段所有資料都掛在這個固定使用者底下（見 middleware/mockAuth.ts）。
 const USER_ID = "mock-user-001";
 
+// 第二個使用者，底下只掛一場空比賽，**不是給畫面看的**——它整場都不會出現在 UI 裡，
+// 因為每一支查詢都綁 userId，user-001 登入時撈不到它。它的用途是當「別人的資料」：
+// 拿這場的 id 去打 API，就能驗證 ownership 檢查真的擋得住跨使用者存取（#225／#232）。
+// 這兩個字串跟 middleware/mockAuth.ts 的常數是刻意用抄的、沒有共用：lib/ 是被 artifacts/
+// 匯入的下層，反過來 import 上層會把相依方向倒過來（見 CLAUDE.md 的 repo layout）。
+const OTHER_USER_ID = "mock-user-002";
+
 // ── 種子隨機數（seeded PRNG）──
 // 為什麼要「隨機但可重現」：這是給開發/展示用的測試資料，之後可能會被清掉重灌很多次
 // （改 schema、清 DB 重跑這支腳本）。如果比分過程真的用 Math.random()，每次重灌出來的
@@ -568,6 +575,20 @@ async function main() {
   // 傳 inProgress → seedSets 不補空 set，最後那局半場的 set 就會被分析頁當成 currentSet。
   await seedMatch(teamA.id, "交大", "2026-07-20T19:00:00+08:00", aRoster, [[25, 22]], [18, 15]);
 
+  // 5) 「別人的」比賽。刻意不走 seedMatch（它寫死 USER_ID，而且會連帶生名單/局/球，
+  // 那些對這個用途完全用不到）——直接插一列最小的 match 就夠了，因為要驗的只有
+  // 「這個 id 存在、但不是你的」。它不掛 teamId，避免混進 user-001 的球隊篩選語意。
+  const [foreignMatch] = await db
+    .insert(matchesTable)
+    .values({
+      userId: OTHER_USER_ID,
+      name: null,
+      opponent: "（其他使用者的比賽，勿在 UI 期待看到）",
+      date: new Date("2026-07-10T19:00:00+08:00"),
+      format: "best_of_3",
+    })
+    .returning({ id: matchesTable.id });
+
   console.log("\n完成！塞入內容：");
   console.log(`  球隊：${teamA.name}(id=${teamA.id})、${teamB.name}(id=${teamB.id})`);
   console.log(`  人員：${people.length} 位（林小美 personId=${personId("林小美")} 跨兩隊）`);
@@ -579,6 +600,12 @@ async function main() {
   );
   console.log("  勝方賽末點一定收在最後一球（不再出現達標後對手還在加分的假象）；並補上 events，");
   console.log("  球員統計的「決定球矩陣」現在有數字可看。");
+  console.log(`\n  另外掛在 ${OTHER_USER_ID} 底下：matchId=${foreignMatch.id}（UI 不會出現）`);
+  console.log("  驗證跨使用者擁有權（需 NODE_ENV=development）：");
+  console.log(
+    `    curl -X POST localhost:3000/api/tactics -H 'Content-Type: application/json' \\\n` +
+      `      -d '{"matchId":${foreignMatch.id},"name":"probe","data":{}}'   # 應回 404`,
+  );
 
   await pool.end();
 }
