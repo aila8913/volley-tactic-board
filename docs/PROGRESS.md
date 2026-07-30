@@ -22,9 +22,9 @@
 > 平行 PR 就落在不同行段、git 幾乎都能自動合併，不用真的把檔案拆兩份、也保住一眼 catch-up。
 > 上面的 `_Last updated_` 是共用一行摘要（誰更新了什麼），保持精簡、別長成段落。
 
-\_Last updated: 2026-07-30 (aila) — #225 tactics ownership 缺口修掉、mockAuth 可切換使用者以實測 IDOR；
-補記 07-28 之後落地但未進快照的 PR #237（球場視覺）/#239（環 3 Stage B，帶關 #174/#120 與 M1.5）/
-#242（#226 PR1 `volleyballRules`）。\_
+\_Last updated: 2026-07-30 (aila) — **#226 三份 PR 全部收斂完成並已關閉**（PR1 #242 `volleyballRules`／
+PR2 #245 `countSetWins`／PR3 #246 `resolveScoringSide`），過程中發現的連鎖換人摺疊 bug 另開 **#247**
+追蹤（不在 #226 範圍）。另補記 #225 tactics ownership 缺口修掉、mockAuth 可切換使用者以實測 IDOR。\_
 
 ## Current state
 
@@ -135,14 +135,17 @@ lives in git log + the issues named).
   同日順手清掉的過期物：`replit.md`（與 CLAUDE.md 重複且已開始說謊）、`index.html` 三處
   `built on Replit` placeholder meta（`robots: index,follow`，會被搜尋引擎收錄）＋`lang="en"`。
 - **架構掃描（`improve-codebase-architecture`）產出 #225–#232，兩個新 milestone。** 掃描依 git log
-  熱點（計分／戰術板／輪轉、api-server routes、analysis）。**M2.5 收斂重複規則**（8/2）＝三張 Strong：
-  #226 得分/輪轉規則現有四份實作＋第五份存在 DB 欄位、#227 球場座標（`*100/*200` 內嵌 12 處、CTM 換算
-  5 份、前排門檻已分歧成 `<0.75` 與 `<=0.75` 只是還沒現形）、#228 route handler 儀式（404 樣板 ×33、
-  ownership 守衛 ×25 全靠人記得寫）。**M3.5 可測性與資料流**（8/16）＝#229 analysis 拆查詢與合併、
-  #230 寫入改 write log（吸收已關的 #184）、#231 先發四份表示法收斂、#232 後端可測性。
-  **#225（tactics 路由缺 ownership）已於 07-30 修掉**——它是 **#127 那條判準的復發**：外鍵保證
-  referential integrity，不保證 ownership，`tactics.ts` 是當初漏網的檔案，整份沒 import `ownership`。
-  詳見下方 Recently closed。
+  熱點（計分／戰術板／輪轉、api-server routes、analysis）。**M2.5 收斂重複規則**（8/2）原三張 Strong：
+  #227 球場座標（`*100/*200` 內嵌 12 處、CTM 換算 5 份、前排門檻已分歧成 `<0.75` 與 `<=0.75` 只是還沒
+  現形）、#228 route handler 儀式（404 樣板 ×33、ownership 守衛 ×25 全靠人記得寫）**仍 open**。
+  **#226（得分/輪轉規則四份實作）已於 07-30 全部收斂並關閉**——三份 PR：PR1 #242（side-out 輪轉／換人
+  淨額摺疊／「最後一局進行中」慣例 → `volleyballRules.ts`）、PR2 #245（局比數計算，原四份重複 →
+  `countSetWins`/`setWinner`）、PR3 #246（勝負反轉換算，原本沒測試、寫在 JSX 裡 → `resolveScoringSide`）。
+  輪次聚合／局比分 replay vs 後端 SQL 重複依 **ADR-0003** 判定不算重複規則（後端欄位是 replay 邏輯的
+  下游物化結果），維持現狀不處理。**PR1 過程中發現的連鎖換人摺疊（A→B→C）既有行為另開 #247 追蹤**，
+  刻意不在 #226 範圍內解決。**#225（tactics 路由缺 ownership）已於 07-30 修掉**——它是 **#127 那條判準
+  的復發**：外鍵保證 referential integrity，不保證 ownership，`tactics.ts` 是當初漏網的檔案，整份沒
+  import `ownership`。詳見下方 Recently closed。
 - **專案 roadmap 已上線。** 時間序住在 repo **Milestones M1–M5**（現為 M1–M5＋M1.5/M2.5/M3.5）（軟目標日
   7/18→9/11，非死線），當下狀態住在 [GitHub Project #4](https://github.com/users/aila8913/projects/4)。
   **M1／M2／M1.5 milestone 皆已關閉**（M1.5 由 PR #239 帶關 #174/#120 後收掉；#176 已移 M3，
@@ -198,10 +201,11 @@ gh issue list --state open                                 # 全部
 從未渲染對手、snapshot player 無 `side`；spec 把 mode D 叫「對手佈陣」的那層 #177 沒做）07-28 補上
 milestone，歸 **M5**。
 
-**當前階段＝M2.5「收斂重複規則」（軟目標日 8/1）**，Project #4 的 Todo 欄就是這三張：**#226**（得分/
-輪轉規則四份實作＋第五份存在 DB 欄位；**PR1 已由 PR #242 落地**——前端 `lib/volleyballRules.ts` 讓 live
-記分與 replay 重建共用同一份，後端 `analysis.ts` 的 SQL 聚合刻意留給後續，故 issue 仍 open）、**#227**（球場座標 `*100/*200` 內嵌 12 處、前排門檻已分歧成
-`<0.75` 與 `<=0.75`）、**#228**（route handler 儀式：404 樣板 ×33、ownership 守衛 ×25 全靠人記得寫）。
+**當前階段＝M2.5「收斂重複規則」（軟目標日 8/1）**，Project #4 的 Todo 欄剩兩張：**#227**（球場座標
+`*100/*200` 內嵌 12 處、前排門檻已分歧成 `<0.75` 與 `<=0.75`）、**#228**（route handler 儀式：404 樣板
+×33、ownership 守衛 ×25 全靠人記得寫）。**#226 已於 07-30 全部收斂並關閉**（見上方 Current state），
+Project #4 網頁上的卡片待 PO 手動移過去。**#247**（連鎖換人 A→B→C 摺疊後查不到原始先發，#226 PR1 過程
+中發現）是 M2.5 之外的新孤兒，未歸 milestone，需先討論修法方向（`needs-plan` 性質）。
 新加入的 **#238**（比賽狀態詞彙與判準收斂）是同一類問題的小號版本，且**已經飄出錯誤答案**：比賽列表用
 `completedSets.length === 0`、資料夾統計格用 `setsPlayed > 0`，同一場打到第一局一半的比賽在兩處分別
 顯示「尚未開賽」與「進行中」。
@@ -237,6 +241,15 @@ serving≠null 但 record.lineup=null」那條路**，但真正的 reconcile 仍
 
 ### 開發 (aila)
 
+- **#226**（得分/輪轉規則收斂成 deep module，07-30，三份 PR）— PR1 #242：side-out 輪轉、換人淨額摺疊、
+  「最後一局進行中」慣例收進 `volleyballRules.ts`，live 記分與 replay 重建共用同一份。PR2 #245：局比數
+  計算（原本四份手寫比較）收成 `countSetWins`/`setWinner`。PR3 #246：「得分/失分→誰拿到這一分」的換算
+  原本直接寫在 `ScoreSheet.tsx` 事件處理器裡、完全沒測試，抽成 `resolveScoringSide` 純函式後才測得到。
+  **輪次聚合、局比分 replay vs 後端 SQL 重複刻意不處理**——依 ADR-0003，後端欄位是 replay 邏輯的下游
+  物化結果，不是第二份規則實作。**PR1 過程中發現的既有 bug 另開 #247**：`applyRegularSub` 把換人紀錄
+  摺成淨額表示（append-only log → 目前誰在場上），連鎖換人 A→B 接著 B→C 時，中間人 A 曾是先發這件事
+  會從清單消失——`ScoreSheetCourt.tsx` 兩處用 `outPlayerId` 查代打的地方查不到最原始先發。確認是 live/
+  replay 合併前就存在的既有行為（非本次重構的回歸），修法方向留給 #247 討論再動手。
 - **#225**（tactics 路由的兩個 ownership 缺口，07-30）— `POST /tactics` 沒驗 `matchId` 屬於誰（**外鍵只
   保證那筆 id 存在，不保證是你的**——#127 判準的復發），`DELETE` 直接回 204 不看實際刪掉幾列，刪不到
   別人的戰術也回成功、等於對呼叫端說謊。修法照 `matches.ts` 既有樣式：`matchBelongsToUser` 守衛 ＋
