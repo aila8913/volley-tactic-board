@@ -9,7 +9,8 @@ import type { SnapshotPlayer } from "../types/courtSnapshot";
 import PlayerNode from "./PlayerNode";
 import Markers from "./Markers";
 import DefenseRange from "./DefenseRange";
-import { COURT_GRADIENT_STOPS } from "../lib/courtTheme";
+import { COURT_GRADIENT_STOPS, CourtLines } from "../lib/courtTheme";
+import { COURT_W, COURT_H, fromScreen, toNorm, rowOf } from "../lib/courtGeometry";
 
 // 這一場還沒有分片資料時用的空白預設值（模組層、參照穩定，避免每 render 換新陣列造成重繪）。
 const EMPTY_ROSTER: MatchPlayer[] = [];
@@ -19,8 +20,9 @@ const EMPTY_ROTATIONS: RotationPositions[] = Array(6)
 
 // 球場「真正比賽用」的座標範圍，永遠固定 0~100 / 0~200——格子吸附、界外判斷、
 // 6 個站位格全部都認這組數字，不會因為旁邊要多留 L 備位空間就跟著變動。
-const COURT_W = 100;
-const COURT_H = 200;
+// （這兩個常數本體收斂到 lib/courtGeometry.ts，跟 ScoreSheetCourt.tsx／PlayerNode.tsx
+// 共用同一份定義，這裡只是 import 進來繼續用同樣的名字，下面 COURT_CANVAS_* 等
+// 衍生常數不用跟著改。）
 
 // L 備位紅框的尺寸（issue #18）。原本連同緩衝一起畫在球場「上下方」，會把球場本體
 // 往內壓縮快 30% 高度；2026-07-15 改成畫在球場「左右側」、對齊 1 號位的高度——
@@ -142,15 +144,9 @@ export default function Court() {
   const rotationPositions = rotations[currentRotation];
   if (!rotationPositions) return null;
 
-  const getSvgPoint = (e: React.PointerEvent) => {
-    if (!courtRef.current) return { x: 50, y: 100 };
-    const CTM = courtRef.current.getScreenCTM();
-    if (!CTM) return { x: 50, y: 100 };
-    return {
-      x: (e.clientX - CTM.e) / CTM.a,
-      y: (e.clientY - CTM.f) / CTM.d,
-    };
-  };
+  // 螢幕座標→SVG 座標的換算（issue #227 收斂到 lib/courtGeometry.ts 的 fromScreen，
+  // 這裡只是把目前這個 SVG 元素的 ref 帶進去）。
+  const getSvgPoint = (e: React.PointerEvent) => fromScreen(e.clientX, e.clientY, courtRef.current);
 
   const handlePointerDown = (e: React.PointerEvent) => {
     if (!matchId) return;
@@ -258,10 +254,7 @@ export default function Court() {
     if (!matchId) return;
     const playerId = e.dataTransfer.getData("text/plain");
     if (!playerId || !courtRef.current) return;
-    const CTM = courtRef.current.getScreenCTM();
-    if (!CTM) return;
-    const rawX = (e.clientX - CTM.e) / CTM.a;
-    const rawY = (e.clientY - CTM.f) / CTM.d;
+    const { x: rawX, y: rawY } = fromScreen(e.clientX, e.clientY, courtRef.current);
 
     if (courtView === "rotation") {
       if (rawY > COURT_H) {
@@ -276,7 +269,8 @@ export default function Court() {
         }
       } else {
         // 輪轉視圖：吸附到最近格子，自動推算全部 6 個輪次
-        placePlayerOnCourt(matchId, playerId, findNearestZone(rawX / 100, rawY / 200));
+        const norm = toNorm({ x: rawX, y: rawY });
+        placePlayerOnCourt(matchId, playerId, findNearestZone(norm.x, norm.y));
       }
     } else if (courtView === "tactics" && session) {
       // 戰術視圖 + 有 session：從名單把一位球員拖進白板。session 的球員是反正規化的
@@ -285,13 +279,14 @@ export default function Court() {
       // store 本身不碰 roster，維持單向。查不到（幽靈 id）就什麼都不做。
       const p = roster.find((rp) => rp.id === playerId);
       if (p) {
+        const norm = toNorm({ x: rawX, y: rawY });
         const sp: SnapshotPlayer = {
           sourcePlayerId: p.id,
           name: p.name,
           number: p.number,
           role: p.role,
-          x: rawX / 100,
-          y: rawY / 200,
+          x: norm.x,
+          y: norm.y,
           isLibero: p.role === "L",
         };
         placeSessionPlayer(sp);
@@ -509,43 +504,12 @@ export default function Court() {
               rx="4"
             />
 
-            <g>
-              {/* Center Line (Net) — x 從 0 到 100 貼齊 div 邊框。米白半透明，見
-                  docs/design-spec.md 第 5 節「球網/邊線」。 */}
-              <line
-                x1="0"
-                y1="100"
-                x2="100"
-                y2="100"
-                stroke="#F5F5F0"
-                strokeOpacity="0.6"
-                strokeWidth="2.5"
-              />
-
-              {/* Attack Lines (3m)
-                viewBox 高 200，每半場 100 個單位代表 9m，3m = 100/3 ≈ 33.3
-                → 三米線：y=100-33.3=66.7 / y=100+33.3=133.3 */}
-              <line
-                x1="0"
-                y1="66.7"
-                x2="100"
-                y2="66.7"
-                stroke="#F5F5F0"
-                strokeOpacity="0.6"
-                strokeWidth="1"
-                strokeDasharray="3 3"
-              />
-              <line
-                x1="0"
-                y1="133.3"
-                x2="100"
-                y2="133.3"
-                stroke="#F5F5F0"
-                strokeOpacity="0.6"
-                strokeWidth="1"
-                strokeDasharray="3 3"
-              />
-            </g>
+            {/* Center Line (Net) + Attack Lines (3m)：跟計分表球場（ScoreSheetCourt.tsx）
+                共用同一份 <CourtLines/>（lib/courtTheme.tsx，issue #227），改一邊兩邊一起變。
+                （這裡原本手寫死 #F5F5F0/0.6，跟 COURT_LINE_COLOR/COURT_LINE_OPACITY 這兩個
+                共用常數的值剛好一樣，只是沒有真的讀常數——換成 CourtLines 之後順便把這處
+                drift 修掉，畫面顏色不變。） */}
+            <CourtLines />
 
             {/* Zone Labels */}
             {labelToggles.zone && (
@@ -655,7 +619,7 @@ export default function Court() {
                     personId: null,
                   };
                   const position = { playerId: id, x: sp.x, y: sp.y };
-                  const isFrontRow = sp.y > 0.5 && sp.y < 0.75;
+                  const isFrontRow = rowOf(sp.y) === "front";
                   return (
                     <PlayerNode
                       key={id}
@@ -671,7 +635,7 @@ export default function Court() {
                   const player = roster.find((p) => p.id === pos.playerId);
                   if (!player) return null;
                   const isLibero = player.role === "L";
-                  const isFrontRow = pos.y > 0.5 && pos.y < 0.75;
+                  const isFrontRow = rowOf(pos.y) === "front";
                   return (
                     <PlayerNode
                       key={pos.playerId}

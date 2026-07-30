@@ -2,6 +2,7 @@ import React, { useRef, useState } from "react";
 import { useParams } from "wouter";
 import { Marker as MarkerType } from "../types/tacticsBoard";
 import { useTacticsBoard } from "../hooks/useTacticsBoard";
+import { fromScreen } from "../lib/courtGeometry";
 
 export default function Markers({ marker }: { marker: MarkerType }) {
   const { id: matchId } = useParams<{ id: string }>();
@@ -21,11 +22,8 @@ export default function Markers({ marker }: { marker: MarkerType }) {
 
   const isSelected = selectedObjectId === marker.id;
 
-  const getSvgPoint = (e: React.PointerEvent, svg: Element) => {
-    const CTM = (svg as SVGSVGElement).getScreenCTM();
-    if (!CTM) return { x: 0, y: 0 };
-    return { x: (e.clientX - CTM.e) / CTM.a, y: (e.clientY - CTM.f) / CTM.d };
-  };
+  const getSvgPoint = (e: React.PointerEvent, svg: Element) =>
+    fromScreen(e.clientX, e.clientY, svg as SVGSVGElement);
 
   const handlePointerDown = (e: React.PointerEvent) => {
     e.stopPropagation();

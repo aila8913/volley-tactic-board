@@ -4,7 +4,8 @@ import { findNearestZone, getZoneLayout, isBackRowPosition } from "../lib/rotati
 import { Side, RegularSub } from "../types/scoresheet";
 import type { MatchPlayer } from "../types/match";
 import type { PlayerPosition } from "../types/rotationTable";
-import { CourtGradientDefs, COURT_LINE_COLOR, COURT_LINE_OPACITY } from "../lib/courtTheme";
+import { CourtGradientDefs, CourtLines } from "../lib/courtTheme";
+import { toSvg, fromScreen, toScreen, rowOf } from "../lib/courtGeometry";
 import PlayerMarker from "./PlayerMarker";
 
 export interface TouchedTarget {
@@ -144,16 +145,14 @@ export default function ScoreSheetCourt({
       ...opponentZones.map((slot) => ({
         side: "opponent" as const,
         zone: slot.zone,
-        x: slot.x * 100,
-        y: slot.y * 200,
+        ...toSvg(slot),
         xNorm: slot.x,
         yNorm: slot.y,
       })),
       ...ourPositions.map((pos) => ({
         side: "us" as const,
         playerId: pos.playerId,
-        x: pos.x * 100,
-        y: pos.y * 200,
+        ...toSvg(pos),
         xNorm: pos.x,
         yNorm: pos.y,
       })),
@@ -161,17 +160,12 @@ export default function ScoreSheetCourt({
     [opponentZones, ourPositions],
   );
 
-  // 座標轉換
-  const screenToSvg = (clientX: number, clientY: number) => {
-    const CTM = svgRef.current?.getScreenCTM();
-    if (!CTM) return { x: 50, y: 100 };
-    return { x: (clientX - CTM.e) / CTM.a, y: (clientY - CTM.f) / CTM.d };
-  };
-  const svgToScreen = (x: number, y: number) => {
-    const CTM = svgRef.current?.getScreenCTM();
-    if (!CTM) return { x: 0, y: 0 };
-    return { x: CTM.e + x * CTM.a, y: CTM.f + y * CTM.d };
-  };
+  // 座標轉換（收斂到 lib/courtGeometry.ts 的 fromScreen/toScreen，issue #227；這裡
+  // 保留 screenToSvg/svgToScreen 這兩個名字，因為下面的手勢/自由球員拖曳邏輯都是照
+  // 這兩個名字在呼叫）。
+  const screenToSvg = (clientX: number, clientY: number) =>
+    fromScreen(clientX, clientY, svgRef.current);
+  const svgToScreen = (x: number, y: number) => toScreen(x, y, svgRef.current);
 
   // ── 畫線手勢 ──
   const handlePointerDown = (e: React.PointerEvent) => {
@@ -275,8 +269,7 @@ export default function ScoreSheetCourt({
     isValidLiberoTarget({
       side: "us",
       playerId: pos.playerId,
-      x: pos.x * 100,
-      y: pos.y * 200,
+      ...toSvg(pos),
       xNorm: pos.x,
       yNorm: pos.y,
     });
@@ -316,35 +309,9 @@ export default function ScoreSheetCourt({
           {/* 底色漸層、線條顏色都從 lib/courtTheme 讀，跟戰術板同一個來源（改那邊兩邊動）。 */}
           <CourtGradientDefs id="ss-court-gradient" />
           <rect x="0" y="0" width="100" height="200" fill="url(#ss-court-gradient)" />
-          <line
-            x1="0"
-            y1="100"
-            x2="100"
-            y2="100"
-            stroke={COURT_LINE_COLOR}
-            strokeOpacity={COURT_LINE_OPACITY}
-            strokeWidth="2.5"
-          />
-          <line
-            x1="0"
-            y1="66.7"
-            x2="100"
-            y2="66.7"
-            stroke={COURT_LINE_COLOR}
-            strokeOpacity={COURT_LINE_OPACITY}
-            strokeWidth="1"
-            strokeDasharray="3 3"
-          />
-          <line
-            x1="0"
-            y1="133.3"
-            x2="100"
-            y2="133.3"
-            stroke={COURT_LINE_COLOR}
-            strokeOpacity={COURT_LINE_OPACITY}
-            strokeWidth="1"
-            strokeDasharray="3 3"
-          />
+          {/* 中線＋3 米攻擊線：跟戰術板球場（Court.tsx）共用同一份 <CourtLines/>
+              （lib/courtTheme.tsx，issue #227），改一邊兩邊一起變。 */}
+          <CourtLines />
 
           {/* 對手號位圈：跟我方球員圈共用 PlayerMarker（深色玻璃底＋實色邊框＋圈內數字），
               不再用虛線外框——使用者覺得虛線太醜、要求跟我方同款只是換色。對手沒有名單，
@@ -359,8 +326,7 @@ export default function ScoreSheetCourt({
               0.75——只影響對手，我方球員（含 PlayerNode.tsx 戰術板的選取態）維持預設不變。 */}
           {opponentZones.map((slot) => {
             const isServer = serving === "opponent" && slot.currentZone === 1;
-            const x = slot.x * 100;
-            const y = slot.y * 200;
+            const { x, y } = toSvg(slot);
             return (
               <g key={`opp-${slot.zone}`} transform={`translate(${x},${y})`}>
                 <PlayerMarker
@@ -396,7 +362,7 @@ export default function ScoreSheetCourt({
             // 顯示」的 bug）。slotPlayer 仍用 effectiveId 找，好在下方顯示「L／被蓋格主的號碼」。
             const isLiberoOverlay = pos.playerId === effectiveLiberoSub && !!liberoPlayer;
 
-            const isFrontRow = pos.y > 0.5 && pos.y <= 0.75;
+            const isFrontRow = rowOf(pos.y) === "front";
             const isServer = serving === "us" && pos.x > 0.7 && pos.y > 0.75;
             const isDropTarget = isLiberoDropHighlight(pos);
             const isSubTarget = subModeActive && !isFrontRow;
@@ -412,8 +378,7 @@ export default function ScoreSheetCourt({
                   : isFrontRow
                     ? "#CCFF00"
                     : "#FFFFFF";
-            const x = pos.x * 100;
-            const y = pos.y * 200;
+            const { x, y } = toSvg(pos);
             // L 蓋住此格時，顯示的是 L 本人的背號/姓名，姓名後面加註被蓋格主的背號
             // （原本是圈裡第二行小字，PlayerMarker 只有「背號＋姓名」兩格，改成併進姓名
             // 那一行，資訊沒有少，只是排版跟著共用元件走）。

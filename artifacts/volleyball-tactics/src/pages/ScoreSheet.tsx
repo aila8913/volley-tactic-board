@@ -20,6 +20,7 @@ import {
   lineupToPositions,
 } from "@/lib/rotationLogic";
 import { captureFromScoreSheet, captureBlank } from "@/lib/courtSnapshot";
+import { rowOf } from "@/lib/courtGeometry";
 
 // 6 大類跟 lib/db/src/schema/events.ts 的 eventActionEnum 對齊（見
 // types/scoresheet.ts 的說明）。陣列順序就是 RadialMenu 從正上方順時針排列的順序，
@@ -174,7 +175,7 @@ export default function ScoreSheet() {
     const positions = lineupToPositions(activeLineup, currentSet.ourRotation);
     const targetPos = positions.find((p) => p.playerId === libSub);
 
-    const isFrontRow = targetPos && targetPos.y > 0.5 && targetPos.y <= 0.75;
+    const isFrontRow = targetPos && rowOf(targetPos.y) === "front";
     if (!isFrontRow) return;
 
     const prev = prevLiberoRef.current;
