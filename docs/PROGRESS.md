@@ -22,9 +22,9 @@
 > 平行 PR 就落在不同行段、git 幾乎都能自動合併，不用真的把檔案拆兩份、也保住一眼 catch-up。
 > 上面的 `_Last updated_` 是共用一行摘要（誰更新了什麼），保持精簡、別長成段落。
 
-\_Last updated: 2026-07-28 (aila) — 領域詞彙表 `CONTEXT.md`＋ADR-0004 上線、三個入口掛勾、刪 `replit.md`
-與過期 ERD、新開 #240（回填 personId）；同日稍早 #174 Stage B 待 ship、roadmap 收束、`docs/adr/` 上線與
-架構掃描八張（#225–#232）。\_
+\_Last updated: 2026-07-30 (aila) — #225 tactics ownership 缺口修掉、mockAuth 可切換使用者以實測 IDOR；
+補記 07-28 之後落地但未進快照的 PR #237（球場視覺）/#239（環 3 Stage B，帶關 #174/#120 與 M1.5）/
+#242（#226 PR1 `volleyballRules`）。\_
 
 ## Current state
 
@@ -70,16 +70,16 @@ lives in git log + the issues named).
     側欄、「戰」子清單、匯出入口「出」）。PO 依實機推翻兩條規格並回寫 layout-spec §2.2：展開寬度
     370→176px；展開改**推開版面**而非浮層（浮層會遮住使用者正要點的中央內容）。**踩到的雷**：
     Tailwind class 是建置時掃描原始碼字串產生的，`hover:${變數}` 拼出來的名字掃不到。
-  - **環 3（#174，**仍 open**）**：右欄 `RotationRailPanel` 有 `axis`（rotation/set）與 stepper，
+  - **環 3（#174，已關）**：右欄 `RotationRailPanel` 有 `axis`（rotation/set）與 stepper，
     **元件只回報方向**，「輪是環狀、局是線性有邊界」屬領域規則留在呼叫端；`MatchInfoRail` 三態
     （空狀態／資料夾摘要／比賽輪轉表）由列表頁與資料夾內頁共用。實作前發現**規格與資料對不上**：
     `CompletedSet` 沒存 lineup，已補 `CompletedSet.lineup` ＋共用的 `findLineupSnapshotForSet`。
     選取語意一般化成 `selected { kind, id }`、**不自動選第一場**（使用者未表達意圖前不該讓站位進
-    可寫狀態）。跨欄拖曳已由 PR #189 完成；**Stage B（統計格）已於 07-28 實作完成**（見下方 Recently
-    closed），ship 後 #174 與 #120 一併關。
+    可寫狀態）。跨欄拖曳已由 PR #189 完成；**Stage B（統計格）已由 PR #239 合併**（見下方 Recently
+    closed），#174 與 #120 一併關閉，**M1.5 milestone 已收掉**。
   - **環 4（#175）／環 5（#176，**仍 open**：剩繪圖工具正式圖示 blocked @tangyi1025，07-28 已移入 M3）／
     環 6（#177）** 皆已落地，見下方 Recently closed。**環 7（#178）需先補線框稿（在 M3）。**
-- **#120 計分頁右欄兩階段落地（**仍 open**）。** `CourtReadOnlyView` 常駐唯讀站位（**純展示、不訂閱
+- **#120 計分頁右欄兩階段落地（已關，隨 PR #239 收尾）。** `CourtReadOnlyView` 常駐唯讀站位（**純展示、不訂閱
   任何 store**）＋`RotationRailPanel` 改為**受控元件**——改動直接進共用真相，草稿 state 與「確定」鈕
   整組移除，連帶消滅「排到一半被無關 re-render 洗掉」那類 bug。**`lib/rotationLogic.ts` 連續兩次 UI
   重寫都一行未動**——把領域邏輯抽出元件的回報。**換局換輪視窗已作廢**（右欄本來就能就地改，彈窗是
@@ -140,11 +140,12 @@ lives in git log + the issues named).
   5 份、前排門檻已分歧成 `<0.75` 與 `<=0.75` 只是還沒現形）、#228 route handler 儀式（404 樣板 ×33、
   ownership 守衛 ×25 全靠人記得寫）。**M3.5 可測性與資料流**（8/16）＝#229 analysis 拆查詢與合併、
   #230 寫入改 write log（吸收已關的 #184）、#231 先發四份表示法收斂、#232 後端可測性。
-  **#225（tactics 路由缺 ownership）排 M3，是 bug 不是重構**——而且是 **#127 那條判準的復發**：外鍵保證
+  **#225（tactics 路由缺 ownership）已於 07-30 修掉**——它是 **#127 那條判準的復發**：外鍵保證
   referential integrity，不保證 ownership，`tactics.ts` 是當初漏網的檔案，整份沒 import `ownership`。
+  詳見下方 Recently closed。
 - **專案 roadmap 已上線。** 時間序住在 repo **Milestones M1–M5**（現為 M1–M5＋M1.5/M2.5/M3.5）（軟目標日
   7/18→9/11，非死線），當下狀態住在 [GitHub Project #4](https://github.com/users/aila8913/projects/4)。
-  **M1／M2 milestone 已關閉；M1.5 只剩 #174/#120 待 ship 帶關，關掉後整個 milestone 收掉**（#176 已移 M3，
+  **M1／M2／M1.5 milestone 皆已關閉**（M1.5 由 PR #239 帶關 #174/#120 後收掉；#176 已移 M3，
   它卡在 @tangyi1025 的圖示、不該讓一個純外部阻塞項把階段一直掛在逾期狀態）。**Todo 欄已填上 M2.5 的
   #226/#227/#228**——下一步直接看 Todo 欄就好，不用再重推。維護規則與 CLI id 在
   `.claude/skills/wrap-up/SKILL.md` step 5＋`reference.md`。尚待 PO 在網頁完成：Workflows 自動化＋三個 view。
@@ -190,7 +191,7 @@ gh issue list --milestone "M2.5 架構深化：收斂重複規則"   # 當前階
 gh issue list --state open                                 # 全部
 ```
 
-**M1／M2 milestone 皆已關閉，M1.5 只等 #174/#120 隨 ship 收尾。** M1.5「戰術板 UI 大改版」＝七環
+**M1／M2／M1.5 milestone 皆已關閉。** M1.5「戰術板 UI 大改版」＝七環
 （#172–#178），規格住 `docs/layout-spec.md`、相依鏈 `環1 →（環2 ‖ 環3 ‖ 環4）→ 環5 → 環6`；環 1–6
 結構工作全部落地，剩的兩張尾巴（#176 繪圖工具圖示 blocked @tangyi1025、#178 環 7 響應式需線框稿）
 已移入 **M3**，因為兩者都卡在 M1.5 內部推不動的外部輸入。**#199**（戰術板對手球員分色渲染——Court
@@ -198,7 +199,8 @@ gh issue list --state open                                 # 全部
 milestone，歸 **M5**。
 
 **當前階段＝M2.5「收斂重複規則」（軟目標日 8/1）**，Project #4 的 Todo 欄就是這三張：**#226**（得分/
-輪轉規則四份實作＋第五份存在 DB 欄位）、**#227**（球場座標 `*100/*200` 內嵌 12 處、前排門檻已分歧成
+輪轉規則四份實作＋第五份存在 DB 欄位；**PR1 已由 PR #242 落地**——前端 `lib/volleyballRules.ts` 讓 live
+記分與 replay 重建共用同一份，後端 `analysis.ts` 的 SQL 聚合刻意留給後續，故 issue 仍 open）、**#227**（球場座標 `*100/*200` 內嵌 12 處、前排門檻已分歧成
 `<0.75` 與 `<=0.75`）、**#228**（route handler 儀式：404 樣板 ×33、ownership 守衛 ×25 全靠人記得寫）。
 新加入的 **#238**（比賽狀態詞彙與判準收斂）是同一類問題的小號版本，且**已經飄出錯誤答案**：比賽列表用
 `completedSets.length === 0`、資料夾統計格用 `setsPlayed > 0`，同一場打到第一局一半的比賽在兩處分別
@@ -227,13 +229,33 @@ serving≠null 但 record.lineup=null」那條路**，但真正的 reconcile 仍
 
 **已修掉但判準值得留著的**：#127（後端沒驗 tournamentId 擁有權）——**外鍵保證 referential integrity
 （uuid 指得到一列），不保證 ownership（那列是不是你的）**，兩者很容易被當成同一件事；`lib/ownership.ts`
-的 `tournamentBelongsToUser`／`teamBelongsToUser` 就是這條判準的落點。
+的 `tournamentBelongsToUser`／`teamBelongsToUser` 就是這條判準的落點。**這條判準已復發過一次**（#225，
+`tactics.ts` 是當初唯一沒 import `ownership` 的路由檔）——**判準寫下來擋不住復發，因為新檔案不會自動
+知道它**；真正的結構解法是 #228 的 route handler 儀式收斂，讓守衛不再依賴「人記得寫」。
 
 ## Recently closed (past ~week)
 
 ### 開發 (aila)
 
-- **#174 Stage B**（資料夾統計格，07-28，**待 ship**）— 右欄兩塊：比賽選中時各局比分藥丸（吃已在手上的
+- **#225**（tactics 路由的兩個 ownership 缺口，07-30）— `POST /tactics` 沒驗 `matchId` 屬於誰（**外鍵只
+  保證那筆 id 存在，不保證是你的**——#127 判準的復發），`DELETE` 直接回 204 不看實際刪掉幾列，刪不到
+  別人的戰術也回成功、等於對呼叫端說謊。修法照 `matches.ts` 既有樣式：`matchBelongsToUser` 守衛 ＋
+  Drizzle `.returning()` 判斷列數，兩者都回 **404 而非 403**（403 等於向攻擊者確認那筆資源存在）。
+  `PUT` 不需要改——`UpdateTacticBody` 根本沒有 `matchId` 欄位，改不到歸屬。
+  **同 PR 讓跨使用者情境變成「測得出來」**：mockAuth 支援 `X-Mock-User-Id` 假扮，seed 補一場掛在
+  `mock-user-002` 底下的空比賽（UI 永遠不會出現，唯一用途是當「別人的資料」）。**gate 用白名單
+  `NODE_ENV === "development"` 而非黑名單 `!== "production"`**——`pnpm run start` 不設 NODE_ENV，黑名單
+  寫法會判定「不是 production」而把身分冒用後門默默打開。**這個選擇當場就回本**：測試失敗才發現
+  dev script 的 `cross-env NODE_ENV=development pnpm run build && pnpm run start` 因 `&&` 中斷作用域，
+  **真正跑起來的 server 一直沒有 NODE_ENV**（已修）——黑名單寫法會「正常運作」並把同一個洞帶進正式環境。
+  **#232 保持 open**：只完成它三件事裡的 mockAuth 那件，`createDb` 注入未做。
+- **PR #242**（#226 PR1，07-29）— 見上方 M2.5 段落。
+- **PR #237**（計分頁球場視覺，07-28）— 對手號位圈改共用 `PlayerMarker`＋紅色邊框柔化到 70% 不透明；
+  `glowBlur` prop 讓紅色光暈收到 0.75px 而其餘顏色維持 3px（**不同顏色需要不同模糊半徑，不是一個數字
+  打天下**）；`courtTheme.tsx` 球場背景從三段深青漸層改單一平色 `#1B6E62`（戰術板與計分表同步變）；
+  「沒看到」從球場上兩個虛線框整併進比分卡動作選單，球場內只留「畫線連到明確目標」一種手勢。
+  **#220 保持 open**：單色版已上線，但「要不要回頭用漸層」還沒拍板，issue 是刻意留著的討論串。
+- **#174 Stage B**（資料夾統計格，PR #239，07-28）— 右欄兩塊：比賽選中時各局比分藥丸（吃已在手上的
   `record.completedSets`，不多打 API），資料夾選中時「N 場 · X 勝 Y 敗 ＋ 總局數 ＋ 逐場清單」。
   **單局統計格 PO 決定不做**（比分已在 `RotationRailPanel` 標題列）。彙總規則抽成
   `lib/tournamentSummary.ts` 純函式並附測試，**刻意只吃自訂的最小形狀**（matchId/opponent/dateTime/
