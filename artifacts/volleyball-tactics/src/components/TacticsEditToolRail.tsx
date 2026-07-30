@@ -5,13 +5,11 @@ import { PRIMARY_BTN_CLASS, SECONDARY_BTN_CLASS } from "../lib/tacticsBoardStyle
 import ToolSelectIcon from "./icons/ToolSelectIcon";
 import ToolArrowIcon from "./icons/ToolArrowIcon";
 import ToolDashedIcon from "./icons/ToolDashedIcon";
-import ToolAttackIcon from "./icons/ToolAttackIcon";
 import ToolTextIcon from "./icons/ToolTextIcon";
 import ToolVolleyballIcon from "./icons/ToolVolleyballIcon";
 import ToolCircleIcon from "./icons/ToolCircleIcon";
 import ToolEllipseIcon from "./icons/ToolEllipseIcon";
 import ToolFanIcon from "./icons/ToolFanIcon";
-import ToolZoneLabelIcon from "./icons/ToolZoneLabelIcon";
 import ToolRosterIcon from "./icons/ToolRosterIcon";
 import ToolDeleteIcon from "./icons/ToolDeleteIcon";
 
@@ -32,9 +30,13 @@ import ToolDeleteIcon from "./icons/ToolDeleteIcon";
 //
 // 繪圖工具的正式圖示（issue #176 剩餘項目）：每顆圖示都照對應功能在球場上實際畫出來的
 // 樣子設計（見各 icons/Tool*Icon.tsx 檔案自己的說明），不是隨便挑好看的符號——例如
-// ToolDashedIcon 真的用虛線畫、ToolAttackIcon 真的比 ToolArrowIcon 粗，圖示本身就是
-// 「畫出來會長怎樣」的預覽。版位本來就設計成「以後只換字、不動結構」，所以這次只換了
+// ToolDashedIcon 真的用虛線畫。版位本來就設計成「以後只換字、不動結構」，所以這次只換了
 // <span> 裡的內容，沒有動按鈕本身的 class/尺寸/排列順序。
+//
+// 原本另外有一顆「攻擊線」（attack）工具，跟「實線箭頭」只差在線更粗一點，tang 實際看過
+// 兩顆圖示後覺得使用者分不太出來、留一顆就好，所以拿掉了——ToolType 本身、Markers.tsx
+// 的 attack 渲染都還在（舊戰術裡如果已經畫了 attack 線，讀出來還是要能顯示），只是工具軌
+// 不再提供新增這個工具的入口。
 interface TacticsEditToolRailProps {
   matchId: string;
   onSave: () => void;
@@ -53,7 +55,6 @@ const DRAW_TOOLS: { tool: ToolType; Icon: ComponentType<{ className?: string }>;
     { tool: "select", Icon: ToolSelectIcon, label: "選取移動" },
     { tool: "arrow", Icon: ToolArrowIcon, label: "實線箭頭" },
     { tool: "dashed", Icon: ToolDashedIcon, label: "虛線路徑" },
-    { tool: "attack", Icon: ToolAttackIcon, label: "攻擊線" },
     { tool: "text", Icon: ToolTextIcon, label: "文字" },
     { tool: "volleyball", Icon: ToolVolleyballIcon, label: "排球" },
   ];
@@ -79,8 +80,6 @@ export default function TacticsEditToolRail({
   const session = useTacticsBoard((s) => s.session);
   const activeTool = useTacticsBoard((s) => s.activeTool);
   const setActiveTool = useTacticsBoard((s) => s.setActiveTool);
-  const zoneLabelOn = useTacticsBoard((s) => s.labelToggles.zone);
-  const toggleLabel = useTacticsBoard((s) => s.toggleLabel);
   const removeMarker = useTacticsBoard((s) => s.removeMarker);
   const removeDefenseRange = useTacticsBoard((s) => s.removeDefenseRange);
   const selectedObjectId = useTacticsBoard((s) => s.selectedObjectId);
@@ -161,21 +160,13 @@ export default function TacticsEditToolRail({
 
         <div className="h-px w-8 bg-white/[0.14]" />
 
-        {/* 「號」＝號位標示開關、「換」＝球員名單浮層開關，兩顆都是 toggle（按下去切換一個
-          持續性狀態），跟上面「選一種工具」語意不同，但視覺上沿用同一顆方鈕、用同一套
-          active 樣式表示「現在開著」，使用者不用學兩套視覺語言。 */}
+        {/* 「換」＝球員名單浮層開關，是 toggle（按下去切換一個持續性狀態），跟上面「選一種
+          工具」語意不同，但視覺上沿用同一顆方鈕、用同一套 active 樣式表示「現在開著」，
+          使用者不用學兩套視覺語言。
+          （原本這裡還有一顆「號位標示」開關，tang 覺得這功能不必要，已經整顆拿掉——連帶
+          labelToggles/toggleLabel 這個 store 欄位、Court.tsx 畫號位數字的區塊都一起刪了，
+          它本來就是重整頁面就歸零、不存進戰術檔的暫時性 UI 狀態，砍掉沒有相容性問題。） */}
         <div className="flex flex-col items-center gap-1.5">
-          <button
-            type="button"
-            title="切換號位標示"
-            aria-label="切換號位標示"
-            aria-pressed={zoneLabelOn}
-            onClick={() => toggleLabel("zone")}
-            data-testid="tool-rail-toggle-zone-label"
-            className={squareBtnClass(zoneLabelOn)}
-          >
-            <ToolZoneLabelIcon className="size-5" />
-          </button>
           <button
             type="button"
             title="球員名單"

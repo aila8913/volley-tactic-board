@@ -85,7 +85,6 @@ export default function Court() {
   const session = useTacticsBoard((s) => s.session);
   const viewingScene = useTacticsBoard((s) => s.viewingScene);
   const isLayoutMode = session !== null;
-  const labelToggles = useTacticsBoard((s) => s.labelToggles);
   const activeTool = useTacticsBoard((s) => s.activeTool);
   const courtView = useTacticsBoard((s) => s.courtView);
   const setActiveTool = useTacticsBoard((s) => s.setActiveTool);
@@ -546,51 +545,6 @@ export default function Court() {
                 strokeDasharray="3 3"
               />
             </g>
-
-            {/* Zone Labels */}
-            {labelToggles.zone && (
-              <g className="opacity-10 font-sans text-4xl" fill="#F5F5F0">
-                {/* Bottom half (Our team) */}
-                <text x="80" y="180" textAnchor="middle">
-                  1
-                </text>
-                <text x="80" y="120" textAnchor="middle">
-                  2
-                </text>
-                <text x="50" y="120" textAnchor="middle">
-                  3
-                </text>
-                <text x="20" y="120" textAnchor="middle">
-                  4
-                </text>
-                <text x="20" y="180" textAnchor="middle">
-                  5
-                </text>
-                <text x="50" y="180" textAnchor="middle">
-                  6
-                </text>
-
-                {/* Top half (Opponent) */}
-                <text x="20" y="30" textAnchor="middle">
-                  1
-                </text>
-                <text x="20" y="90" textAnchor="middle">
-                  2
-                </text>
-                <text x="50" y="90" textAnchor="middle">
-                  3
-                </text>
-                <text x="80" y="90" textAnchor="middle">
-                  4
-                </text>
-                <text x="80" y="30" textAnchor="middle">
-                  5
-                </text>
-                <text x="50" y="30" textAnchor="middle">
-                  6
-                </text>
-              </g>
-            )}
 
             <text
               x="50"
