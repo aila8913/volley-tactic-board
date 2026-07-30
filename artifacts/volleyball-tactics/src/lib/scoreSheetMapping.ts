@@ -78,6 +78,17 @@ export function disabledActions(serving: Side | null, actorSide: Side): PlayActi
   return [actorSide === serving ? "receive" : "serve"];
 }
 
+// ── 「得分／失分」→ 這分實際算誰的（issue #226）──
+// 記一球時使用者選的是「動作方這一球是得分還是失分」，不是「我方/對手直接得分」——
+// 對手做了一個動作、這個動作是「得分」，代表對手拿到這一分；同一個動作若是「失分」，
+// 代表對手沒拿到（我方拿到）。動作方是我方球員時邏輯相反過來，一樣是「這個動作方
+// 自己得分還是失分」。這一行判斷原本寫在 ScoreSheet.tsx 的事件處理器裡（JSX 元件內部），
+// 完全沒有測試覆蓋；抽成這支純函式後才測得到。
+export function resolveScoringSide(actorSide: Side, outcome: "win" | "lose"): Side {
+  if (outcome === "win") return actorSide;
+  return actorSide === "us" ? "opponent" : "us";
+}
+
 // ── PointRecord → rally ──
 // 一個 PointRecord 就是一分 = 一個 rally。homeScore/awayScore 存的是「這分開始前」的比分
 // （後端設計，見 lib/db/src/schema/rallies.ts），所以呼叫端要把記這分之前的比分傳進來。
