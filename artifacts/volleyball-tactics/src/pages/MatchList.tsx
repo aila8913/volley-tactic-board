@@ -12,6 +12,7 @@ import MatchEntryLinks from "@/components/MatchEntryLinks";
 import AppShell from "@/components/AppShell";
 import ListNavRail from "@/components/ListNavRail";
 import MatchInfoRail, { MatchListSelection } from "@/components/MatchInfoRail";
+import { APP_BACKGROUND_STYLE, APP_SHELL_CLASS } from "@/lib/appChromeStyles";
 import { formatMatchDateTime, formatMatchResult } from "@/lib/matchSummary";
 import { winsNeededFor, type MatchFormat } from "@/lib/matchOutcome";
 import { Match } from "@/types/match";
@@ -143,11 +144,9 @@ export default function MatchList() {
     // 空狀態／資料夾摘要／比賽站位——這一頁只負責把「目前選中什麼」傳過去，不自己判斷要
     // 渲染哪一種畫面。
     //
-    // 背景跟戰術板／計分表（TacticsBoard.tsx／ScoreSheet.tsx）對齊成同一套（tang 2026-07-30
-    // 要求四頁背景統一）：這裡原本是 #131 那次改版之前留下的舊版本——純色底＋一層很淡的斜線
-    // 網格當「球網紋理」給 backdrop-blur 東西可以模糊（PR #129 review 建議）。#131 已經把
-    // 戰術板／計分表換成兩顆柔光暈疊底層斜切漸層，比純網格更有層次，這裡補上同一組漸層字串，
-    // 讓四頁背景真正一致而不是分裂成兩代。
+    // 背景改用 lib/appChromeStyles 的共用常數（tang 2026-07-30 要求全站背景統一）：這裡原本
+    // 是 #131 那次改版之前留下的舊版本——純色底＋一層很淡的斜線網格。收斂成共用常數的完整
+    // 理由（以及為什麼當初會分裂成兩代）寫在那個檔案裡。
     <AppShell
       mode="A"
       nav={
@@ -161,13 +160,8 @@ export default function MatchList() {
         </div>
       }
       backdrop={<div className="tb-beam" />}
-      className="relative font-dash text-[#f5f5f0]"
-      style={{
-        background:
-          "radial-gradient(ellipse 55% 45% at 18% 12%, rgba(198,241,53,0.10), transparent 70%), " +
-          "radial-gradient(ellipse 65% 55% at 88% 92%, rgba(42,110,106,0.30), transparent 70%), " +
-          "linear-gradient(160deg, #0a0b07 0%, #16241c 55%, #0a0b07 100%)",
-      }}
+      className={APP_SHELL_CLASS}
+      style={APP_BACKGROUND_STYLE}
     >
       {/* 中央主區（issue #175 環 4）。
           捲動責任下放給 ListScrollArea（AppShell 最外層是 overflow-hidden，沒人接手的話長清單

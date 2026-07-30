@@ -18,6 +18,7 @@ import { Spinner } from "@/components/ui/spinner";
 import AppShell from "@/components/AppShell";
 import NavRail, { matchBackHref } from "@/components/NavRail";
 import AnalyticsRotationRail from "@/components/AnalyticsRotationRail";
+import { APP_BACKGROUND_STYLE, APP_SHELL_CLASS } from "@/lib/appChromeStyles";
 import { countSetWins, setWinner, winsNeededFor } from "@/lib/matchOutcome";
 import { useMatchWithRoster } from "@/hooks/useMatches";
 import { useMatchRecording } from "@/hooks/useMatchRecording";
@@ -341,16 +342,10 @@ export default function MatchAnalytics() {
         </div>
       }
       backdrop={<div className="tb-beam" />}
-      // 背景跟戰術板／計分表（TacticsBoard.tsx／ScoreSheet.tsx）對齊成同一套（tang 2026-07-30
-      // 要求四頁背景統一）：原本這裡跟 MatchList.tsx 一樣停在 #131 改版之前的斜線網格版本，
-      // 說明見 MatchList.tsx 同一處的註解。
-      className="relative font-dash text-[#f5f5f0]"
-      style={{
-        background:
-          "radial-gradient(ellipse 55% 45% at 18% 12%, rgba(198,241,53,0.10), transparent 70%), " +
-          "radial-gradient(ellipse 65% 55% at 88% 92%, rgba(42,110,106,0.30), transparent 70%), " +
-          "linear-gradient(160deg, #0a0b07 0%, #16241c 55%, #0a0b07 100%)",
-      }}
+      // 背景改用 lib/appChromeStyles 的共用常數（tang 2026-07-30 要求全站背景統一）：
+      // 這裡原本停在 #131 改版之前的斜線網格版本，說明見那個檔案。
+      className={APP_SHELL_CLASS}
+      style={APP_BACKGROUND_STYLE}
     >
       {/* 原本是 min-h-screen（讓整個瀏覽器視窗跟著內容變長、由視窗自己捲）。AppShell 改成
           h-screen 固定版面之後，捲動責任下放到這一層：min-h-0 + flex-1 讓它剛好吃滿中央

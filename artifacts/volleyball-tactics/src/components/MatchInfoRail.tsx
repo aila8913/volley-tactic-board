@@ -8,6 +8,7 @@ import { useScoreSheet, useScoreSheetController } from "@/hooks/useScoreSheet";
 import { useCrossMatchAnalysis } from "@/hooks/useCrossMatchAnalysis";
 import { readLineupFromRotations } from "@/lib/rotationLogic";
 import { getMatchWinner, setWinner, winsNeededFor } from "@/lib/matchOutcome";
+import { INFO_RAIL_BASE_CLASS } from "@/lib/appChromeStyles";
 import {
   computeTournamentStats,
   type TournamentMatchResult,
@@ -26,12 +27,11 @@ interface MatchInfoRailProps {
   selected: MatchListSelection;
 }
 
-// 右欄外層沿用 ScoreSheet.tsx 那套「深色玻璃右欄」樣式（issue #120 訂的色票，
-// docs/design-spec.md 第 2 節）。寬度刻意不寫在這裡——AppShell 的 ASIDE_WIDTH 已經是唯一
-// 寬度來源（見 AppShell.tsx 開頭「為什麼三欄骨架要收斂到一個檔案」的說明），這個元件只負責
+// 右欄外層樣式改從 lib/appChromeStyles 讀（原本這裡自己寫一份、跟另外兩個右欄字面相同）——
+// 抽出去的理由跟材質決定都寫在那個檔案裡。寬度刻意不在這裡也不在那裡：AppShell 的
+// ASIDE_WIDTH 已經是唯一寬度來源（見 AppShell.tsx 開頭的說明），這個元件只負責
 // 「這一欄裡面長什麼樣」，多寫一次寬度只會製造「兩個地方各管一份數字」的老問題重演。
-const RAIL_BASE_CLASS =
-  "flex h-full flex-col border-l border-white/[0.10] bg-[#121310] font-dash text-[#F5F5F0]";
+const RAIL_BASE_CLASS = INFO_RAIL_BASE_CLASS;
 
 export default function MatchInfoRail({ selected }: MatchInfoRailProps) {
   // 這兩個 query 在 MatchList.tsx / TournamentDetail.tsx 本來就會呼叫一次——這裡再呼叫一次

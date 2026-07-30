@@ -1,6 +1,7 @@
 import { useState } from "react";
 import RotationRailPanel from "@/components/RotationRailPanel";
 import { getMatchWinner } from "@/lib/matchOutcome";
+import { INFO_RAIL_BASE_CLASS } from "@/lib/appChromeStyles";
 import type { MatchPlayer } from "@/types/match";
 import type { LineupSnapshot, ScoreSheetState } from "@/types/scoresheet";
 
@@ -35,10 +36,12 @@ interface AnalyticsRotationRailProps {
   winsNeeded: number;
 }
 
-// 跟 MatchInfoRail.tsx 用同一個常數字面值（不是 import，因為那邊的常數沒有 export——
-// 兩個右欄外觀本來就該長一樣，抄一份字串比為了共用兩行 class 特地拉一個共用檔案划算）。
-const RAIL_BASE_CLASS =
-  "flex h-full flex-col border-l border-white/[0.10] bg-[#121310] font-dash text-[#F5F5F0]";
+// 這裡原本是刻意抄一份 MatchInfoRail 的字面值，理由寫著「抄一份字串比為了共用兩行 class
+// 特地拉一個共用檔案划算」。2026-07-30 推翻：那個判斷成立的前提是「這串 class 不會變」，
+// 但實際上第三個呼叫端（ScoreSheet.tsx 的右欄）也複製了同一份，而且 tang 要改材質
+//（實色 → 半透明玻璃）時就得同時記得改三個地方——複製的成本不在寫的當下，在改的時候。
+// 現在收斂到 lib/appChromeStyles.ts，材質決定也寫在那裡。
+const RAIL_BASE_CLASS = INFO_RAIL_BASE_CLASS;
 
 export default function AnalyticsRotationRail({
   record,

@@ -5,6 +5,7 @@ import BackToMatchListButton from "@/components/BackToMatchListButton";
 import { useMatchList, useDeleteMatch } from "@/hooks/useMatches";
 import { useTournamentList } from "@/hooks/useTournaments";
 import { useScoreSheet } from "@/hooks/useScoreSheet";
+import { APP_BACKGROUND_STYLE, APP_SHELL_CLASS } from "@/lib/appChromeStyles";
 import MatchFormDialog from "@/components/MatchFormDialog";
 import ListItemCard from "@/components/ListItemCard";
 import ListScrollArea from "@/components/ListScrollArea";
@@ -103,22 +104,26 @@ export default function TournamentDetail() {
     // 就少一塊。
     <AppShell
       mode="A"
-      nav={<ListNavRail selected={selected} />}
-      aside={<MatchInfoRail selected={selected} />}
+      nav={
+        <div className="relative z-10 h-full">
+          <ListNavRail selected={selected} />
+        </div>
+      }
+      aside={
+        <div className="relative z-10 h-full">
+          <MatchInfoRail selected={selected} />
+        </div>
+      }
       // issue #131：這頁的中央區原本還是 shadcn 預設的白底（`bg-white` ＋ Card/Button），
       // #175 既然要整個重寫這塊，深色語言就在這裡一次做完，不在 #131 底下另外做一次白工。
-      // 背景（純色 ＋ 斜線網格）跟 MatchList.tsx 用同一組值：兩頁是同一個列表體驗的兩層，
-      // 進了資料夾底色卻換一種會很突兀；網格的作用是讓卡片的 backdrop-blur 有東西可以模糊
-      // （純色背景模糊完還是同一個純色，玻璃感等於沒發生）。
-      className="bg-[#0a0b07] font-dash text-[#f5f5f0]"
-      style={{
-        backgroundImage:
-          "repeating-linear-gradient(45deg, rgba(245,245,240,0.035) 0 1px, transparent 1px 28px)," +
-          "repeating-linear-gradient(-45deg, rgba(245,245,240,0.035) 0 1px, transparent 1px 28px)",
-      }}
+      // 背景跟 MatchList.tsx 用同一組值（現在共用 lib/appChromeStyles 的常數，不再各寫一份）：
+      // 兩頁是同一個列表體驗的兩層，進了資料夾底色卻換一種會很突兀。
+      backdrop={<div className="tb-beam" />}
+      className={APP_SHELL_CLASS}
+      style={APP_BACKGROUND_STYLE}
     >
       {/* 版面與捲動的處理跟 MatchList.tsx 完全一致，說明見那邊。 */}
-      <div className="flex min-h-0 flex-1 flex-col px-8 py-8">
+      <div className="relative z-10 flex min-h-0 flex-1 flex-col px-8 py-8">
         <div className="mx-auto flex min-h-0 w-full max-w-[1136px] flex-1 flex-col">
           <BackToMatchListButton className="mb-4 -ml-2" />
 
