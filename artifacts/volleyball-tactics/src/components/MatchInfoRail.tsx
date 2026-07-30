@@ -7,7 +7,7 @@ import { useRotationTable } from "@/hooks/useRotationTable";
 import { useScoreSheet, useScoreSheetController } from "@/hooks/useScoreSheet";
 import { useCrossMatchAnalysis } from "@/hooks/useCrossMatchAnalysis";
 import { readLineupFromRotations } from "@/lib/rotationLogic";
-import { getMatchWinner, winsNeededFor } from "@/lib/matchOutcome";
+import { getMatchWinner, setWinner, winsNeededFor } from "@/lib/matchOutcome";
 import {
   computeTournamentStats,
   type TournamentMatchResult,
@@ -233,7 +233,7 @@ function MatchRotationSection({ matchId }: { matchId: string }) {
             {completedSets.map((set, index) => {
               // 顏色是這一局的勝負，不是文字——PO 原話「勝負用顏色表示」，藥丸本身
               // 就是結果，不再疊一層「勝/敗」文字或加總分數製造多餘資訊。
-              const weWonThisSet = set.ourScore > set.opponentScore;
+              const weWonThisSet = setWinner(set) === "us";
               return (
                 <span
                   key={index}

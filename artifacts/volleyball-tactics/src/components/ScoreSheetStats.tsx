@@ -1,6 +1,7 @@
 import { MatchPlayer } from "@/types/match";
 import { ScoreSheetState, PointRecord } from "@/types/scoresheet";
 import { ACTIONS, ACTION_LABELS, buildPlayerMatrix } from "@/lib/statsMapping";
+import { countSetWins, setWinner } from "@/lib/matchOutcome";
 
 // 排球規則（issue #20）：一局比賽，每隊最多只能換 6 次「一般換人」（自由球員上下場不算在內，
 // 有獨立的規則、不受這個上限限制）。這裡只是「顯示提醒」用，不會真的擋住教練繼續按換人——
@@ -52,8 +53,9 @@ export default function ScoreSheetStats({
       : []),
   ];
 
-  const ourSetsWon = completedSets.filter((s) => s.ourScore > s.opponentScore).length;
-  const opponentSetsWon = completedSets.filter((s) => s.opponentScore > s.ourScore).length;
+  // 局比數走 matchOutcome.countSetWins（#226 PR2）——這裡原本是一對手寫的 .filter().length，
+  // 跟另外五處逐字相同。
+  const { ourWins: ourSetsWon, opponentWins: opponentSetsWon } = countSetWins(completedSets);
 
   const allHistory: PointRecord[] = [
     ...completedSets.flatMap((s) => s.history ?? []),
@@ -78,7 +80,7 @@ export default function ScoreSheetStats({
           <div className="flex flex-col items-center gap-2">
             <div className="flex flex-wrap justify-center gap-2">
               {setRows.map((s) => {
-                const weWon = s.ourScore > s.opponentScore;
+                const weWon = setWinner(s) === "us";
                 const inProgress = s.status === "in-progress";
                 return (
                   <div

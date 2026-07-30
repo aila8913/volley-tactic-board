@@ -18,7 +18,7 @@ import { Spinner } from "@/components/ui/spinner";
 import AppShell from "@/components/AppShell";
 import NavRail, { matchBackHref } from "@/components/NavRail";
 import AnalyticsRotationRail from "@/components/AnalyticsRotationRail";
-import { winsNeededFor } from "@/lib/matchOutcome";
+import { countSetWins, setWinner, winsNeededFor } from "@/lib/matchOutcome";
 import { useMatchWithRoster } from "@/hooks/useMatches";
 import { useMatchRecording } from "@/hooks/useMatchRecording";
 import { ACTIONS, ACTION_LABELS, buildPlayerMatrix, buildRotationStats } from "@/lib/statsMapping";
@@ -241,8 +241,8 @@ export default function MatchAnalytics() {
         ]
       : []),
   ];
-  const ourSetsWon = completedSets.filter((s) => s.ourScore > s.opponentScore).length;
-  const opponentSetsWon = completedSets.filter((s) => s.opponentScore > s.ourScore).length;
+  // 局比數走 matchOutcome.countSetWins（#226 PR2），不再各頁手寫一份。
+  const { ourWins: ourSetsWon, opponentWins: opponentSetsWon } = countSetWins(completedSets);
 
   // 球員統計：completedSets 全部 history + currentSet.history 一起丟給 buildPlayerMatrix。
   const allHistory: PointRecord[] = [
@@ -383,7 +383,7 @@ export default function MatchAnalytics() {
                   </span>
                 </button>
                 {setRows.map((s) => {
-                  const weWon = s.ourScore > s.opponentScore;
+                  const weWon = setWinner(s) === "us";
                   const inProgress = s.status === "in-progress";
                   const selected = scope === s.setNumber;
                   // 選中的局用實心萊姆綠框強調（跟「全場」一致）；沒選中時維持原本依勝負／進行中

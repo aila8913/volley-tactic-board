@@ -3,7 +3,7 @@
 // 為什麼獨立成 lib 純函式而不是寫在卡片元件裡：這是「排球賽制怎麼講一場比賽的結果」的規則，
 // 跟 matchOutcome.ts 是同一類東西（見那支檔案開頭的說明），純規則脫離 UI 才測得動，也才不會
 // 之後資料夾統計、數據頁要用同一句話時各自複製一份、慢慢飄成三種寫法。
-import { getMatchWinner, type SetScoreLike } from "./matchOutcome";
+import { countSetWins, getMatchWinner, type SetScoreLike } from "./matchOutcome";
 
 // 回傳例如「3:0 勝」「1:2 進行中」「尚未開賽」。
 //
@@ -16,14 +16,10 @@ import { getMatchWinner, type SetScoreLike } from "./matchOutcome";
 export function formatMatchResult(completedSets: SetScoreLike[], winsNeeded: number): string {
   if (completedSets.length === 0) return "尚未開賽";
 
-  // 數的是「贏了幾局」而不是「打了幾局」，跟 getMatchWinner 同一套理由：局比數才是排球
-  // 講結果的單位（3:0 指的是局數，不是分數）。
-  let ourWins = 0;
-  let opponentWins = 0;
-  for (const set of completedSets) {
-    if (set.ourScore > set.opponentScore) ourWins++;
-    else if (set.opponentScore > set.ourScore) opponentWins++;
-  }
+  // 數的是「贏了幾局」而不是「打了幾局」：局比數才是排球講結果的單位（3:0 指的是局數，
+  // 不是分數）。這段原本是手寫的 for 迴圈，#226 PR2 收進 matchOutcome.countSetWins——
+  // 規則的家在那支檔案，這裡只負責把數字組成一句給人看的話。
+  const { ourWins, opponentWins } = countSetWins(completedSets);
 
   const score = `${ourWins}:${opponentWins}`;
   const winner = getMatchWinner(completedSets, winsNeeded);

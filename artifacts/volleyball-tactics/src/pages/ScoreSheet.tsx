@@ -13,6 +13,7 @@ import ScoreSheetStats from "@/components/ScoreSheetStats";
 import RotationRailPanel from "@/components/RotationRailPanel";
 import { PlayAction, Side } from "@/types/scoresheet";
 import { isSetComplete, disabledActions } from "@/lib/scoreSheetMapping";
+import { countSetWins } from "@/lib/matchOutcome";
 import {
   captureLineupFromRotations,
   readLineupFromRotations,
@@ -245,8 +246,8 @@ export default function ScoreSheet() {
   const opponentTimeoutCount = timeouts.filter((t) => t.side === "opponent").length;
   const currentTimeoutCount = timeouts.length;
   const totalTimeoutCount = timeoutCountsHistory.reduce((a, b) => a + b, 0) + currentTimeoutCount;
-  const ourSetsWon = completedSets.filter((s) => s.ourScore > s.opponentScore).length;
-  const opponentSetsWon = completedSets.filter((s) => s.opponentScore > s.ourScore).length;
+  // 局比數走 matchOutcome.countSetWins（#226 PR2），不再各頁手寫一份。
+  const { ourWins: ourSetsWon, opponentWins: opponentSetsWon } = countSetWins(completedSets);
 
   // 統計欄目前只顯示「本場」。跨場統計需要「列出本使用者所有有記錄的場」的 API 策略，
   // 留到 Phase 3b-ii（連同 events 讀回、球員矩陣重建）一起做。

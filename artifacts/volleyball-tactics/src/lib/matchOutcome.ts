@@ -22,6 +22,50 @@ export function winsNeededFor(format: MatchFormat): number {
   return format === "best_of_3" ? 2 : 3;
 }
 
+// 「這一局誰贏」——把 `set.ourScore > set.opponentScore` 這個裸比較收成一個有名字的函式
+// （issue #226 PR2）。它本來散在三個 UI 檔裡各寫一次（MatchInfoRail 的各局比分藥丸、
+// ScoreSheetStats 的比分總覽、MatchAnalytics 的單場數據頁），每一處都自己判斷
+// 「分數大的那邊贏」。
+//
+// 抽出來的價值不在「省了幾個字」，而在**平手這個 edge case 只需要決定一次**：下面回 null
+// 而不是 false，逼呼叫端明確寫 `setWinner(s) === "us"`，而不是靠一個 boolean 把「對手贏」
+// 和「平手」悄悄併成同一格。原本 UI 那幾處寫的 `weWon = ourScore > opponentScore`，
+// 平手時會落進「敗」的顏色——行為上跟現在等價（改寫後仍是 `=== "us"`），但至少現在
+// 「平手算誰的」是一個看得見的決定，不是一個沒人注意到的比較運算子。
+//
+// 型別上吃 SetScoreLike 而不是 CompletedSet，理由同這支檔案開頭：純規則不認識儲存形狀。
+export function setWinner(set: SetScoreLike): "us" | "opponent" | null {
+  if (set.ourScore > set.opponentScore) return "us";
+  if (set.opponentScore > set.ourScore) return "opponent";
+  return null;
+}
+
+// 「局比數」——排球講一場比賽的結果用的單位（「3:0」指的是局數不是分數）。
+//
+// 這段 for 迴圈在 #226 PR2 之前有六份逐字相同的複製：getMatchWinner（下面）、
+// matchSummary.formatMatchResult、tournamentSummary.computeTournamentStats 三支手寫迴圈，
+// 加上 ScoreSheet / ScoreSheetStats / MatchAnalytics 三個頁面各寫成一對 `.filter().length`。
+// 六份都對，但那正是重複最危險的形態——沒有任何一處是壞的，所以沒有測試會失敗，
+// 而下一次規則要改（例如未來要處理棄賽局、或平手局的認定）時，改對五份、漏掉第六份
+// 也一樣不會有人發現。
+//
+// 回傳一個物件而不是單一數字：呼叫端幾乎都同時要兩邊的數字（要嘛顯示 "3:0"，要嘛比大小），
+// 分成兩支函式就會被連呼叫兩次、把同一個陣列走兩遍。
+export function countSetWins(sets: SetScoreLike[]): { ourWins: number; opponentWins: number } {
+  let ourWins = 0;
+  let opponentWins = 0;
+
+  for (const set of sets) {
+    const winner = setWinner(set);
+    if (winner === "us") ourWins++;
+    else if (winner === "opponent") opponentWins++;
+    // winner 為 null（兩邊比分相同，理論上不會發生——一局排球一定要分出勝負，不會平手封存）
+    // 就不算給任何一方，保守處理，不讓不合理的資料誤判出勝隊。
+  }
+
+  return { ourWins, opponentWins };
+}
+
 // 回傳目前的勝隊：
 //   "us"       — 我方已經拿到足以獲勝的局數。
 //   "opponent" — 對手已經拿到足以獲勝的局數。
@@ -38,18 +82,7 @@ export function winsNeededFor(format: MatchFormat): number {
 // 自己算出這個數字（用下面的 winsNeededFor(match.format)）才能編譯過，等於強迫每個呼叫點
 // 都想過一次「這場比賽是什麼賽制」。
 export function getMatchWinner(sets: SetScoreLike[], winsNeeded: number): "us" | "opponent" | null {
-  let ourWins = 0;
-  let opponentWins = 0;
-
-  for (const set of sets) {
-    if (set.ourScore > set.opponentScore) {
-      ourWins++;
-    } else if (set.opponentScore > set.ourScore) {
-      opponentWins++;
-    }
-    // 兩邊比分相同（理論上不會發生——一局排球一定要分出勝負，不會平手封存）就不算給任何一方，
-    // 保守處理，不讓不合理的資料誤判出勝隊。
-  }
+  const { ourWins, opponentWins } = countSetWins(sets);
 
   if (ourWins >= winsNeeded) return "us";
   if (opponentWins >= winsNeeded) return "opponent";
