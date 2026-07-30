@@ -13,6 +13,7 @@ import {
   reconstructTimeouts,
   reconstructRecording,
   disabledActions,
+  resolveScoringSide,
   lineupSnapshotToApi,
   apiLineupToSnapshot,
 } from "./scoreSheetMapping";
@@ -90,6 +91,18 @@ describe("disabledActions (issue #50 規則#1：發球/接發互斥)", () => {
       expect(["serve", "receive"]).toContain(disabled[0]);
       for (const kept of ["set", "attack", "block", "dig"]) expect(disabled).not.toContain(kept);
     }
+  });
+});
+
+describe("resolveScoringSide (issue #226：得分／失分 → 誰拿到這一分，原本寫在 ScoreSheet.tsx 事件處理器裡沒測試)", () => {
+  it("動作方得分，這一分就是動作方的", () => {
+    expect(resolveScoringSide("us", "win")).toBe("us");
+    expect(resolveScoringSide("opponent", "win")).toBe("opponent");
+  });
+
+  it("動作方失分，這一分算給對面那一方", () => {
+    expect(resolveScoringSide("us", "lose")).toBe("opponent");
+    expect(resolveScoringSide("opponent", "lose")).toBe("us");
   });
 });
 

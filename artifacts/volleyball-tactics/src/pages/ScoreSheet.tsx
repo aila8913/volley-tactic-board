@@ -12,7 +12,7 @@ import RadialMenu, { RadialMenuOption } from "@/components/RadialMenu";
 import ScoreSheetStats from "@/components/ScoreSheetStats";
 import RotationRailPanel from "@/components/RotationRailPanel";
 import { PlayAction, Side } from "@/types/scoresheet";
-import { isSetComplete, disabledActions } from "@/lib/scoreSheetMapping";
+import { isSetComplete, disabledActions, resolveScoringSide } from "@/lib/scoreSheetMapping";
 import { countSetWins } from "@/lib/matchOutcome";
 import {
   captureLineupFromRotations,
@@ -289,12 +289,10 @@ export default function ScoreSheet() {
 
   const handleOutcomeSelect = (outcome: Outcome) => {
     if (!gesture || gesture.step !== "outcome") return;
-    // 「得分／失分」是相對於這一球的動作方（target.side）來看，不是永遠對應
-    // 我方：對手(全體)做了這個動作時，「得分」代表對手拿到這一分，得加的是
-    // 對手的分數；「失分」代表對手沒拿到這一分（我方拿到）。動作方是我方球員
-    // 時邏輯相反過來，一樣是「這個動作方自己得分還是失分」。
+    // 「得分／失分」→「誰拿到這一分」的換算規則收在 resolveScoringSide（issue #226）：
+    // 原本這一行判斷直接寫在這個事件處理器裡、完全沒有測試，抽成 lib 純函式後才測得到。
     const actorSide = gesture.target.side;
-    const side = outcome === "win" ? actorSide : actorSide === "us" ? "opponent" : "us";
+    const side = resolveScoringSide(actorSide, outcome);
     score(side, {
       action: gesture.action,
       touchedBy: {
