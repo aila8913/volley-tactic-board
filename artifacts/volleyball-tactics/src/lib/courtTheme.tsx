@@ -43,3 +43,50 @@ export function CourtGradientDefs({ id }: { id: string }) {
     </defs>
   );
 }
+
+// 球網中線＋兩條 3 米攻擊線（issue #227）：戰術板（Court.tsx）跟計分表
+// （ScoreSheetCourt.tsx）原本各自手刻一份一模一樣的 <line> 標記，數字改一次要
+// 兩邊一起改。收斂到這裡之後，兩個球場共用同一份 markup，材質（顏色/透明度）
+// 也自然統一走上面的 COURT_LINE_COLOR / COURT_LINE_OPACITY，不會再各自寫死顏色。
+//
+// 座標數字的來源：viewBox 高 200，代表整片球場（含我方＋對方兩個半場）合起來是
+// 18 公尺長，每半場 100 個 SVG 單位＝9 公尺。排球規則的 3 米攻擊線量到球網為止是
+// 3 公尺，換算成 SVG 單位就是 100 * (3/9) ≈ 33.3——中線在 y=100，所以兩條攻擊線
+// 分別落在 100-33.3=66.7（對方那側）跟 100+33.3=133.3（我方這側）。
+export function CourtLines() {
+  return (
+    <g>
+      {/* 中線（球網位置）：x 從 0 到 100 貼齊球場左右邊界。 */}
+      <line
+        x1="0"
+        y1="100"
+        x2="100"
+        y2="100"
+        stroke={COURT_LINE_COLOR}
+        strokeOpacity={COURT_LINE_OPACITY}
+        strokeWidth="2.5"
+      />
+      {/* 3 米攻擊線：虛線、比中線細，兩側各一條。 */}
+      <line
+        x1="0"
+        y1="66.7"
+        x2="100"
+        y2="66.7"
+        stroke={COURT_LINE_COLOR}
+        strokeOpacity={COURT_LINE_OPACITY}
+        strokeWidth="1"
+        strokeDasharray="3 3"
+      />
+      <line
+        x1="0"
+        y1="133.3"
+        x2="100"
+        y2="133.3"
+        stroke={COURT_LINE_COLOR}
+        strokeOpacity={COURT_LINE_OPACITY}
+        strokeWidth="1"
+        strokeDasharray="3 3"
+      />
+    </g>
+  );
+}

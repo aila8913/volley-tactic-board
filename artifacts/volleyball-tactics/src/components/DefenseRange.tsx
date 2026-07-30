@@ -2,6 +2,7 @@ import React, { useRef } from "react";
 import { useParams } from "wouter";
 import { DefenseRange as DefenseRangeType } from "../types/tacticsBoard";
 import { useTacticsBoard } from "../hooks/useTacticsBoard";
+import { fromScreen } from "../lib/courtGeometry";
 
 export default function DefenseRange({ range }: { range: DefenseRangeType }) {
   const { id: matchId } = useParams<{ id: string }>();
@@ -29,15 +30,8 @@ export default function DefenseRange({ range }: { range: DefenseRangeType }) {
 
       const svg = target.closest("svg");
       if (svg) {
-        const CTM = svg.getScreenCTM();
-        if (CTM) {
-          dragStart.current = {
-            x: (e.clientX - CTM.e) / CTM.a,
-            y: (e.clientY - CTM.f) / CTM.d,
-            initialX: range.x,
-            initialY: range.y,
-          };
-        }
+        const pt = fromScreen(e.clientX, e.clientY, svg as SVGSVGElement);
+        dragStart.current = { x: pt.x, y: pt.y, initialX: range.x, initialY: range.y };
       }
     }
   };
@@ -47,18 +41,14 @@ export default function DefenseRange({ range }: { range: DefenseRangeType }) {
     const target = e.target as Element;
     const svg = target.closest("svg");
     if (svg) {
-      const CTM = svg.getScreenCTM();
-      if (CTM) {
-        const currentX = (e.clientX - CTM.e) / CTM.a;
-        const currentY = (e.clientY - CTM.f) / CTM.d;
-        const dx = currentX - dragStart.current.x;
-        const dy = currentY - dragStart.current.y;
+      const { x: currentX, y: currentY } = fromScreen(e.clientX, e.clientY, svg as SVGSVGElement);
+      const dx = currentX - dragStart.current.x;
+      const dy = currentY - dragStart.current.y;
 
-        updateDefenseRange(range.id, {
-          x: dragStart.current.initialX + dx,
-          y: dragStart.current.initialY + dy,
-        });
-      }
+      updateDefenseRange(range.id, {
+        x: dragStart.current.initialX + dx,
+        y: dragStart.current.initialY + dy,
+      });
     }
   };
 

@@ -5,6 +5,7 @@ import { MatchPlayer } from "../types/match";
 import { useRotationTable } from "../hooks/useRotationTable";
 import { useTacticsBoard } from "../hooks/useTacticsBoard";
 import { findNearestZone, getZoneCoords } from "../lib/rotationLogic";
+import { toSvg, toNorm, fromScreen } from "../lib/courtGeometry";
 import PlayerMarker from "./PlayerMarker";
 
 interface PlayerNodeProps {
@@ -84,14 +85,12 @@ export default function PlayerNode({
       x = dragPos.x;
       y = dragPos.y;
     } else {
-      x = position.x * 100;
-      y = position.y * 200;
+      ({ x, y } = toSvg(position));
     }
   } else {
     const renderZone = dragZone ?? findNearestZone(position.x, position.y);
     const coords = getZoneCoords(renderZone);
-    x = coords.x * 100;
-    y = coords.y * 200;
+    ({ x, y } = toSvg(coords));
   }
 
   // 戰術視圖 + 非布置模式：完全唯讀，不接受任何拖曳
@@ -108,10 +107,7 @@ export default function PlayerNode({
 
   const handlePointerMove = (e: React.PointerEvent) => {
     if (!isDragging || !courtRef.current) return;
-    const CTM = courtRef.current.getScreenCTM();
-    if (!CTM) return;
-    const unclampedX = (e.clientX - CTM.e) / CTM.a;
-    const unclampedY = (e.clientY - CTM.f) / CTM.d;
+    const { x: unclampedX, y: unclampedY } = fromScreen(e.clientX, e.clientY, courtRef.current);
 
     if (courtView === "tactics") {
       // 戰術視圖的白板大小會依 panel 尺寸即時變動（見 Court.tsx 的 computeTacticsViewBox），
@@ -136,7 +132,8 @@ export default function PlayerNode({
       // 輪轉視圖：嚴格限制在球場範圍內，格子吸附一定要對到真正的比賽位置。
       const rawX = Math.max(radius, Math.min(100 - radius, unclampedX));
       const rawY = Math.max(radius, Math.min(200 - radius, unclampedY));
-      setDragZone(findNearestZone(rawX / 100, rawY / 200));
+      const norm = toNorm({ x: rawX, y: rawY });
+      setDragZone(findNearestZone(norm.x, norm.y));
     }
   };
 
