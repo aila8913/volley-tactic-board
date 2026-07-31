@@ -26,6 +26,10 @@
 純函式＋`<CourtLines/>` 共用元件，範圍收在核心四項，鏡射機制/zone 座標搬家刻意不做）。M2.5 Todo 欄剩
 **#228**。\_
 
+\_Last updated: 2026-07-30 (tang) — 工具軌圖示（PR #248）與全站背景統一（PR #253）兩張 PR 開著待調整；
+實機盤點挖出兩個遷移缺口／需求，開了 **#251**（戰術板頁沒接上 `RotationRailPanel`，三份名單重複）與
+**#252**（球員身分挑選，待與 aila 討論）。\_
+
 ## Current state
 
 Where the project actually stands right now (durable "current" facts; per-session detail
@@ -178,6 +182,14 @@ lives in git log + the issues named).
   `ScoreSheetCourt.tsx` 吃同一份，改一處兩邊同步）＋`components/PlayerMarker.tsx`（深色玻璃底＋狀態色
   邊框＋圈內背號／圈下姓名，戰術板 `PlayerNode.tsx` 與計分表共用）。計分表原本那個沒有 UI 能切換的死
   開關 `circleLabel` 已退役。
+- **全站外殼材質（背景／右欄）已收斂成 `lib/appChromeStyles.ts`**（PR #253，**尚未合併**）：整頁背景
+  `APP_BACKGROUND_STYLE`＋`APP_SHELL_CLASS`、右欄外殼 `INFO_RAIL_BASE_CLASS`（半透明玻璃
+  `bg-[#121310]/75 + backdrop-blur-md`，取代原本的實色板子）各只有一個家。動機是這兩串樣式原本在
+  七個頁面／三個右欄各複製一份，而 #131 改版**只改到戰術板／計分表兩頁**、其餘五頁停在舊的斜線網格版本
+  分裂成兩代——複製的成本不在寫的當下，在改的時候。要調整全站氛圍改那一個檔案就好。
+- **UX 測試流程已成文**：`docs/ux-testing.md`（PR #244）——兩個方案分不出高下時用小規模 moderated
+  usability test（無事件追蹤基礎設施，做不了正式 A/B），測試結果寫在相關 issue 留言、不另開文件。
+  #214 的[留言](https://github.com/aila8913/volley-tactic-board/issues/214#issuecomment-5126493974)是範例格式。
 - **教訓（踩過三次，兩條）**：(1) aila 的架構重構（#154/#160、#172 AppShell）速度很快，材質類 PR 只要
   卡在分支上超過一天，動到的元件常常已被換掉底層架構——合併前務必先 `git fetch` 比對 `origin/main`，
   抓到就**直接照新結構重做一次**（不要嘗試 rebase 硬套舊 diff；#167 與 #182 都是重做的第二版）。
@@ -348,6 +360,15 @@ serving≠null 但 record.lineup=null」那條路**，但真正的 reconcile 仍
 
 ### 設計 (tang)
 
+- **PR #244**（`docs/ux-testing.md`，07-30，無對應 issue）— 輕量 UX 測試流程：什麼時候該測（兩個方案
+  分不出高下時，不是每個設計決定都要測）、怎麼測（任務情境不下指令＋think-aloud＋3–5 人）、決策規則
+  （打平時選跟現有互動一致的），底部留一張測試紀錄表格待累積。
+- **開著待調整的兩張 PR（今天沒合併，刻意留著追蹤）**：
+  - **PR #248**（#176 剩餘的工具軌正式圖示）— 10 顆圖示取代單字佔位，每顆照該工具在球場上實際畫出來的
+    樣子設計（虛線工具的圖示真的用 `stroke-dasharray` 畫）。實機看過後拿掉「攻擊線」工具（跟實線箭頭
+    分不出來）與「號位標示」開關（連 store 欄位＋`Court.tsx` 渲染一起刪，決定已留言在 #176）。
+  - **PR #253**（全站背景與右欄材質統一）— 待調項目記在該 PR 的留言：右欄透明度 `/75` 的實際數值、
+    `ListItemCard` 比例（要拿 Figma 重畫線稿，不再猜 px）、全站 16 種字級的收斂。
 - **PR #217**（計分頁視覺打磨＋左欄導覽全面圖示化，07-27，無對應 issue）— 大比分改黑底翻牌計分卡、
   字體用 Anton（`--font-score`；這是 design-spec 第 3 節明文留的例外「真的需要大字展示、且內容以數字
   為主」，跟 PR #129 判 Anton 死刑的 17–18px 中英混排卡片標題不同情境）；發球指示從一顆 🏐 改成發球方
