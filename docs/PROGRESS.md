@@ -22,9 +22,9 @@
 > 平行 PR 就落在不同行段、git 幾乎都能自動合併，不用真的把檔案拆兩份、也保住一眼 catch-up。
 > 上面的 `_Last updated_` 是共用一行摘要（誰更新了什麼），保持精簡、別長成段落。
 
-\_Last updated: 2026-07-30 (aila) — **#226 三份 PR 全部收斂完成並已關閉**（PR1 #242 `volleyballRules`／
-PR2 #245 `countSetWins`／PR3 #246 `resolveScoringSide`），過程中發現的連鎖換人摺疊 bug 另開 **#247**
-追蹤（不在 #226 範圍）。另補記 #225 tactics ownership 缺口修掉、mockAuth 可切換使用者以實測 IDOR。\_
+\_Last updated: 2026-07-30 (aila) — **#227 球場座標 module 已收斂並關閉**（PR #250，`lib/courtGeometry.ts`
+純函式＋`<CourtLines/>` 共用元件，範圍收在核心四項，鏡射機制/zone 座標搬家刻意不做）。M2.5 Todo 欄剩
+**#228**。\_
 
 ## Current state
 
@@ -201,11 +201,11 @@ gh issue list --state open                                 # 全部
 從未渲染對手、snapshot player 無 `side`；spec 把 mode D 叫「對手佈陣」的那層 #177 沒做）07-28 補上
 milestone，歸 **M5**。
 
-**當前階段＝M2.5「收斂重複規則」（軟目標日 8/1）**，Project #4 的 Todo 欄剩兩張：**#227**（球場座標
-`*100/*200` 內嵌 12 處、前排門檻已分歧成 `<0.75` 與 `<=0.75`）、**#228**（route handler 儀式：404 樣板
-×33、ownership 守衛 ×25 全靠人記得寫）。**#226 已於 07-30 全部收斂並關閉**（見上方 Current state），
-Project #4 網頁上的卡片待 PO 手動移過去。**#247**（連鎖換人 A→B→C 摺疊後查不到原始先發，#226 PR1 過程
-中發現）是 M2.5 之外的新孤兒，未歸 milestone，需先討論修法方向（`needs-plan` 性質）。
+**當前階段＝M2.5「收斂重複規則」（軟目標日 8/1）**，Project #4 的 Todo 欄剩一張：**#228**（route handler
+儀式：404 樣板 ×33、ownership 守衛 ×25 全靠人記得寫）。**#226（07-30）與 #227（07-30，PR #250）都已收斂
+並關閉**（見下方 Recently closed），Project #4 網頁上的卡片待 PO 手動移過去。**#247**（連鎖換人 A→B→C
+摺疊後查不到原始先發，#226 PR1 過程中發現）是 M2.5 之外的新孤兒，未歸 milestone，需先討論修法方向
+（`needs-plan` 性質）。
 新加入的 **#238**（比賽狀態詞彙與判準收斂）是同一類問題的小號版本，且**已經飄出錯誤答案**：比賽列表用
 `completedSets.length === 0`、資料夾統計格用 `setsPlayed > 0`，同一場打到第一局一半的比賽在兩處分別
 顯示「尚未開賽」與「進行中」。
@@ -220,9 +220,10 @@ M2 雖已收 milestone，衍生待辦仍在各自 issue：**#214**（分析頁�
 **#168（引入 `@testing-library/react`）** ——現行 `renderToStaticMarkup` 慣例無法觸發事件、讀不到 Radix
 Portal，飛出選單與帶 mutation 副作用的 controller 全在自動測試盲區（#201 的計分頁死結修復就落在這裡，
 僅手動驗證）。**架構掃描把這個盲區量化了，它是 M2.5/M3.5 的實質前置**：每一支刻意抽到 `lib/` 的純函式
-都有測試，每一個握著座標數學、指標事件、輪轉/自由球員規則的元件都沒有（`Court.tsx` 727 行、
-`ScoreSheetCourt.tsx` 594 行、`useRotationTable.ts` 364 行全部零測試）；唯一有測試的 renderer
-`CourtReadOnlyView.tsx` **沒有任何 production caller**。**測試覆蓋的是安全的部分，沒覆蓋的是危險的部分。**
+都有測試，每一個握著座標數學、指標事件、輪轉/自由球員規則的元件都沒有（`Court.tsx`、
+`ScoreSheetCourt.tsx`、`useRotationTable.ts` 364 行全部零測試，座標數學部分已隨 #227 抽成
+`lib/courtGeometry.ts` 並補測試，元件本體互動邏輯仍是零測試）。**測試覆蓋的是安全的部分，
+沒覆蓋的是危險的部分。**
 **#40**（undo/redo 不涵蓋輪轉拖曳，與 #147 同塊邏輯但不同 store）——建議排在 **#231 之後**：先發表示法
 收斂成一份、座標降級為衍生值之後，undo 要回捲的目標才明確，屆時這張可能小很多。
 **#64**（背景寫入失敗不 reconcile）——#201 在 `useScoreSheet.start()` 補了 guard，**堵掉「單機就能製造
@@ -241,6 +242,15 @@ serving≠null 但 record.lineup=null」那條路**，但真正的 reconcile 仍
 
 ### 開發 (aila)
 
+- **#227**（抽出 `lib/courtGeometry.ts`，07-30，PR #250）— `toSvg`/`toNorm`（normalized↔SVG 換算）、
+  `fromScreen`/`toScreen`（`getScreenCTM` screen↔SVG 換算）、`rowOf`（前後排視覺門檻）三組純函式，
+  收斂 `Court.tsx`/`PlayerNode.tsx`/`ScoreSheetCourt.tsx`/`Markers.tsx`/`DefenseRange.tsx` 原本重複的
+  12+5+4 處實作；中線/三米攻擊線 SVG 抽成 `courtTheme.tsx` 的 `<CourtLines/>`。**`rowOf` 刻意不跟
+  `rotationLogic.ts` 的 `isBackRowPosition` 合併**——前者是純視覺判斷（圓圈該不該套前排配色），後者是
+  領域規則（自由球員站這裡合不合法），門檻數字現在一樣只是巧合，未來各自要調整互不影響。順手刪除
+  `CourtReadOnlyView.tsx`（零 production caller，只有自己的測試在用）。**範圍依 PO 確認收在核心四項**，
+  issue 原本提議但「還沒定案」的鏡射機制統一（`Court.tsx` 三種手寫鏡射並存）與 zone 座標搬家，
+  刻意不做、留在原地。
 - **#226**（得分/輪轉規則收斂成 deep module，07-30，三份 PR）— PR1 #242：side-out 輪轉、換人淨額摺疊、
   「最後一局進行中」慣例收進 `volleyballRules.ts`，live 記分與 replay 重建共用同一份。PR2 #245：局比數
   計算（原本四份手寫比較）收成 `countSetWins`/`setWinner`。PR3 #246：「得分/失分→誰拿到這一分」的換算
@@ -335,11 +345,6 @@ serving≠null 但 record.lineup=null」那條路**，但真正的 reconcile 仍
   線框稿的意圖是兩者混在同一列表，分兩個元件遲早飄成兩種行高）＋`ListScrollArea`（自繪指示條，是指示器
   不是控制項）＋`matchSummary.ts`。**兩個 PO 實機推翻**：卡高 176→104px；比賽三入口從 modal 改成**選中
   的卡片就地向下展開**——疊層會把「旁邊還有哪幾場、我捲到哪」一起蓋掉，還多一個返回動作。
-- **#172**（環 1／`AppShell` 三欄骨架，PR #180，07-22）— 詳見上方 Current state。**教訓值得記**：四項
-  檢查全綠但**一項都抓不到版面問題**——捲不動、欄被擠爆、scroll-snap 沒對齊，型別全都合法。這正是 #168
-  要補的盲區，也是為什麼這類 PR 一定得真的開瀏覽器點過。
-- **PR #179**（`docs/layout-spec.md` ＋七環拆解，07-22）— 這顆一度是 stranded commit（比前一次 squash
-  merge 晚 46 分鐘落在本機 main 上、沒被帶走），由 catch-up 的 drift 比對撿回、cherry-pick 重送。
 
 ### 設計 (tang)
 
@@ -371,6 +376,7 @@ serving≠null 但 record.lineup=null」那條路**，但真正的 reconcile 仍
 ---
 
 - （更早的條目已修剪——記錄住在各自 issue 留言、`docs/*-spec.md`、git log：
+  #172 `AppShell` 三欄骨架（PR #180）、PR #179 `layout-spec.md`＋七環拆解、
   #163 文件同步、#160 C1/C2/C3 三顆 PR、#44 暫停全棧、#147/#149 undo 一次退兩步、
   PR #141 協作規則放寬、PR #142 pattern-language、PR #148 品牌 logo、PR #140 戰術板材質、
   PR #135/#129 深色語言首批，以及更早的 #118/#117/#115/#41/#50/#74/#73/#63/#20 等。）
