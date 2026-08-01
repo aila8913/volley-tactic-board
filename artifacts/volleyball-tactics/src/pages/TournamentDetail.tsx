@@ -4,13 +4,18 @@ import { ArrowLeft, Plus, SlidersHorizontal } from "lucide-react";
 import BackToMatchListButton from "@/components/BackToMatchListButton";
 import { useMatchList, useDeleteMatch } from "@/hooks/useMatches";
 import { useTournamentList } from "@/hooks/useTournaments";
-import { useScoreSheet } from "@/hooks/useScoreSheet";
+import { useCrossMatchAnalysis } from "@/hooks/useCrossMatchAnalysis";
 import MatchFormDialog from "@/components/MatchFormDialog";
 import ListItemCard from "@/components/ListItemCard";
 import ListScrollArea from "@/components/ListScrollArea";
 import MatchEntryLinks from "@/components/MatchEntryLinks";
 import { formatMatchDateTime, formatMatchResult } from "@/lib/matchSummary";
-import { deriveMatchStatus, getMatchWinner, winsNeededFor } from "@/lib/matchOutcome";
+import {
+  deriveMatchStatus,
+  getMatchWinner,
+  winsNeededFor,
+  type MatchFormat,
+} from "@/lib/matchOutcome";
 import AppShell from "@/components/AppShell";
 import ListNavRail from "@/components/ListNavRail";
 import MatchInfoRail, { MatchListSelection } from "@/components/MatchInfoRail";
@@ -50,32 +55,44 @@ export default function TournamentDetail() {
   // 型別（而不是另外定義一個只收 string 的窄型別），是因為 MatchInfoRail 的 props 契約本來
   // 就是吃這個型別，兩邊維持同一份型別，日後兩個頁面的行為要保持一致時才不會各自飄掉。
   const [selected, setSelected] = useState<MatchListSelection>(null);
-  // 「3:0 勝」那格的來源，理由同 MatchList.tsx：直接讀共用 store 已有的紀錄，不逐場 hydrate。
+  // 卡片右端「3:0 勝」那格、跟「尚未排先發」黃標的來源，改讀後端的跨場彙總
+  // （GET /analysis/matches，#65 視圖②那支），不再讀本機 zustand store。
   //
-  // issue #238：這裡的資料源刻意保持現狀——不像 MatchList.tsx 改讀後端 bulk 摘要
-  // （useCrossMatchAnalysis），因為本機 store 只有「打開過那一場」才會被 hydrate，這頁
-  // 目前仍是讀本機 recordingsByMatch，會有跟 MatchList.tsx 同樣「剛進頁還沒點過的比賽顯示
-  // 不準」的問題——但那是另一個獨立問題（已開在 issue #257），這次只把「怎麼判斷這場比賽的
-  // 狀態」換成跟全站同一份 deriveMatchStatus，資料源本身不動。
-  const recordingsByMatch = useScoreSheet((s) => s.recordingsByMatch);
+  // issue #257：這頁原本讀 useScoreSheet 的 recordingsByMatch，那是本機 store，只有「使用者
+  // 真的打開過那一場」才會被 hydrate——所以剛進資料夾內頁、還沒點開任何一場比賽時，每張卡都是
+  // 空的，一律誤判成「尚未開賽」，就算那場其實已經打完了也一樣。MatchList.tsx 之前也踩過完全
+  // 一樣的坑，當時（issue #238／#65）就已經改成呼叫這支 bulk endpoint 解決——這裡只是把同一個
+  // 修法原封不動搬過來：一支請求把資料夾內每場比賽的摘要（逐局比分＋是否排過先發）一次拿回來，
+  // 頁面剛載入當下資料就是對的，不必等使用者逐場點開才「補正確」。
+  const { summaries, isLoading: isSummaryLoading } = useCrossMatchAnalysis();
+  // summaries 的 matchId 是後端 serial（數字），這裡的 domain id 是字串，轉成字串當 Map key。
+  const summaryByMatch = new Map(summaries.map((s) => [String(s.matchId), s]));
 
-  // 把本機 store 手上有的欄位（completedSets/currentSet/lineup）換算成 deriveMatchStatus
-  // 要的三個參數：
-  //   - setsPlayed：completedSets 之外，若目前這一局已經選過發球方（currentSet.serving
-  //     不是 null）就代表已經開球，也算一局「開打過」——跟後端 setsPlayed 的定義（有沒有
-  //     firstServer）同一個精神，只是這裡用本機資料自己算。
-  //   - hasLineup：本機只追蹤「目前這一局」的先發快照（lineup），不是後端那種「這場比賽
-  //     有沒有任一局凍結過先發」，是比較粗略的近似值——但這個近似值只影響
-  //     not_started/lineup_only 這兩種狀態的區分，而 formatMatchResult 這兩種狀態渲染的
-  //     文字完全一樣（都是「尚未開賽」），所以近似值不精準也不影響這裡實際顯示的結果。
-  const matchStatus = (match: Match) => {
-    const record = recordingsByMatch[match.id];
-    const completedSets = record?.completedSets ?? [];
-    const winner = getMatchWinner(completedSets, winsNeededFor(match.format));
-    const setsPlayed =
-      completedSets.length + (record !== undefined && record.currentSet.serving !== null ? 1 : 0);
-    const hasLineup = record?.lineup != null;
-    return deriveMatchStatus(winner, setsPlayed, hasLineup);
+  // 這場比賽現在是什麼狀態（尚未開賽／已排先發／進行中／贏／輸），全站只有一份判準——
+  // matchOutcome.deriveMatchStatus，跟 MatchList.tsx 共用同一支函式（但刻意不共用這層包裝，
+  // 兩頁各自的 matchId/format 型別跟資料來源接線本來就不同，硬抽成共用 hook 反而增加耦合）。
+  const matchStatus = (matchId: string, format: MatchFormat) => {
+    const s = summaryByMatch.get(matchId);
+    // 查不到摘要（還沒載入完成 / 這場還沒任何資料）就當作「還沒開打過、也沒排過先發」。
+    const setResults = s?.setResults ?? [];
+    const winner = getMatchWinner(setResults, winsNeededFor(format));
+    return deriveMatchStatus(winner, s?.setsPlayed ?? 0, s?.hasLineup ?? false);
+  };
+
+  // setResults 只含「已結束局」（後端已排除進行中的最後一局），formatMatchResult 吃的就是
+  // 逐局比分，語意跟原本傳 completedSets 完全一致。
+  const matchResultText = (matchId: string, format: MatchFormat) =>
+    formatMatchResult(summaryByMatch.get(matchId)?.setResults ?? [], matchStatus(matchId, format));
+
+  // 「尚未排先發」黃標：單純看 status 是不是 lineup_only，deriveMatchStatus 已經把優先序決定
+  // 好了（見 matchOutcome.ts 註解），這裡不用再自己重寫一次判斷式。這頁以前完全沒有這個提醒，
+  // 現在跟著 MatchList.tsx 一起補上，理由同上——都是同一支 bulk 摘要順手一起拿到的欄位。
+  //
+  // 刻意在 summaries 還在載入時先不亮黃標——寧可晚半秒出現，也不要在載入瞬間對每場都閃一下
+  // 「尚未排先發」的假警告。
+  const matchNeedsLineup = (matchId: string, format: MatchFormat): boolean => {
+    if (isSummaryLoading) return false;
+    return matchStatus(matchId, format) === "lineup_only";
   };
 
   const openCreateDialog = () => {
@@ -192,14 +209,17 @@ export default function TournamentDetail() {
                     kind="match"
                     title={`vs ${match.opponent}`}
                     dateText={formatMatchDateTime(match.dateTime)}
-                    secondaryText={formatMatchResult(
-                      recordingsByMatch[match.id]?.completedSets ?? [],
-                      matchStatus(match),
-                    )}
+                    secondaryText={matchResultText(match.id, match.format)}
+                    statusHint={matchNeedsLineup(match.id, match.format) ? "尚未排先發" : undefined}
                     selected={selected?.kind === "match" && selected.id === match.id}
                     onSelect={() => setSelected({ kind: "match", id: match.id })}
                     // 跟 MatchList.tsx 同一套：選中就地展開三個入口，不跳頁也不疊層。
-                    expandedContent={<MatchEntryLinks matchId={match.id} />}
+                    expandedContent={
+                      <MatchEntryLinks
+                        matchId={match.id}
+                        needsLineup={matchNeedsLineup(match.id, match.format)}
+                      />
+                    }
                     onEdit={() => openEditDialog(match)}
                     onDelete={() => handleDelete(match.id)}
                   />
