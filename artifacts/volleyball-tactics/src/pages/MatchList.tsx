@@ -13,7 +13,12 @@ import AppShell from "@/components/AppShell";
 import ListNavRail from "@/components/ListNavRail";
 import MatchInfoRail, { MatchListSelection } from "@/components/MatchInfoRail";
 import { formatMatchDateTime, formatMatchResult } from "@/lib/matchSummary";
-import { winsNeededFor, type MatchFormat } from "@/lib/matchOutcome";
+import {
+  deriveMatchStatus,
+  getMatchWinner,
+  winsNeededFor,
+  type MatchFormat,
+} from "@/lib/matchOutcome";
 import { Match } from "@/types/match";
 import { Tournament } from "@/types/tournament";
 
@@ -54,31 +59,35 @@ export default function MatchList() {
   // summaries 的 matchId 是數字（後端 serial），這裡的 domain id 是字串，轉成字串當 key。
   const summaryByMatch = new Map(summaries.map((s) => [String(s.matchId), s]));
 
-  // setResults 只含「已結束局」（後端已排除進行中的最後一局），formatMatchResult 吃的就是
-  // 逐局比分，語意跟原本傳 completedSets 完全一致。查不到（還沒載入 / 這場沒資料）就回
-  // 空陣列 → 顯示「尚未開賽」。
-  //
-  // format（#215）：呼叫端（render 時手上就有這張卡片的 match 物件）把賽制換算成
-  // winsNeeded 一起傳進來，不能再靠 formatMatchResult 內部假設全站都是五戰三勝。
-  const matchResultText = (matchId: string, format: MatchFormat) =>
-    formatMatchResult(summaryByMatch.get(matchId)?.setResults ?? [], winsNeededFor(format));
-
-  // issue #190（軟提醒）：這場是否已排先發，直接看後端 hasLineup（有沒有任一局凍結過先發
-  // 陣容）。刻意在 summaries 還在載入時先不亮黃標——寧可晚半秒出現，也不要在載入瞬間對每場
-  // 都閃一下「尚未排先發」的假警告（那正是使用者回報的困擾）。載完後 hasLineup 為 false 才
-  // 判定「還沒排」。注意：輪轉表上「排好但還沒開賽」的暫存陣容不進 DB（見 useRotationTable
-  // 的 partialize），所以這裡認的是「已凍結進計分流程」的先發；純輪轉表暫存的先發不算，
-  // 這跟「暫存狀態重整就沒了」本來就一致，不是退步。
-  const matchNeedsLineup = (matchId: string): boolean => {
-    if (isSummaryLoading) return false;
+  // issue #238：這場比賽現在是什麼狀態（尚未開賽／已排先發／進行中／贏／輸），全站只有一份
+  // 判準——matchOutcome.deriveMatchStatus。以前這裡（matchResultText 用 completedSets.length
+  // 判斷）跟 matchNeedsLineup（自己手寫一份跟 tournamentSummary.deriveMatchStatus 幾乎逐字
+  // 重複的優先序）各自維護一份規則，同一場正在打第一局的比賽在不同畫面顯示矛盾。現在改成
+  // 先用這支共用函式算出 status，matchResultText / matchNeedsLineup 都只是「怎麼呈現同一個
+  // status」的問題，不再各自重新判斷「這場比賽算不算開賽」。
+  const matchStatus = (matchId: string, format: MatchFormat) => {
     const s = summaryByMatch.get(matchId);
-    if (!s) return true; // 查不到摘要＝這場還沒任何資料，當作「還沒排」
-    // 打過至少一局就不用再提醒——鏡射舊本機邏輯的 completedSets>0 分支。這一條也順手擋掉
-    // 舊資料的邊界：有些早期/被清過 rally 的比賽，sets 還在但對應的 lineups row 已不存在
-    //（hasLineup=false），若只看 hasLineup 會對這種「其實打過球」的比賽誤亮黃標，跟點進去
-    // 計分頁看到的（有完成局、不提醒）就對不上。先看 setsPlayed 能讓兩邊一致。
-    if (s.setsPlayed > 0) return false;
-    return !s.hasLineup;
+    // 查不到摘要（還沒載入 / 這場還沒任何資料）就當作「還沒開打過、也沒排過先發」，
+    // 跟改動前 matchResultText/matchNeedsLineup 各自的 fallback 語意一致。
+    const setResults = s?.setResults ?? [];
+    const winner = getMatchWinner(setResults, winsNeededFor(format));
+    return deriveMatchStatus(winner, s?.setsPlayed ?? 0, s?.hasLineup ?? false);
+  };
+
+  // setResults 只含「已結束局」（後端已排除進行中的最後一局），formatMatchResult 吃的就是
+  // 逐局比分，語意跟原本傳 completedSets 完全一致。
+  const matchResultText = (matchId: string, format: MatchFormat) =>
+    formatMatchResult(summaryByMatch.get(matchId)?.setResults ?? [], matchStatus(matchId, format));
+
+  // issue #190（軟提醒）：這場是否需要提醒「尚未排先發」，現在單純看 status 是不是
+  // lineup_only——deriveMatchStatus 已經把「打過球」「排過先發」「都沒有」這三種情境的優先序
+  // 決定好了（見 matchOutcome.ts 的註解），這裡不用再自己重寫一次判斷式。
+  //
+  // 刻意在 summaries 還在載入時先不亮黃標——寧可晚半秒出現，也不要在載入瞬間對每場都閃一下
+  // 「尚未排先發」的假警告（那正是使用者回報的困擾）。
+  const matchNeedsLineup = (matchId: string, format: MatchFormat): boolean => {
+    if (isSummaryLoading) return false;
+    return matchStatus(matchId, format) === "lineup_only";
   };
 
   // 「最上層」比賽 = 沒有歸到任何資料夾（tournamentId 為 null）。
@@ -250,7 +259,9 @@ export default function MatchList() {
                       title={`vs ${item.data.opponent}`}
                       dateText={formatMatchDateTime(item.data.dateTime)}
                       secondaryText={matchResultText(item.data.id, item.data.format)}
-                      statusHint={matchNeedsLineup(item.data.id) ? "尚未排先發" : undefined}
+                      statusHint={
+                        matchNeedsLineup(item.data.id, item.data.format) ? "尚未排先發" : undefined
+                      }
                       selected={selected?.kind === "match" && selected.id === item.data.id}
                       onSelect={() => setSelected({ kind: "match", id: item.data.id })}
                       // 比賽卡片沒有 onOpen（不跳頁）：三個入口改成選中後在卡片裡就地展開，
@@ -258,7 +269,7 @@ export default function MatchList() {
                       expandedContent={
                         <MatchEntryLinks
                           matchId={item.data.id}
-                          needsLineup={matchNeedsLineup(item.data.id)}
+                          needsLineup={matchNeedsLineup(item.data.id, item.data.format)}
                         />
                       }
                       onEdit={() => openEditMatchDialog(item.data)}

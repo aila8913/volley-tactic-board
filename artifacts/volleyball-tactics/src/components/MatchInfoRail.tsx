@@ -7,12 +7,8 @@ import { useRotationTable } from "@/hooks/useRotationTable";
 import { useScoreSheet, useScoreSheetController } from "@/hooks/useScoreSheet";
 import { useCrossMatchAnalysis } from "@/hooks/useCrossMatchAnalysis";
 import { readLineupFromRotations } from "@/lib/rotationLogic";
-import { getMatchWinner, setWinner, winsNeededFor } from "@/lib/matchOutcome";
-import {
-  computeTournamentStats,
-  type TournamentMatchResult,
-  type TournamentMatchStatus,
-} from "@/lib/tournamentSummary";
+import { getMatchWinner, setWinner, winsNeededFor, type MatchStatus } from "@/lib/matchOutcome";
+import { computeTournamentStats, type TournamentMatchResult } from "@/lib/tournamentSummary";
 import type { LineupSnapshot } from "@/types/scoresheet";
 import type { Match } from "@/types/match";
 
@@ -346,7 +342,7 @@ function TournamentStatsSection({ matches }: { matches: Match[] }) {
 // （下面的 resultLabel）不用先判斷「這個狀態要不要吃分數」，直接呼叫 meta.label(scoreText)
 // 就好，少一層 if。
 const STATUS_META: Record<
-  TournamentMatchStatus,
+  MatchStatus,
   { label: (scoreText: string) => string; className: string }
 > = {
   won: { label: (scoreText) => `勝 ${scoreText}`, className: "text-[#C6F135]" },
