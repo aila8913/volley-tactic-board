@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
 import { db, tacticsTable } from "@workspace/db";
 import { mockAuth } from "../middleware/mockAuth";
-import { matchBelongsToUser } from "../lib/ownership";
+import { matchBelongsToUser, tacticBelongsToUser } from "../lib/ownership";
 import { handler } from "../lib/handler";
 import {
   CreateTacticBody,
@@ -86,13 +86,7 @@ router.get(
   handler(
     {
       params: GetTacticParams,
-      owns: async ({ params, userId }) => {
-        const [tactic] = await db
-          .select({ id: tacticsTable.id })
-          .from(tacticsTable)
-          .where(and(eq(tacticsTable.id, params.tacticId), eq(tacticsTable.userId, userId)));
-        return tactic !== undefined;
-      },
+      owns: ({ params, userId }) => tacticBelongsToUser(params.tacticId, userId),
     },
     async ({ res, params, userId }) => {
       const [tactic] = await db
@@ -115,13 +109,7 @@ router.put(
     {
       params: UpdateTacticParams,
       body: UpdateTacticBody,
-      owns: async ({ params, userId }) => {
-        const [tactic] = await db
-          .select({ id: tacticsTable.id })
-          .from(tacticsTable)
-          .where(and(eq(tacticsTable.id, params.tacticId), eq(tacticsTable.userId, userId)));
-        return tactic !== undefined;
-      },
+      owns: ({ params, userId }) => tacticBelongsToUser(params.tacticId, userId),
     },
     async ({ res, params, body, userId }) => {
       const [updated] = await db
@@ -146,13 +134,7 @@ router.delete(
   handler(
     {
       params: DeleteTacticParams,
-      owns: async ({ params, userId }) => {
-        const [tactic] = await db
-          .select({ id: tacticsTable.id })
-          .from(tacticsTable)
-          .where(and(eq(tacticsTable.id, params.tacticId), eq(tacticsTable.userId, userId)));
-        return tactic !== undefined;
-      },
+      owns: ({ params, userId }) => tacticBelongsToUser(params.tacticId, userId),
     },
     async ({ res, params, userId }) => {
       // where 綁了 userId，所以刪不到別人的戰術——但「刪不到」和「刪掉了」在 SQL 層長得一模一樣：
