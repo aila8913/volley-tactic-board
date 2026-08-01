@@ -629,7 +629,7 @@ export default function ScoreSheet() {
                   </div>
                 ) : (
                   <p className="shrink-0 text-center text-xs text-[#a9b096]">
-                    在球場上畫線連到球員，記錄這一球
+                    在球場上畫線連到球員記一球，長按球員可以換人
                   </p>
                 )}
 
@@ -645,6 +645,7 @@ export default function ScoreSheet() {
                     regularSubs={regularSubs}
                     selectedBenchPlayer={selectedBenchPlayer}
                     onBenchPlayerSelect={setSelectedBenchPlayer}
+                    onRegularSub={handleRegularSub}
                     liberoSubstitution={liberoSubstitution}
                   />
                 </div>

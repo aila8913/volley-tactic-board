@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRotationTable } from "../hooks/useRotationTable";
 import { findNearestZone, getZoneLayout, isBackRowPosition } from "../lib/rotationLogic";
 import { Side, RegularSub } from "../types/scoresheet";
@@ -38,6 +38,11 @@ interface ScoreSheetCourtProps {
   // 目前場邊被選中、準備換上場的球員 id；設定後球場進入「換人模式」
   selectedBenchPlayer?: string | null;
   onBenchPlayerSelect?: (playerId: string | null) => void;
+  // 長按場上我方球員換人（tang 2026-07-31 要求的新入口）：跟 selectedBenchPlayer 那套
+  // 「先點場邊、再點場上」的流程並存，順序相反——長按先決定「換誰下場」，接著跳出的清單
+  // 才決定「換誰上場」。兩條路徑最後都收斂到同一個動作，所以直接把 handleRegularSub 傳進來，
+  // 不用另外設計一套一半的換人狀態機。
+  onRegularSub?: (inPlayerId: string, outPlayerId: string) => void;
   // 自由球員即時替補狀態：以前這個元件自己去共用 store 讀，但這個狀態其實是「這一場
   // 比賽」的計分表資料（見 types/scoresheet.ts 的 ScoreSheetState.liberoSubstitution），
   // 不是輪轉表/戰術板共用的東西，所以改由外層（pages/ScoreSheet.tsx，已經知道自己在看
@@ -46,6 +51,9 @@ interface ScoreSheetCourtProps {
 }
 
 const HIT_RADIUS = 11;
+// 長按判定的等待時間。跟 OS 層級的長按手勢（通常 500ms 上下）抓同一個量級，
+// 使用者不用重新學一套「這個 app 的長按比較快/比較慢」的手感。
+const LONG_PRESS_MS = 500;
 
 function dist(ax: number, ay: number, bx: number, by: number) {
   return Math.hypot(ax - bx, ay - by);
@@ -62,6 +70,7 @@ export default function ScoreSheetCourt({
   regularSubs = [],
   selectedBenchPlayer = null,
   onBenchPlayerSelect,
+  onRegularSub,
   liberoSubstitution,
 }: ScoreSheetCourtProps) {
   // circleLabel 是「圈圈顯示姓名/背號/位置」的全域顯示偏好（不是某一場的資料），留在全域 store
@@ -73,6 +82,26 @@ export default function ScoreSheetCourt({
   const [dragCurrent, setDragCurrent] = useState<{ x: number; y: number } | null>(null);
   const [draggingLibero, setDraggingLibero] = useState(false);
   const [liberoGhostScreen, setLiberoGhostScreen] = useState<{ x: number; y: number } | null>(null);
+  // 長按換人：目前正在跳出換人清單的那顆我方球員（playerId ＋ 清單要浮在哪個螢幕座標）。
+  // null＝清單沒開。
+  const [longPressTarget, setLongPressTarget] = useState<{
+    playerId: string;
+    screenX: number;
+    screenY: number;
+  } | null>(null);
+  // 計時器跟「有沒有已經觸發」用 ref 不用 state：這兩個純粹是手勢判斷的中間狀態，
+  // 改用 state 只會讓每次 pointermove 都多一次不必要的 re-render（跟 dragStart/dragCurrent
+  // 需要驅動畫面上的手勢軌跡線不同，這兩個值本身不需要畫出任何東西）。
+  const longPressTimerRef = useRef<number | null>(null);
+  const longPressFiredRef = useRef(false);
+
+  // 元件卸載時（例如長按計時器還沒觸發、使用者就切到別頁）清掉還在跑的計時器，避免
+  // setTimeout 的 callback 之後才觸發，對著已經卸載的元件呼叫 setState。
+  useEffect(() => {
+    return () => {
+      if (longPressTimerRef.current !== null) window.clearTimeout(longPressTimerRef.current);
+    };
+  }, []);
 
   const opponentZones = getZoneLayout(opponentRotation, true);
   const liberoPlayer = roster.find((p) => p.role === "L");
@@ -167,21 +196,10 @@ export default function ScoreSheetCourt({
     fromScreen(clientX, clientY, svgRef.current);
   const svgToScreen = (x: number, y: number) => toScreen(x, y, svgRef.current);
 
-  // ── 畫線手勢 ──
-  const handlePointerDown = (e: React.PointerEvent) => {
-    if (!interactive || draggingLibero) return;
-    const pt = screenToSvg(e.clientX, e.clientY);
-    setDragStart(pt);
-    setDragCurrent(pt);
-  };
-  const handlePointerMove = (e: React.PointerEvent) => {
-    if (!dragStart) return;
-    setDragCurrent(screenToSvg(e.clientX, e.clientY));
-  };
-  const finishGesture = (pt: { x: number; y: number } | null) => {
-    setDragStart(null);
-    setDragCurrent(null);
-    if (!pt) return;
+  // 找離某個 SVG 座標最近、且在命中半徑內的目標——finishGesture（放開手指判定記哪一球）
+  // 跟長按判定（按住的當下要知道是不是壓在我方球員上）共用同一份「找最近目標」邏輯，
+  // 原本只有 finishGesture 內部一份，抽出來才不會兩處各寫一次、之後改命中規則忘記改一邊。
+  const findNearestHit = (pt: { x: number; y: number }): (typeof hitTargets)[number] | null => {
     let nearest: (typeof hitTargets)[number] | null = null;
     let nearestD = Infinity;
     for (const t of hitTargets) {
@@ -191,7 +209,59 @@ export default function ScoreSheetCourt({
         nearest = t;
       }
     }
-    if (!nearest || nearestD > HIT_RADIUS) return;
+    return nearest && nearestD <= HIT_RADIUS ? nearest : null;
+  };
+
+  const clearLongPressTimer = () => {
+    if (longPressTimerRef.current !== null) {
+      window.clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
+  // ── 畫線手勢（＋長按換人判定）──
+  const handlePointerDown = (e: React.PointerEvent) => {
+    if (!interactive || draggingLibero) return;
+    const pt = screenToSvg(e.clientX, e.clientY);
+    setDragStart(pt);
+    setDragCurrent(pt);
+    longPressFiredRef.current = false;
+
+    // 長按只在「按下當下就壓在我方球員身上、而且不是已經在走舊版換人模式」時才判定，
+    // 換句話說是 selectedBenchPlayer 那套流程的互斥選項，不會同時開兩套換人 UI。
+    if (onRegularSub && !subModeActive) {
+      const downTarget = findNearestHit(pt);
+      if (downTarget?.side === "us" && downTarget.playerId) {
+        const targetPlayerId = downTarget.playerId;
+        const scr = svgToScreen(downTarget.x, downTarget.y);
+        longPressTimerRef.current = window.setTimeout(() => {
+          longPressFiredRef.current = true;
+          longPressTimerRef.current = null;
+          // 長按判定成功＝這次手勢不是在畫線/記錄一球，把畫線軌跡狀態收掉，避免放開手指時
+          // handlePointerUp 又跑一次 finishGesture、把長按之後的放手誤判成另一次記錄手勢。
+          setDragStart(null);
+          setDragCurrent(null);
+          setLongPressTarget({ playerId: targetPlayerId, screenX: scr.x, screenY: scr.y });
+        }, LONG_PRESS_MS);
+      }
+    }
+  };
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!dragStart) return;
+    const pt = screenToSvg(e.clientX, e.clientY);
+    setDragCurrent(pt);
+    // 手指移動超過一點點就不算「按住不動」，取消長按判定——這樣畫線手勢（本來就要移動）
+    // 不會被長按邏輯誤判打斷；閾值故意抓比 HIT_RADIUS 小很多，一點點手抖不該取消長按。
+    if (longPressTimerRef.current !== null && dist(dragStart.x, dragStart.y, pt.x, pt.y) > 3) {
+      clearLongPressTimer();
+    }
+  };
+  const finishGesture = (pt: { x: number; y: number } | null) => {
+    setDragStart(null);
+    setDragCurrent(null);
+    if (!pt) return;
+    const nearest = findNearestHit(pt);
+    if (!nearest) return;
     const scr = svgToScreen(nearest.x, nearest.y);
     // L 蓋住的格子：動作歸屬為 L（L 才是實際打球的人），
     // 但 hitTargets 的 playerId 保留格主 id（供自由球員拖曳邏輯使用），
@@ -213,9 +283,20 @@ export default function ScoreSheetCourt({
     });
   };
   const handlePointerUp = (e: React.PointerEvent) => {
+    clearLongPressTimer();
+    // 長按已經在計時器裡觸發、跳出換人清單了——這次放開手指是「結束長按」，不是「放開手指
+    // 記一球」，不能再跑 finishGesture，不然會把長按之後鬆手的動作誤判成又記了一次觸球。
+    if (longPressFiredRef.current) {
+      longPressFiredRef.current = false;
+      return;
+    }
     if (dragStart) finishGesture(screenToSvg(e.clientX, e.clientY));
   };
-  const handlePointerLeave = () => finishGesture(null);
+  const handlePointerLeave = () => {
+    clearLongPressTimer();
+    longPressFiredRef.current = false;
+    finishGesture(null);
+  };
 
   // ── 自由球員拖曳 ──
   const isValidLiberoTarget = (t: (typeof hitTargets)[number]): boolean => {
@@ -529,6 +610,57 @@ export default function ScoreSheetCourt({
           <span>#{liberoPlayer.number}</span>
         </div>
       )}
+
+      {/* 長按換人清單：浮在被長按的那顆球員上方，列出場邊可以換上場的人（自由球員不列——
+          自由球員有自己專屬的拖曳流程，見上面場邊欄 isLiberoDraggable 那個分支，混進這裡
+          會讓同一個人有兩種互相打架的換人方式）。 */}
+      {longPressTarget &&
+        (() => {
+          const outPlayer = roster.find((p) => p.id === longPressTarget.playerId);
+          const candidates = sidelinePlayers.filter((p) => p.role !== "L");
+          return (
+            <>
+              {/* 全螢幕透明背景：點清單以外的地方＝取消，不用另外做一顆「取消」鈕。 */}
+              <div
+                className="fixed inset-0 z-40"
+                onClick={() => setLongPressTarget(null)}
+                data-testid="long-press-sub-backdrop"
+              />
+              <div
+                className="fixed z-50 w-40 -translate-x-1/2 rounded-xl border border-white/[0.14]
+                  bg-[#12140f]/97 p-2 shadow-2xl shadow-black/50 backdrop-blur-lg"
+                style={{ left: longPressTarget.screenX, top: longPressTarget.screenY + 16 }}
+                data-testid="long-press-sub-menu"
+              >
+                <p className="mb-1.5 px-1 text-[11px] font-bold text-[#a9b096]">
+                  換下 {outPlayer ? `#${outPlayer.number} ${outPlayer.name}` : ""}
+                </p>
+                {candidates.length === 0 ? (
+                  <p className="px-1 py-1 text-[11px] text-[#a9b096]">場邊沒有人可以換上</p>
+                ) : (
+                  <div className="flex flex-col gap-1">
+                    {candidates.map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => {
+                          onRegularSub?.(p.id, longPressTarget.playerId);
+                          setLongPressTarget(null);
+                        }}
+                        className="flex items-center gap-2 rounded-lg border border-white/[0.12]
+                          bg-white/[0.03] px-2 py-1.5 text-left text-xs text-[#f5f5f0] transition
+                          hover:border-[#c6f135] hover:text-[#c6f135]"
+                      >
+                        <span className="font-bold tabular-nums">#{p.number}</span>
+                        <span className="truncate">{p.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          );
+        })()}
     </div>
   );
 }
