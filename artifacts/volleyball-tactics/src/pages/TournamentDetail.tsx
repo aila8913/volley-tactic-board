@@ -10,7 +10,7 @@ import ListItemCard from "@/components/ListItemCard";
 import ListScrollArea from "@/components/ListScrollArea";
 import MatchEntryLinks from "@/components/MatchEntryLinks";
 import { formatMatchDateTime, formatMatchResult } from "@/lib/matchSummary";
-import { winsNeededFor } from "@/lib/matchOutcome";
+import { deriveMatchStatus, getMatchWinner, winsNeededFor } from "@/lib/matchOutcome";
 import AppShell from "@/components/AppShell";
 import ListNavRail from "@/components/ListNavRail";
 import MatchInfoRail, { MatchListSelection } from "@/components/MatchInfoRail";
@@ -51,7 +51,32 @@ export default function TournamentDetail() {
   // 就是吃這個型別，兩邊維持同一份型別，日後兩個頁面的行為要保持一致時才不會各自飄掉。
   const [selected, setSelected] = useState<MatchListSelection>(null);
   // 「3:0 勝」那格的來源，理由同 MatchList.tsx：直接讀共用 store 已有的紀錄，不逐場 hydrate。
+  //
+  // issue #238：這裡的資料源刻意保持現狀——不像 MatchList.tsx 改讀後端 bulk 摘要
+  // （useCrossMatchAnalysis），因為本機 store 只有「打開過那一場」才會被 hydrate，這頁
+  // 目前仍是讀本機 recordingsByMatch，會有跟 MatchList.tsx 同樣「剛進頁還沒點過的比賽顯示
+  // 不準」的問題——但那是另一個獨立問題（已開在 issue #257），這次只把「怎麼判斷這場比賽的
+  // 狀態」換成跟全站同一份 deriveMatchStatus，資料源本身不動。
   const recordingsByMatch = useScoreSheet((s) => s.recordingsByMatch);
+
+  // 把本機 store 手上有的欄位（completedSets/currentSet/lineup）換算成 deriveMatchStatus
+  // 要的三個參數：
+  //   - setsPlayed：completedSets 之外，若目前這一局已經選過發球方（currentSet.serving
+  //     不是 null）就代表已經開球，也算一局「開打過」——跟後端 setsPlayed 的定義（有沒有
+  //     firstServer）同一個精神，只是這裡用本機資料自己算。
+  //   - hasLineup：本機只追蹤「目前這一局」的先發快照（lineup），不是後端那種「這場比賽
+  //     有沒有任一局凍結過先發」，是比較粗略的近似值——但這個近似值只影響
+  //     not_started/lineup_only 這兩種狀態的區分，而 formatMatchResult 這兩種狀態渲染的
+  //     文字完全一樣（都是「尚未開賽」），所以近似值不精準也不影響這裡實際顯示的結果。
+  const matchStatus = (match: Match) => {
+    const record = recordingsByMatch[match.id];
+    const completedSets = record?.completedSets ?? [];
+    const winner = getMatchWinner(completedSets, winsNeededFor(match.format));
+    const setsPlayed =
+      completedSets.length + (record !== undefined && record.currentSet.serving !== null ? 1 : 0);
+    const hasLineup = record?.lineup != null;
+    return deriveMatchStatus(winner, setsPlayed, hasLineup);
+  };
 
   const openCreateDialog = () => {
     setEditingMatch(null);
@@ -169,8 +194,7 @@ export default function TournamentDetail() {
                     dateText={formatMatchDateTime(match.dateTime)}
                     secondaryText={formatMatchResult(
                       recordingsByMatch[match.id]?.completedSets ?? [],
-                      // #215：這場比賽的賽制換算成贏局門檻，不能再假設全站都是五戰三勝。
-                      winsNeededFor(match.format),
+                      matchStatus(match),
                     )}
                     selected={selected?.kind === "match" && selected.id === match.id}
                     onSelect={() => setSelected({ kind: "match", id: match.id })}

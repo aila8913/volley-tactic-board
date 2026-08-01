@@ -88,3 +88,43 @@ export function getMatchWinner(sets: SetScoreLike[], winsNeeded: number): "us" |
   if (opponentWins >= winsNeeded) return "opponent";
   return null;
 }
+
+// 「這場比賽現在是什麼狀態」——issue #238 之前這條規則有兩套互相矛盾的判準：
+// matchSummary.formatMatchResult 用 completedSets.length === 0 判斷「尚未開賽」（已打完幾局），
+// tournamentSummary.deriveMatchStatus 用 setsPlayed > 0（已開球幾局，來自後端
+// count(*) filter (where first_server is not null)）判斷「進行中」。同一場正在打第一局的比賽，
+// completedSets.length 還是 0（第一局都還沒打完），但 setsPlayed 已經是 1（已經開球了），
+// 兩套判準在這個情境下算出不同答案——列表頁說「尚未開賽」、資料夾統計格說「進行中」，同一場
+// 比賽在兩個畫面顯示矛盾。這支函式（原本叫 TournamentMatchStatus/deriveMatchStatus，只給
+// 資料夾統計格用）現在搬來這裡、拿掉 Tournament 前綴，成為全站唯一一份「比賽狀態」判準，
+// 比賽列表（MatchList.tsx）、資料夾內頁（TournamentDetail.tsx）、資料夾統計格
+//（MatchInfoRail.tsx）都改呼叫同一份，不再各自寫一套。
+//
+// 為什麼放在 matchOutcome.ts 而不是留在 tournamentSummary.ts：這支檔案本來就是這個 repo
+// 「排球規則」類純函式唯一的家（SetScoreLike/MatchFormat/winsNeededFor/setWinner/
+// countSetWins/getMatchWinner 都在這裡），「這場比賽算贏／算輸／算進行中」跟這些函式是同一種
+// 東西，理應跟它們放在一起，而不是掛在原本專門處理「資料夾彙總」的 tournamentSummary.ts——
+// 那支檔案的職責應該只剩「一個資料夾底下這幾場比賽合起來戰績多少」，不該順便也是狀態判準
+// 的家。
+//
+// lineup_only 的呈現差異是刻意的：列表頁（MatchList.tsx）用獨立黃標催辦（statusHint=
+// "尚未排先發"），資料夾頁（MatchInfoRail.tsx 的 STATUS_META）合進主標籤陳述（顯示「已排
+// 先發」）——這是刻意的呈現差異，不代表狀態本身有兩個答案，兩邊都是同一個 deriveMatchStatus
+// 結果，只是渲染意圖不同（列表頁想催辦、資料夾頁想陳述現況）。
+export type MatchStatus = "not_started" | "lineup_only" | "in_progress" | "won" | "lost";
+
+// 依優先序判斷這場比賽該顯示成哪一種狀態。優先序很重要，不能拆成五個獨立的 if 各自回傳：
+// 例如 winner 已經是 "us" 的比賽，setsPlayed 一定 > 0（贏球必然發生在打過球之後），但這裡
+// 刻意先判 winner，是因為「贏/輸」是終局狀態、比「有沒有開打」更值得優先呈現給使用者，
+// 而不是恰好也能用 setsPlayed 分支涵蓋就偷懶不分先後。
+export function deriveMatchStatus(
+  winner: "us" | "opponent" | null,
+  setsPlayed: number,
+  hasLineup: boolean,
+): MatchStatus {
+  if (winner === "us") return "won";
+  if (winner === "opponent") return "lost";
+  if (setsPlayed > 0) return "in_progress";
+  if (hasLineup) return "lineup_only";
+  return "not_started";
+}
