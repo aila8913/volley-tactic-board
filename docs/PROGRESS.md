@@ -22,11 +22,16 @@
 > 平行 PR 就落在不同行段、git 幾乎都能自動合併，不用真的把檔案拆兩份、也保住一眼 catch-up。
 > 上面的 `_Last updated_` 是共用一行摘要（誰更新了什麼），保持精簡、別長成段落。
 
-\_Last updated: 2026-08-01 (aila) — **#228 route handler 收斂啟動**（PR #256，`lib/handler.ts`＋
-`tactics.ts` 當第一個遷移案例，`owns` 必填欄位讓漏寫擁有權檢查變編譯錯誤；#228 本身**仍 open**，
-剩約 10 支 route 檔案待遷移）。**#238 與 #257 兩張比賽狀態相關 bug 已收斂關閉**（PR #258/#259，
-`matchOutcome.deriveMatchStatus` 成為全站唯一狀態判準，`MatchList.tsx`／`TournamentDetail.tsx`／
-`MatchInfoRail.tsx` 三處呼叫端都改讀同一份，資料源也統一改走 `useCrossMatchAnalysis` bulk API）。\_
+\_Last updated: 2026-08-01 (aila) — **#228 route handler 收斂全數完成並關閉**（PR #256/#262~#272，
+共 12 支 route 檔案：tactics/matches/teams/tournaments/people/players/sets/rallies/events/
+substitutions/timeouts/analysis）。`lib/handler.ts` 的 `owns` 必填欄位讓漏寫擁有權檢查從「人眼
+容易漏看」變成編譯錯誤（#225 的教訓）；`analysis.ts` 的 `GET /analysis/matches` 因無單一路徑資源
+可驗，改用 `owns: "public"` 明講（擁有權篩選發生在查詢自身的 `where userId`）。`health.ts`／
+`index.ts` 非資源路由不需遷移。DELETE 路由順手補齊 `.returning()` + 長度檢查（不靠 owns
+pre-check，靠實際刪掉幾列判斷成功）。**#238 與 #257 兩張比賽狀態相關 bug 已收斂關閉**（PR
+#258/#259，`matchOutcome.deriveMatchStatus` 成為全站唯一狀態判準，`MatchList.tsx`／
+`TournamentDetail.tsx`／`MatchInfoRail.tsx` 三處呼叫端都改讀同一份，資料源也統一改走
+`useCrossMatchAnalysis` bulk API）。\_
 
 \_Last updated: 2026-07-30 (tang) — 工具軌圖示（PR #248）與全站背景統一（PR #253）兩張 PR 開著待調整；
 實機盤點挖出兩個遷移缺口／需求，開了 **#251**（戰術板頁沒接上 `RotationRailPanel`，三份名單重複）與
