@@ -103,19 +103,29 @@ export default function TacticsBoard() {
     //    要疊在下面」的特例，不是每個用 AppShell 的頁面都需要的行為，寫死進去反而讓其他頁面
     //    多一層它們用不到的 stacking context。
     //
-    // 3. 中央主區內部的 260px 輪轉表欄：docs/layout-spec.md §4 把輪轉表歸在右側資訊欄裡，
-    //    但那次搬移屬於環 3（#174，右欄資訊欄元件化），環 1（這一環）刻意不重寫任何功能
-    //    元件、也不做視覺變更。所以 RotationTable 那一欄目前先留在中央主區（children）
-    //    內部，用一個 flex 容器把它跟球場欄放在一起，畫面完全維持原樣；等環 3 動手時，
-    //    再把這一欄從這裡搬進 AppShell 的 aside 插槽。
+    // 3.（issue #172 原本這裡有一段：中央主區內部留一個 260px 輪轉表欄，等右欄資訊欄
+    //    元件化那一環再搬進 aside。issue #251 這一輪就是那次搬移——把 RotationTable 整個
+    //    移出中央主區，併進 aside 插槽跟球員名單面板疊在一起，理由見下面第 4 點。這裡不再
+    //    保留中央欄，是這一輪唯一動到「畫面骨架」的地方，其餘中央主區維持 Court 置中滿版。
     //
-    // 4.（issue #176 環 5 新增，issue #177 擴充成三態）mode B/D/C 換欄：session === null 時
-    //    是 mode B（右欄放 TacticsBoardPanel）；session.arranging（佈陣中）是 mode D（右欄放
-    //    TacticsRosterPanel，見下面 aside 插槽的說明）；session 存在但已按過「確定」是 mode C
-    //    （右欄從「資訊欄」換成「工具軌」TacticsEditToolRail，132px）。D 跟 B 一樣顯示中央
-    //    260px 輪轉表欄（見下面第 3 點條件），只有 C 隱藏它、讓球場吃滿中央主區剩下的全部
-    //    寬度——這正是 mode C 的核心訴求：只有「畫筆/防守範圍」這種真正的編輯動作才需要
-    //    球場最大化，佈陣（拖球員上下場）不需要。
+    // 4.（issue #176 環 5 新增，issue #177 擴充成三態，issue #251 這一輪再改 B/D 內容）
+    //    mode B/D/C 換欄：session === null 時是 mode B；session.arranging（佈陣中）是
+    //    mode D；session 存在但已按過「確定」是 mode C（右欄從「資訊欄」換成「工具軌」
+    //    TacticsEditToolRail，132px）。
+    //    B／D 兩態原本各自在「中央欄的輪轉表」跟「aside 的球員名單/瀏覽清單」兩個地方
+    //    重複列出同一場的球員（#251 回報的重複顯示 bug）。這一輪的修法：輪轉表（現在叫
+    //    RotationRailPanel，見該檔案）不再活在中央欄，兩個 mode 統一收進 aside，跟原本
+    //    aside 已有的內容「疊在同一欄」而不是「分頭各自一份」——
+    //      - mode B：aside 由上而下疊 RotationTable（輪轉+球員名單）跟 TacticsBoardPanel
+    //        （戰術瀏覽/唯讀檢視），兩者互不衝突，是「參考站位」跟「瀏覽已存戰術」两件事
+    //        本來就都想同時看得到。
+    //      - mode D：aside 只放 TacticsRosterPanel（現在也是同一顆 RotationRailPanel 的
+    //        另一種組裝，見該檔案），不再另外顯示 TacticsBoardPanel——佈陣中使用者的
+    //        唯一任務是把人排上場，不需要同時瀏覽戰術清單。
+    //    這樣「輪轉/名單面板」在 B/D 之間永遠待在同一欄（aside），不會像重構前那樣
+    //    在中央欄／右欄之間跳來跳去，這正是使用者這一輪回報的核心問題（面板位置不一致）。
+    //    mode C 一樣完全不顯示這個面板，讓球場吃滿中央主區剩下的全部寬度——只有
+    //    「畫筆/防守範圍」這種真正的編輯動作才需要球場最大化，佈陣（拖球員上下場）不需要。
     <AppShell
       mode={mode}
       nav={
@@ -142,11 +152,17 @@ export default function TacticsBoard() {
         // mount 進畫面——React 只有真的把元素放進渲染樹才會呼叫元件函式，所以下面的內容不會
         // 在 mode C 期間執行，不用另外包一層條件判斷。
         //
-        // B／D 兩態右欄放的內容不同（issue #177）：D（session?.arranging）放
-        // TacticsRosterPanel——佈陣模式的唯一任務是「把人排上場」，球員名單比戰術瀏覽清單
-        // 更有用；B（沒在編）維持原本的 TacticsBoardPanel（戰術瀏覽／唯讀檢視）。用同一個
-        // 容器包起來（border-l／bg／backdrop-blur／relative z-10／h-full 這些視覺 class 兩態
-        // 共用，理由見上面第 2 點的 backdrop 說明），內容用 session?.arranging 判斷該渲染哪個。
+        // B／D 兩態右欄放的內容不同，issue #251 這一輪重寫（見上面第 4 點的完整說明）：
+        // D（session?.arranging）只放 TacticsRosterPanel（RotationRailPanel 的另一種
+        // 組裝）——佈陣模式的唯一任務是「把人排上場」；B（沒在編）改成「疊」兩塊：
+        // 上面是 RotationTable（一樣是 RotationRailPanel 的組裝，這裡是原本活在中央欄
+        // 的那份，issue #251 把它搬進這裡），下面接原本就在的 TacticsBoardPanel
+        // （戰術瀏覽／唯讀檢視）。兩塊用同一個 flex-column 容器直接疊起來、不是分頁籤——
+        // PO 確認過「同一欄、直接疊」就是要的效果，不需要更複雜的切換 UI。
+        //
+        // 用同一個外層容器包起來（border-l／bg／backdrop-blur／relative z-10／h-full 這些
+        // 視覺 class 兩態共用，理由見上面第 2 點的 backdrop 說明），內容用 session?.arranging
+        // 判斷該渲染哪個組合。
         //
         // 原本這裡是 `<div className="flex w-[250px] flex-shrink-0 ...">`，寬度／
         // flex-shrink-0 現在交給 AppShell 的 ASIDE_WIDTH 常數決定（w-72＝288px，跟
@@ -156,17 +172,27 @@ export default function TacticsBoard() {
         // 撐滿 AppShell 給的欄位高度。
         <div className="relative z-10 flex h-full flex-col border-l border-white/[0.08] bg-white/[0.02] backdrop-blur-sm">
           {session?.arranging ? (
-            <div className="p-3">
+            <div className="min-h-0 flex-1 overflow-y-auto p-3">
               <TacticsRosterPanel matchId={id ?? ""} />
             </div>
           ) : (
-            <TacticsBoardPanel
-              tactics={controller.tactics}
-              onSelectTactic={controller.handleSelectTactic}
-              onRenameTactic={controller.handleRenameTactic}
-              onDeleteTactic={controller.handleDeleteTactic}
-              onOpenNewTacticDialog={openNewTactic}
-            />
+            <>
+              {/* RotationTable 本身內部已經是 flex-col + overflow-y-auto（見該檔案），
+                這裡不需要再包一層捲動容器，只需要讓它跟下面 TacticsBoardPanel 各自
+                佔一半高度、都能在內容太長時各自捲動，不會互相把對方擠出畫面。 */}
+              <div className="min-h-0 flex-1 border-b border-white/[0.08]">
+                <RotationTable />
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                <TacticsBoardPanel
+                  tactics={controller.tactics}
+                  onSelectTactic={controller.handleSelectTactic}
+                  onRenameTactic={controller.handleRenameTactic}
+                  onDeleteTactic={controller.handleDeleteTactic}
+                  onOpenNewTacticDialog={openNewTactic}
+                />
+              </div>
+            </>
           )}
         </div>
       }
@@ -228,18 +254,9 @@ export default function TacticsBoard() {
       </header>
 
       <div className="relative z-10 flex min-h-0 flex-1 overflow-hidden">
-        {/* 輪轉表欄留在中央主區內部，見上面「3. 中央主區內部的 260px 輪轉表欄」的說明——
-            這一環不把它搬進 aside 插槽。
-            issue #177：條件從「!session」改成「只有 mode C 隱藏」——B（沒在編）跟 D（佈陣中）
-            都照樣顯示輪轉表，只有 C（真正的編輯模式：畫筆/防守範圍工具軌）才把這一欄藏起來、
-            讓球場吃滿中央主區剩下的全部寬度。理由：D 的任務只是把人拖上場，輪轉表仍是使用者
-            排陣時很自然想參考的資訊（跟哪一輪的先發長得像），不像 C 那樣需要最大化球場視覺
-            空間給畫筆工具用。 */}
-        {mode !== "C" && (
-          <div className="flex w-[260px] flex-shrink-0 flex-col border-r border-white/[0.08] bg-white/[0.02] backdrop-blur-sm">
-            <RotationTable />
-          </div>
-        )}
+        {/* 中央主區以前這裡有一欄 260px 寬的 RotationTable（見上面說明的第 3 點），
+            issue #251 這一輪把它搬進 aside 插槽（跟球員名單面板疊在一起），所以這裡
+            不再需要任何條件分支，球場永遠吃滿中央主區剩下的全部寬度。 */}
         <div className="relative flex flex-1 flex-col overflow-hidden">
           <div className="relative flex min-h-0 flex-1 items-center justify-center p-4">
             <Court />
