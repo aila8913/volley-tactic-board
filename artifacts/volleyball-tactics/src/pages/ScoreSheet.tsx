@@ -144,6 +144,26 @@ export default function ScoreSheet() {
   // 球員」這個純 UI 互動狀態（跟後端無關，不用持久化）。
   const [selectedBenchPlayer, setSelectedBenchPlayer] = useState<string | null>(null);
 
+  // ── 自由球員選定（名單有兩位候選時，記使用者選了哪一位）──
+  // tang 2026-07-31 要求：這個選擇要撐過重新整理頁面，但又不是「這場比賽的紀錄」（換誰上場
+  // 才是紀錄，這裡只是「鈕現在代表哪一位」的畫面偏好）——所以不走 controller/後端那條路
+  // （那條路是給真的要記錄的動作用的，見 handleLiberoSubstitute 旁的註解「libero 替補是純
+  // 前端狀態、沒寫後端」），改用 localStorage，key 帶上 matchId 避免跟別場比賽的選擇互相污染。
+  // 用 useState 的 lazy initializer 讀初值，避免每個 render 都重新讀一次 localStorage。
+  const [selectedLiberoId, setSelectedLiberoIdState] = useState<string | null>(() =>
+    id ? window.localStorage.getItem(`libero-pick:${id}`) : null,
+  );
+  // matchId 換場時（例如從別場比賽切過來），重新從那一場自己的 localStorage key 讀一次，
+  // 不要沿用上一場殘留在 state 裡的選擇——跟 useRotationTable 用 dataByMatch[matchId] 分片
+  // 是同一種「不同比賽的暫存狀態不該互相污染」的原則（issue #119）。
+  useEffect(() => {
+    setSelectedLiberoIdState(id ? window.localStorage.getItem(`libero-pick:${id}`) : null);
+  }, [id]);
+  const handleSelectLibero = (playerId: string) => {
+    setSelectedLiberoIdState(playerId);
+    if (id) window.localStorage.setItem(`libero-pick:${id}`, playerId);
+  };
+
   // ── 計分表的先發快照（issue #115）──
   // lineup：這場已凍結的先發（開賽時擷取、reload 讀回）。capturableLineup：還沒凍結前，從輪轉表
   // 當下站位「能不能擷取出一份完整先發」（只收屬於這場、湊滿 6 個號位才算數，否則 null）。
@@ -647,6 +667,8 @@ export default function ScoreSheet() {
                     onBenchPlayerSelect={setSelectedBenchPlayer}
                     onRegularSub={handleRegularSub}
                     liberoSubstitution={liberoSubstitution}
+                    selectedLiberoId={selectedLiberoId}
+                    onSelectLibero={handleSelectLibero}
                   />
                 </div>
               </div>

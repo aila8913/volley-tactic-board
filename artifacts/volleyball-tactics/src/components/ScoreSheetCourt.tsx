@@ -48,6 +48,13 @@ interface ScoreSheetCourtProps {
   // 不是輪轉表/戰術板共用的東西，所以改由外層（pages/ScoreSheet.tsx，已經知道自己在看
   // 哪個 matchId）當 prop 傳進來，這個元件不用管資料實際存在哪個 store。
   liberoSubstitution: string | null;
+  // 名單上可能有 0～2 位自由球員（排球規則允許登錄兩位）。只有一位時鍵直接顯示他，不用選；
+  // 兩位時鍵先顯示通用的「L」，長按叫出選單挑其中一位，選完鍵才變成顯示那位、可以拖曳上場
+  // ——跟 selectedBenchPlayer 一樣是外層（ScoreSheet.tsx）擁有的狀態，這裡只讀寫，
+  // 理由是 tang 要求「重整頁面後仍記得上次選哪位」，外層才知道要存進 localStorage 的 key
+  //（scope 到 matchId）。
+  selectedLiberoId?: string | null;
+  onSelectLibero?: (playerId: string) => void;
 }
 
 const HIT_RADIUS = 11;
@@ -72,6 +79,8 @@ export default function ScoreSheetCourt({
   onBenchPlayerSelect,
   onRegularSub,
   liberoSubstitution,
+  selectedLiberoId = null,
+  onSelectLibero,
 }: ScoreSheetCourtProps) {
   // circleLabel 是「圈圈顯示姓名/背號/位置」的全域顯示偏好（不是某一場的資料），留在全域 store
   // 讀即可——它不參與 issue #115 要解的「先發被跨場污染」問題。
@@ -96,15 +105,34 @@ export default function ScoreSheetCourt({
   const longPressFiredRef = useRef(false);
 
   // 元件卸載時（例如長按計時器還沒觸發、使用者就切到別頁）清掉還在跑的計時器，避免
-  // setTimeout 的 callback 之後才觸發，對著已經卸載的元件呼叫 setState。
+  // setTimeout 的 callback 之後才觸發，對著已經卸載的元件呼叫 setState。自由球員鈕的長按
+  // 計時器（liberoLongPressTimerRef，宣告見下面）是同一種風險，一起清。
   useEffect(() => {
     return () => {
       if (longPressTimerRef.current !== null) window.clearTimeout(longPressTimerRef.current);
+      if (liberoLongPressTimerRef.current !== null)
+        window.clearTimeout(liberoLongPressTimerRef.current);
     };
   }, []);
 
   const opponentZones = getZoneLayout(opponentRotation, true);
-  const liberoPlayer = roster.find((p) => p.role === "L");
+  // 名單上登錄的自由球員（0～2 位，排球規則上限兩位）。下面 liberoPlayer 才是「目前這顆鈕
+  // 代表的那一位」——只有一位時直接是他；兩位時要看 selectedLiberoId 有沒有選過。兩位都還沒
+  // 選時 liberoPlayer 是 undefined，鈕顯示通用「L」，所有原本直接用 liberoPlayer 的渲染/
+  // 拖曳邏輯完全不用改，因為它們要的本來就是「目前代表哪一位」而不是「名單上有誰」。
+  const liberoCandidates = roster.filter((p) => p.role === "L");
+  const liberoPlayer =
+    liberoCandidates.length === 1
+      ? liberoCandidates[0]
+      : liberoCandidates.find((p) => p.id === selectedLiberoId);
+  // 兩位候選時才需要選單；叫出選單的手勢是長按，跟球場本身「長按球場上的我方球員換人」
+  // 同一套機制（LONG_PRESS_MS 計時器 + 移動就取消長按判定），不是另外發明一套「點一下」
+  // 的規則——這顆鈕的長按跟球場的長按用的是各自獨立的一組 ref，因為是兩個不同的手勢區域，
+  // 但判定邏輯完全比照，使用者不用為這顆鈕另外學一種「按多久算數」的手感。
+  const [liberoPickerOpen, setLiberoPickerOpen] = useState(false);
+  const liberoPointerStartRef = useRef<{ x: number; y: number } | null>(null);
+  const liberoLongPressTimerRef = useRef<number | null>(null);
+  const liberoLongPressFiredRef = useRef(false);
 
   // ── effectiveLiberoSub ──
   // liberoSubstitution 的狀態可能在 useEffect 清除前就已輪轉到前排，
@@ -152,7 +180,13 @@ export default function ScoreSheetCourt({
   }, [ourPositions, regularSubMap, effectiveLiberoSub, liberoPlayer]);
 
   const sidelinePlayers = roster.filter((p) => !effectivelyOnCourt.has(p.id));
-  const liberoOnSideline = !effectiveLiberoSub && liberoPlayer;
+  // 「鈕該不該出現」不能用 liberoPlayer（目前代表哪一位）來判斷——兩位候選都還沒選定時
+  // liberoPlayer 是 undefined，但鈕還是要出現（顯示通用「L」讓使用者點來選）。真正決定
+  // 「有沒有可以上場的自由球員」的是候選名單本身、加上目前沒有人正在替補中。
+  const liberoOnSideline = liberoCandidates.length > 0 && !effectiveLiberoSub;
+  // 場邊欄清單／長按換人清單都只列一般候補球員，自由球員排除在外——見場邊欄跟球場右側
+  // 拖曳鈕兩處的說明，兩個地方共用同一份過濾規則，不用各寫一次。
+  const regularSidelinePlayers = sidelinePlayers.filter((p) => p.role !== "L");
 
   // 命中判定清單（我方＋對手）。用一個扁平型別讓 TypeScript 不必分辨聯集。
   type HitTarget = {
@@ -315,20 +349,63 @@ export default function ScoreSheetCourt({
     return true;
   };
 
+  const clearLiberoLongPressTimer = () => {
+    if (liberoLongPressTimerRef.current !== null) {
+      window.clearTimeout(liberoLongPressTimerRef.current);
+      liberoLongPressTimerRef.current = null;
+    }
+  };
+
   const handleLiberoPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!interactive || !onLiberoSubstitute) return;
     e.stopPropagation();
     e.currentTarget.setPointerCapture(e.pointerId);
+    liberoPointerStartRef.current = { x: e.clientX, y: e.clientY };
+    liberoLongPressFiredRef.current = false;
     setDraggingLibero(true);
     setLiberoGhostScreen({ x: e.clientX, y: e.clientY });
+
+    // 只有兩位候選時長按才有意義（一位的話沒什麼好選）。跟球場本身的長按判定同一套
+    // LONG_PRESS_MS 計時器，見 handlePointerDown 的長按分支。
+    if (liberoCandidates.length === 2) {
+      liberoLongPressTimerRef.current = window.setTimeout(() => {
+        liberoLongPressFiredRef.current = true;
+        liberoLongPressTimerRef.current = null;
+        // 長按判定成功＝這次手勢是「叫出選單」，不是拖曳換人，把拖曳中的 ghost 收掉，
+        // 避免放開手指時又被當成一次拖曳結算。
+        setDraggingLibero(false);
+        setLiberoGhostScreen(null);
+        setLiberoPickerOpen(true);
+      }, LONG_PRESS_MS);
+    }
   };
   const handleLiberoPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (draggingLibero) setLiberoGhostScreen({ x: e.clientX, y: e.clientY });
+    // 手指移動超過一點點就不算「按住不動」，取消長按判定——讓手勢自然變成拖曳換人，
+    // 跟球場本身 handlePointerMove 取消長按的理由一樣。
+    const start = liberoPointerStartRef.current;
+    if (
+      liberoLongPressTimerRef.current !== null &&
+      start &&
+      dist(start.x, start.y, e.clientX, e.clientY) > 3
+    ) {
+      clearLiberoLongPressTimer();
+    }
   };
   const handleLiberoPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    clearLiberoLongPressTimer();
+    liberoPointerStartRef.current = null;
+    // 長按已經在計時器裡處理過、選單也開了——這次放開手指是「結束長按」，不能再往下走
+    // 拖曳換人的結算邏輯，不然會把長按之後鬆手誤判成一次拖曳。
+    if (liberoLongPressFiredRef.current) {
+      liberoLongPressFiredRef.current = false;
+      return;
+    }
     if (!draggingLibero) return;
     setDraggingLibero(false);
     setLiberoGhostScreen(null);
+    if (!liberoPlayer) return; // 兩位都還沒選定時沒有「誰」可以拖上場
+
     const svgPt = screenToSvg(e.clientX, e.clientY);
     let nearest: (typeof hitTargets)[number] | null = null;
     let nearestD = Infinity;
@@ -516,46 +593,99 @@ export default function ScoreSheetCourt({
             />
           )}
         </svg>
+
+        {/* 自由球員拖曳鈕（tang 2026-07-31 要求搬出場邊欄，貼在球場右側、跟我方底線同高）：
+            以前跟一般候補球員混在同一直欄清單裡，容易讓人以為它也是「點一下進換人模式」的
+            那種按鈕——但它其實是拖曳操作，跟長按/點擊都不同掛。獨立浮在球場右側、絕對定位
+            相對 court-glass（這個 div 本來就是 position:relative），bottom:0 讓圓圈底端
+            貼齊球場最底那條線的高度——我方在球場下半場，這條線就是我方底線。拖曳判定邏輯
+            （handleLiberoPointerDown 等）完全沒變，那套邏輯本來就只認 clientX/clientY，
+            跟這顆按鈕實際擺在哪裡無關，搬家不用碰任何手勢程式碼。
+            兩位候選、還沒選定時（liberoPlayer undefined）鈕顯示通用「L」；長按（跟球場長按
+            換人同一套手感）打開下面那個選單，選完才變成顯示那位球員的名字/背號，可以拖曳，
+            理由見 handleLiberoPointerDown 的說明。 */}
+        {liberoOnSideline && (
+          <div
+            onPointerDown={handleLiberoPointerDown}
+            onPointerMove={handleLiberoPointerMove}
+            onPointerUp={handleLiberoPointerUp}
+            className="absolute flex cursor-grab flex-col items-center justify-center rounded-full border-2 border-orange-500 bg-orange-400 font-bold text-white touch-none select-none active:scale-95"
+            style={{
+              left: "100%",
+              marginLeft: 8,
+              bottom: 0,
+              width: SIDELINE_W,
+              height: SIDELINE_W,
+              touchAction: "none",
+              userSelect: "none",
+            }}
+            title={
+              liberoPlayer
+                ? `拖曳自由球員 #${liberoPlayer.number} 到後排球員；長按可改選另一位`
+                : "長按選擇自由球員"
+            }
+          >
+            {liberoPlayer ? (
+              <>
+                <span className="text-[10px] leading-none">L</span>
+                <span className="text-[10px] leading-none">#{liberoPlayer.number}</span>
+              </>
+            ) : (
+              <span className="text-xs leading-none">L</span>
+            )}
+          </div>
+        )}
+
+        {/* 自由球員選單：只有兩位候選時才會用到（一位的話沒什麼好選，鈕直接代表他）。
+            浮在拖曳鈕正上方，同樣絕對定位相對 court-glass。跟長按換人清單同一套「透明背景點
+            外面＝取消」的關閉手勢（見下面長按選單那段），不用另外做一顆取消鈕。 */}
+        {liberoPickerOpen && liberoCandidates.length === 2 && (
+          <>
+            <div
+              className="fixed inset-0 z-40"
+              onClick={() => setLiberoPickerOpen(false)}
+              data-testid="libero-picker-backdrop"
+            />
+            <div
+              className="absolute z-50 flex flex-col gap-1 rounded-lg border border-white/[0.18] bg-[#12140f]/97 p-1.5 shadow-2xl shadow-black/50 backdrop-blur-lg"
+              style={{ left: "100%", marginLeft: 8, bottom: SIDELINE_W + 8 }}
+            >
+              <p className="px-1 text-[9px] font-bold text-[#a9b096]">選自由球員</p>
+              {liberoCandidates.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => {
+                    onSelectLibero?.(p.id);
+                    setLiberoPickerOpen(false);
+                  }}
+                  className="whitespace-nowrap rounded-md border border-white/[0.14] bg-white/[0.05] px-2 py-1 text-left text-[10px] font-bold text-[#f5f5f0] transition hover:border-[#c6f135] hover:text-[#c6f135]"
+                >
+                  #{p.number} {p.name}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
       </div>
 
-      {/* ── 場邊欄 ── */}
+      {/* ── 場邊欄：現在只放一般候補球員（點擊進舊版換人模式）──
+          自由球員不再出現在這份清單裡：它是拖曳操作、不是點擊操作，混在同一直欄容易讓人
+          誤以為兩者操作方式一樣（tang 2026-07-31）。它的按鈕搬到球場右側單獨浮著，見上面
+          court-glass 內的說明；這裡改用 regularSidelinePlayers（排除 role==="L"）。 */}
       <div
         className="flex h-full flex-shrink-0 flex-col items-center gap-2 overflow-y-auto py-1"
         style={{ width: SIDELINE_W + 8 }}
       >
-        {sidelinePlayers.length === 0 && (
+        {regularSidelinePlayers.length === 0 && (
           <p className="mt-4 text-center text-[9px] text-[#a9b096]">場邊</p>
         )}
 
-        {sidelinePlayers.map((player) => {
-          const isLibero = player.role === "L";
-          const isLiberoDraggable = isLibero && !!liberoOnSideline;
+        {regularSidelinePlayers.map((player) => {
           const isSelected = player.id === selectedBenchPlayer;
           // 是否為「一般換人後被換下場的球員」，顯示「換」小標籤
           const isSubbedOut = regularSubs.some((s) => s.outPlayerId === player.id);
           const label = playerLabel(player);
-
-          if (isLiberoDraggable) {
-            return (
-              <div
-                key={player.id}
-                onPointerDown={handleLiberoPointerDown}
-                onPointerMove={handleLiberoPointerMove}
-                onPointerUp={handleLiberoPointerUp}
-                className="relative flex cursor-grab flex-col items-center justify-center rounded-full border-2 border-orange-500 bg-orange-400 font-bold text-white touch-none select-none active:scale-95"
-                style={{
-                  width: SIDELINE_W,
-                  height: SIDELINE_W,
-                  touchAction: "none",
-                  userSelect: "none",
-                }}
-                title={`拖曳自由球員 #${player.number} 到後排球員`}
-              >
-                <span className="text-[10px] leading-none">L</span>
-                <span className="text-[10px] leading-none">#{player.number}</span>
-              </div>
-            );
-          }
 
           return (
             <button
@@ -612,12 +742,12 @@ export default function ScoreSheetCourt({
       )}
 
       {/* 長按換人清單：浮在被長按的那顆球員上方，列出場邊可以換上場的人（自由球員不列——
-          自由球員有自己專屬的拖曳流程，見上面場邊欄 isLiberoDraggable 那個分支，混進這裡
-          會讓同一個人有兩種互相打架的換人方式）。 */}
+          自由球員有自己專屬的拖曳流程，見球場右側那顆拖曳鈕的說明，混進這裡會讓同一個人
+          有兩種互相打架的換人方式）。跟場邊欄共用 regularSidelinePlayers 這份過濾好的清單。 */}
       {longPressTarget &&
         (() => {
           const outPlayer = roster.find((p) => p.id === longPressTarget.playerId);
-          const candidates = sidelinePlayers.filter((p) => p.role !== "L");
+          const candidates = regularSidelinePlayers;
           return (
             <>
               {/* 全螢幕透明背景：點清單以外的地方＝取消，不用另外做一顆「取消」鈕。 */}
