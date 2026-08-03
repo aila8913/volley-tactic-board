@@ -84,6 +84,10 @@ router.post(
         // playerInId/playerOutId 用 ?? null 把「body 沒帶」轉成 DB 的 null——
         // libero 上/下場時，其中一邊本來就可能沒有對應球員（見 substitutions.ts 的欄位註解）。
         .values({
+          // 選填的 client-mintable 主鍵（#64 PR2），做法與理由見 sets.ts 的 POST 註解。
+          // 注意這裡指定的是 id，不是 seq——seq 仍由 DB 自增，它守的是「同一分內的插入順序」
+          // （見 lib/db/src/schema/substitutions.ts），跟前端鑄不鑄 id 是兩件事。
+          ...(body.id ? { id: body.id } : {}),
           setId: params.setId,
           homeScore: body.homeScore,
           awayScore: body.awayScore,

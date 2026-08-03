@@ -334,6 +334,7 @@ export const CreateSetParams = zod.object({
 })
 
 export const CreateSetBody = zod.object({
+  "id": zod.string().uuid().optional(),
   "setNumber": zod.number(),
   "firstServer": zod.enum(['home', 'away']).nullable()
 })
@@ -415,6 +416,7 @@ export const CreateRallyParams = zod.object({
 })
 
 export const CreateRallyBody = zod.object({
+  "id": zod.string().uuid().optional(),
   "rallyNumber": zod.number(),
   "homeScore": zod.number(),
   "awayScore": zod.number(),
@@ -460,6 +462,7 @@ export const CreateEventParams = zod.object({
 })
 
 export const CreateEventBody = zod.object({
+  "id": zod.string().uuid().optional(),
   "sequence": zod.number(),
   "side": zod.enum(['home', 'away']),
   "playerId": zod.string().uuid().nullish(),
@@ -513,6 +516,7 @@ export const CreateSubstitutionParams = zod.object({
 })
 
 export const CreateSubstitutionBody = zod.object({
+  "id": zod.string().uuid().optional(),
   "homeScore": zod.number(),
   "awayScore": zod.number(),
   "playerInId": zod.string().uuid().nullish(),
@@ -555,6 +559,7 @@ export const CreateTimeoutParams = zod.object({
 })
 
 export const CreateTimeoutBody = zod.object({
+  "id": zod.string().uuid().optional(),
   "homeScore": zod.number(),
   "awayScore": zod.number(),
   "side": zod.enum(['home', 'away'])

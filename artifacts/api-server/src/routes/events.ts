@@ -91,6 +91,8 @@ router.post(
         // 座標 / ballType / quality 都留空，用 ?? null 把「body 沒帶」轉成 DB 的 null。
         // tags 沒帶時給 []，對齊 DB 欄位的 default（notNull，預設空陣列）。
         .values({
+          // 選填的 client-mintable 主鍵（#64 PR2），做法與理由見 sets.ts 的 POST 註解。
+          ...(body.id ? { id: body.id } : {}),
           rallyId: params.rallyId,
           sequence: body.sequence,
           side: body.side,

@@ -8,6 +8,7 @@
 import type { ServingSide } from './servingSide';
 
 export interface NewSet {
+  id?: string;
   setNumber: number;
   firstServer: ServingSide | null;
 }

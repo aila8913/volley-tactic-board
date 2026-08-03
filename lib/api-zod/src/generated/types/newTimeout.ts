@@ -8,6 +8,7 @@
 import type { TimeoutSide } from './timeoutSide';
 
 export interface NewTimeout {
+  id?: string;
   homeScore: number;
   awayScore: number;
   side: TimeoutSide;

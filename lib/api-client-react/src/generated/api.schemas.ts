@@ -159,6 +159,7 @@ export interface MatchSet {
 }
 
 export interface NewSet {
+  id?: string;
   setNumber: number;
   firstServer: ServingSide | null;
 }
@@ -187,6 +188,7 @@ export interface Rally {
 }
 
 export interface NewRally {
+  id?: string;
   rallyNumber: number;
   homeScore: number;
   awayScore: number;
@@ -280,6 +282,7 @@ export interface Substitution {
 }
 
 export interface NewSubstitution {
+  id?: string;
   homeScore: number;
   awayScore: number;
   playerInId?: string | null;
@@ -305,6 +308,7 @@ export interface Timeout {
 }
 
 export interface NewTimeout {
+  id?: string;
   homeScore: number;
   awayScore: number;
   side: TimeoutSide;
@@ -376,6 +380,7 @@ export interface MatchEvent {
 }
 
 export interface NewEvent {
+  id?: string;
   sequence: number;
   side: EventSide;
   playerId?: string | null;

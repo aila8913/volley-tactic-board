@@ -33,6 +33,13 @@ import {
   emptyRecord,
 } from "../lib/scoreSheetMapping";
 import { applyRally, applyRegularSub, type RuleState } from "../lib/volleyballRules";
+import {
+  createWriteLog,
+  newRowId,
+  type WriteLog,
+  type WriteLogEntry,
+  type WriteOp,
+} from "../lib/writeLog";
 
 // 計分表的狀態層。以前這裡是 Zustand + persist（localStorage）；Phase 3b 把真相來源搬到後端
 // sets/rallies/events。做法是「本地優先 + 背景寫入」：
@@ -57,14 +64,15 @@ interface ScoreSheetStore {
   // 記一個使用者動作「之前」先存一份快照，之後 undo 靠它整包還原（見 UndoEntry 註解）。
   // 只在真正會改變狀態的使用者動作前呼叫（記分、一般換人、手動 libero）；自動 libero 回位、
   // 換局清空這類「後果」不呼叫——它們會被下一個使用者動作的快照涵蓋，不該各自變成一個可復原步驟。
-  snapshotForUndo: (matchId: string, backendKind: UndoEntry["backendKind"]) => void;
+  // backendRef 帶的是「這個動作在後端建了哪一筆」（表名＋已鑄好的 uuid），undo 要刪它。
+  snapshotForUndo: (matchId: string, backendRef: UndoEntry["backendRef"]) => void;
   scorePoint: (
     matchId: string,
     side: Side,
     meta?: Pick<PointRecord, "action" | "touchedBy">,
   ) => void;
   // 復原最近一個動作：pop 堆疊最上面那筆快照、整包還原三個可變欄位（比分/輪轉/發球方、
-  // 一般換人清單、libero 替補）。後端要補刪什麼由 controller 依那筆的 backendKind 決定。
+  // 一般換人清單、libero 替補）。後端要補刪什麼由 controller 依那筆的 backendRef 決定。
   undoLast: (matchId: string) => void;
   nextSet: (matchId: string) => void;
   // 擷取這場比賽的先發快照（issue #115）。開賽（選先發方）那一刻由 controller 的 start() 呼叫，
@@ -93,7 +101,7 @@ export const useScoreSheet = create<ScoreSheetStore>()((set) => ({
       recordingsByMatch: { ...s.recordingsByMatch, [matchId]: state },
     })),
 
-  snapshotForUndo: (matchId, backendKind) =>
+  snapshotForUndo: (matchId, backendRef) =>
     set((state) => {
       const record = state.recordingsByMatch[matchId];
       if (!record) return state;
@@ -103,7 +111,7 @@ export const useScoreSheet = create<ScoreSheetStore>()((set) => ({
         regularSubs: record.regularSubs,
         liberoSubstitution: record.liberoSubstitution,
         timeouts: record.timeouts,
-        backendKind,
+        backendRef,
       };
       const stack = state.undoStacksByMatch[matchId] ?? [];
       return {
@@ -293,14 +301,14 @@ export const useScoreSheet = create<ScoreSheetStore>()((set) => ({
 // ────────────────────────────────────────────────────────────────────────────
 // 持久化 + 重建的橋接層。
 //
-// 為什麼把「重建」跟「動作」放在同一個 hook？因為兩者要共用同一組記帳 ref：
-//   - currentSetIdRef：目前這一局在後端的 setId（POST rally 要掛在它底下）。
-//   - rallyIdsRef：目前這一局每一分對應的 rallyId 堆疊（復原上一球要 DELETE 最後一個）。
-// 進頁重建時 seed 這兩個 ref，之後每個動作維護它們。放在兩個 hook 會各有一份 ref、對不上。
+// 為什麼把「重建」跟「動作」放在同一個 hook？因為兩者要共用同一份記帳：currentSetIdRef
+// ——目前這一局在後端的 setId（rally/換人/暫停都要掛在它底下）。進頁重建時 seed 它，
+// 之後每個動作維護它。放在兩個 hook 會各有一份 ref、對不上。
 //
-// 所有後端寫入都排進一條「序列化的 promise 佇列」(queueRef)：即使教練連點很快，rally 也會
-// 依序 POST（rallyNumber 不會亂、id 不會 race）；復原時 pop 到的一定是正確那一分的 id，
-// 就算它的 POST 還在飛也沒關係（佇列保證 create 一定先跑完、id 已進堆疊）。
+// 所有後端寫入都 append 進一條有序的 write log（lib/writeLog.ts），由它序列化送出：
+// 即使教練連點很快，rally 也會依序 POST（rallyNumber 不會亂），delete 也一定排在對應的
+// create 之後。復原要刪哪一筆不再靠「pop 某一疊 id ref」，而是 undo 快照自己帶著 row id
+// ——因為主鍵已是 client-mintable uuid，動作發生的當下就鑄得出來（#64 PR1/PR2、#230）。
 // ────────────────────────────────────────────────────────────────────────────
 export function useScoreSheetController(matchId: string) {
   const numericMatchId = Number(matchId);
@@ -317,28 +325,108 @@ export function useScoreSheetController(matchId: string) {
   const deleteTimeout = useDeleteTimeout();
   const putLineup = usePutSetLineup();
 
-  // 持久化記帳（見上方說明）。用 ref 因為它們只影響背景寫入、不該觸發重繪。
-  // 型別從 number 改成 string：sets/rallies/substitutions/timeouts 的主鍵全部從自增整數
-  // 改成 client-mintable uuid（#64 PR1），這幾支 ref 存的就是那些表的 id，跟著改型別。
-  // 注意：這裡只改型別，佇列的行為/結構不變（client-mintable 帶來的「前端自己決定 id」
-  // 是之後 PR2/PR3 的事）。
+  // 持久化記帳：目前這一局在後端的 setId。用 ref 因為它只影響背景寫入、不該觸發重繪。
+  // 以前它旁邊還有 rallyIdsRef / subIdsRef / timeoutIdsRef 三疊「建立時 push、undo 時 pop」的
+  // id 堆疊，現在全部刪掉了——id 在動作當下就鑄好並存進 undo 快照（見 UndoEntry.backendRef）。
   const currentSetIdRef = useRef<string | undefined>(undefined);
-  const rallyIdsRef = useRef<string[]>([]);
-  // 換人 row id 的堆疊，跟 rallyIdsRef 是同一套路：一般換人成功 POST 後把 id 推進來，
-  // 「復原」退掉一個換人動作時 pop 出最後一個、DELETE 掉它。序列化佇列保證 create 一定
-  // 先於 delete 跑完（id 已進堆疊），所以 pop 到的就是要刪的那一筆。
-  const subIdsRef = useRef<string[]>([]);
-  // 暫停 row id 的堆疊，跟 subIdsRef 完全同一套路：暫停成功 POST 後把 id 推進來，「復原」退掉
-  // 一個暫停動作時 pop 出最後一個、DELETE 掉它（issue #44）。
-  const timeoutIdsRef = useRef<string[]>([]);
-  const queueRef = useRef<Promise<unknown>>(Promise.resolve());
 
-  // 把一個後端寫入工作排進序列化佇列。本地優先：寫入失敗只記 log、不回滾畫面
-  // （完整的失敗 reconcile 留待未來；現階段先確保單人、順暢的 happy path）。
-  const enqueue = useCallback((task: () => Promise<void>) => {
-    queueRef.current = queueRef.current.then(task).catch((err) => {
-      console.error("[scoresheet] 背景寫入後端失敗：", err);
-    });
+  // executor：整份程式碼裡唯一知道「哪一種 write op 對應哪一支 API」的地方。以前這個知識
+  // 散在六個 action 裡（各自 mutateAsync 一次），現在收斂成這一個 switch。
+  //
+  // 為什麼要透過 ref 拿 mutation：orval/react-query 的 mutation 物件每次 render 都是新的，
+  // 但 write log 必須整頁只建立一次（換一條新 log ＝ 序列化的 promise 鏈斷掉、順序不再保證）。
+  // 所以 log 拿到的 executor 必須是穩定的函式，執行當下再從 ref 讀最新的 mutation。
+  const apiRef = useRef({
+    createSet,
+    updateSet,
+    createRally,
+    createEvent,
+    deleteRally,
+    createSubstitution,
+    deleteSubstitution,
+    createTimeout,
+    deleteTimeout,
+    putLineup,
+  });
+  apiRef.current = {
+    createSet,
+    updateSet,
+    createRally,
+    createEvent,
+    deleteRally,
+    createSubstitution,
+    deleteSubstitution,
+    createTimeout,
+    deleteTimeout,
+    putLineup,
+  };
+
+  const execute = useCallback(
+    async (entry: WriteLogEntry): Promise<void> => {
+      const api = apiRef.current;
+      // TypeScript 會用 kind + table 這兩個 discriminant 把 entry 窄化到對應的分支，
+      // 所以底下每個 case 拿到的 payload 型別都是準的；漏掉分支也會被編譯器抓到。
+      switch (entry.table) {
+        case "sets":
+          if (entry.kind === "create") {
+            await api.createSet.mutateAsync({ matchId: entry.matchId, data: entry.payload });
+          } else if (entry.kind === "patch") {
+            await api.updateSet.mutateAsync({
+              matchId: entry.matchId,
+              setId: entry.id,
+              data: entry.payload,
+            });
+          }
+          return;
+        case "rallies":
+          if (entry.kind === "create") {
+            await api.createRally.mutateAsync({ setId: entry.parentId, data: entry.payload });
+          } else {
+            await api.deleteRally.mutateAsync({ rallyId: entry.id });
+          }
+          return;
+        case "events":
+          await api.createEvent.mutateAsync({ rallyId: entry.parentId, data: entry.payload });
+          return;
+        case "substitutions":
+          if (entry.kind === "create") {
+            await api.createSubstitution.mutateAsync({
+              setId: entry.parentId,
+              data: entry.payload,
+            });
+          } else {
+            await api.deleteSubstitution.mutateAsync({ substitutionId: entry.id });
+          }
+          return;
+        case "timeouts":
+          if (entry.kind === "create") {
+            await api.createTimeout.mutateAsync({ setId: entry.parentId, data: entry.payload });
+          } else {
+            await api.deleteTimeout.mutateAsync({ timeoutId: entry.id });
+          }
+          return;
+        case "lineups":
+          await api.putLineup.mutateAsync({ setId: entry.id, data: entry.payload });
+          return;
+      }
+    },
+    // apiRef 是穩定的容器，內容每次 render 就地更新，所以這個 callback 不需要任何依賴。
+    [],
+  );
+
+  // 這一場的 write log。用「lazy init + matchId 變了才重建」而不是 useMemo：useMemo 在
+  // React 的合約裡是可以被丟棄重算的快取，而這裡重建一次就等於丟掉還沒送出的寫入，不能賭。
+  const logRef = useRef<WriteLog | null>(null);
+  const logMatchRef = useRef<number | null>(null);
+  if (logRef.current === null || logMatchRef.current !== numericMatchId) {
+    logRef.current = createWriteLog(numericMatchId, execute);
+    logMatchRef.current = numericMatchId;
+  }
+
+  // 六個動作統一用它把寫入交出去。本地優先：寫入失敗只記 log、不回滾畫面
+  // （完整的失敗 reconcile 是 #64 PR4 的事）。
+  const append = useCallback((op: WriteOp) => {
+    logRef.current?.append(op);
   }, []);
 
   // ── 進頁重建 ──
@@ -402,17 +490,10 @@ export function useScoreSheetController(matchId: string) {
       timeoutsQuery.data ?? [],
     );
 
-    // seed 記帳 ref，讓重建後接著記分/復原能對得上後端 id。
+    // seed 記帳 ref，讓重建後接著記分能掛到正確的一局底下。
+    // （以前這裡還要 seed 三疊 id 堆疊；現在不用了——undo 快照自己帶著要刪的 row id，
+    // 而復原堆疊 reload 後本來就是空的，所以 reload 前的紀錄不會、也不該被 undo 退掉。）
     currentSetIdRef.current = state.currentSet.serverId;
-    rallyIdsRef.current = state.currentSet.history
-      .map((h) => h.serverId)
-      .filter((id): id is string => id !== undefined);
-    // 換人 id 堆疊重建後歸零：復原堆疊（undoStacksByMatch）reload 後本來就是空的（純記憶體、
-    // 不重建），所以 reload 前的換人不會被 undo 退掉、也就不需要它們的 id；只累積本次進頁後
-    // 新記的換人 id 即可。
-    subIdsRef.current = [];
-    // 暫停 id 堆疊同理歸零（issue #44）：reload 前的暫停不會被 undo 退掉，只累積本次進頁後新記的。
-    timeoutIdsRef.current = [];
 
     hydrate(matchId, state);
     hydratedMatchRef.current = matchId;
@@ -456,38 +537,44 @@ export function useScoreSheetController(matchId: string) {
         useScoreSheet.getState().setLineup(matchId, effectiveLineup);
       }
       // 兩條路（#63 修法）：
-      //   - 第 2 局以後：goNextSet 在按下一局的當下已經 POST 過一筆 firstServer=null 的空
-      //     set row，currentSetIdRef 早就有值——這裡只是教練終於選好先發方，PATCH 補上去。
-      //   - 第 1 局：從頭開始，還沒有任何 set row，照舊直接 POST 一筆帶 firstServer 的。
-      // 判斷放進 enqueue 的 async task 裡（而不是 enqueue 之前）才讀 ref，是因為佇列會把
-      // 這個任務排在 goNextSet 那筆「建空局」任務後面依序執行——true 而已，等到這裡真的
-      // 執行時，前面所有任務都跑完了，ref 保證是最新值，不會有「PATCH 早於 POST 完成」的競態。
-      enqueue(async () => {
-        const existingSetId = currentSetIdRef.current;
-        if (existingSetId !== undefined) {
-          await updateSet.mutateAsync({
-            matchId: numericMatchId,
-            setId: existingSetId,
-            data: { firstServer: sideToApi(servingFirst) },
-          });
-        } else {
-          const created = await createSet.mutateAsync({
-            matchId: numericMatchId,
-            data: { setNumber, firstServer: sideToApi(servingFirst) },
-          });
-          currentSetIdRef.current = created.id;
-          rallyIdsRef.current = [];
-        }
-        // set row 確定存在後（上面兩條路都已把 currentSetIdRef 指到這一局），把先發 PUT 上去
-        // ——一局一 row（setId unique），PUT 是 idempotent upsert，同一局重按也只會覆寫、不重覆。
-        // 排在 firstServer 寫入之後同一個 task 裡，順序天然正確。
-        const setId = currentSetIdRef.current;
-        if (setId !== undefined && effectiveLineup) {
-          await putLineup.mutateAsync({ setId, data: lineupSnapshotToApi(effectiveLineup) });
-        }
-      });
+      //   - 第 2 局以後：goNextSet 在按下一局的當下已經記過一筆 firstServer=null 的空 set，
+      //     currentSetIdRef 早就有值——這裡只是教練終於選好先發方，PATCH 補上去。
+      //   - 第 1 局：從頭開始，還沒有任何 set，POST 一筆帶 firstServer 的。
+      // 以前這個判斷必須寫在 async task 裡「等排到自己時才讀 ref」，因為 setId 要等 POST 回來；
+      // 現在 id 是前端鑄的，goNextSet 一按就同步寫進 ref，所以這裡可以直接同步判斷。
+      // 順序仍由 write log 保證：PATCH 一定排在建空局的 POST 之後。
+      const existingSetId = currentSetIdRef.current;
+      if (existingSetId !== undefined) {
+        append({
+          kind: "patch",
+          table: "sets",
+          id: existingSetId,
+          payload: { firstServer: sideToApi(servingFirst) },
+        });
+      } else {
+        const setId = newRowId();
+        currentSetIdRef.current = setId;
+        append({
+          kind: "create",
+          table: "sets",
+          id: setId,
+          payload: { id: setId, setNumber, firstServer: sideToApi(servingFirst) },
+        });
+      }
+      // set row 確定存在後（上面兩條路都已把 currentSetIdRef 指到這一局），把先發 PUT 上去
+      // ——一局一 row（setId unique），PUT 是 idempotent upsert，同一局重按也只會覆寫、不重覆。
+      // append 在 firstServer 那筆之後，log 的順序就保證它不會早於 set 建立。
+      const setId = currentSetIdRef.current;
+      if (setId !== undefined) {
+        append({
+          kind: "put",
+          table: "lineups",
+          id: setId,
+          payload: lineupSnapshotToApi(effectiveLineup),
+        });
+      }
     },
-    [matchId, numericMatchId, enqueue, createSet, updateSet, putLineup],
+    [matchId, append],
   );
 
   const score = useCallback(
@@ -505,20 +592,29 @@ export function useScoreSheetController(matchId: string) {
       const awayRotationBefore = pre.opponentRotation;
       const point: PointRecord = { side, wasSideOut: side !== pre.serving, ...meta };
 
+      const setId = currentSetIdRef.current;
+      if (setId === undefined) return; // 理論上 start 一定先跑過；防呆
+
+      // 這一分的 rally id 現在由前端當場鑄出來，不必等 POST 回應。有了它，下面兩件事才能
+      // 同步做完：undo 快照直接記住「要刪哪一筆」，event 也能立刻掛到這個 rallyId 底下。
+      const rallyId = newRowId();
+
       // 0) 先存一份「記這分之前」的快照，讓之後「復原」能整包退回這一球（issue #41）。
-      //    backendKind 'rally'：一分＝一個 rally，復原時要 DELETE 那個 rally。
-      useScoreSheet.getState().snapshotForUndo(matchId, "rally");
+      useScoreSheet.getState().snapshotForUndo(matchId, { table: "rallies", id: rallyId });
 
       // 1) 本地即時更新（畫面零延遲）
       useScoreSheet.getState().scorePoint(matchId, side, meta);
 
-      // 2) 背景持久化：POST rally，成功後把 id 推進堆疊；有動作/球員才順帶 POST 一個 event。
-      enqueue(async () => {
-        const setId = currentSetIdRef.current;
-        if (setId === undefined) return; // 理論上 start 一定先跑過；防呆
-        const rally = await createRally.mutateAsync({
-          setId,
-          data: pointRecordToRally(
+      // 2) 背景持久化：一筆 rally；有動作/球員才順帶一筆 event（掛在同一個 rallyId 底下，
+      //    log 的順序保證 event 不會早於 rally 送出）。
+      append({
+        kind: "create",
+        table: "rallies",
+        id: rallyId,
+        parentId: setId,
+        payload: {
+          id: rallyId,
+          ...pointRecordToRally(
             point,
             rallyNumber,
             homeScoreBefore,
@@ -526,55 +622,42 @@ export function useScoreSheetController(matchId: string) {
             homeRotationBefore,
             awayRotationBefore,
           ),
-        });
-        rallyIdsRef.current.push(rally.id);
-        const newEvent = pointRecordToEvent(point, 1);
-        if (newEvent) {
-          await createEvent.mutateAsync({ rallyId: rally.id, data: newEvent });
-        }
+        },
       });
+      const newEvent = pointRecordToEvent(point, 1);
+      if (newEvent) {
+        const eventId = newRowId();
+        append({
+          kind: "create",
+          table: "events",
+          id: eventId,
+          parentId: rallyId,
+          payload: { id: eventId, ...newEvent },
+        });
+      }
     },
-    [matchId, enqueue, createRally, createEvent],
+    [matchId, append],
   );
 
   // 復原最近一個動作（issue #41）：一顆按鈕、一次退一個動作（得分 / 一般換人 / 手動 libero），
-  // 連按就一路往回。做法是先偷看堆疊最上面那筆是什麼動作（backendKind），本地整包還原後，
-  // 再依它決定後端要不要補刪、刪哪張表的 row。
+  // 連按就一路往回。做法是先偷看堆疊最上面那筆在後端建了哪一筆（backendRef），本地整包還原後，
+  // 再 append 一筆對應的 delete。
+  //
+  // 這裡就是 #230 消失的地方：以前要用字串 switch 判斷三疊 id ref 該 pop 哪一疊，而「pop 到的
+  // 剛好是對的那筆」只是因為佇列順序碰巧成立。現在快照直接帶著 { table, id }，刪誰是資料、
+  // 不是推論；而 delete 排在對應 create 之後，是 write log 的序列化本來就保證的性質。
   const undo = useCallback(() => {
     const stack = useScoreSheet.getState().undoStacksByMatch[matchId];
     if (!stack || stack.length === 0) return;
-    // 先 peek（不 pop）拿到「上一個動作在後端建了什麼」，再叫 store 還原＋pop。
     const top = stack[stack.length - 1];
     useScoreSheet.getState().undoLast(matchId);
 
-    if (top.backendKind === "rally") {
-      enqueue(async () => {
-        // 佇列序列化保證：即使這一分的 POST 還沒回來，它排在本 delete 前面、一定先跑完並把 id
-        // 推進堆疊，所以這裡 pop 到的就是要刪的那一分。event 靠 FK cascade 一起刪掉。
-        const rallyId = rallyIdsRef.current.pop();
-        if (rallyId !== undefined) {
-          await deleteRally.mutateAsync({ rallyId });
-        }
-      });
-    } else if (top.backendKind === "substitution") {
-      enqueue(async () => {
-        // 跟 rally 同理：序列化佇列保證這筆換人的 POST 已先跑完、id 已進 subIdsRef。
-        const substitutionId = subIdsRef.current.pop();
-        if (substitutionId !== undefined) {
-          await deleteSubstitution.mutateAsync({ substitutionId });
-        }
-      });
-    } else if (top.backendKind === "timeout") {
-      enqueue(async () => {
-        // 跟換人同理（issue #44）：序列化佇列保證這筆暫停的 POST 已先跑完、id 已進 timeoutIdsRef。
-        const timeoutId = timeoutIdsRef.current.pop();
-        if (timeoutId !== undefined) {
-          await deleteTimeout.mutateAsync({ timeoutId });
-        }
-      });
+    // backendRef === null（手動 libero 上/下場）：純本地狀態，undoLast 已還原畫面，後端沒東西要刪。
+    // rally 底下的 event 靠 FK cascade 一起刪掉，不用自己再 append 一筆。
+    if (top.backendRef) {
+      append({ kind: "delete", table: top.backendRef.table, id: top.backendRef.id });
     }
-    // backendKind === null（手動 libero 上/下場）：純本地狀態，undoLast 已還原畫面，後端沒東西要刪。
-  }, [matchId, enqueue, deleteRally, deleteSubstitution, deleteTimeout]);
+  }, [matchId, append]);
 
   const goNextSet = useCallback(() => {
     const pre = useScoreSheet.getState().recordingsByMatch[matchId]?.currentSet;
@@ -584,22 +667,21 @@ export function useScoreSheetController(matchId: string) {
     // firstServer=null 的空 set row（教練還沒選先發方，先寫 null，選好後 start() 再 PATCH
     // 補上）。這樣「使用者已經進到的每一局」都保證有對應 DB row，reload 時最後一局就是
     // 這筆空 row，會正確重建成「這局由誰先發球？」，不會退回顯示上一局。
-    // 排進佇列而非直接發請求，是為了排在剛結束那局最後幾筆記分/換人寫入之後，維持順序。
-    enqueue(async () => {
-      // 先把記帳 ref 清乾淨「再」發 POST。順序很重要：如果建空局的 POST 失敗（背景寫入
-      // 失敗目前不 reconcile，屬 #64 範圍），ref 會停在這個 undefined，start() 讀到就會
-      // 退回「POST 開新局」——而不是誤把 ref 停在剛結束那局的 id、害 start() PATCH 到
-      // 錯的一局、後續記分也灌進錯的 set。這保留了舊碼「goNextSet 後 ref 不指向舊局」的
-      // 安全性質（舊碼是同步設 undefined，這裡改成非同步建 row 前先設，效果一致）。
-      currentSetIdRef.current = undefined;
-      rallyIdsRef.current = [];
-      const created = await createSet.mutateAsync({
-        matchId: numericMatchId,
-        data: { setNumber: newSetNumber, firstServer: null },
-      });
-      currentSetIdRef.current = created.id;
+    // append 進 log 而非直接發請求，是為了排在剛結束那局最後幾筆記分/換人寫入之後，維持順序。
+    //
+    // 記帳 ref 現在是同步就位的：id 前端自己鑄，不用等回應。舊碼在這裡有一段「先把 ref 設回
+    // undefined，POST 失敗就停在 undefined，讓 start() 退回開新局」的保護；現在拿掉了，因為
+    // id 已經鑄好、ref 直接指向新的一局。差別在寫入失敗時：舊碼會另起一局（等於放棄那筆），
+    // 新碼保留同一個 id ——這正是之後重送要的性質（同 id 重送，PR3 的冪等寫入會吃掉重複）。
+    const newSetId = newRowId();
+    currentSetIdRef.current = newSetId;
+    append({
+      kind: "create",
+      table: "sets",
+      id: newSetId,
+      payload: { id: newSetId, setNumber: newSetNumber, firstServer: null },
     });
-  }, [matchId, numericMatchId, enqueue, createSet]);
+  }, [matchId, append]);
 
   // 一般換人（issue #42 Phase B）。跟 score() 是同一套結構：
   //   1) 先同步擷取「這次換人當下」的比分快照（换人不是掛在某個 rally 底下，
@@ -614,25 +696,31 @@ export function useScoreSheetController(matchId: string) {
       const homeScore = pre.ourScore;
       const awayScore = pre.opponentScore;
 
+      const setId = currentSetIdRef.current;
+      if (setId === undefined) return; // 理論上 start 一定先跑過；防呆
+      const substitutionId = newRowId();
+
       // 0) 先存一份「這次換人之前」的快照，讓「復原」能單獨退掉這個換人動作（issue #41）。
-      //    backendKind 'substitution'：復原時要 DELETE 這一筆換人 row。
-      useScoreSheet.getState().snapshotForUndo(matchId, "substitution");
+      useScoreSheet
+        .getState()
+        .snapshotForUndo(matchId, { table: "substitutions", id: substitutionId });
 
       // 1) 本地即時更新（畫面零延遲）
       useScoreSheet.getState().recordRegularSub(matchId, outPlayerId, inPlayerId);
 
-      // 2) 背景持久化：POST 到目前這一局底下，成功後把 row id 推進 subIdsRef（復原要用它 DELETE）。
-      enqueue(async () => {
-        const setId = currentSetIdRef.current;
-        if (setId === undefined) return; // 理論上 start 一定先跑過；防呆
-        const created = await createSubstitution.mutateAsync({
-          setId,
-          data: regularSubToApi({ outPlayerId, inPlayerId }, homeScore, awayScore),
-        });
-        subIdsRef.current.push(created.id);
+      // 2) 背景持久化：記在目前這一局底下。
+      append({
+        kind: "create",
+        table: "substitutions",
+        id: substitutionId,
+        parentId: setId,
+        payload: {
+          id: substitutionId,
+          ...regularSubToApi({ outPlayerId, inPlayerId }, homeScore, awayScore),
+        },
       });
     },
-    [matchId, enqueue, createSubstitution],
+    [matchId, append],
   );
 
   // 暫停（issue #44）。跟 substitute() 是同一套結構，只是更單純（沒有球員、沒有淨疊加）：
@@ -647,24 +735,26 @@ export function useScoreSheetController(matchId: string) {
       const homeScore = pre.ourScore;
       const awayScore = pre.opponentScore;
 
+      const setId = currentSetIdRef.current;
+      if (setId === undefined) return; // 理論上 start 一定先跑過；防呆
+      const timeoutId = newRowId();
+
       // 0) 先存一份「叫這次暫停之前」的快照，讓「復原」能單獨退掉這個暫停動作（issue #41）。
-      useScoreSheet.getState().snapshotForUndo(matchId, "timeout");
+      useScoreSheet.getState().snapshotForUndo(matchId, { table: "timeouts", id: timeoutId });
 
       // 1) 本地即時更新（畫面零延遲）
       useScoreSheet.getState().recordTimeout(matchId, side);
 
-      // 2) 背景持久化：POST 到目前這一局底下，成功後把 row id 推進 timeoutIdsRef。
-      enqueue(async () => {
-        const setId = currentSetIdRef.current;
-        if (setId === undefined) return; // 理論上 start 一定先跑過；防呆
-        const created = await createTimeout.mutateAsync({
-          setId,
-          data: timeoutToApi(side, homeScore, awayScore),
-        });
-        timeoutIdsRef.current.push(created.id);
+      // 2) 背景持久化：記在目前這一局底下。
+      append({
+        kind: "create",
+        table: "timeouts",
+        id: timeoutId,
+        parentId: setId,
+        payload: { id: timeoutId, ...timeoutToApi(side, homeScore, awayScore) },
       });
     },
-    [matchId, enqueue, createTimeout],
+    [matchId, append],
   );
 
   return { isHydrating, start, score, undo, goNextSet, substitute, callTimeout };

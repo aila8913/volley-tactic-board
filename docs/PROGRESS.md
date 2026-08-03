@@ -25,7 +25,8 @@
 \_Last updated: 2026-08-02 (aila) — **M3「部署給真人試用」啟動**：#77 帳號模型已定案並關閉
 （v1 auth＝**Google OAuth、每人一個真帳號**、公開網址不設邀請碼），#75 離線可靠性契約的同步引擎
 設計已產出並貼在該 issue，**契約範圍由 PO 拍板＝`rallies`/`events`/`substitutions`/`timeouts`
-四類保證不遺失，`lineups` 與戰術板/名單刻意不保證**。#64 PR1（五張表主鍵 `serial → uuid`）已完成。
+四類保證不遺失，`lineups` 與戰術板/名單刻意不保證**。#64 PR1（五張表主鍵 `serial → uuid`）已完成，
+PR2（計分頁六個動作收斂成一條有序 write log，一併吃掉 **#230**）已完成。
 先前條目：#251 戰術板右欄整併（PR #274）、#228 route handler 收斂 12 支檔案全數完成（PR
 #256/#262~#272）、#238＋#257 比賽狀態判準收斂（PR #258/#259）。\_
 
@@ -187,6 +188,17 @@ lives in git log + the issues named).
   schema-first + `drizzle-kit push` 沒有 migration 檔可以寫 `USING` 轉換，只能 drop 六張表再 push＋
   重跑 seed（PO 已授權；seed 本來就是 `TRUNCATE ... RESTART IDENTITY CASCADE` ＋固定種子 PRNG，
   重灌結果與先前完全一致）。
+- **計分頁的寫入已收斂成一條有序 write log（#64 PR2，順帶關掉 #230）。** 新增
+  `artifacts/volleyball-tactics/src/lib/writeLog.ts`：六個動作（`start`/`score`/`undo`/`goNextSet`/
+  `substitute`/`callTimeout`）不再各自呼叫各自的 mutation，而是 append 一筆
+  `WriteLogEntry`，由一個集中的 executor 依序翻成 API 呼叫。**三疊平行的 id ref
+  （`rallyIdsRef`/`subIdsRef`/`timeoutIdsRef`）與那個「undo 該 pop 哪一疊」的字串 switch 一起消失**——
+  因為主鍵已是 uuid，動作發生的當下就鑄得出 id，直接存進 undo 快照的 `backendRef: { table, id }`，
+  刪誰變成資料而不是推論。**PR1 只改了 DB 型別，API 仍逐欄白名單、不收 body 的 `id`**，所以這張 PR
+  一併把 `NewSet`/`NewRally`/`NewEvent`/`NewSubstitution`/`NewTimeout` 開出選填的 `id`（否則 log 的
+  `id` 只能等 POST 回來才填、delete 又得回頭查表，等於先蓋一版 PR3 會拆掉的東西）。冪等
+  （`ON CONFLICT DO NOTHING`）仍留給 PR3——PR2 沒有重送，撞不到。#230 抱怨的「create 先於 delete
+  只靠佇列巧合、沒有測試守著」現在有 `writeLog.test.ts` 五條合約測試守住。
 - **專案 roadmap 已上線。** 時間序住在 repo **Milestones M1–M5**（現為 M1–M5＋M1.5/M2.5/M3.5）（軟目標日
   7/18→9/11，非死線），當下狀態住在 [GitHub Project #4](https://github.com/users/aila8913/projects/4)。
   **M1／M2／M1.5 milestone 皆已關閉**（M1.5 由 PR #239 帶關 #174/#120 後收掉；#176 已移 M3，
@@ -252,7 +264,7 @@ milestone，歸 **M5**。
 
 **當前階段＝M3「部署給真人試用」（軟目標日 8/7，10 張 open）。** 脊椎與定案見上方 Current state；
 `gh issue list --milestone "M3 部署給真人試用"`。**#77 已於 08-02 關閉**，剩下的脊椎是 #75 設計已定、
-#64 待實作（PR1 主鍵遷移已完成，PR2 寫入 log／PR3 IndexedDB 落地＋收斂重放／PR4 flush loop 待做）、
+#64 待實作（PR1 主鍵遷移、PR2 寫入 log 已完成；PR3 IndexedDB 落地＋收斂重放／PR4 flush loop 待做）、
 #26 部署。**搭便車、不擋部署的 6 張**：#218（結束比賽節點）、#221/#224/#240（人員合併與管理）、
 #176（工具軌圖示，blocked @tangyi1025）、#178（響應式，需線框稿）。**待新開一張**：「PWA 化：
 manifest ＋ vite-plugin-pwa」——跟 #64 資料層零依賴、可平行，且是唯一能自然分給設計夥伴、
