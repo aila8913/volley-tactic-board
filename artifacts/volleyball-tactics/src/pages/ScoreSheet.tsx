@@ -14,6 +14,7 @@ import RotationRailPanel from "@/components/RotationRailPanel";
 import { PlayAction, Side } from "@/types/scoresheet";
 import { isSetComplete, disabledActions, resolveScoringSide } from "@/lib/scoreSheetMapping";
 import { countSetWins } from "@/lib/matchOutcome";
+import { APP_BACKGROUND_STYLE, APP_SHELL_CLASS, INFO_RAIL_BASE_CLASS } from "@/lib/appChromeStyles";
 import {
   captureLineupFromRotations,
   readLineupFromRotations,
@@ -477,13 +478,8 @@ export default function ScoreSheet() {
     // 球場跟大比分佔滿畫面，那顆置中大字會被蓋住又搶操作注意力（跟戰術板唯讀檢視的情境不同）。
     <AppShell
       mode="A"
-      className="relative font-dash text-[#f5f5f0]"
-      style={{
-        background:
-          "radial-gradient(ellipse 55% 45% at 18% 12%, rgba(198,241,53,0.10), transparent 70%), " +
-          "radial-gradient(ellipse 65% 55% at 88% 92%, rgba(42,110,106,0.30), transparent 70%), " +
-          "linear-gradient(160deg, #0a0b07 0%, #16241c 55%, #0a0b07 100%)",
-      }}
+      className={APP_SHELL_CLASS}
+      style={APP_BACKGROUND_STYLE}
       backdrop={<div className="tb-beam" />}
       nav={
         <div className="relative z-10 h-full">
@@ -503,10 +499,10 @@ export default function ScoreSheet() {
       }
       aside={
         // ── 右欄：站位／統計／快速戰術板（深色玻璃，跟中間計分區切開） ──
-        // 色票照 docs/design-spec.md 第 2 節；border-l 收在這一側，交界只留一條邊框。
-        // 寬度（原本 w-72 flex-none）由 AppShell 的 ASIDE_WIDTH 負責，這裡只留視覺 class，
-        // 加上 h-full 撐滿 AppShell 給的欄位高度，以及 `relative z-10` 疊在 .tb-beam 之上。
-        <div className="relative z-10 flex h-full flex-col border-l border-white/[0.10] bg-[#121310] font-dash text-[#F5F5F0]">
+        // 外殼 class 收斂到 lib/appChromeStyles（原本這裡跟另外兩個右欄各寫一份字面相同的字串，
+        // 見那個檔案的說明）。寬度（原本 w-72 flex-none）由 AppShell 的 ASIDE_WIDTH 負責，
+        // 這裡只多加 `relative z-10` 疊在 .tb-beam 之上。
+        <div className={`relative z-10 ${INFO_RAIL_BASE_CLASS}`}>
           {/* ── 站位面板（issue #120，共用真相版）──
             開賽前（canEditLineup）：lineup 讀的是 activeLineup，此時等於
             capturableLineup——輪轉表當下的共用真相，可以直接編輯；onLineupChange

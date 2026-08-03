@@ -17,6 +17,7 @@ import NavRail from "@/components/NavRail";
 import { usePersonList } from "@/hooks/usePeople";
 import { usePersonAnalysis } from "@/hooks/usePersonAnalysis";
 import { useTeamList } from "@/hooks/useTeams";
+import { APP_BACKGROUND_STYLE, APP_SHELL_CLASS } from "@/lib/appChromeStyles";
 import { buildPersonActionSummary } from "@/lib/personAnalysisMapping";
 import { formatMatchDateTime } from "@/lib/matchSummary";
 
@@ -55,15 +56,17 @@ export default function PersonAnalytics() {
     // 「數」底下的其中一種視圖，不是獨立的新入口（左側子導覽本身留給 #214 再做）。
     <AppShell
       mode="A"
-      nav={<NavRail backHref="/" active="analytics" />}
-      className="bg-[#0a0b07] font-dash text-[#f5f5f0]"
-      style={{
-        backgroundImage:
-          "repeating-linear-gradient(45deg, rgba(245,245,240,0.035) 0 1px, transparent 1px 28px)," +
-          "repeating-linear-gradient(-45deg, rgba(245,245,240,0.035) 0 1px, transparent 1px 28px)",
-      }}
+      nav={
+        <div className="relative z-10 h-full">
+          <NavRail backHref="/" active="analytics" />
+        </div>
+      }
+      backdrop={<div className="tb-beam" />}
+      className={APP_SHELL_CLASS}
+      style={APP_BACKGROUND_STYLE}
     >
-      <div className="min-h-0 w-full flex-1 overflow-y-auto">
+      {/* relative z-10：疊在 backdrop 的 .tb-beam 之上，理由見 TacticsBoard.tsx 的說明。 */}
+      <div className="relative z-10 min-h-0 w-full flex-1 overflow-y-auto">
         <header className="flex items-center justify-between border-b border-white/[0.08] bg-white/[0.02] px-4 py-3 backdrop-blur-sm">
           <h1 className="flex items-center gap-2 text-lg font-bold">
             <Users className="h-5 w-5 text-[#c6f135]" />

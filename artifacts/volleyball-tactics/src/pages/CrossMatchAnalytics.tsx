@@ -15,6 +15,7 @@ import AppShell from "@/components/AppShell";
 import NavRail from "@/components/NavRail";
 import { useCrossMatchAnalysis } from "@/hooks/useCrossMatchAnalysis";
 import { useTeamList } from "@/hooks/useTeams";
+import { APP_BACKGROUND_STYLE, APP_SHELL_CLASS } from "@/lib/appChromeStyles";
 import { formatMatchDateTime } from "@/lib/matchSummary";
 
 // 球隊篩選的兩個特殊值：全部場次、以及「未分類」（teamId 為 null 的場）。其餘就是球隊 id。
@@ -58,15 +59,18 @@ export default function CrossMatchAnalytics() {
     // ——右欄目前的內容都綁在單一比賽/資料夾情境，這頁沒有那種情境，硬湊反而沒意義。
     <AppShell
       mode="A"
-      nav={<NavRail backHref="/" active="analytics" />}
-      className="bg-[#0a0b07] font-dash text-[#f5f5f0]"
-      style={{
-        backgroundImage:
-          "repeating-linear-gradient(45deg, rgba(245,245,240,0.035) 0 1px, transparent 1px 28px)," +
-          "repeating-linear-gradient(-45deg, rgba(245,245,240,0.035) 0 1px, transparent 1px 28px)",
-      }}
+      nav={
+        <div className="relative z-10 h-full">
+          <NavRail backHref="/" active="analytics" />
+        </div>
+      }
+      backdrop={<div className="tb-beam" />}
+      className={APP_SHELL_CLASS}
+      style={APP_BACKGROUND_STYLE}
     >
-      <div className="min-h-0 w-full flex-1 overflow-y-auto">
+      {/* relative z-10：疊在 backdrop 的 .tb-beam（position:absolute + z-index:1）之上，
+          理由見 TacticsBoard.tsx 同一種寫法的說明。 */}
+      <div className="relative z-10 min-h-0 w-full flex-1 overflow-y-auto">
         <header className="flex items-center justify-between border-b border-white/[0.08] bg-white/[0.02] px-4 py-3 backdrop-blur-sm">
           <h1 className="flex items-center gap-2 text-lg font-bold">
             <BarChart3 className="h-5 w-5 text-[#c6f135]" />
