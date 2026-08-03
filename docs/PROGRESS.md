@@ -25,8 +25,9 @@
 \_Last updated: 2026-08-02 (aila) — **M3「部署給真人試用」啟動**：#77 帳號模型已定案並關閉
 （v1 auth＝**Google OAuth、每人一個真帳號**、公開網址不設邀請碼），#75 離線可靠性契約的同步引擎
 設計已產出並貼在該 issue，**契約範圍由 PO 拍板＝`rallies`/`events`/`substitutions`/`timeouts`
-四類保證不遺失，`lineups` 與戰術板/名單刻意不保證**。#64 PR1（五張表主鍵 `serial → uuid`）已完成，
-PR2（計分頁六個動作收斂成一條有序 write log，一併吃掉 **#230**）已完成。
+四類保證不遺失，`lineups` 與戰術板/名單刻意不保證**。#64 PR1（五張表主鍵 `serial → uuid`）、
+PR2（計分頁六個動作收斂成一條有序 write log，一併吃掉 **#230**）、PR3（write log 落地 IndexedDB＋
+開頁重放＋後端冪等寫入）皆已完成，只剩 PR4（自動重送迴圈與未同步指示器）。
 先前條目：#251 戰術板右欄整併（PR #274）、#228 route handler 收斂 12 支檔案全數完成（PR
 #256/#262~#272）、#238＋#257 比賽狀態判準收斂（PR #258/#259）。\_
 
@@ -199,6 +200,19 @@ lives in git log + the issues named).
   `id` 只能等 POST 回來才填、delete 又得回頭查表，等於先蓋一版 PR3 會拆掉的東西）。冪等
   （`ON CONFLICT DO NOTHING`）仍留給 PR3——PR2 沒有重送，撞不到。#230 抱怨的「create 先於 delete
   只靠佇列巧合、沒有測試守著」現在有 `writeLog.test.ts` 五條合約測試守住。
+- **write log 已落地、撐得過 reload（#64 PR3）。** 新增
+  `artifacts/volleyball-tactics/src/lib/writeLogStore.ts`：entry 進 **IndexedDB**（主鍵
+  `[matchId, seq]`），開頁時把上一輪沒送完的讀回來、**依 `seq` 補送**，送成功才刪掉（＝「至少送
+  一次」；先刪再送斷在中間就是永久掉一筆）。三個非顯然的決定：①**序號游標存 localStorage**——
+  `seq` 必須在同步的 `append()` 當下就決定，而 IndexedDB 全是非同步的，游標要是重新從 1 開始，
+  新 entry 會直接覆蓋掉還沒送出的舊 entry。②**drain 從 promise 鏈改成「挑 `seq` 最小的 pending」**
+  ——重放的 entry 是非同步才進得了 log，promise 鏈會讓使用者的新動作插到它前面。
+  ③**重放跑完才 hydrate**（`replayed` promise ＋ `invalidateQueries`），否則畫面會先少幾分、
+  補送完又冒回來。undo 多了「還沒送出就直接作廢」的路徑（`cancelPending`，連同子 event 一起），
+  取代盲目 append 一筆 delete。後端五支 POST 補上 `ON CONFLICT (id) DO NOTHING` ＋重送回既有列
+  （**先驗 parent 相符才回，否則 409**，不然等於開了一條拿別人 row id 換內容的探測管道）；
+  DELETE 的重送則由前端把 404 當成功處理。**仍缺 PR4**：自動重送迴圈（online/offline＋backoff）
+  與「N 筆未同步」指示器——目前離線那幾筆會留在 IndexedDB，但要下次開頁才會補送。
 - **專案 roadmap 已上線。** 時間序住在 repo **Milestones M1–M5**（現為 M1–M5＋M1.5/M2.5/M3.5）（軟目標日
   7/18→9/11，非死線），當下狀態住在 [GitHub Project #4](https://github.com/users/aila8913/projects/4)。
   **M1／M2／M1.5 milestone 皆已關閉**（M1.5 由 PR #239 帶關 #174/#120 後收掉；#176 已移 M3，
@@ -264,7 +278,8 @@ milestone，歸 **M5**。
 
 **當前階段＝M3「部署給真人試用」（軟目標日 8/7，10 張 open）。** 脊椎與定案見上方 Current state；
 `gh issue list --milestone "M3 部署給真人試用"`。**#77 已於 08-02 關閉**，剩下的脊椎是 #75 設計已定、
-#64 待實作（PR1 主鍵遷移、PR2 寫入 log 已完成；PR3 IndexedDB 落地＋收斂重放／PR4 flush loop 待做）、
+#64 待實作（PR1 主鍵遷移、PR2 寫入 log、PR3 IndexedDB 落地＋重放＋冪等皆已完成；只剩 PR4
+flush loop ＋未同步指示器）、
 #26 部署。**搭便車、不擋部署的 6 張**：#218（結束比賽節點）、#221/#224/#240（人員合併與管理）、
 #176（工具軌圖示，blocked @tangyi1025）、#178（響應式，需線框稿）。**待新開一張**：「PWA 化：
 manifest ＋ vite-plugin-pwa」——跟 #64 資料層零依賴、可平行，且是唯一能自然分給設計夥伴、

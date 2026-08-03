@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, getTableColumns } from "drizzle-orm";
+import { eq, and, getTableColumns } from "drizzle-orm";
 import { db, substitutionsTable, setsTable } from "@workspace/db";
 import { mockAuth } from "../middleware/mockAuth";
 import { setBelongsToUser, matchBelongsToUser, substitutionBelongsToUser } from "../lib/ownership";
@@ -95,7 +95,29 @@ router.post(
           playerOutId: body.playerOutId ?? null,
           kind: body.kind,
         })
+        // 冪等寫入 + 重送回既有列（#64 PR3），做法與理由見 sets.ts 的 POST 註解。
+        // 重送不會多配一個 seq：DO NOTHING 代表那一列根本沒有再被 insert 一次。
+        .onConflictDoNothing({ target: substitutionsTable.id })
         .returning();
+
+      if (!created) {
+        const existing = body.id
+          ? await db
+              .select()
+              .from(substitutionsTable)
+              .where(
+                and(eq(substitutionsTable.id, body.id), eq(substitutionsTable.setId, params.setId)),
+              )
+              .limit(1)
+          : [];
+
+        if (existing.length === 0) {
+          res.status(409).json({ error: "Conflict" });
+          return;
+        }
+        res.status(201).json(existing[0]);
+        return;
+      }
 
       res.status(201).json(created);
     },

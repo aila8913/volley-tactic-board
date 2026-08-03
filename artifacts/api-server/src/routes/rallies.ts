@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { db, ralliesTable } from "@workspace/db";
 import { mockAuth } from "../middleware/mockAuth";
 import { setBelongsToUser, rallyBelongsToUser } from "../lib/ownership";
@@ -66,7 +66,26 @@ router.post(
           awayRotation: body.awayRotation,
           winner: body.winner,
         })
+        // 冪等寫入 + 重送回既有列（#64 PR3），做法與理由見 sets.ts 的 POST 註解。
+        .onConflictDoNothing({ target: ralliesTable.id })
         .returning();
+
+      if (!created) {
+        const existing = body.id
+          ? await db
+              .select()
+              .from(ralliesTable)
+              .where(and(eq(ralliesTable.id, body.id), eq(ralliesTable.setId, params.setId)))
+              .limit(1)
+          : [];
+
+        if (existing.length === 0) {
+          res.status(409).json({ error: "Conflict" });
+          return;
+        }
+        res.status(201).json(existing[0]);
+        return;
+      }
 
       res.status(201).json(created);
     },
