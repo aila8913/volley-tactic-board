@@ -4,6 +4,15 @@ import { useRoster, useSaveRoster } from "./useMatches";
 import { useToast } from "./use-toast";
 import type { MatchPlayer } from "../types/match";
 
+// 這一場還沒有分片資料時的空白預設值，定義在模組層（不是每次 render 新建）——跟
+// RotationTable.tsx／Court.tsx 的 EMPTY_ROSTER 是同一個理由：Zustand selector 的回傳值
+// 若每次都是新的陣列參照（即使內容一樣），React 的 useSyncExternalStore 會判定「快照
+// 每次都變了」而卡進無限重繪迴圈（"The result of getSnapshot should be cached" 那個錯誤，
+// 實機會看到整個 <RotationPanel> 崩潰、戰術板頁面直接空白）。這裡原本兩個 fallback
+// 分支（matchId 不存在／roster 不存在）各自寫一個 `[]` 字面值，兩個都會產生新參照，
+// 正是這個 bug 的根因——2026-08-03 修掉，統一指回同一個模組層常數。
+const EMPTY_ROSTER: MatchPlayer[] = [];
+
 // 「編輯球員名單」的彈窗開關 + 存檔邏輯，抽成共用 hook 的理由（issue #251）：
 // 這一串「開彈窗 → local-first 寫進 useRotationTable 分片 → diff 回寫後端 → 失敗時 toast」
 // 原本整套寫死在 RotationTable.tsx 裡（mode B 用）。issue #251 修 mode D（佈陣中）的
@@ -14,7 +23,7 @@ import type { MatchPlayer } from "../types/match";
 export function useRosterEditor(matchId: string | undefined) {
   // 這一場目前的球員名單（本地分片），編輯彈窗要拿這份當初始值、儲存後也要立刻反映在這裡。
   const roster = useRotationTable((state) =>
-    matchId ? (state.dataByMatch[matchId]?.roster ?? []) : [],
+    matchId ? (state.dataByMatch[matchId]?.roster ?? EMPTY_ROSTER) : EMPTY_ROSTER,
   );
   const setRoster = useRotationTable((state) => state.setRoster);
   // 伺服器目前的名單，當作「儲存名單」時算差異（新增/修改/刪除哪些球員）的基準。
