@@ -369,28 +369,12 @@ export default function Court() {
               見 index.css 的 .court-edge-light 說明。 */}
           <div className="court-edge-light" />
 
-          {/* 左上／右下對角方塊（issue #176、docs/layout-spec.md §3.2）：示意「場外區塊」——
-              發球位/替補區之類球場本體以外、但仍屬於這片戰術白板的留白區。
-              用一般 HTML 絕對定位的 div 疊在 wrapper 上，而不是畫進 SVG 裡的 <g>：這片 SVG
-              整份用 preserveAspectRatio="none"（見上面 computeTacticsViewBox 的說明），
-              viewBox 會依 wrapper 的寬高比非等比縮放，畫在 SVG 座標系裡的方塊會被拉伸變形
-              （球員圓圈之所以看起來還是正圓，是 PlayerNode 自己用 CTM 反向補償縮放）。
-              這兩個方塊只是純裝飾示意，犯不著也去做那層補償，直接用 CSS box 疊在 wrapper
-              外層——wrapper 本身尺寸固定（撐滿 court-glass 那個容器），這兩個角的 top/left/
-              bottom/right 百分比位置就不會隨球場縮放而漂移，符合 spec 「位置固定不隨球場
-              縮放漂移」的要求。pointer-events-none：它們純粹裝飾，不能擋掉底下球場的
-              點擊/拖放（球場的 pointerDown/drop 事件都掛在 SVG 上，這兩個 div 疊在最上層，
-              沒有這個屬性會吃掉事件）。尺寸刻意抓小（h-8 w-8＝32px）——示意用，不是主角。 */}
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute left-1.5 top-1.5 z-10 h-8 w-8 rounded-md
-              border border-white/[0.15] bg-white/[0.04] backdrop-blur-sm"
-          />
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute bottom-1.5 right-1.5 z-10 h-8 w-8 rounded-md
-              border border-white/[0.15] bg-white/[0.04] backdrop-blur-sm"
-          />
+          {/* 左上／右下對角的半透明玻璃裝飾方塊（issue #176、docs/layout-spec.md §3.2）已於
+              2026-08-03 拿掉（tang 實機確認）：這兩個方塊當初是「示意場外區塊——發球位/替補區
+              之類」的純裝飾佔位，`pointer-events-none`、從沒接過任何功能，跟旁邊珊瑚色虛線的
+              自由球員備位框（issue #18，見下面 ourLiberoBox/opponentLiberoBox）疊在同一個角落
+              反而讓人分不清哪個有用哪個沒用。真的要做「場外區塊」時再重新設計，不要復原這兩個
+              純裝飾的 div。 */}
           <svg
             id="court-svg"
             ref={courtRef}
