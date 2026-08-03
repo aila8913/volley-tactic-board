@@ -30,7 +30,8 @@ import type { WriteLogStore } from "./writeLogStore";
 //   1. 落地：每筆 entry 先寫進 IndexedDB 才送，送成功才刪掉（「至少送一次」）。
 //   2. 重放：開頁時把上一輪沒送完的讀回來、依 seq 補送，計分頁等它跑完才用後端資料重建。
 //   3. 取消：還沒送出的 create 被「復原」時直接作廢，而不是留下「建了又刪」兩筆。
-// 還沒做的是 PR4 的自動重送迴圈（上線/離線事件、backoff）與「N 筆未同步」指示器。
+// PR4 補上最後一塊：送失敗的 entry 會自己退避重送（見下面的 scheduleRetry），上線事件與
+// 使用者手動點「N 筆未同步」都能立刻催一次（retry），不用等下次開頁。
 //
 // 前提條件：五張表的主鍵在 #64 PR1 已從自增整數改成 uuid，而且 API 在 PR2 開放 body 指定 id
 // （見 openapi.yaml 的 NewSet.id 註解）。有了它，前端才能在**動作發生的當下同步鑄出 id**，
@@ -72,7 +73,7 @@ export type WriteOp =
 
 // pending：已 append、還沒送。syncing：正在送。synced：後端已收。error：送失敗。
 // cancelled：送出前就被「復原」抵銷掉了（見 cancelPending），這輩子不會送。
-// 現階段（PR3）還沒有自動重送，error 是終點；PR4 的重送迴圈會讓它回到 pending。
+// error 不是終點：PR4 的重送迴圈會在退避時間到、或瀏覽器回報上線時把它推回 pending。
 export type WriteStatus = "pending" | "syncing" | "synced" | "error" | "cancelled";
 
 export type WriteLogEntry = WriteOp & {
@@ -98,8 +99,16 @@ export interface WriteLog {
    * 回傳是否真的取消掉了；false 代表那筆已經送出／正在送，呼叫端要改用 delete 來抵銷。
    */
   cancelPending: (table: WriteTable, id: string) => boolean;
-  /** 還沒送成功的筆數（不含被取消的）。PR4 的「N 筆未同步」指示器會讀它。 */
+  /** 還沒送成功的筆數（不含被取消的）。計分頁的「N 筆未同步」指示器讀它。 */
   pendingCount: () => number;
+  /**
+   * 立刻把送失敗的 entry 推回 pending 再試一次，並把退避（backoff）歸零。
+   * 由「瀏覽器回報上線」與使用者手動點指示器觸發——兩者都代表「情況可能變了」，
+   * 不該還在等那個已經拉到 60 秒的退避計時器。
+   */
+  retry: () => void;
+  /** 停掉背景的重送計時器。離開這場比賽（換 matchId／卸載）時呼叫，避免留下看不見的迴圈。 */
+  dispose: () => void;
   /** 目前整份 log（唯讀）。給測試與之後的持久化用。 */
   entries: () => readonly WriteLogEntry[];
   /**
@@ -147,8 +156,8 @@ export function newRowId(): string {
  * 而使用者可能在讀完之前就按下第一個動作。promise 鏈會照「誰先接上鏈尾」決定順序，那就變成
  * 新動作插到舊 entry 前面；改成看 seq，順序就由資料自己決定，跟誰先排隊無關。
  *
- * 失敗處理維持現階段的「本地優先」：標成 error、記 log、留在 IndexedDB 裡等 PR4 的重送迴圈，
- * 不回滾畫面。
+ * 失敗處理維持「本地優先」：標成 error、記 log、留在 IndexedDB 裡，交給退避重送迴圈慢慢磨，
+ * 不回滾畫面——教練剛記下的那一分不該因為訊號不好就從螢幕上消失。
  */
 export function createWriteLog(
   matchId: number,
@@ -221,6 +230,10 @@ export function createWriteLog(
     for (let entry = nextPending(); entry; entry = nextPending()) {
       await runEntry(entry);
     }
+    // 這一輪送完還有失敗的，就排一次退避重送；全都過了就把退避歸零，
+    // 下次真的斷線時是從最短的間隔重新開始數，而不是接著上次的 60 秒。
+    if (entries.some((e) => e.status === "error")) scheduleRetry();
+    else retryAttempt = 0;
   };
 
   // 同一時間只有一輪 drain 在跑：把每次 kick 接在同一條鏈上，天然互斥。
@@ -228,6 +241,50 @@ export function createWriteLog(
   let chain: Promise<void> = Promise.resolve();
   const kick = () => {
     chain = chain.then(drain).catch(() => {});
+  };
+
+  // ── 自動重送迴圈（#64 PR4）────────────────────────────────────────────────
+  //
+  // PR3 之後「不會掉」已經有保證（entry 留在 IndexedDB 裡），但補送只發生在下次開頁。
+  // 對現場記錄來說那不夠：教練在體育館裡訊號斷斷續續，中間那十分鐘的分數不該一直躺在
+  // 本機等使用者剛好想到要重新整理。
+  //
+  // 兩個觸發點刻意都保留：
+  //   - `online` 事件（由 controller 轉呼叫 retry()）：反應快，但不可靠——它只代表
+  //     「作業系統認為有網路介面」，連得到我們的後端是另一回事（咖啡廳的登入頁、
+  //     後端自己掛掉、DNS 壞掉都會讓它說謊）。
+  //   - 退避計時器：慢但誠實，唯一的判準是「真的送出去成功了沒有」。
+  // 只有前者會漏掉「一直有網路、但後端剛好掛了五分鐘」；只有後者則會讓使用者從電梯裡
+  // 走出來後還要多等半分鐘。
+  //
+  // 間隔是遞增的（指數退避的手寫版）：離線時每 3 秒重試一次只是在灌 console 跟耗電，
+  // 而失敗越多次代表「這次也會失敗」的機率越高，值得等久一點。上限 60 秒是為了讓
+  // 「網路默默恢復、又沒觸發 online 事件」的情況最多晚一分鐘收斂。
+  const RETRY_DELAYS_MS = [3_000, 10_000, 30_000, 60_000];
+  let retryAttempt = 0;
+  let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** 把送失敗的推回 pending。回傳有沒有真的推回任何一筆。 */
+  const revive = () => {
+    let revived = false;
+    for (const entry of entries) {
+      if (entry.status !== "error") continue;
+      entry.status = "pending";
+      revived = true;
+    }
+    return revived;
+  };
+
+  const scheduleRetry = () => {
+    // 已經排了就不重排：drain 可能一輪失敗好幾筆，但我們只要一個計時器。
+    if (retryTimer !== null) return;
+    const delay = RETRY_DELAYS_MS[Math.min(retryAttempt, RETRY_DELAYS_MS.length - 1)]!;
+    retryAttempt += 1;
+    retryTimer = setTimeout(() => {
+      retryTimer = null;
+      if (revive()) onChange?.();
+      kick();
+    }, delay);
   };
 
   // 開機就先把重放的 entry 送出去；replayed 在這一輪 drain 結束時 resolve。
@@ -276,5 +333,26 @@ export function createWriteLog(
       entries.filter((e) => e.status !== "synced" && e.status !== "cancelled").length,
     entries: () => entries,
     replayed,
+
+    retry: () => {
+      // 把排隊中的退避取消掉、次數歸零：呼叫者（上線事件／使用者手動）帶來的資訊是
+      // 「現在情況不一樣了」，繼續等那個已經拉長的間隔沒有意義。
+      if (retryTimer !== null) {
+        clearTimeout(retryTimer);
+        retryTimer = null;
+      }
+      retryAttempt = 0;
+      if (revive()) onChange?.();
+      // 就算沒有 error 可以復活也要 kick 一下：可能有 pending 卡在那裡（例如上一輪
+      // drain 因為 ready 還沒好而空轉）。drain 沒事做的時候是零成本的。
+      kick();
+    },
+
+    dispose: () => {
+      if (retryTimer !== null) {
+        clearTimeout(retryTimer);
+        retryTimer = null;
+      }
+    },
   };
 }

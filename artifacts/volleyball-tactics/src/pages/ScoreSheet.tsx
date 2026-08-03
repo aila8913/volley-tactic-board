@@ -11,6 +11,7 @@ import ScoreSheetCourt, { TouchedTarget } from "@/components/ScoreSheetCourt";
 import RadialMenu, { RadialMenuOption } from "@/components/RadialMenu";
 import ScoreSheetStats from "@/components/ScoreSheetStats";
 import RotationRailPanel from "@/components/RotationRailPanel";
+import UnsyncedWritesBadge from "@/components/UnsyncedWritesBadge";
 import { PlayAction, Side } from "@/types/scoresheet";
 import { isSetComplete, disabledActions, resolveScoringSide } from "@/lib/scoreSheetMapping";
 import { countSetWins } from "@/lib/matchOutcome";
@@ -116,8 +117,18 @@ export default function ScoreSheet() {
   // 記分/開局/復原/下一局改走 controller：本地即時更新畫面，同時在背景寫進後端
   // sets/rallies/events；進頁時也由它從 API 重建這場的記錄。setLiberoSubstitution 仍留在
   // store（純前端、不進 API，reload 後歸零——真正的自由球員持久化是 #43 的範圍）。
-  const { isHydrating, start, score, undo, goNextSet, substitute, callTimeout } =
-    useScoreSheetController(id ?? "");
+  const {
+    isHydrating,
+    start,
+    score,
+    undo,
+    goNextSet,
+    substitute,
+    callTimeout,
+    // 背景寫入還沒送成功的筆數，＋手動催一次的動作（#64 PR4）。
+    pendingWrites,
+    retryWrites,
+  } = useScoreSheetController(id ?? "");
   // 這場比賽目前的自由球員替補狀態——現在跟著 matchId 存在 useScoreSheet 裡（見
   // types/scoresheet.ts 的說明），不會再跟別場比賽的計分表互相污染。
   const liberoSubstitution = record?.liberoSubstitution ?? null;
@@ -562,8 +573,14 @@ export default function ScoreSheet() {
       }
     >
       <div className="relative z-10 flex h-full min-h-0 flex-1 flex-col">
-        <header className="flex shrink-0 items-center justify-center border-b border-white/[0.08] bg-white/[0.02] px-4 py-3 backdrop-blur-sm">
+        {/* relative + 絕對定位的徽章：標題要維持「置中於整條標題列」，如果改用 flex 的
+            justify-between 讓徽章佔一格，標題就會被推得偏左，而且徽章一出現／消失標題還會
+            跳動。把徽章抬出文件流就沒有這個問題——它有沒有出現都不影響標題的位置。 */}
+        <header className="relative flex shrink-0 items-center justify-center border-b border-white/[0.08] bg-white/[0.02] px-4 py-3 backdrop-blur-sm">
           <h1 className="text-lg font-bold">vs {match.opponent}</h1>
+          <div className="absolute right-4 top-1/2 -translate-y-1/2">
+            <UnsyncedWritesBadge count={pendingWrites} onRetry={retryWrites} />
+          </div>
         </header>
 
         <div className="flex flex-1 min-h-0 justify-center">

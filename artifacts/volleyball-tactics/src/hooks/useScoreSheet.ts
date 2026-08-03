@@ -440,12 +440,38 @@ export function useScoreSheetController(matchId: string) {
 
   // 這一場的 write log。用「lazy init + matchId 變了才重建」而不是 useMemo：useMemo 在
   // React 的合約裡是可以被丟棄重算的快取，而這裡重建一次就等於丟掉還沒送出的寫入，不能賭。
+  //
+  // pendingWrites 是「還沒送成功的筆數」，給畫面上的未同步指示器用（#64 PR4）。log 內部
+  // 的 entry 是普通物件、就地改狀態，React 看不到——所以 log 每次狀態變動都回呼 onChange，
+  // 我們在那裡把數字抄進 state 觸發重畫。這是把「非 React 的可變資料」接進 React 的標準做法。
+  const [pendingWrites, setPendingWrites] = useState(0);
   const logRef = useRef<WriteLog | null>(null);
   const logMatchRef = useRef<number | null>(null);
   if (logRef.current === null || logMatchRef.current !== numericMatchId) {
-    logRef.current = createWriteLog(numericMatchId, execute, { store: getWriteLogStore() });
+    // 換一場比賽時先把舊 log 的重送計時器停掉，不然它會在背景一直醒來。
+    logRef.current?.dispose();
+    // holder 是為了讓 onChange 讀到「自己這條 log」而不是 logRef.current——換場之後
+    // 舊 log 若還有 in-flight 的請求回來，讀 logRef 就會把新 log 的數字算成舊 log 的。
+    const holder: { log: WriteLog | null } = { log: null };
+    holder.log = createWriteLog(numericMatchId, execute, {
+      store: getWriteLogStore(),
+      onChange: () => setPendingWrites(holder.log?.pendingCount() ?? 0),
+    });
+    logRef.current = holder.log;
     logMatchRef.current = numericMatchId;
   }
+
+  // 重新上線就立刻催一次補送，不用等退避計時器（理由見 writeLog.ts 的重送迴圈說明：
+  // online 事件快但會說謊，退避計時器慢但誠實，兩個都留著）。
+  // 卸載時 dispose：離開計分頁後不該還有一個看不見的計時器在背景重試。
+  useEffect(() => {
+    const flush = () => logRef.current?.retry();
+    window.addEventListener("online", flush);
+    return () => {
+      window.removeEventListener("online", flush);
+      logRef.current?.dispose();
+    };
+  }, []);
 
   // 六個動作統一用它把寫入交出去。本地優先：寫入失敗只記 log、不回滾畫面
   // （完整的失敗 reconcile 是 #64 PR4 的事）。
@@ -817,5 +843,21 @@ export function useScoreSheetController(matchId: string) {
     [matchId, append],
   );
 
-  return { isHydrating, start, score, undo, goNextSet, substitute, callTimeout };
+  // retryWrites 給指示器當「點一下馬上重試」用。包成 useCallback 是為了讓它能安穩地當
+  // 子元件的 prop（每次 render 都換一個新函式會讓 memo 化的子元件白白重畫）。
+  const retryWrites = useCallback(() => {
+    logRef.current?.retry();
+  }, []);
+
+  return {
+    isHydrating,
+    start,
+    score,
+    undo,
+    goNextSet,
+    substitute,
+    callTimeout,
+    pendingWrites,
+    retryWrites,
+  };
 }
