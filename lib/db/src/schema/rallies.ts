@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, uuid, integer, pgEnum } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { setsTable } from "./sets";
@@ -7,8 +7,10 @@ export const rallyWinnerEnum = pgEnum("rally_winner", ["home", "away"]);
 
 // 一個 rally = 從發球開始，到球落地/出界/犯規（也就是這一球死掉、產生一分）為止的完整來回。
 export const ralliesTable = pgTable("rallies", {
-  id: serial("id").primaryKey(),
-  setId: integer("set_id")
+  // id 改成 uuid，理由同 sets.ts：離線記一分的當下就要能決定 rallyId，讓緊接著的每一顆
+  // event（見 events.ts）馬上有 rallyId 可以引用，不用等後端回應。
+  id: uuid("id").primaryKey().defaultRandom(),
+  setId: uuid("set_id")
     .notNull()
     .references(() => setsTable.id, { onDelete: "cascade" }),
   rallyNumber: integer("rally_number").notNull(), // 這一局裡的第幾個 rally，從 1 開始
@@ -23,6 +25,8 @@ export const ralliesTable = pgTable("rallies", {
   winner: rallyWinnerEnum("winner").notNull(),
 });
 
-export const insertRallySchema = createInsertSchema(ralliesTable).omit({ id: true });
+// 不再 .omit({ id: true })：理由同 sets.ts / players.ts——id 是 uuid + defaultRandom()，
+// drizzle-zod 自動把它標成選填，前端可以自己塞 uuid（client-mintable）。
+export const insertRallySchema = createInsertSchema(ralliesTable);
 export type InsertRally = z.infer<typeof insertRallySchema>;
 export type Rally = typeof ralliesTable.$inferSelect;

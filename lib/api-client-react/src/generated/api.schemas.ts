@@ -152,7 +152,7 @@ export const ServingSide = {
 } as const;
 
 export interface MatchSet {
-  id: number;
+  id: string;
   matchId: number;
   setNumber: number;
   firstServer: ServingSide | null;
@@ -176,8 +176,8 @@ export const RallyWinner = {
 } as const;
 
 export interface Rally {
-  id: number;
-  setId: number;
+  id: string;
+  setId: string;
   rallyNumber: number;
   homeScore: number;
   awayScore: number;
@@ -269,13 +269,14 @@ export const SubstitutionKind = {
 } as const;
 
 export interface Substitution {
-  id: number;
-  setId: number;
+  id: string;
+  setId: string;
   homeScore: number;
   awayScore: number;
   playerInId: string | null;
   playerOutId: string | null;
   kind: SubstitutionKind;
+  seq: number;
 }
 
 export interface NewSubstitution {
@@ -295,11 +296,12 @@ export const TimeoutSide = {
 } as const;
 
 export interface Timeout {
-  id: number;
-  setId: number;
+  id: string;
+  setId: string;
   homeScore: number;
   awayScore: number;
   side: TimeoutSide;
+  seq: number;
 }
 
 export interface NewTimeout {
@@ -310,7 +312,7 @@ export interface NewTimeout {
 
 export interface Lineup {
   id: number;
-  setId: number;
+  setId: string;
   zone1PlayerId: string;
   zone2PlayerId: string;
   zone3PlayerId: string;
@@ -355,8 +357,8 @@ export const EventSide = {
 } as const;
 
 export interface MatchEvent {
-  id: number;
-  rallyId: number;
+  id: string;
+  rallyId: string;
   sequence: number;
   side: EventSide;
   playerId?: string | null;

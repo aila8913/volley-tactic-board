@@ -22,13 +22,12 @@
 > 平行 PR 就落在不同行段、git 幾乎都能自動合併，不用真的把檔案拆兩份、也保住一眼 catch-up。
 > 上面的 `_Last updated_` 是共用一行摘要（誰更新了什麼），保持精簡、別長成段落。
 
-\_Last updated: 2026-08-02 (aila) — **#251 戰術板右欄整併進 `RotationRailPanel` 已關閉**（PR #274，
-見下方 Recently closed 完整說明）：mode B／D 統一收進右欄同一顆面板，新增 `benchDraggable` prop
-讓球員清單獨立於格子的唯讀狀態之外仍可拖曳，中央欄固定輪轉表欄拿掉，面板不再依 mode 跳位置。
-`#228` route handler 收斂已於 08-01 全數完成並關閉（PR #256/#262~#272，共 12 支 route 檔案），
-`lib/handler.ts` 的 `owns` 必填欄位讓漏寫擁有權檢查從「人眼容易漏看」變成編譯錯誤（#225 的教訓）。
-`#238` 與 `#257` 兩張比賽狀態相關 bug 也已收斂關閉（PR #258/#259，`matchOutcome.deriveMatchStatus`
-成為全站唯一狀態判準）。\_
+\_Last updated: 2026-08-02 (aila) — **M3「部署給真人試用」啟動**：#77 帳號模型已定案並關閉
+（v1 auth＝**Google OAuth、每人一個真帳號**、公開網址不設邀請碼），#75 離線可靠性契約的同步引擎
+設計已產出並貼在該 issue，**契約範圍由 PO 拍板＝`rallies`/`events`/`substitutions`/`timeouts`
+四類保證不遺失，`lineups` 與戰術板/名單刻意不保證**。#64 PR1（五張表主鍵 `serial → uuid`）已完成。
+先前條目：#251 戰術板右欄整併（PR #274）、#228 route handler 收斂 12 支檔案全數完成（PR
+#256/#262~#272）、#238＋#257 比賽狀態判準收斂（PR #258/#259）。\_
 
 \_Last updated: 2026-07-30 (tang) — 工具軌圖示（PR #248）與全站背景統一（PR #253）兩張 PR 開著待調整；
 實機盤點挖出兩個遷移缺口／需求，開了 **#251**（戰術板頁沒接上 `RotationRailPanel`，三份名單重複）與
@@ -161,6 +160,33 @@ lives in git log + the issues named).
   刻意不在 #226 範圍內解決。**#225（tactics 路由缺 ownership）已於 07-30 修掉**——它是 **#127 那條判準
   的復發**：外鍵保證 referential integrity，不保證 ownership，`tactics.ts` 是當初漏網的檔案，整份沒
   import `ownership`。詳見下方 Recently closed。
+- **M3 的脊椎＝#77 →（#75 → #64）→ #26，其餘 6 張是搭便車的。** 這不是推測，是 issue 自述：#77 的
+  產出寫明「直接寫進 #26 的規格」，#75 body 寫明「**擋在 #26 前面**」。**#77 已關（08-02）**：v1 auth
+  ＝Google OAuth／每人一帳號，**理由是共用帳號會讓 #127/#225/#228 那整串 ownership 基礎建設沒有兌現
+  對象**——`handler()` 的 `owns` 必填、`lib/ownership.ts` 那些守衛都寫完了，缺的只是上面那顆真的
+  `userId`（現況 `mockAuth.ts:43` 無條件塞 `mock-user-001`）。
+- **離線可靠性契約定案（#75，08-02）＝按「資料能不能事後重建」切線。** 保證的四張表都是「比賽當下
+  不記就永遠沒有」；先發（`lineups`）與戰術板/名單丟了要重做、但**重做得回來**，所以不保證。
+  **判準值得記住：離線保證的邊界不是照技術難度切，是照可重建性切**——跟 #74 記錄成本預算的簡易/進階
+  硬分界是同一種判準。`sets` 一併進佇列但**不算擴大範圍**：四類保證資料全掛在 `setId` 底下（FK），
+  局本身若只在線上才建，離線第一步就斷鏈；它沒有使用者感受得到的內容，是達成保證的必要掛鉤。
+  **這份設計的正確性建立在「單裝置單人」（P7）前提上**——要支援「教練與球經各拿一台平板記同一場」
+  就得整個重來，已寫進 #75 當警語。因為前提成立，要做的是**重放（replay）不是合併（merge）**，
+  所以不需要 CRDT。**#230 依此設計不獨立做**（它要的有序寫入紀錄就是離線佇列本來需要的結構，
+  分兩次做等於同一份設計做兩遍），落地併進 #64 PR2。
+- **五張表主鍵已改 client-mintable uuid（#64 PR1）。** `sets`/`rallies`/`events`/`substitutions`/
+  `timeouts` 的 `id` 從 `serial` 改成 `uuid().defaultRandom()`（比照 `players`/`people`/`teams` 既有
+  模式），`lineups.setId` 的 FK 型別跟著改。**非改不可的理由**：寫入鏈是「一分 → 一球」，`event` 要掛
+  `rallyId`，線上靠「先等 POST 一分回來拿到 DB 配的號碼」撐住，而**離線根本沒有「等後端」這個選項**。
+  附帶好處是**主鍵本身就是冪等鍵**（重試時同一個 uuid 重送，`ON CONFLICT DO NOTHING` 即安全 no-op），
+  不用另設冪等鍵欄位。**過程中抓到一個型別檢查抓不到的正確性地雷**：`substitutions`/`timeouts` 的
+  `orderBy` 原本用 `id` 當第二層 tiebreaker，靠的是「自增主鍵＝insert 順序」，改隨機 uuid 後會變成
+  **隨機排序**，同一分內連續換兩次人的 replay 結果每次都不同。修法是兩張表各加一個非主鍵的
+  `seq: serial()` 專供排序。**這類「舊語意藏在型別裡」的相依，是機械式型別遷移最容易無聲踩掉的東西。**
+  另一個踩到的坑：**Postgres 無法把 integer 自動轉成 uuid**（`cannot be cast automatically`），
+  schema-first + `drizzle-kit push` 沒有 migration 檔可以寫 `USING` 轉換，只能 drop 六張表再 push＋
+  重跑 seed（PO 已授權；seed 本來就是 `TRUNCATE ... RESTART IDENTITY CASCADE` ＋固定種子 PRNG，
+  重灌結果與先前完全一致）。
 - **專案 roadmap 已上線。** 時間序住在 repo **Milestones M1–M5**（現為 M1–M5＋M1.5/M2.5/M3.5）（軟目標日
   7/18→9/11，非死線），當下狀態住在 [GitHub Project #4](https://github.com/users/aila8913/projects/4)。
   **M1／M2／M1.5 milestone 皆已關閉**（M1.5 由 PR #239 帶關 #174/#120 後收掉；#176 已移 M3，
@@ -223,6 +249,14 @@ gh issue list --state open                        # 全部
 已移入 **M3**，因為兩者都卡在 M1.5 內部推不動的外部輸入。**#199**（戰術板對手球員分色渲染——Court
 從未渲染對手、snapshot player 無 `side`；spec 把 mode D 叫「對手佈陣」的那層 #177 沒做）07-28 補上
 milestone，歸 **M5**。
+
+**當前階段＝M3「部署給真人試用」（軟目標日 8/7，10 張 open）。** 脊椎與定案見上方 Current state；
+`gh issue list --milestone "M3 部署給真人試用"`。**#77 已於 08-02 關閉**，剩下的脊椎是 #75 設計已定、
+#64 待實作（PR1 主鍵遷移已完成，PR2 寫入 log／PR3 IndexedDB 落地＋收斂重放／PR4 flush loop 待做）、
+#26 部署。**搭便車、不擋部署的 6 張**：#218（結束比賽節點）、#221/#224/#240（人員合併與管理）、
+#176（工具軌圖示，blocked @tangyi1025）、#178（響應式，需線框稿）。**待新開一張**：「PWA 化：
+manifest ＋ vite-plugin-pwa」——跟 #64 資料層零依賴、可平行，且是唯一能自然分給設計夥伴、
+又不需要先懂佇列設計的一塊。
 
 **M2.5「收斂重複規則」（軟目標日 8/1）已全數關閉。** `#228`（route handler 儀式：404 樣板 ×33、
 ownership 守衛 ×25 全靠人記得寫）08-01 完成收尾：`lib/handler.ts` 落地後 12 支 route 檔案

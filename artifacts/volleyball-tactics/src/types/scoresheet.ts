@@ -32,7 +32,9 @@ export interface PointRecord {
   // 這一分在後端 rallies 表對應的 id（一個 PointRecord = 一個 rally）。持久化記帳用：
   // 「復原上一球」要靠它打 DELETE /rallies/:id、補記 event 也要掛在這個 rally 底下。
   // 只在已成功寫進後端後才有值；純本地（還沒 flush）或舊資料是 undefined。
-  serverId?: number;
+  // 型別從 number 改成 string：rallies.id 從自增整數改成 client-mintable uuid
+  // （見 lib/db/src/schema/rallies.ts，#64 PR1），離線寫入佇列需要前端自己決定這個 id。
+  serverId?: string;
 }
 
 export interface SetRecordingState {
@@ -46,7 +48,8 @@ export interface SetRecordingState {
   history: PointRecord[];
   // 這一局在後端 sets 表對應的 id。開局（startSet）成功建立 set row 後才有值；
   // 記分（POST rally）要掛在這個 setId 底下。純本地未 flush 時是 undefined。
-  serverId?: number;
+  // 型別從 number 改成 string：理由同 PointRecord.serverId（sets.id 也改成 uuid了）。
+  serverId?: string;
 }
 
 export interface CompletedSet {

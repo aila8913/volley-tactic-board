@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, uuid } from "drizzle-orm/pg-core";
+import { pgTable, serial, uuid } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { setsTable } from "./sets";
@@ -15,7 +15,10 @@ export const lineupsTable = pgTable("lineups", {
   id: serial("id").primaryKey(),
   // 一局一 row：setId 加 unique，讓「這一局已經記過先發」在 DB 層就擋得住重複寫入，
   // 不用應用層自己查一次再決定要 insert 還是 update。
-  setId: integer("set_id")
+  // setId 型別跟著 sets.id 從 integer 改成 uuid（sets.ts 的 id 已改成 client-mintable
+  // uuid，見該檔案註解），否則外鍵型別對不上、drizzle-kit push 會失敗。lineups 本身
+  // 不在離線寫入契約範圍內（id 仍是 serial），這裡只是被動跟著改型別。
+  setId: uuid("set_id")
     .notNull()
     .unique()
     .references(() => setsTable.id, { onDelete: "cascade" }),

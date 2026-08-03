@@ -1831,7 +1831,7 @@ export const useCreateSet = <TError = ErrorType<unknown>,
     }
 
 export const getUpdateSetUrl = (matchId: number,
-    setId: number,) => {
+    setId: string,) => {
 
 
 
@@ -1843,7 +1843,7 @@ export const getUpdateSetUrl = (matchId: number,
  * @summary Update a set (currently only used to fill in firstServer once it's chosen)
  */
 export const updateSet = async (matchId: number,
-    setId: number,
+    setId: string,
     updateSet: UpdateSet, options?: RequestInit): Promise<MatchSet> => {
 
   return customFetch<MatchSet>(getUpdateSetUrl(matchId,setId),
@@ -1860,8 +1860,8 @@ export const updateSet = async (matchId: number,
 
 
 export const getUpdateSetMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateSet>>, TError,{matchId: number;setId: number;data: BodyType<UpdateSet>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof updateSet>>, TError,{matchId: number;setId: number;data: BodyType<UpdateSet>}, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateSet>>, TError,{matchId: number;setId: string;data: BodyType<UpdateSet>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateSet>>, TError,{matchId: number;setId: string;data: BodyType<UpdateSet>}, TContext> => {
 
 const mutationKey = ['updateSet'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -1873,7 +1873,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateSet>>, {matchId: number;setId: number;data: BodyType<UpdateSet>}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateSet>>, {matchId: number;setId: string;data: BodyType<UpdateSet>}> = (props) => {
           const {matchId,setId,data} = props ?? {};
 
           return  updateSet(matchId,setId,data,requestOptions)
@@ -1894,11 +1894,11 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
  * @summary Update a set (currently only used to fill in firstServer once it's chosen)
  */
 export const useUpdateSet = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateSet>>, TError,{matchId: number;setId: number;data: BodyType<UpdateSet>}, TContext>, request?: SecondParameter<typeof customFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateSet>>, TError,{matchId: number;setId: string;data: BodyType<UpdateSet>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof updateSet>>,
         TError,
-        {matchId: number;setId: number;data: BodyType<UpdateSet>},
+        {matchId: number;setId: string;data: BodyType<UpdateSet>},
         TContext
       > => {
       return useMutation(getUpdateSetMutationOptions(options));
@@ -1981,7 +1981,7 @@ export function useListMatchEvents<TData = Awaited<ReturnType<typeof listMatchEv
 
 
 
-export const getListRalliesUrl = (setId: number,) => {
+export const getListRalliesUrl = (setId: string,) => {
 
 
 
@@ -1992,7 +1992,7 @@ export const getListRalliesUrl = (setId: number,) => {
 /**
  * @summary List rallies for a set
  */
-export const listRallies = async (setId: number, options?: RequestInit): Promise<Rally[]> => {
+export const listRallies = async (setId: string, options?: RequestInit): Promise<Rally[]> => {
 
   return customFetch<Rally[]>(getListRalliesUrl(setId),
   {
@@ -2007,14 +2007,14 @@ export const listRallies = async (setId: number, options?: RequestInit): Promise
 
 
 
-export const getListRalliesQueryKey = (setId: number,) => {
+export const getListRalliesQueryKey = (setId: string,) => {
     return [
     `/api/sets/${setId}/rallies`
     ] as const;
     }
 
 
-export const getListRalliesQueryOptions = <TData = Awaited<ReturnType<typeof listRallies>>, TError = ErrorType<unknown>>(setId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listRallies>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getListRalliesQueryOptions = <TData = Awaited<ReturnType<typeof listRallies>>, TError = ErrorType<unknown>>(setId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listRallies>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -2041,7 +2041,7 @@ export type ListRalliesQueryError = ErrorType<unknown>
  */
 
 export function useListRallies<TData = Awaited<ReturnType<typeof listRallies>>, TError = ErrorType<unknown>>(
- setId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listRallies>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+ setId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listRallies>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
@@ -2058,7 +2058,7 @@ export function useListRallies<TData = Awaited<ReturnType<typeof listRallies>>, 
 
 
 
-export const getCreateRallyUrl = (setId: number,) => {
+export const getCreateRallyUrl = (setId: string,) => {
 
 
 
@@ -2069,7 +2069,7 @@ export const getCreateRallyUrl = (setId: number,) => {
 /**
  * @summary Record a new rally (one point)
  */
-export const createRally = async (setId: number,
+export const createRally = async (setId: string,
     newRally: NewRally, options?: RequestInit): Promise<Rally> => {
 
   return customFetch<Rally>(getCreateRallyUrl(setId),
@@ -2086,8 +2086,8 @@ export const createRally = async (setId: number,
 
 
 export const getCreateRallyMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createRally>>, TError,{setId: number;data: BodyType<NewRally>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof createRally>>, TError,{setId: number;data: BodyType<NewRally>}, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createRally>>, TError,{setId: string;data: BodyType<NewRally>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createRally>>, TError,{setId: string;data: BodyType<NewRally>}, TContext> => {
 
 const mutationKey = ['createRally'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -2099,7 +2099,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createRally>>, {setId: number;data: BodyType<NewRally>}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createRally>>, {setId: string;data: BodyType<NewRally>}> = (props) => {
           const {setId,data} = props ?? {};
 
           return  createRally(setId,data,requestOptions)
@@ -2120,17 +2120,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
  * @summary Record a new rally (one point)
  */
 export const useCreateRally = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createRally>>, TError,{setId: number;data: BodyType<NewRally>}, TContext>, request?: SecondParameter<typeof customFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createRally>>, TError,{setId: string;data: BodyType<NewRally>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof createRally>>,
         TError,
-        {setId: number;data: BodyType<NewRally>},
+        {setId: string;data: BodyType<NewRally>},
         TContext
       > => {
       return useMutation(getCreateRallyMutationOptions(options));
     }
 
-export const getListEventsUrl = (rallyId: number,) => {
+export const getListEventsUrl = (rallyId: string,) => {
 
 
 
@@ -2141,7 +2141,7 @@ export const getListEventsUrl = (rallyId: number,) => {
 /**
  * @summary List events (individual ball touches) for a rally
  */
-export const listEvents = async (rallyId: number, options?: RequestInit): Promise<MatchEvent[]> => {
+export const listEvents = async (rallyId: string, options?: RequestInit): Promise<MatchEvent[]> => {
 
   return customFetch<MatchEvent[]>(getListEventsUrl(rallyId),
   {
@@ -2156,14 +2156,14 @@ export const listEvents = async (rallyId: number, options?: RequestInit): Promis
 
 
 
-export const getListEventsQueryKey = (rallyId: number,) => {
+export const getListEventsQueryKey = (rallyId: string,) => {
     return [
     `/api/rallies/${rallyId}/events`
     ] as const;
     }
 
 
-export const getListEventsQueryOptions = <TData = Awaited<ReturnType<typeof listEvents>>, TError = ErrorType<unknown>>(rallyId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listEvents>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getListEventsQueryOptions = <TData = Awaited<ReturnType<typeof listEvents>>, TError = ErrorType<unknown>>(rallyId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listEvents>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -2190,7 +2190,7 @@ export type ListEventsQueryError = ErrorType<unknown>
  */
 
 export function useListEvents<TData = Awaited<ReturnType<typeof listEvents>>, TError = ErrorType<unknown>>(
- rallyId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listEvents>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+ rallyId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listEvents>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
@@ -2207,7 +2207,7 @@ export function useListEvents<TData = Awaited<ReturnType<typeof listEvents>>, TE
 
 
 
-export const getCreateEventUrl = (rallyId: number,) => {
+export const getCreateEventUrl = (rallyId: string,) => {
 
 
 
@@ -2218,7 +2218,7 @@ export const getCreateEventUrl = (rallyId: number,) => {
 /**
  * @summary Record one ball touch, live during the match or backfilled from video review
  */
-export const createEvent = async (rallyId: number,
+export const createEvent = async (rallyId: string,
     newEvent: NewEvent, options?: RequestInit): Promise<MatchEvent> => {
 
   return customFetch<MatchEvent>(getCreateEventUrl(rallyId),
@@ -2235,8 +2235,8 @@ export const createEvent = async (rallyId: number,
 
 
 export const getCreateEventMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createEvent>>, TError,{rallyId: number;data: BodyType<NewEvent>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof createEvent>>, TError,{rallyId: number;data: BodyType<NewEvent>}, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createEvent>>, TError,{rallyId: string;data: BodyType<NewEvent>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createEvent>>, TError,{rallyId: string;data: BodyType<NewEvent>}, TContext> => {
 
 const mutationKey = ['createEvent'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -2248,7 +2248,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createEvent>>, {rallyId: number;data: BodyType<NewEvent>}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createEvent>>, {rallyId: string;data: BodyType<NewEvent>}> = (props) => {
           const {rallyId,data} = props ?? {};
 
           return  createEvent(rallyId,data,requestOptions)
@@ -2269,17 +2269,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
  * @summary Record one ball touch, live during the match or backfilled from video review
  */
 export const useCreateEvent = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createEvent>>, TError,{rallyId: number;data: BodyType<NewEvent>}, TContext>, request?: SecondParameter<typeof customFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createEvent>>, TError,{rallyId: string;data: BodyType<NewEvent>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof createEvent>>,
         TError,
-        {rallyId: number;data: BodyType<NewEvent>},
+        {rallyId: string;data: BodyType<NewEvent>},
         TContext
       > => {
       return useMutation(getCreateEventMutationOptions(options));
     }
 
-export const getDeleteRallyUrl = (rallyId: number,) => {
+export const getDeleteRallyUrl = (rallyId: string,) => {
 
 
 
@@ -2290,7 +2290,7 @@ export const getDeleteRallyUrl = (rallyId: number,) => {
 /**
  * @summary Delete a rally (e.g. undo the last point; cascades to its events)
  */
-export const deleteRally = async (rallyId: number, options?: RequestInit): Promise<void> => {
+export const deleteRally = async (rallyId: string, options?: RequestInit): Promise<void> => {
 
   return customFetch<void>(getDeleteRallyUrl(rallyId),
   {
@@ -2305,8 +2305,8 @@ export const deleteRally = async (rallyId: number, options?: RequestInit): Promi
 
 
 export const getDeleteRallyMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteRally>>, TError,{rallyId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof deleteRally>>, TError,{rallyId: number}, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteRally>>, TError,{rallyId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteRally>>, TError,{rallyId: string}, TContext> => {
 
 const mutationKey = ['deleteRally'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -2318,7 +2318,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteRally>>, {rallyId: number}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteRally>>, {rallyId: string}> = (props) => {
           const {rallyId} = props ?? {};
 
           return  deleteRally(rallyId,requestOptions)
@@ -2339,11 +2339,11 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
  * @summary Delete a rally (e.g. undo the last point; cascades to its events)
  */
 export const useDeleteRally = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteRally>>, TError,{rallyId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteRally>>, TError,{rallyId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof deleteRally>>,
         TError,
-        {rallyId: number},
+        {rallyId: string},
         TContext
       > => {
       return useMutation(getDeleteRallyMutationOptions(options));
@@ -2426,7 +2426,7 @@ export function useListMatchSubstitutions<TData = Awaited<ReturnType<typeof list
 
 
 
-export const getCreateSubstitutionUrl = (setId: number,) => {
+export const getCreateSubstitutionUrl = (setId: string,) => {
 
 
 
@@ -2437,7 +2437,7 @@ export const getCreateSubstitutionUrl = (setId: number,) => {
 /**
  * @summary Record one substitution (regular sub or libero in/out) within a set
  */
-export const createSubstitution = async (setId: number,
+export const createSubstitution = async (setId: string,
     newSubstitution: NewSubstitution, options?: RequestInit): Promise<Substitution> => {
 
   return customFetch<Substitution>(getCreateSubstitutionUrl(setId),
@@ -2454,8 +2454,8 @@ export const createSubstitution = async (setId: number,
 
 
 export const getCreateSubstitutionMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createSubstitution>>, TError,{setId: number;data: BodyType<NewSubstitution>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof createSubstitution>>, TError,{setId: number;data: BodyType<NewSubstitution>}, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createSubstitution>>, TError,{setId: string;data: BodyType<NewSubstitution>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createSubstitution>>, TError,{setId: string;data: BodyType<NewSubstitution>}, TContext> => {
 
 const mutationKey = ['createSubstitution'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -2467,7 +2467,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createSubstitution>>, {setId: number;data: BodyType<NewSubstitution>}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createSubstitution>>, {setId: string;data: BodyType<NewSubstitution>}> = (props) => {
           const {setId,data} = props ?? {};
 
           return  createSubstitution(setId,data,requestOptions)
@@ -2488,17 +2488,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
  * @summary Record one substitution (regular sub or libero in/out) within a set
  */
 export const useCreateSubstitution = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createSubstitution>>, TError,{setId: number;data: BodyType<NewSubstitution>}, TContext>, request?: SecondParameter<typeof customFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createSubstitution>>, TError,{setId: string;data: BodyType<NewSubstitution>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof createSubstitution>>,
         TError,
-        {setId: number;data: BodyType<NewSubstitution>},
+        {setId: string;data: BodyType<NewSubstitution>},
         TContext
       > => {
       return useMutation(getCreateSubstitutionMutationOptions(options));
     }
 
-export const getDeleteSubstitutionUrl = (substitutionId: number,) => {
+export const getDeleteSubstitutionUrl = (substitutionId: string,) => {
 
 
 
@@ -2509,7 +2509,7 @@ export const getDeleteSubstitutionUrl = (substitutionId: number,) => {
 /**
  * @summary Delete a substitution (e.g. undo the last substitution action)
  */
-export const deleteSubstitution = async (substitutionId: number, options?: RequestInit): Promise<void> => {
+export const deleteSubstitution = async (substitutionId: string, options?: RequestInit): Promise<void> => {
 
   return customFetch<void>(getDeleteSubstitutionUrl(substitutionId),
   {
@@ -2524,8 +2524,8 @@ export const deleteSubstitution = async (substitutionId: number, options?: Reque
 
 
 export const getDeleteSubstitutionMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteSubstitution>>, TError,{substitutionId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof deleteSubstitution>>, TError,{substitutionId: number}, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteSubstitution>>, TError,{substitutionId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteSubstitution>>, TError,{substitutionId: string}, TContext> => {
 
 const mutationKey = ['deleteSubstitution'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -2537,7 +2537,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteSubstitution>>, {substitutionId: number}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteSubstitution>>, {substitutionId: string}> = (props) => {
           const {substitutionId} = props ?? {};
 
           return  deleteSubstitution(substitutionId,requestOptions)
@@ -2558,11 +2558,11 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
  * @summary Delete a substitution (e.g. undo the last substitution action)
  */
 export const useDeleteSubstitution = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteSubstitution>>, TError,{substitutionId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteSubstitution>>, TError,{substitutionId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof deleteSubstitution>>,
         TError,
-        {substitutionId: number},
+        {substitutionId: string},
         TContext
       > => {
       return useMutation(getDeleteSubstitutionMutationOptions(options));
@@ -2645,7 +2645,7 @@ export function useListMatchTimeouts<TData = Awaited<ReturnType<typeof listMatch
 
 
 
-export const getCreateTimeoutUrl = (setId: number,) => {
+export const getCreateTimeoutUrl = (setId: string,) => {
 
 
 
@@ -2656,7 +2656,7 @@ export const getCreateTimeoutUrl = (setId: number,) => {
 /**
  * @summary Record one timeout within a set
  */
-export const createTimeout = async (setId: number,
+export const createTimeout = async (setId: string,
     newTimeout: NewTimeout, options?: RequestInit): Promise<Timeout> => {
 
   return customFetch<Timeout>(getCreateTimeoutUrl(setId),
@@ -2673,8 +2673,8 @@ export const createTimeout = async (setId: number,
 
 
 export const getCreateTimeoutMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createTimeout>>, TError,{setId: number;data: BodyType<NewTimeout>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof createTimeout>>, TError,{setId: number;data: BodyType<NewTimeout>}, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createTimeout>>, TError,{setId: string;data: BodyType<NewTimeout>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createTimeout>>, TError,{setId: string;data: BodyType<NewTimeout>}, TContext> => {
 
 const mutationKey = ['createTimeout'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -2686,7 +2686,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createTimeout>>, {setId: number;data: BodyType<NewTimeout>}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createTimeout>>, {setId: string;data: BodyType<NewTimeout>}> = (props) => {
           const {setId,data} = props ?? {};
 
           return  createTimeout(setId,data,requestOptions)
@@ -2707,17 +2707,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
  * @summary Record one timeout within a set
  */
 export const useCreateTimeout = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createTimeout>>, TError,{setId: number;data: BodyType<NewTimeout>}, TContext>, request?: SecondParameter<typeof customFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createTimeout>>, TError,{setId: string;data: BodyType<NewTimeout>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof createTimeout>>,
         TError,
-        {setId: number;data: BodyType<NewTimeout>},
+        {setId: string;data: BodyType<NewTimeout>},
         TContext
       > => {
       return useMutation(getCreateTimeoutMutationOptions(options));
     }
 
-export const getDeleteTimeoutUrl = (timeoutId: number,) => {
+export const getDeleteTimeoutUrl = (timeoutId: string,) => {
 
 
 
@@ -2728,7 +2728,7 @@ export const getDeleteTimeoutUrl = (timeoutId: number,) => {
 /**
  * @summary Delete a timeout (e.g. undo the last timeout action)
  */
-export const deleteTimeout = async (timeoutId: number, options?: RequestInit): Promise<void> => {
+export const deleteTimeout = async (timeoutId: string, options?: RequestInit): Promise<void> => {
 
   return customFetch<void>(getDeleteTimeoutUrl(timeoutId),
   {
@@ -2743,8 +2743,8 @@ export const deleteTimeout = async (timeoutId: number, options?: RequestInit): P
 
 
 export const getDeleteTimeoutMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteTimeout>>, TError,{timeoutId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof deleteTimeout>>, TError,{timeoutId: number}, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteTimeout>>, TError,{timeoutId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteTimeout>>, TError,{timeoutId: string}, TContext> => {
 
 const mutationKey = ['deleteTimeout'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -2756,7 +2756,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteTimeout>>, {timeoutId: number}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteTimeout>>, {timeoutId: string}> = (props) => {
           const {timeoutId} = props ?? {};
 
           return  deleteTimeout(timeoutId,requestOptions)
@@ -2777,11 +2777,11 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
  * @summary Delete a timeout (e.g. undo the last timeout action)
  */
 export const useDeleteTimeout = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteTimeout>>, TError,{timeoutId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteTimeout>>, TError,{timeoutId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof deleteTimeout>>,
         TError,
-        {timeoutId: number},
+        {timeoutId: string},
         TContext
       > => {
       return useMutation(getDeleteTimeoutMutationOptions(options));
@@ -2864,7 +2864,7 @@ export function useListMatchLineups<TData = Awaited<ReturnType<typeof listMatchL
 
 
 
-export const getPutSetLineupUrl = (setId: number,) => {
+export const getPutSetLineupUrl = (setId: string,) => {
 
 
 
@@ -2875,7 +2875,7 @@ export const getPutSetLineupUrl = (setId: number,) => {
 /**
  * @summary Set (upsert) the starting lineup for a set
  */
-export const putSetLineup = async (setId: number,
+export const putSetLineup = async (setId: string,
     newLineup: NewLineup, options?: RequestInit): Promise<Lineup> => {
 
   return customFetch<Lineup>(getPutSetLineupUrl(setId),
@@ -2892,8 +2892,8 @@ export const putSetLineup = async (setId: number,
 
 
 export const getPutSetLineupMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putSetLineup>>, TError,{setId: number;data: BodyType<NewLineup>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof putSetLineup>>, TError,{setId: number;data: BodyType<NewLineup>}, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putSetLineup>>, TError,{setId: string;data: BodyType<NewLineup>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof putSetLineup>>, TError,{setId: string;data: BodyType<NewLineup>}, TContext> => {
 
 const mutationKey = ['putSetLineup'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -2905,7 +2905,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof putSetLineup>>, {setId: number;data: BodyType<NewLineup>}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof putSetLineup>>, {setId: string;data: BodyType<NewLineup>}> = (props) => {
           const {setId,data} = props ?? {};
 
           return  putSetLineup(setId,data,requestOptions)
@@ -2926,11 +2926,11 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
  * @summary Set (upsert) the starting lineup for a set
  */
 export const usePutSetLineup = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putSetLineup>>, TError,{setId: number;data: BodyType<NewLineup>}, TContext>, request?: SecondParameter<typeof customFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putSetLineup>>, TError,{setId: string;data: BodyType<NewLineup>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof putSetLineup>>,
         TError,
-        {setId: number;data: BodyType<NewLineup>},
+        {setId: string;data: BodyType<NewLineup>},
         TContext
       > => {
       return useMutation(getPutSetLineupMutationOptions(options));
@@ -3310,7 +3310,7 @@ export const useDeleteTactic = <TError = ErrorType<unknown>,
       return useMutation(getDeleteTacticMutationOptions(options));
     }
 
-export const getUpdateEventUrl = (eventId: number,) => {
+export const getUpdateEventUrl = (eventId: string,) => {
 
 
 
@@ -3321,7 +3321,7 @@ export const getUpdateEventUrl = (eventId: number,) => {
 /**
  * @summary Correct or fill in details on an existing event (e.g. during video review)
  */
-export const updateEvent = async (eventId: number,
+export const updateEvent = async (eventId: string,
     updateEvent: UpdateEvent, options?: RequestInit): Promise<MatchEvent> => {
 
   return customFetch<MatchEvent>(getUpdateEventUrl(eventId),
@@ -3338,8 +3338,8 @@ export const updateEvent = async (eventId: number,
 
 
 export const getUpdateEventMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateEvent>>, TError,{eventId: number;data: BodyType<UpdateEvent>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof updateEvent>>, TError,{eventId: number;data: BodyType<UpdateEvent>}, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateEvent>>, TError,{eventId: string;data: BodyType<UpdateEvent>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateEvent>>, TError,{eventId: string;data: BodyType<UpdateEvent>}, TContext> => {
 
 const mutationKey = ['updateEvent'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -3351,7 +3351,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateEvent>>, {eventId: number;data: BodyType<UpdateEvent>}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateEvent>>, {eventId: string;data: BodyType<UpdateEvent>}> = (props) => {
           const {eventId,data} = props ?? {};
 
           return  updateEvent(eventId,data,requestOptions)
@@ -3372,17 +3372,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
  * @summary Correct or fill in details on an existing event (e.g. during video review)
  */
 export const useUpdateEvent = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateEvent>>, TError,{eventId: number;data: BodyType<UpdateEvent>}, TContext>, request?: SecondParameter<typeof customFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateEvent>>, TError,{eventId: string;data: BodyType<UpdateEvent>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof updateEvent>>,
         TError,
-        {eventId: number;data: BodyType<UpdateEvent>},
+        {eventId: string;data: BodyType<UpdateEvent>},
         TContext
       > => {
       return useMutation(getUpdateEventMutationOptions(options));
     }
 
-export const getDeleteEventUrl = (eventId: number,) => {
+export const getDeleteEventUrl = (eventId: string,) => {
 
 
 
@@ -3393,7 +3393,7 @@ export const getDeleteEventUrl = (eventId: number,) => {
 /**
  * @summary Delete an event (e.g. recorded by mistake)
  */
-export const deleteEvent = async (eventId: number, options?: RequestInit): Promise<void> => {
+export const deleteEvent = async (eventId: string, options?: RequestInit): Promise<void> => {
 
   return customFetch<void>(getDeleteEventUrl(eventId),
   {
@@ -3408,8 +3408,8 @@ export const deleteEvent = async (eventId: number, options?: RequestInit): Promi
 
 
 export const getDeleteEventMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteEvent>>, TError,{eventId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof deleteEvent>>, TError,{eventId: number}, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteEvent>>, TError,{eventId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteEvent>>, TError,{eventId: string}, TContext> => {
 
 const mutationKey = ['deleteEvent'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -3421,7 +3421,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteEvent>>, {eventId: number}> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteEvent>>, {eventId: string}> = (props) => {
           const {eventId} = props ?? {};
 
           return  deleteEvent(eventId,requestOptions)
@@ -3442,11 +3442,11 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
  * @summary Delete an event (e.g. recorded by mistake)
  */
 export const useDeleteEvent = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteEvent>>, TError,{eventId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteEvent>>, TError,{eventId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof deleteEvent>>,
         TError,
-        {eventId: number},
+        {eventId: string},
         TContext
       > => {
       return useMutation(getDeleteEventMutationOptions(options));

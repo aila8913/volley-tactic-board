@@ -13,10 +13,21 @@ export const substitutionKindEnum = pgEnum("substitution_kind", ["regular", "lib
 // 一次換人紀錄。詳見 docs/event-grammar-spec.md 的「時機為何存比分快照」一節——
 // 這張表的設計是那一節分析後鎖定的結果，不要重新設計。
 export const substitutionsTable = pgTable("substitutions", {
-  id: serial("id").primaryKey(),
-  setId: integer("set_id")
+  // id 改成 uuid，理由同 sets.ts / rallies.ts：離線記一次換人的當下就要能決定這筆的 id，
+  // 不用等後端回應。
+  id: uuid("id").primaryKey().defaultRandom(),
+  setId: uuid("set_id")
     .notNull()
     .references(() => setsTable.id, { onDelete: "cascade" }),
+  // seq：非主鍵的插入順序流水號，只給「同一分內排序」用，跟 id 是完全不同的用途。
+  // 為什麼 id 不能再兼職當排序 tiebreaker：id 從 serial 改成 uuid 之後，id 已經是隨機值、
+  // 不帶任何時序資訊，用它排序等於隨機排序——會讓「同一分內連續換兩次人」這種情境的
+  // replay 結果每次都不一樣（見 artifacts/api-server/src/routes/substitutions.ts 的
+  // orderBy 註解）。所以另外留一個「單純遞增、只給排序用」的欄位。
+  // 為什麼在離線情境下 seq 仍然正確：離線佇列 flush 時是嚴格依照本機紀錄的順序、一筆一筆
+  // 送出去給後端 insert 的（這個 PR 不改佇列行為，但契約如此），所以 DB 這裡的 insert
+  // 順序＝使用者在本機實際操作的順序，seq 遞增剛好等於「這幾筆事件真正發生的先後」。
+  seq: serial("seq").notNull(),
   // 換人發生的「時機」，存的是比分快照而不是 rallyId。
   // 為什麼不能存 rallyId：換人發生在下一個 rally 開始「之前」，但 rally row 要等那一分
   // 打完才會 insert（見 rallies.ts 的比分快照設計同理）——換人當下，下一個 rally 的 id
@@ -46,6 +57,11 @@ export const substitutionsTable = pgTable("substitutions", {
   kind: substitutionKindEnum("kind").notNull(),
 });
 
-export const insertSubstitutionSchema = createInsertSchema(substitutionsTable).omit({ id: true });
+// id 不再 .omit：id 是 uuid + defaultRandom()，drizzle-zod 自動把它標成選填，前端可以
+// 自己塞 uuid（client-mintable）。但 seq 要繼續 omit——它是伺服器插入時才決定的排序
+// 流水號，前端不該也不能自己指定。
+export const insertSubstitutionSchema = createInsertSchema(substitutionsTable).omit({
+  seq: true,
+});
 export type InsertSubstitution = z.infer<typeof insertSubstitutionSchema>;
 export type Substitution = typeof substitutionsTable.$inferSelect;

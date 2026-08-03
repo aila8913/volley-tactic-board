@@ -8,7 +8,7 @@
 
 export interface Lineup {
   id: number;
-  setId: number;
+  setId: string;
   zone1PlayerId: string;
   zone2PlayerId: string;
   zone3PlayerId: string;

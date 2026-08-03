@@ -1,4 +1,4 @@
-import { pgTable, serial, integer, uuid, real, text, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, integer, uuid, real, text, pgEnum } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { ralliesTable } from "./rallies";
@@ -38,8 +38,10 @@ export const eventSideEnum = pgEnum("event_side", ["home", "away"]);
 // viewBox 0~100（寬）x 0~200（長），見 artifacts/volleyball-tactics/src/components/Court.tsx。
 // 這樣前端畫面上點的座標可以直接存進來，不用再做任何座標轉換。
 export const eventsTable = pgTable("events", {
-  id: serial("id").primaryKey(),
-  rallyId: integer("rally_id")
+  // id 改成 uuid，理由同 sets.ts / rallies.ts：離線記錄一球的當下就要能決定 eventId，
+  // 不用等後端回應才知道自己是第幾號。
+  id: uuid("id").primaryKey().defaultRandom(),
+  rallyId: uuid("rally_id")
     .notNull()
     .references(() => ralliesTable.id, { onDelete: "cascade" }),
   sequence: integer("sequence").notNull(), // 這個 rally 裡的第幾球，從 1 開始
@@ -72,7 +74,9 @@ export const eventsTable = pgTable("events", {
   outcome: eventOutcomeEnum("outcome"),
 });
 
-export const insertEventSchema = createInsertSchema(eventsTable).omit({ id: true });
+// 不再 .omit({ id: true })：理由同上——id 是 uuid + defaultRandom()，drizzle-zod
+// 自動把它標成選填，前端可以自己塞 uuid（client-mintable，離線寫入佇列需要）。
+export const insertEventSchema = createInsertSchema(eventsTable);
 export type InsertEvent = z.infer<typeof insertEventSchema>;
 // 命名為 MatchEvent 而不是 Event，避免跟瀏覽器內建的 DOM Event 型別撞名。
 export type MatchEvent = typeof eventsTable.$inferSelect;

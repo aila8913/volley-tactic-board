@@ -90,7 +90,7 @@ export async function playerBelongsToMatch(playerId: string, matchId: number): P
 // set 在 match 底下：join sets → matches，比對 setId 與 userId。
 // innerJoin 的意思是「只保留兩張表都對得上的列」——如果這個 set 不存在、
 // 或它所屬的 match 不是這個 user 的，join 完就是空的，回傳 false。
-export async function setBelongsToUser(setId: number, userId: string): Promise<boolean> {
+export async function setBelongsToUser(setId: string, userId: string): Promise<boolean> {
   const [row] = await db
     .select({ id: setsTable.id })
     .from(setsTable)
@@ -101,7 +101,7 @@ export async function setBelongsToUser(setId: number, userId: string): Promise<b
 }
 
 // rally 在 set 底下、set 又在 match 底下：要 join 兩層（rallies → sets → matches）。
-export async function rallyBelongsToUser(rallyId: number, userId: string): Promise<boolean> {
+export async function rallyBelongsToUser(rallyId: string, userId: string): Promise<boolean> {
   const [row] = await db
     .select({ id: ralliesTable.id })
     .from(ralliesTable)
@@ -116,7 +116,7 @@ export async function rallyBelongsToUser(rallyId: number, userId: string): Promi
 // （substitutions → sets → matches）追到 match.userId。DELETE /substitutions/:id 路徑上
 // 只有 substitutionId（沒有 set/match），只能靠這條 join 鏈反推它屬不屬於這個 user。
 export async function substitutionBelongsToUser(
-  substitutionId: number,
+  substitutionId: string,
   userId: string,
 ): Promise<boolean> {
   const [row] = await db
@@ -132,7 +132,7 @@ export async function substitutionBelongsToUser(
 // timeout 跟 substitution 一樣掛在 set 底下（不是掛在 rally），所以擁有權也是 join 兩層
 // （timeouts → sets → matches）追到 match.userId。DELETE /timeouts/:id 路徑上只有 timeoutId
 // （沒有 set/match），只能靠這條 join 鏈反推它屬不屬於這個 user，跟 substitutionBelongsToUser 同理。
-export async function timeoutBelongsToUser(timeoutId: number, userId: string): Promise<boolean> {
+export async function timeoutBelongsToUser(timeoutId: string, userId: string): Promise<boolean> {
   const [row] = await db
     .select({ id: timeoutsTable.id })
     .from(timeoutsTable)
@@ -158,7 +158,7 @@ export async function tacticBelongsToUser(tacticId: string, userId: string): Pro
 // event 是最深一層：events → rallies → sets → matches，join 三層才追得到 userId。
 // PATCH / DELETE /events/:eventId 只拿得到 eventId（路徑裡沒有 match/set/rally），
 // 所以只能靠這條 join 鏈反推它到底屬不屬於這個 user。
-export async function eventBelongsToUser(eventId: number, userId: string): Promise<boolean> {
+export async function eventBelongsToUser(eventId: string, userId: string): Promise<boolean> {
   const [row] = await db
     .select({ id: eventsTable.id })
     .from(eventsTable)

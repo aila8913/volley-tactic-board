@@ -36,10 +36,17 @@ router.get(
       // 依 setId、(homeScore+awayScore) 排序：換人是按「這局內比分快照」記錄時機的（見
       // substitutions.ts 的設計說明），比分嚴格遞增，所以這樣排序就能還原「換人發生的先後順序」，
       // 讓前端可以照順序重放（replay）出每個時間點的上場名單。
-      // 最後再加 id 當 tiebreak：同一分（homeScore/awayScore 完全相同）可能連續換好幾次人
-      // （例如同一球剛結束、教練一次換兩個位置），這時候比分排不出先後，改用 insert 順序
-      // （自增主鍵 id 遞增）當第二層依據，讓「同分內誰先換」永遠是決定性的（deterministic），
-      // 前端 replay 出來的結果每次都一樣，不會因為資料庫排序不穩定而長出不同的重建結果。
+      // 最後再加 seq 當 tiebreak：同一分（homeScore/awayScore 完全相同）可能連續換好幾次人
+      // （例如同一球剛結束、教練一次換兩個位置），這時候比分排不出先後，需要第二層依據讓
+      // 「同分內誰先換」永遠是決定性的（deterministic）。
+      // 為什麼不能再用主鍵 id 當 tiebreak（#64 PR1）：主鍵從自增整數改成 client-mintable
+      // 的隨機 uuid 之後，id 本身不再帶任何時序資訊，拿它排序等於隨機排序——同一分內連續
+      // 換兩個位置，每次重建出來的先後順序可能不一樣。所以另外留一個非主鍵、單純遞增的
+      // seq 欄位（見 lib/db/src/schema/substitutions.ts）專門給排序用。
+      // 為什麼 seq 在離線情境下仍然正確：這張表的寫入之後會走離線佇列（#75），但佇列
+      // flush 時是嚴格依照本機記錄的操作順序、一筆一筆送給後端 insert 的——所以這裡的
+      // insert 順序（seq 遞增的順序）等於使用者在本機實際換人的先後順序，不會因為
+      // 「離線先記、之後才補送」而錯亂。
       const rows = await db
         .select(getTableColumns(substitutionsTable))
         .from(substitutionsTable)
@@ -49,7 +56,7 @@ router.get(
           substitutionsTable.setId,
           substitutionsTable.homeScore,
           substitutionsTable.awayScore,
-          substitutionsTable.id,
+          substitutionsTable.seq,
         );
 
       res.json(rows);
