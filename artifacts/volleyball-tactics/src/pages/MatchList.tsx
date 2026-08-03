@@ -12,6 +12,7 @@ import MatchEntryLinks from "@/components/MatchEntryLinks";
 import AppShell from "@/components/AppShell";
 import ListNavRail from "@/components/ListNavRail";
 import MatchInfoRail, { MatchListSelection } from "@/components/MatchInfoRail";
+import { APP_BACKGROUND_STYLE, APP_SHELL_CLASS } from "@/lib/appChromeStyles";
 import { formatMatchDateTime, formatMatchResult } from "@/lib/matchSummary";
 import {
   deriveMatchStatus,
@@ -152,27 +153,32 @@ export default function MatchList() {
     // 空狀態／資料夾摘要／比賽站位——這一頁只負責把「目前選中什麼」傳過去，不自己判斷要
     // 渲染哪一種畫面。
     //
-    // 純色背景會讓 backdrop-blur 白忙一場（模糊純色還是同一個純色，卡片的玻璃感其實沒有真的
-    // 產生）。這裡疊一層很淡的斜線網格當「球網紋理」，讓 blur 有東西可以模糊，也呼應排球主題
-    // （PR #129 review 建議：docs/design-spec.md 第 4 節寫的玻璃質感本來就是設計給疊在有內容
-    // 的背景上用的）。這些 class/style 以前掛在最外層 div 上，現在原樣搬到 AppShell 的
-    // className/style——AppShell 自己的 h-screen 已經接手了原本 min-h-screen 的角色。
+    // 背景改用 lib/appChromeStyles 的共用常數（tang 2026-07-30 要求全站背景統一）：這裡原本
+    // 是 #131 那次改版之前留下的舊版本——純色底＋一層很淡的斜線網格。收斂成共用常數的完整
+    // 理由（以及為什麼當初會分裂成兩代）寫在那個檔案裡。
     <AppShell
       mode="A"
-      nav={<ListNavRail selected={selected} />}
-      aside={<MatchInfoRail selected={selected} />}
-      className="bg-[#0a0b07] font-dash text-[#f5f5f0]"
-      style={{
-        backgroundImage:
-          "repeating-linear-gradient(45deg, rgba(245,245,240,0.035) 0 1px, transparent 1px 28px)," +
-          "repeating-linear-gradient(-45deg, rgba(245,245,240,0.035) 0 1px, transparent 1px 28px)",
-      }}
+      nav={
+        <div className="relative z-10 h-full">
+          <ListNavRail selected={selected} />
+        </div>
+      }
+      aside={
+        <div className="relative z-10 h-full">
+          <MatchInfoRail selected={selected} />
+        </div>
+      }
+      backdrop={<div className="tb-beam" />}
+      className={APP_SHELL_CLASS}
+      style={APP_BACKGROUND_STYLE}
     >
       {/* 中央主區（issue #175 環 4）。
           捲動責任下放給 ListScrollArea（AppShell 最外層是 overflow-hidden，沒人接手的話長清單
           會被裁掉），它同時負責藏掉原生捲軸、在右邊畫那條 8px 指示條。
-          max-w-[1136px] 是 Figma 的內容寬基準，超寬螢幕下不讓卡片無限拉長。 */}
-      <div className="flex min-h-0 flex-1 flex-col px-8 py-8">
+          max-w-[1136px] 是 Figma 的內容寬基準，超寬螢幕下不讓卡片無限拉長。
+          relative z-10：跟 backdrop 的 .tb-beam（position:absolute + z-index:1）疊圖時要贏過去，
+          理由見 TacticsBoard.tsx 同一種寫法的說明。 */}
+      <div className="relative z-10 flex min-h-0 flex-1 flex-col px-8 py-8">
         <div className="mx-auto flex min-h-0 w-full max-w-[1136px] flex-1 flex-col">
           <div className="mb-8 flex items-center justify-between gap-4">
             <h1 className="font-dash text-2xl font-bold">比賽列表</h1>

@@ -18,6 +18,7 @@ import { Spinner } from "@/components/ui/spinner";
 import AppShell from "@/components/AppShell";
 import NavRail, { matchBackHref } from "@/components/NavRail";
 import AnalyticsRotationRail from "@/components/AnalyticsRotationRail";
+import { APP_BACKGROUND_STYLE, APP_SHELL_CLASS } from "@/lib/appChromeStyles";
 import { countSetWins, setWinner, winsNeededFor } from "@/lib/matchOutcome";
 import { useMatchWithRoster } from "@/hooks/useMatches";
 import { useMatchRecording } from "@/hooks/useMatchRecording";
@@ -320,35 +321,40 @@ export default function MatchAnalytics() {
     <AppShell
       mode="A"
       nav={
-        <NavRail
-          matchId={id ?? ""}
-          backHref={backHref}
-          active="analytics"
-          captureCurrent={captureCurrentForAnalytics}
-          captureLabel="此頁沒有可擷取的站位，僅能從空站位開始"
-          captureDisabled
-        />
+        <div className="relative z-10 h-full">
+          <NavRail
+            matchId={id ?? ""}
+            backHref={backHref}
+            active="analytics"
+            captureCurrent={captureCurrentForAnalytics}
+            captureLabel="此頁沒有可擷取的站位，僅能從空站位開始"
+            captureDisabled
+          />
+        </div>
       }
       aside={
-        <AnalyticsRotationRail
-          record={record}
-          roster={match.players}
-          winsNeeded={winsNeededFor(match.format)}
-        />
+        <div className="relative z-10 h-full">
+          <AnalyticsRotationRail
+            record={record}
+            roster={match.players}
+            winsNeeded={winsNeededFor(match.format)}
+          />
+        </div>
       }
-      className="bg-[#0a0b07] font-dash text-[#f5f5f0]"
-      style={{
-        backgroundImage:
-          "repeating-linear-gradient(45deg, rgba(245,245,240,0.035) 0 1px, transparent 1px 28px)," +
-          "repeating-linear-gradient(-45deg, rgba(245,245,240,0.035) 0 1px, transparent 1px 28px)",
-      }}
+      backdrop={<div className="tb-beam" />}
+      // 背景改用 lib/appChromeStyles 的共用常數（tang 2026-07-30 要求全站背景統一）：
+      // 這裡原本停在 #131 改版之前的斜線網格版本，說明見那個檔案。
+      className={APP_SHELL_CLASS}
+      style={APP_BACKGROUND_STYLE}
     >
       {/* 原本是 min-h-screen（讓整個瀏覽器視窗跟著內容變長、由視窗自己捲）。AppShell 改成
           h-screen 固定版面之後，捲動責任下放到這一層：min-h-0 + flex-1 讓它剛好吃滿中央
           主區的高度、不多不少，再由自己的 overflow-y-auto 捲內容。留著 min-h-screen 的話，
           這塊的最小高度會被釘在 100vh，之後若中央主區上面多一條 header，它就會超出容器
-          一個 header 的高度、把捲軸推到看不見的地方。 */}
-      <div className="min-h-0 w-full flex-1 overflow-y-auto">
+          一個 header 的高度、把捲軸推到看不見的地方。
+          relative z-10：跟 backdrop 的 .tb-beam（position:absolute + z-index:1）疊圖時要贏過去，
+          理由見 TacticsBoard.tsx 同一種寫法的說明。 */}
+      <div className="relative z-10 min-h-0 w-full flex-1 overflow-y-auto">
         <header className="flex items-center justify-center border-b border-white/[0.08] bg-white/[0.02] px-4 py-3 backdrop-blur-sm">
           <h1 className="text-lg font-bold">vs {match.opponent} · 數據分析</h1>
         </header>

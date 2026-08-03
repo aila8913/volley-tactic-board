@@ -12,6 +12,7 @@ import { useMatchWithRoster } from "../hooks/useMatches";
 import { useRotationTable } from "../hooks/useRotationTable";
 import { useTacticsBoard } from "../hooks/useTacticsBoard";
 import { useTacticsBoardController } from "../hooks/useTacticsBoardController";
+import { APP_BACKGROUND_STYLE, APP_SHELL_CLASS } from "../lib/appChromeStyles";
 import { captureCurrentRotation } from "../lib/captureCurrentRotation";
 import { PRIMARY_BTN_CLASS } from "../lib/tacticsBoardStyles";
 
@@ -238,13 +239,8 @@ export default function TacticsBoard() {
           </div>
         </>
       }
-      className="relative font-dash text-[#f5f5f0]"
-      style={{
-        background:
-          "radial-gradient(ellipse 55% 45% at 18% 12%, rgba(198,241,53,0.10), transparent 70%), " +
-          "radial-gradient(ellipse 65% 55% at 88% 92%, rgba(42,110,106,0.30), transparent 70%), " +
-          "linear-gradient(160deg, #0a0b07 0%, #16241c 55%, #0a0b07 100%)",
-      }}
+      className={APP_SHELL_CLASS}
+      style={APP_BACKGROUND_STYLE}
     >
       {/* 中央主區：header 以前橫跨整頁（在 nav／中央／aside 三欄「上面」置中），現在拆進
           AppShell 之後，header 只會置中在中央主區這一欄的寬度裡——這是這一環唯一刻意的
