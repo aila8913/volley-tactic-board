@@ -63,6 +63,11 @@ BASE_PATH=/
 API_PORT=3000
 ```
 
+（根目錄的 `.env.example` 是同一份清單的可複製版本：`cp .env.example .env` 之後只要換掉
+`DATABASE_URL` 就好。）
+
+想把它部署到雲端上讓別人試用，見 **[`docs/deploy.md`](docs/deploy.md)**。
+
 ## Repo 結構導覽
 
 ```

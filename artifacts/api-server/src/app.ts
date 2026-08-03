@@ -12,6 +12,25 @@ const FRONTEND_DIST = path.resolve(import.meta.dirname, "../../volleyball-tactic
 
 const app: Express = express();
 
+// 雲端平台（Render 等）不會讓外界直接連到我們的 Node 行程——中間隔著一層它自己的
+// 反向代理（reverse proxy）。代理負責 HTTPS，然後用普通 HTTP 把請求轉進來。
+// 對 Express 來說，這造成兩個「它看到的」跟「事實」不符：
+//   - req.ip 會是代理的內網 IP，不是真正使用者的 IP（log 因此全是同一個位址）
+//   - req.protocol 會是 "http"，即使使用者其實是走 HTTPS 連進來的
+//
+// 真正的資訊被代理放在 X-Forwarded-For / X-Forwarded-Proto 這兩個 header 裡，
+// 而 Express 預設**不信任**它們——這是對的預設值，因為 header 是誰都能偽造的東西，
+// 在沒有代理的環境下相信它等於讓任何人自稱來自任何 IP。
+//
+// `trust proxy` 就是告訴 Express「我確實在代理後面，可以信這些 header」。數字 1 的意思是
+// 「只信最靠近我的那一層」，而不是無條件全信（`true`）——中間只有 Render 一層代理，
+// 多信的每一層都是多一個可被偽造的環節。
+//
+// 這行現在影響的是 log 的正確性，但接上 OAuth（#26 PR2）之後會變成安全相關：
+// 帶 `secure` 旗標的 cookie 只在 Express 認為連線是 HTTPS 時才會被送出，
+// 少了這行，正式環境的登入 cookie 會安靜地發不出去。
+app.set("trust proxy", 1);
+
 app.use(
   pinoHttp({
     logger,

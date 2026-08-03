@@ -1,0 +1,48 @@
+# Render Blueprint（issue #26）——把「這個服務要怎麼跑」寫成檔案，而不是在網頁儀表板上點。
+#
+# 為什麼用 blueprint 而不是手動建 service：儀表板上的設定沒有人看得到、也沒有版本紀錄，
+# 半年後「build command 當初到底填了什麼」只能靠記憶。寫成檔案之後它跟程式一起進 code review、
+# 一起被 git 記錄，換一台電腦或換一個人接手都還原得回來。這就是 infrastructure as code 的核心理由。
+#
+# 使用方式：Render Dashboard → New → Blueprint → 選這個 repo，它會讀這個檔案建出服務。
+# 詳細步驟（含 Neon 建資料庫、環境變數怎麼填）見 docs/deploy.md。
+
+services:
+  - type: web
+    name: volley-tactics-board
+    runtime: node
+    plan: free
+    # 新加坡是 Render 離台灣最近的機房，對延遲有感（美國機房每個 API 來回會多 ~150ms）。
+    region: singapore
+    branch: main
+
+    # 為什麼 build 跟 start 是分開的兩條指令：Render 會先在一台有完整工具鏈的機器上跑 build，
+    # 產出 dist/ 之後才啟動 start。start 不該再做編譯——那會讓每次冷啟動都慢好幾十秒。
+    #
+    # `corepack enable`：這個 repo 用 pnpm（根目錄 preinstall 會擋掉 npm/yarn），
+    # 而雲端機器預設只有 npm。corepack 是 Node 內建的套件管理器橋接工具，它會讀
+    # package.json 的 "packageManager" 欄位，自動裝上「跟你本機同一版」的 pnpm。
+    #
+    # `--prod=false`：這是這條指令裡最容易踩到的地雷。下面 envVars 設了 NODE_ENV=production，
+    # 而 pnpm 看到 NODE_ENV=production 會自動**跳過 devDependencies**——但這個 repo 的
+    # vite / esbuild / typescript 全都掛在 devDependencies 底下，跳過它們 build 會直接失敗。
+    # `--prod=false` 明確覆寫掉這個推測。（NODE_ENV 對 install 有副作用，是 npm 生態一個
+    # 很不直覺但很經典的坑。）
+    buildCommand: corepack enable && pnpm install --prod=false --frozen-lockfile && pnpm run build
+    # 單一服務同時提供 API 和前端靜態檔——見 artifacts/api-server/src/app.ts 的 express.static。
+    # 所以這裡只需要啟動 api-server，不需要另外部署前端。
+    startCommand: pnpm --filter @workspace/api-server run start
+
+    # Render 會定期打這個路徑確認服務還活著；連續失敗會自動重啟。
+    # 它同時也是「部署成功了沒」的判準——build 過了但 server 起不來，這裡會抓到。
+    healthCheckPath: /api/healthz
+
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # sync: false 代表「這個值不寫在檔案裡，我會到儀表板手動填」。
+      # 資料庫連線字串裡有密碼，是憑證，絕對不能進 git。
+      - key: DATABASE_URL
+        sync: false
+    # PORT 不用寫：Render 會自己注入，artifacts/api-server/src/index.ts 讀得到
+    # （它的順序是 API_PORT ?? PORT，本機開發才會設 API_PORT）。
