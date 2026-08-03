@@ -1,3 +1,5 @@
+import type { DeletableTable } from "../lib/writeLog";
+
 // 計分表（比賽期間快速記分）用的型別，跟輪轉表/戰術板（types/rotationTable.ts、
 // types/tacticsBoard.ts）的輪轉是分開的概念：輪轉表的「目前輪次」是教練手動選來
 // 編輯/檢視戰術用的，計分表的輪轉則是跟著比分自動算出來、反映場上真實狀況，
@@ -102,12 +104,15 @@ export interface UndoEntry {
   liberoSubstitution: string | null;
   // 暫停清單（issue #44）也一起進快照，undo 才能整包退回叫暫停「之前」的狀態。
   timeouts: TimeoutRecord[];
-  // 這個動作在後端建了什麼、undo 時要補刪什麼：
-  //   'rally'        — 得分（一分＝一個 rally），刪對應 rally（它的 event 靠 FK cascade 一起走）。
-  //   'substitution' — 一般換人，刪對應 substitution row。
-  //   'timeout'      — 暫停，刪對應 timeout row。
-  //   null           — 純本地動作（手動 libero 上/下場，沒寫後端），畫面還原即可、後端沒東西要刪。
-  backendKind: "rally" | "substitution" | "timeout" | null;
+  // 這個動作在後端建了哪一筆、undo 時要補刪什麼。null 代表純本地動作（手動 libero 上/下場，
+  // 沒寫後端），畫面還原即可、後端沒東西要刪。
+  //
+  // 為什麼直接存「表名＋row id」而不是像以前那樣存一個 'rally' | 'substitution' | 'timeout'
+  // 的字串（#230）：以前 id 要等 POST 回來才知道，所以動作端只能先記「我建的是哪一類」，
+  // 由 controller 維護三疊平行的 id ref，undo 時再用字串 switch 決定 pop 哪一疊。
+  // 主鍵改成 client-mintable uuid 後（#64 PR1/PR2），動作發生的當下就鑄得出 id，直接存進
+  // 這筆快照即可——三疊 ref 和那個 switch 一起消失，undo 只是「append 一筆 delete 進 write log」。
+  backendRef: { table: DeletableTable; id: string } | null;
 }
 
 // 「先發快照」：一局開始時，我方六個號位（1~6）各站哪個球員。

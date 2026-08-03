@@ -1196,6 +1196,13 @@ components:
     NewSet:
       type: object
       properties:
+        # 選填的 client-mintable 主鍵（#64 PR2）。離線記錄時前端得先有 id 才能把「建立」跟
+        # 之後的「刪除」寫成同一條有序 write log，不能等 POST 回來才知道 id——所以主鍵在
+        # #64 PR1 改成 uuid，這裡把它開放給前端指定。不帶就照舊由 DB 產（defaultRandom）。
+        # 之所以是選填而不是必填：舊呼叫端與手動測試不用改，且 seed/腳本仍可讓 DB 決定。
+        id:
+          type: string
+          format: uuid
         setNumber:
           type: integer
         # 開新的一局時：如果先發方還沒選（空局，見 MatchSet.firstServer 註解），送 null；
@@ -1247,6 +1254,10 @@ components:
     NewRally:
       type: object
       properties:
+        # 選填的 client-mintable 主鍵，理由同 NewSet.id（#64 PR2）。
+        id:
+          type: string
+          format: uuid
         rallyNumber:
           type: integer
         homeScore:
@@ -1457,6 +1468,10 @@ components:
     NewSubstitution:
       type: object
       properties:
+        # 選填的 client-mintable 主鍵，理由同 NewSet.id（#64 PR2）。
+        id:
+          type: string
+          format: uuid
         homeScore:
           type: integer
         awayScore:
@@ -1505,6 +1520,10 @@ components:
     NewTimeout:
       type: object
       properties:
+        # 選填的 client-mintable 主鍵，理由同 NewSet.id（#64 PR2）。
+        id:
+          type: string
+          format: uuid
         homeScore:
           type: integer
         awayScore:
@@ -1659,6 +1678,10 @@ components:
     NewEvent:
       type: object
       properties:
+        # 選填的 client-mintable 主鍵，理由同 NewSet.id（#64 PR2）。
+        id:
+          type: string
+          format: uuid
         sequence:
           type: integer
         side:

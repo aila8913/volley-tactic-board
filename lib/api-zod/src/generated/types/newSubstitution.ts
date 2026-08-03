@@ -8,6 +8,7 @@
 import type { SubstitutionKind } from './substitutionKind';
 
 export interface NewSubstitution {
+  id?: string;
   homeScore: number;
   awayScore: number;
   playerInId?: string | null;

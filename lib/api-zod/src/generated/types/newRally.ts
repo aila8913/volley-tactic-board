@@ -8,6 +8,7 @@
 import type { RallyWinner } from './rallyWinner';
 
 export interface NewRally {
+  id?: string;
   rallyNumber: number;
   homeScore: number;
   awayScore: number;

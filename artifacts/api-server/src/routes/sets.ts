@@ -52,6 +52,11 @@ router.post(
         .insert(setsTable)
         // firstServer 從 body 帶進來（開局時前端已知道誰先發）；matchId 從路徑取（已驗擁有權）。
         .values({
+          // client-mintable 主鍵（#64 PR2）：前端離線記錄時得先有 id 才能把「建立」與之後的
+          // 「刪除」排進同一條有序 write log，所以允許 body 指定 id。用條件展開而不是直接寫
+          // `id: body.id`，是為了不依賴「drizzle 遇到 undefined 會自動退回 default」這個隱性
+          // 行為——沒帶 id 時這個 key 根本不存在，DB 的 defaultRandom() 一定生效。
+          ...(body.id ? { id: body.id } : {}),
           matchId: params.matchId,
           setNumber: body.setNumber,
           firstServer: body.firstServer,

@@ -11,6 +11,7 @@ import type { EventSide } from './eventSide';
 import type { EventSource } from './eventSource';
 
 export interface NewEvent {
+  id?: string;
   sequence: number;
   side: EventSide;
   playerId?: string | null;

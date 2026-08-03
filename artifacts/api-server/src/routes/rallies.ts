@@ -56,6 +56,8 @@ router.post(
         .insert(ralliesTable)
         // setId 來自路徑（已驗擁有權），不吃 body 的，避免 client 把 rally 塞到別局去。
         .values({
+          // 選填的 client-mintable 主鍵（#64 PR2），做法與理由見 sets.ts 的 POST 註解。
+          ...(body.id ? { id: body.id } : {}),
           setId: params.setId,
           rallyNumber: body.rallyNumber,
           homeScore: body.homeScore,

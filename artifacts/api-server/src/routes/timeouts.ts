@@ -70,6 +70,8 @@ router.post(
         .insert(timeoutsTable)
         // setId 來自路徑（已驗擁有權），不吃 body 的，避免 client 把暫停紀錄塞到別局去。
         .values({
+          // 選填的 client-mintable 主鍵（#64 PR2），做法與理由見 sets.ts 的 POST 註解。
+          ...(body.id ? { id: body.id } : {}),
           setId: params.setId,
           homeScore: body.homeScore,
           awayScore: body.awayScore,
