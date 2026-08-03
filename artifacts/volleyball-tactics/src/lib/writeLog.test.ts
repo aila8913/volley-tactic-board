@@ -246,6 +246,132 @@ describe("cancelPending", () => {
   });
 });
 
+// ── 自動重送（#64 PR4）──────────────────────────────────────────────────────
+//
+// 用假計時器（fake timers）把「等 3 秒再重試」壓縮成一行 advanceTimersByTime——
+// 這幾條測的是退避的行為本身，不是真的要等。
+
+describe("自動重送", () => {
+  it("送失敗後會自己退避重試，成功了就把退避歸零", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.useFakeTimers();
+    try {
+      let attempts = 0;
+      let online = false;
+      const log = createWriteLog(1, async () => {
+        attempts += 1;
+        if (!online) throw new Error("離線");
+      });
+
+      log.append({ kind: "delete", table: "rallies", id: "r1" });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(attempts).toBe(1);
+      expect(log.entries()[0]!.status).toBe("error");
+
+      // 第一段退避是 3 秒：還沒到就不該有第二次嘗試。
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(attempts).toBe(1);
+      await vi.advanceTimersByTimeAsync(1_500);
+      expect(attempts).toBe(2);
+
+      // 第二段拉長到 10 秒——這就是「退避」：失敗越多次，等越久。
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(attempts).toBe(2);
+
+      online = true;
+      await vi.advanceTimersByTimeAsync(6_000);
+      expect(attempts).toBe(3);
+      expect(log.pendingCount()).toBe(0);
+
+      // 送成功之後不該再有任何背景重試在排隊。
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(attempts).toBe(3);
+    } finally {
+      vi.useRealTimers();
+      consoleError.mockRestore();
+    }
+  });
+
+  it("retry() 立刻重試，不等退避計時器", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.useFakeTimers();
+    try {
+      let attempts = 0;
+      let online = false;
+      const log = createWriteLog(1, async () => {
+        attempts += 1;
+        if (!online) throw new Error("離線");
+      });
+
+      log.append({ kind: "delete", table: "rallies", id: "r1" });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(attempts).toBe(1);
+
+      // 模擬瀏覽器的 online 事件：controller 收到就呼叫 retry()。
+      online = true;
+      log.retry();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(attempts).toBe(2);
+      expect(log.pendingCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+      consoleError.mockRestore();
+    }
+  });
+
+  it("dispose() 之後不會再有背景重試醒來", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.useFakeTimers();
+    try {
+      let attempts = 0;
+      const log = createWriteLog(1, async () => {
+        attempts += 1;
+        throw new Error("離線");
+      });
+
+      log.append({ kind: "delete", table: "rallies", id: "r1" });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(attempts).toBe(1);
+
+      // 離開計分頁。沒有這個，換一場比賽就會多留一條迴圈在背景空轉。
+      log.dispose();
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(attempts).toBe(1);
+    } finally {
+      vi.useRealTimers();
+      consoleError.mockRestore();
+    }
+  });
+
+  it("重試時 entry 還是留在落地層裡，直到真的送成功才清掉", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.useFakeTimers();
+    try {
+      const store = createMemoryWriteLogStore();
+      let online = false;
+      const log = createWriteLog(
+        7,
+        async () => {
+          if (!online) throw new Error("離線");
+        },
+        { store },
+      );
+
+      log.append({ kind: "delete", table: "rallies", id: "r1" });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(await store.load(7)).toHaveLength(1);
+
+      online = true;
+      await vi.advanceTimersByTimeAsync(3_500);
+      expect(await store.load(7)).toHaveLength(0);
+      expect(log.pendingCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+      consoleError.mockRestore();
+    }
+  });
+});
+
 describe("newRowId", () => {
   it("產生互不相同的 uuid 形狀字串", () => {
     const ids = new Set(Array.from({ length: 500 }, () => newRowId()));
