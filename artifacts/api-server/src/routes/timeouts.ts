@@ -31,9 +31,12 @@ router.get(
     },
     async ({ res, params }) => {
       // getTableColumns(timeoutsTable) 讓 select 只回傳 timeouts 的欄位（扁平形狀），不會因 join
-      // 變成 { timeouts: {...}, sets: {...} } 的巢狀結構。依 setId、(homeScore+awayScore)、id 排序：
-      // 比分嚴格遞增，這樣排就還原了「暫停發生的先後順序」，讓前端照順序重放；id 當 tiebreak，
-      // 讓同分內的順序也是決定性的（跟 substitutions 的排序理由完全一樣）。
+      // 變成 { timeouts: {...}, sets: {...} } 的巢狀結構。依 setId、(homeScore+awayScore)、seq 排序：
+      // 比分嚴格遞增，這樣排就還原了「暫停發生的先後順序」，讓前端照順序重放。
+      // 最後用 seq（而不是主鍵 id）當 tiebreak，理由跟 substitutions.ts 的 GET 完全一樣（#64
+      // PR1）：id 改成 client-mintable 的隨機 uuid 之後不再帶時序資訊，不能拿來排序；seq
+      // 是另外留的、單純遞增的插入順序欄位（見 lib/db/src/schema/timeouts.ts）。離線佇列
+      // flush 時嚴格依本機順序送出，所以 seq 遞增在離線情境下依然等於「暫停實際發生的先後」。
       const rows = await db
         .select(getTableColumns(timeoutsTable))
         .from(timeoutsTable)
@@ -43,7 +46,7 @@ router.get(
           timeoutsTable.setId,
           timeoutsTable.homeScore,
           timeoutsTable.awayScore,
-          timeoutsTable.id,
+          timeoutsTable.seq,
         );
 
       res.json(rows);

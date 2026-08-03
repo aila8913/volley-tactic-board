@@ -849,31 +849,36 @@ components:
       in: path
       required: true
       schema:
-        type: integer
+        type: string
+        format: uuid
     RallyId:
       name: rallyId
       in: path
       required: true
       schema:
-        type: integer
+        type: string
+        format: uuid
     EventId:
       name: eventId
       in: path
       required: true
       schema:
-        type: integer
+        type: string
+        format: uuid
     SubstitutionId:
       name: substitutionId
       in: path
       required: true
       schema:
-        type: integer
+        type: string
+        format: uuid
     TimeoutId:
       name: timeoutId
       in: path
       required: true
       schema:
-        type: integer
+        type: string
+        format: uuid
     TacticId:
       name: tacticId
       in: path
@@ -1172,8 +1177,11 @@ components:
     MatchSet:
       type: object
       properties:
+        # id 從整數改成 uuid（#64 PR1）：離線寫入佇列需要前端在還沒連上網路時就能自己決定
+        # setId，好讓緊接著記錄的 rally/event 有 id 可以引用，不用等 POST 回應。
         id:
-          type: integer
+          type: string
+          format: uuid
         matchId:
           type: integer
         setNumber:
@@ -1212,10 +1220,13 @@ components:
     Rally:
       type: object
       properties:
+        # id/setId 從整數改成 uuid（#64 PR1），理由同 MatchSet.id。
         id:
-          type: integer
+          type: string
+          format: uuid
         setId:
-          type: integer
+          type: string
+          format: uuid
         rallyNumber:
           type: integer
         # 這分開始前的比分，不是結束後的——見 docs/db-schema-spec.md 的設計理由。
@@ -1408,10 +1419,13 @@ components:
     Substitution:
       type: object
       properties:
+        # id/setId 從整數改成 uuid（#64 PR1），理由同 MatchSet.id。
         id:
-          type: integer
+          type: string
+          format: uuid
         setId:
-          type: integer
+          type: string
+          format: uuid
         # 換人發生的「時機」，存的是這一局當下的比分快照（而非 rallyId）——
         # 理由跟 Rally 的 homeScore/awayScore 一樣，見 lib/db/src/schema/substitutions.ts。
         homeScore:
@@ -1430,7 +1444,15 @@ components:
           nullable: true
         kind:
           $ref: "#/components/schemas/SubstitutionKind"
-      required: [id, setId, homeScore, awayScore, playerInId, playerOutId, kind]
+        # 伺服器指派的插入順序流水號，只給「同一分內排序」用，不是給前端識別身分用的。
+        # id 改成 uuid 之後不再帶時序資訊，不能拿來當 orderBy 的 tiebreaker（見
+        # lib/db/src/schema/substitutions.ts、artifacts/api-server/src/routes/substitutions.ts
+        # 的 orderBy 註解），所以另外開一個欄位。這是 row 的真實欄位（getTableColumns 會回傳
+        # 它），所以要宣告在回應 schema 裡，不然跟實際回應對不上；但 NewSubstitution 不能有
+        # 這個欄位——它是 server-assigned，前端不該送。
+        seq:
+          type: integer
+      required: [id, setId, homeScore, awayScore, playerInId, playerOutId, kind, seq]
 
     NewSubstitution:
       type: object
@@ -1460,10 +1482,13 @@ components:
     Timeout:
       type: object
       properties:
+        # id/setId 從整數改成 uuid（#64 PR1），理由同 MatchSet.id。
         id:
-          type: integer
+          type: string
+          format: uuid
         setId:
-          type: integer
+          type: string
+          format: uuid
         # 暫停發生的「時機」＝這一局當下的比分快照（而非 rallyId），理由見 lib/db/src/schema/timeouts.ts。
         homeScore:
           type: integer
@@ -1471,7 +1496,11 @@ components:
           type: integer
         side:
           $ref: "#/components/schemas/TimeoutSide"
-      required: [id, setId, homeScore, awayScore, side]
+        # 伺服器指派的插入順序流水號，理由跟 Substitution.seq 完全一樣——id 改成隨機 uuid
+        # 後不能再當排序 tiebreaker，另開一個單純遞增的欄位給 orderBy 用。
+        seq:
+          type: integer
+      required: [id, setId, homeScore, awayScore, side, seq]
 
     NewTimeout:
       type: object
@@ -1492,8 +1521,11 @@ components:
       properties:
         id:
           type: integer
+        # setId 跟著 sets.id 從整數改成 uuid（#64 PR1）；lineups 自己的 id 維持整數
+        # （這張表不在離線寫入契約範圍內，見 lib/db/src/schema/lineups.ts）。
         setId:
-          type: integer
+          type: string
+          format: uuid
         zone1PlayerId:
           type: string
           format: uuid
@@ -1570,10 +1602,13 @@ components:
     MatchEvent:
       type: object
       properties:
+        # id/rallyId 從整數改成 uuid（#64 PR1），理由同 MatchSet.id。
         id:
-          type: integer
+          type: string
+          format: uuid
         rallyId:
-          type: integer
+          type: string
+          format: uuid
         sequence:
           type: integer
         # 哪一方執行這球，見 EventSide。

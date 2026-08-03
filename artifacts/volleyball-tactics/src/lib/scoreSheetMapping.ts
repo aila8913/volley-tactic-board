@@ -155,7 +155,8 @@ export function eventToMeta(event: MatchEvent): Pick<PointRecord, "action" | "to
 export function reconstructSetFromRallies(
   apiSet: MatchSet,
   rallies: Rally[],
-  eventsByRallyId?: Map<number, MatchEvent[]>,
+  // key 是 rallyId，型別跟著 rallies.id 從 number 改成 string（#64 PR1：主鍵改 uuid）。
+  eventsByRallyId?: Map<string, MatchEvent[]>,
 ): SetRecordingState {
   // 空局防呆（#63）：按「下一局」的當下就會先建一筆 firstServer=null 的空 set row
   // （見 lib/db/src/schema/sets.ts 的註解），此時教練還沒選先發方，這局理應完全沒有
@@ -301,7 +302,7 @@ export function apiLineupToSnapshot(row: Lineup): LineupSnapshot {
 // 跟「每個已結束局」各自找出自己的那一筆——兩處要的是同一個查找＋轉換邏輯，抽成共用函式，
 // 不要複製貼上兩份（複製貼上的下場是規則之後改一邊、另一邊忘記跟著改，兩邊兜不起來）。
 // 找不到（這局從沒選過先發方，例如已結束局理論上不該發生，但保守處理）就回傳 null。
-export function findLineupSnapshotForSet(lineups: Lineup[], setId: number): LineupSnapshot | null {
+export function findLineupSnapshotForSet(lineups: Lineup[], setId: string): LineupSnapshot | null {
   const row = lineups.find((l) => l.setId === setId);
   return row ? apiLineupToSnapshot(row) : null;
 }
@@ -368,7 +369,8 @@ export function reconstructRecording(
 ): ScoreSheetState {
   // 把整場的 event 依 rallyId 分組，餵給 reconstruct 還原每一分的動作/球員。
   // endpoint 已依 rallyId、sequence 排序，所以同一組內是照 sequence 排好的。
-  const eventsByRallyId = new Map<number, MatchEvent[]>();
+  // key 是 rallyId，型別跟著 rallies.id 從 number 改成 string（#64 PR1：主鍵改 uuid）。
+  const eventsByRallyId = new Map<string, MatchEvent[]>();
   for (const ev of events) {
     const list = eventsByRallyId.get(ev.rallyId);
     if (list) list.push(ev);
@@ -378,7 +380,8 @@ export function reconstructRecording(
   // 把整場的一般換人紀錄依 setId 分組，重建各局的 regularSubs（見下方使用處）。
   // 後端 GET 已依 (setId, homeScore, awayScore, id) 排序，同一組內就是發生的先後順序，
   // 可以直接丟給 reconstructRegularSubs 照順序 replay。
-  const subsBySetId = new Map<number, Substitution[]>();
+  // key 是 setId，型別跟著 sets.id 從 number 改成 string（#64 PR1：主鍵改 uuid）。
+  const subsBySetId = new Map<string, Substitution[]>();
   for (const sub of subs) {
     const list = subsBySetId.get(sub.setId);
     if (list) list.push(sub);
@@ -387,7 +390,8 @@ export function reconstructRecording(
 
   // 暫停也依 setId 分組，重建各局的 timeouts（issue #44）。後端 GET 已依 (setId, homeScore,
   // awayScore, id) 排序，同一組內就是發生的先後順序，可直接丟給 reconstructTimeouts。
-  const timeoutsBySetId = new Map<number, Timeout[]>();
+  // key 是 setId，型別同上跟著改成 string。
+  const timeoutsBySetId = new Map<string, Timeout[]>();
   for (const t of timeouts) {
     const list = timeoutsBySetId.get(t.setId);
     if (list) list.push(t);

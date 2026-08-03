@@ -8,7 +8,7 @@
 import type { ServingSide } from './servingSide';
 
 export interface MatchSet {
-  id: number;
+  id: string;
   matchId: number;
   setNumber: number;
   firstServer: ServingSide | null;

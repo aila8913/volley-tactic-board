@@ -318,7 +318,7 @@ export const ListSetsParams = zod.object({
 })
 
 export const ListSetsResponseItem = zod.object({
-  "id": zod.number(),
+  "id": zod.string().uuid(),
   "matchId": zod.number(),
   "setNumber": zod.number(),
   "firstServer": zod.enum(['home', 'away']).nullable()
@@ -344,7 +344,7 @@ export const CreateSetBody = zod.object({
  */
 export const UpdateSetParams = zod.object({
   "matchId": zod.coerce.number(),
-  "setId": zod.coerce.number()
+  "setId": zod.coerce.string().uuid()
 })
 
 export const UpdateSetBody = zod.object({
@@ -352,7 +352,7 @@ export const UpdateSetBody = zod.object({
 })
 
 export const UpdateSetResponse = zod.object({
-  "id": zod.number(),
+  "id": zod.string().uuid(),
   "matchId": zod.number(),
   "setNumber": zod.number(),
   "firstServer": zod.enum(['home', 'away']).nullable()
@@ -367,8 +367,8 @@ export const ListMatchEventsParams = zod.object({
 })
 
 export const ListMatchEventsResponseItem = zod.object({
-  "id": zod.number(),
-  "rallyId": zod.number(),
+  "id": zod.string().uuid(),
+  "rallyId": zod.string().uuid(),
   "sequence": zod.number(),
   "side": zod.enum(['home', 'away']),
   "playerId": zod.string().uuid().nullish(),
@@ -391,12 +391,12 @@ export const ListMatchEventsResponse = zod.array(ListMatchEventsResponseItem)
  * @summary List rallies for a set
  */
 export const ListRalliesParams = zod.object({
-  "setId": zod.coerce.number()
+  "setId": zod.coerce.string().uuid()
 })
 
 export const ListRalliesResponseItem = zod.object({
-  "id": zod.number(),
-  "setId": zod.number(),
+  "id": zod.string().uuid(),
+  "setId": zod.string().uuid(),
   "rallyNumber": zod.number(),
   "homeScore": zod.number(),
   "awayScore": zod.number(),
@@ -411,7 +411,7 @@ export const ListRalliesResponse = zod.array(ListRalliesResponseItem)
  * @summary Record a new rally (one point)
  */
 export const CreateRallyParams = zod.object({
-  "setId": zod.coerce.number()
+  "setId": zod.coerce.string().uuid()
 })
 
 export const CreateRallyBody = zod.object({
@@ -428,12 +428,12 @@ export const CreateRallyBody = zod.object({
  * @summary List events (individual ball touches) for a rally
  */
 export const ListEventsParams = zod.object({
-  "rallyId": zod.coerce.number()
+  "rallyId": zod.coerce.string().uuid()
 })
 
 export const ListEventsResponseItem = zod.object({
-  "id": zod.number(),
-  "rallyId": zod.number(),
+  "id": zod.string().uuid(),
+  "rallyId": zod.string().uuid(),
   "sequence": zod.number(),
   "side": zod.enum(['home', 'away']),
   "playerId": zod.string().uuid().nullish(),
@@ -456,7 +456,7 @@ export const ListEventsResponse = zod.array(ListEventsResponseItem)
  * @summary Record one ball touch, live during the match or backfilled from video review
  */
 export const CreateEventParams = zod.object({
-  "rallyId": zod.coerce.number()
+  "rallyId": zod.coerce.string().uuid()
 })
 
 export const CreateEventBody = zod.object({
@@ -481,7 +481,7 @@ export const CreateEventBody = zod.object({
  * @summary Delete a rally (e.g. undo the last point; cascades to its events)
  */
 export const DeleteRallyParams = zod.object({
-  "rallyId": zod.coerce.number()
+  "rallyId": zod.coerce.string().uuid()
 })
 
 
@@ -493,13 +493,14 @@ export const ListMatchSubstitutionsParams = zod.object({
 })
 
 export const ListMatchSubstitutionsResponseItem = zod.object({
-  "id": zod.number(),
-  "setId": zod.number(),
+  "id": zod.string().uuid(),
+  "setId": zod.string().uuid(),
   "homeScore": zod.number(),
   "awayScore": zod.number(),
   "playerInId": zod.string().uuid().nullable(),
   "playerOutId": zod.string().uuid().nullable(),
-  "kind": zod.enum(['regular', 'libero'])
+  "kind": zod.enum(['regular', 'libero']),
+  "seq": zod.number()
 })
 export const ListMatchSubstitutionsResponse = zod.array(ListMatchSubstitutionsResponseItem)
 
@@ -508,7 +509,7 @@ export const ListMatchSubstitutionsResponse = zod.array(ListMatchSubstitutionsRe
  * @summary Record one substitution (regular sub or libero in/out) within a set
  */
 export const CreateSubstitutionParams = zod.object({
-  "setId": zod.coerce.number()
+  "setId": zod.coerce.string().uuid()
 })
 
 export const CreateSubstitutionBody = zod.object({
@@ -524,7 +525,7 @@ export const CreateSubstitutionBody = zod.object({
  * @summary Delete a substitution (e.g. undo the last substitution action)
  */
 export const DeleteSubstitutionParams = zod.object({
-  "substitutionId": zod.coerce.number()
+  "substitutionId": zod.coerce.string().uuid()
 })
 
 
@@ -536,11 +537,12 @@ export const ListMatchTimeoutsParams = zod.object({
 })
 
 export const ListMatchTimeoutsResponseItem = zod.object({
-  "id": zod.number(),
-  "setId": zod.number(),
+  "id": zod.string().uuid(),
+  "setId": zod.string().uuid(),
   "homeScore": zod.number(),
   "awayScore": zod.number(),
-  "side": zod.enum(['home', 'away'])
+  "side": zod.enum(['home', 'away']),
+  "seq": zod.number()
 })
 export const ListMatchTimeoutsResponse = zod.array(ListMatchTimeoutsResponseItem)
 
@@ -549,7 +551,7 @@ export const ListMatchTimeoutsResponse = zod.array(ListMatchTimeoutsResponseItem
  * @summary Record one timeout within a set
  */
 export const CreateTimeoutParams = zod.object({
-  "setId": zod.coerce.number()
+  "setId": zod.coerce.string().uuid()
 })
 
 export const CreateTimeoutBody = zod.object({
@@ -563,7 +565,7 @@ export const CreateTimeoutBody = zod.object({
  * @summary Delete a timeout (e.g. undo the last timeout action)
  */
 export const DeleteTimeoutParams = zod.object({
-  "timeoutId": zod.coerce.number()
+  "timeoutId": zod.coerce.string().uuid()
 })
 
 
@@ -576,7 +578,7 @@ export const ListMatchLineupsParams = zod.object({
 
 export const ListMatchLineupsResponseItem = zod.object({
   "id": zod.number(),
-  "setId": zod.number(),
+  "setId": zod.string().uuid(),
   "zone1PlayerId": zod.string().uuid(),
   "zone2PlayerId": zod.string().uuid(),
   "zone3PlayerId": zod.string().uuid(),
@@ -591,7 +593,7 @@ export const ListMatchLineupsResponse = zod.array(ListMatchLineupsResponseItem)
  * @summary Set (upsert) the starting lineup for a set
  */
 export const PutSetLineupParams = zod.object({
-  "setId": zod.coerce.number()
+  "setId": zod.coerce.string().uuid()
 })
 
 export const PutSetLineupBody = zod.object({
@@ -605,7 +607,7 @@ export const PutSetLineupBody = zod.object({
 
 export const PutSetLineupResponse = zod.object({
   "id": zod.number(),
-  "setId": zod.number(),
+  "setId": zod.string().uuid(),
   "zone1PlayerId": zod.string().uuid(),
   "zone2PlayerId": zod.string().uuid(),
   "zone3PlayerId": zod.string().uuid(),
@@ -694,7 +696,7 @@ export const DeleteTacticParams = zod.object({
  * @summary Correct or fill in details on an existing event (e.g. during video review)
  */
 export const UpdateEventParams = zod.object({
-  "eventId": zod.coerce.number()
+  "eventId": zod.coerce.string().uuid()
 })
 
 export const UpdateEventBody = zod.object({
@@ -712,8 +714,8 @@ export const UpdateEventBody = zod.object({
 })
 
 export const UpdateEventResponse = zod.object({
-  "id": zod.number(),
-  "rallyId": zod.number(),
+  "id": zod.string().uuid(),
+  "rallyId": zod.string().uuid(),
   "sequence": zod.number(),
   "side": zod.enum(['home', 'away']),
   "playerId": zod.string().uuid().nullish(),
@@ -735,7 +737,7 @@ export const UpdateEventResponse = zod.object({
  * @summary Delete an event (e.g. recorded by mistake)
  */
 export const DeleteEventParams = zod.object({
-  "eventId": zod.coerce.number()
+  "eventId": zod.coerce.string().uuid()
 })
 
 

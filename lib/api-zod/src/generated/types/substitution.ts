@@ -8,11 +8,12 @@
 import type { SubstitutionKind } from './substitutionKind';
 
 export interface Substitution {
-  id: number;
-  setId: number;
+  id: string;
+  setId: string;
   homeScore: number;
   awayScore: number;
   playerInId: string | null;
   playerOutId: string | null;
   kind: SubstitutionKind;
+  seq: number;
 }

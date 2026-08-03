@@ -8,8 +8,8 @@
 import type { RallyWinner } from './rallyWinner';
 
 export interface Rally {
-  id: number;
-  setId: number;
+  id: string;
+  setId: string;
   rallyNumber: number;
   homeScore: number;
   awayScore: number;

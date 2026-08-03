@@ -192,7 +192,10 @@ function buildEventSpec(
 // 比分走勢，勝方是「打到最後一球才到頂」，對手不可能在那之後還得分（根本沒有下一球了）。
 function buildRallies(
   rng: () => number,
-  setId: number,
+  // setId 是「還沒有真正 id」的佔位值（呼叫端傳空字串），insertSetWithRallies 插入 set
+  // 拿到 DB 配的 uuid 之後會整批覆蓋回去，見那支函式裡的 `{ ...s.rally, setId: set.id }`。
+  // 型別跟著 sets.id 從 number 改成 string（#64 PR1）。
+  setId: string,
   homeTarget: number,
   awayTarget: number,
   ourRoster: RosterPlayerWithId[],
@@ -283,7 +286,8 @@ function buildRallies(
 // 「未完成」的 mock 比賽用（見下方 seedMatch 的 inProgress 參數）。
 function buildPartialRallies(
   rng: () => number,
-  setId: number,
+  // 同 buildRallies 的 setId 註解：佔位值，稍後會被真正的 set.id 覆蓋。
+  setId: string,
   homeNow: number,
   awayNow: number,
   ourRoster: RosterPlayerWithId[],
@@ -399,15 +403,15 @@ async function seedSets(
 
   for (let i = 0; i < completedScores.length; i += 1) {
     const [home, away] = completedScores[i];
-    // setId 先塞 0（佔位），真正的 id 由 insertSetWithRallies 插入 set 後回填。
-    const specs = buildRallies(rng, 0, home, away, ourRoster);
+    // setId 先塞空字串（佔位），真正的 uuid 由 insertSetWithRallies 插入 set 後回填。
+    const specs = buildRallies(rng, "", home, away, ourRoster);
     await insertSetWithRallies(matchId, i + 1, firstServerOf(i), specs);
   }
 
   const nextSetNumber = completedScores.length + 1;
   if (inProgress) {
     const [home, away] = inProgress;
-    const specs = buildPartialRallies(rng, 0, home, away, ourRoster);
+    const specs = buildPartialRallies(rng, "", home, away, ourRoster);
     await insertSetWithRallies(matchId, nextSetNumber, firstServerOf(nextSetNumber - 1), specs);
   } else {
     // 已打完：補一局空 set（firstServer=null、沒有任何 rally），見上方大段說明。

@@ -11,8 +11,8 @@ import type { EventSide } from './eventSide';
 import type { EventSource } from './eventSource';
 
 export interface MatchEvent {
-  id: number;
-  rallyId: number;
+  id: string;
+  rallyId: string;
   sequence: number;
   side: EventSide;
   playerId?: string | null;

@@ -318,15 +318,19 @@ export function useScoreSheetController(matchId: string) {
   const putLineup = usePutSetLineup();
 
   // 持久化記帳（見上方說明）。用 ref 因為它們只影響背景寫入、不該觸發重繪。
-  const currentSetIdRef = useRef<number | undefined>(undefined);
-  const rallyIdsRef = useRef<number[]>([]);
+  // 型別從 number 改成 string：sets/rallies/substitutions/timeouts 的主鍵全部從自增整數
+  // 改成 client-mintable uuid（#64 PR1），這幾支 ref 存的就是那些表的 id，跟著改型別。
+  // 注意：這裡只改型別，佇列的行為/結構不變（client-mintable 帶來的「前端自己決定 id」
+  // 是之後 PR2/PR3 的事）。
+  const currentSetIdRef = useRef<string | undefined>(undefined);
+  const rallyIdsRef = useRef<string[]>([]);
   // 換人 row id 的堆疊，跟 rallyIdsRef 是同一套路：一般換人成功 POST 後把 id 推進來，
   // 「復原」退掉一個換人動作時 pop 出最後一個、DELETE 掉它。序列化佇列保證 create 一定
   // 先於 delete 跑完（id 已進堆疊），所以 pop 到的就是要刪的那一筆。
-  const subIdsRef = useRef<number[]>([]);
+  const subIdsRef = useRef<string[]>([]);
   // 暫停 row id 的堆疊，跟 subIdsRef 完全同一套路：暫停成功 POST 後把 id 推進來，「復原」退掉
   // 一個暫停動作時 pop 出最後一個、DELETE 掉它（issue #44）。
-  const timeoutIdsRef = useRef<number[]>([]);
+  const timeoutIdsRef = useRef<string[]>([]);
   const queueRef = useRef<Promise<unknown>>(Promise.resolve());
 
   // 把一個後端寫入工作排進序列化佇列。本地優先：寫入失敗只記 log、不回滾畫面
@@ -402,7 +406,7 @@ export function useScoreSheetController(matchId: string) {
     currentSetIdRef.current = state.currentSet.serverId;
     rallyIdsRef.current = state.currentSet.history
       .map((h) => h.serverId)
-      .filter((id): id is number => id !== undefined);
+      .filter((id): id is string => id !== undefined);
     // 換人 id 堆疊重建後歸零：復原堆疊（undoStacksByMatch）reload 後本來就是空的（純記憶體、
     // 不重建），所以 reload 前的換人不會被 undo 退掉、也就不需要它們的 id；只累積本次進頁後
     // 新記的換人 id 即可。
