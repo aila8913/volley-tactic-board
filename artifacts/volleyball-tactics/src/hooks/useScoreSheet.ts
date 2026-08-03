@@ -1,6 +1,6 @@
 import { create } from "zustand";
-import { useCallback, useEffect, useRef } from "react";
-import { useQueries } from "@tanstack/react-query";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useQueries, useQueryClient } from "@tanstack/react-query";
 import {
   useListSets,
   useListMatchEvents,
@@ -19,6 +19,7 @@ import {
   usePutSetLineup,
   listRallies,
   getListRalliesQueryKey,
+  ApiError,
 } from "@workspace/api-client-react";
 import { ScoreSheetState, PointRecord, Side, UndoEntry, LineupSnapshot } from "../types/scoresheet";
 import {
@@ -40,6 +41,7 @@ import {
   type WriteLogEntry,
   type WriteOp,
 } from "../lib/writeLog";
+import { createIndexedDbWriteLogStore, type WriteLogStore } from "../lib/writeLogStore";
 
 // 計分表的狀態層。以前這裡是 Zustand + persist（localStorage）；Phase 3b 把真相來源搬到後端
 // sets/rallies/events。做法是「本地優先 + 背景寫入」：
@@ -310,9 +312,19 @@ export const useScoreSheet = create<ScoreSheetStore>()((set) => ({
 // create 之後。復原要刪哪一筆不再靠「pop 某一疊 id ref」，而是 undo 快照自己帶著 row id
 // ——因為主鍵已是 client-mintable uuid，動作發生的當下就鑄得出來（#64 PR1/PR2、#230）。
 // ────────────────────────────────────────────────────────────────────────────
+// write log 的落地層（IndexedDB）。整個 app 共用一份：它內部只有一個 DB 連線，
+// 每場比賽靠 entry 的 matchId 分開。用 lazy singleton 而不是 module 頂層直接建，
+// 是為了讓「沒有 IndexedDB 的環境」（測試/SSR）第一次用到時才判斷、並快取那個 null。
+let writeLogStore: WriteLogStore | null | undefined;
+function getWriteLogStore(): WriteLogStore | null {
+  if (writeLogStore === undefined) writeLogStore = createIndexedDbWriteLogStore();
+  return writeLogStore;
+}
+
 export function useScoreSheetController(matchId: string) {
   const numericMatchId = Number(matchId);
   const hydrate = useScoreSheet((s) => s.hydrate);
+  const queryClient = useQueryClient();
 
   const createSet = useCreateSet();
   const updateSet = useUpdateSet();
@@ -364,6 +376,18 @@ export function useScoreSheetController(matchId: string) {
   const execute = useCallback(
     async (entry: WriteLogEntry): Promise<void> => {
       const api = apiRef.current;
+      // 重送一筆 DELETE 時，那列可能上一輪其實已經刪成功了（回應在半路掉了），後端會回 404。
+      // 對「把這列弄不見」這個意圖來說 404 就是達成了，所以吞掉它、把 entry 標成 synced，
+      // 否則這筆會永遠卡在 outbox 裡重送。這是 delete 天生冪等的性質；create 那邊對應的
+      // 冪等是後端的 ON CONFLICT (id) DO NOTHING（見各 route 的 POST）。
+      const ignoreMissing = async (send: Promise<unknown>) => {
+        try {
+          await send;
+        } catch (err) {
+          if (err instanceof ApiError && err.status === 404) return;
+          throw err;
+        }
+      };
       // TypeScript 會用 kind + table 這兩個 discriminant 把 entry 窄化到對應的分支，
       // 所以底下每個 case 拿到的 payload 型別都是準的；漏掉分支也會被編譯器抓到。
       switch (entry.table) {
@@ -382,7 +406,7 @@ export function useScoreSheetController(matchId: string) {
           if (entry.kind === "create") {
             await api.createRally.mutateAsync({ setId: entry.parentId, data: entry.payload });
           } else {
-            await api.deleteRally.mutateAsync({ rallyId: entry.id });
+            await ignoreMissing(api.deleteRally.mutateAsync({ rallyId: entry.id }));
           }
           return;
         case "events":
@@ -395,14 +419,14 @@ export function useScoreSheetController(matchId: string) {
               data: entry.payload,
             });
           } else {
-            await api.deleteSubstitution.mutateAsync({ substitutionId: entry.id });
+            await ignoreMissing(api.deleteSubstitution.mutateAsync({ substitutionId: entry.id }));
           }
           return;
         case "timeouts":
           if (entry.kind === "create") {
             await api.createTimeout.mutateAsync({ setId: entry.parentId, data: entry.payload });
           } else {
-            await api.deleteTimeout.mutateAsync({ timeoutId: entry.id });
+            await ignoreMissing(api.deleteTimeout.mutateAsync({ timeoutId: entry.id }));
           }
           return;
         case "lineups":
@@ -419,7 +443,7 @@ export function useScoreSheetController(matchId: string) {
   const logRef = useRef<WriteLog | null>(null);
   const logMatchRef = useRef<number | null>(null);
   if (logRef.current === null || logMatchRef.current !== numericMatchId) {
-    logRef.current = createWriteLog(numericMatchId, execute);
+    logRef.current = createWriteLog(numericMatchId, execute, { store: getWriteLogStore() });
     logMatchRef.current = numericMatchId;
   }
 
@@ -428,6 +452,32 @@ export function useScoreSheetController(matchId: string) {
   const append = useCallback((op: WriteOp) => {
     logRef.current?.append(op);
   }, []);
+
+  // ── 重放閘門（#64 PR3）──
+  //
+  // 上一次分頁被關掉時，可能還有沒送出的寫入躺在 IndexedDB 裡。如果直接拿後端資料重建畫面，
+  // 那幾筆就會「暫時消失」（後端還沒有它們），等重放送完又冒出來——畫面閃一下、比分還會倒退。
+  //
+  // 所以順序反過來：**先把積欠的寫入補送完，再重建**。補送完如果真的有送出東西，後端資料就
+  // 過期了，要 invalidate 讓 react-query 重抓（await 它 = 等重抓落地），這樣重建看到的才是
+  // 「本地 + 後端」收斂後的同一份真相。
+  //
+  // 補送失敗（真的離線）時仍然會放行重建：那幾筆留在 IndexedDB 裡等 PR4 的重送迴圈，
+  // 但畫面會暫時看不到它們。這是目前已知的取捨——「不會掉」有保證，「馬上看得到」還沒有。
+  const [replayedMatch, setReplayedMatch] = useState<number | null>(null);
+  useEffect(() => {
+    const log = logRef.current;
+    if (!log) return;
+    let cancelled = false;
+    void log.replayed.then(async (count) => {
+      if (count > 0) await queryClient.invalidateQueries();
+      if (!cancelled) setReplayedMatch(numericMatchId);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [numericMatchId, queryClient]);
+  const replayDone = replayedMatch === numericMatchId;
 
   // ── 進頁重建 ──
   // 先抓這場的所有 set，再對每個 set 抓它的 rallies（useQueries 讓我們對動態長度的清單
@@ -460,6 +510,7 @@ export function useScoreSheetController(matchId: string) {
   const timeoutsReady = timeoutsQuery.isSuccess;
   const lineupsReady = lineupsQuery.isSuccess;
   const isHydrating =
+    !replayDone ||
     !setsReady ||
     !eventsReady ||
     !subsReady ||
@@ -472,6 +523,8 @@ export function useScoreSheetController(matchId: string) {
   const hydratedMatchRef = useRef<string | null>(null);
   useEffect(() => {
     if (hydratedMatchRef.current === matchId) return;
+    // 重放沒跑完就先不重建（理由見上面的「重放閘門」）。
+    if (!replayDone) return;
     if (!setsReady || !eventsReady || !subsReady || !timeoutsReady || !lineupsReady) return;
     if (sets.length > 0 && !ralliesReady) return;
 
@@ -501,6 +554,7 @@ export function useScoreSheetController(matchId: string) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     matchId,
+    replayDone,
     setsReady,
     ralliesReady,
     eventsReady,
@@ -655,7 +709,13 @@ export function useScoreSheetController(matchId: string) {
     // backendRef === null（手動 libero 上/下場）：純本地狀態，undoLast 已還原畫面，後端沒東西要刪。
     // rally 底下的 event 靠 FK cascade 一起刪掉，不用自己再 append 一筆。
     if (top.backendRef) {
-      append({ kind: "delete", table: top.backendRef.table, id: top.backendRef.id });
+      const { table, id } = top.backendRef;
+      // 先試著「還沒送出就直接作廢」（#64 PR3）：離線時記一分再馬上復原，本來會在佇列裡
+      // 留下 create + delete 兩筆白跑；更糟的是 create 若失敗，delete 會打到不存在的 row。
+      // cancelPending 回 false 才代表那筆已經送出去了，這時才需要真的 append 一筆 delete。
+      if (!logRef.current?.cancelPending(table, id)) {
+        append({ kind: "delete", table, id });
+      }
     }
   }, [matchId, append]);
 
