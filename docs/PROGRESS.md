@@ -22,6 +22,14 @@
 > 平行 PR 就落在不同行段、git 幾乎都能自動合併，不用真的把檔案拆兩份、也保住一眼 catch-up。
 > 上面的 `_Last updated_` 是共用一行摘要（誰更新了什麼），保持精簡、別長成段落。
 
+\_Last updated: 2026-08-02 (aila) — **#251 戰術板右欄整併進 `RotationRailPanel` 已關閉**（PR #274，
+見下方 Recently closed 完整說明）：mode B／D 統一收進右欄同一顆面板，新增 `benchDraggable` prop
+讓球員清單獨立於格子的唯讀狀態之外仍可拖曳，中央欄固定輪轉表欄拿掉，面板不再依 mode 跳位置。
+`#228` route handler 收斂已於 08-01 全數完成並關閉（PR #256/#262~#272，共 12 支 route 檔案），
+`lib/handler.ts` 的 `owns` 必填欄位讓漏寫擁有權檢查從「人眼容易漏看」變成編譯錯誤（#225 的教訓）。
+`#238` 與 `#257` 兩張比賽狀態相關 bug 也已收斂關閉（PR #258/#259，`matchOutcome.deriveMatchStatus`
+成為全站唯一狀態判準）。\_
+
 \_Last updated: 2026-07-30 (tang) — 工具軌圖示（PR #248）與全站背景統一（PR #253）兩張 PR 開著待調整；
 實機盤點挖出兩個遷移缺口／需求，開了 **#251**（戰術板頁沒接上 `RotationRailPanel`，三份名單重複）與
 **#252**（球員身分挑選，待與 aila 討論）。\_
@@ -79,6 +87,12 @@ lives in git log + the issues named).
     closed），#174 與 #120 一併關閉，**M1.5 milestone 已收掉**。
   - **環 4（#175）／環 5（#176，**仍 open**：剩繪圖工具正式圖示 blocked @tangyi1025，07-28 已移入 M3）／
     環 6（#177）** 皆已落地，見下方 Recently closed。**環 7（#178）需先補線框稿（在 M3）。**
+  - **戰術板頁遺留的 #174 遷移缺口已補上（#251，08-02，PR #274）。** 環 3 當時只把 `RotationRailPanel`
+    接上列表頁／資料夾內頁，戰術板頁被漏掉，`TacticsBoard.tsx` 一直是中央欄一份舊版 `RotationTable`
+    ＋右欄一份 `TacticsRosterPanel`，同一場的球員清單重複列了兩三次。現在兩個 mode（B／D）統一收進
+    右欄同一顆 `RotationRailPanel`：格子維持 ADR-0001 訂死的唯讀（不能寫回輪轉真相），新增獨立的
+    `benchDraggable` prop 讓球員清單本身仍可拖到球場——「格子能不能改」跟「清單能不能拖」是兩個互不
+    相干的開關。中央欄那份固定 260px 的輪轉表欄整個拿掉，面板固定活在 aside，不再依 mode 換位置。
 - **#120 計分頁右欄兩階段落地（已關，隨 PR #239 收尾）。** `CourtReadOnlyView` 常駐唯讀站位（**純展示、不訂閱
   任何 store**）＋`RotationRailPanel` 改為**受控元件**——改動直接進共用真相，草稿 state 與「確定」鈕
   整組移除，連帶消滅「排到一半被無關 re-render 洗掉」那類 bug。**`lib/rotationLogic.ts` 連續兩次 UI
@@ -137,7 +151,8 @@ lives in git log + the issues named).
 - **架構掃描（`improve-codebase-architecture`）產出 #225–#232，兩個新 milestone。** 掃描依 git log
   熱點（計分／戰術板／輪轉、api-server routes、analysis）。**M2.5 收斂重複規則**（8/2）原三張 Strong：
   #227 球場座標（`*100/*200` 內嵌 12 處、CTM 換算 5 份、前排門檻已分歧成 `<0.75` 與 `<=0.75` 只是還沒
-  現形）、#228 route handler 儀式（404 樣板 ×33、ownership 守衛 ×25 全靠人記得寫）**仍 open**。
+  現形）已關閉；**#228 route handler 儀式（404 樣板 ×33、ownership 守衛 ×25 全靠人記得寫）仍 open**，
+  `lib/handler.ts` 已落地、`tactics.ts` 是第一個遷移案例（PR #256），約 10 支 route 檔案待陸續遷移。
   **#226（得分/輪轉規則四份實作）已於 07-30 全部收斂並關閉**——三份 PR：PR1 #242（side-out 輪轉／換人
   淨額摺疊／「最後一局進行中」慣例 → `volleyballRules.ts`）、PR2 #245（局比數計算，原四份重複 →
   `countSetWins`/`setWinner`）、PR3 #246（勝負反轉換算，原本沒測試、寫在 JSX 裡 → `resolveScoringSide`）。
@@ -198,25 +213,26 @@ Backlog lives in **GitHub Issues, phase-ordered via Milestones M1–M5** — thi
 duplicates it. Current phase = lowest-numbered milestone with open issues:
 
 ```
-gh issue list --milestone "M2.5 架構深化：收斂重複規則"   # 當前階段
-gh issue list --state open                                 # 全部
+gh issue list --milestone "M3 部署給真人試用"   # 當前階段
+gh issue list --state open                        # 全部
 ```
 
-**M1／M2／M1.5 milestone 皆已關閉。** M1.5「戰術板 UI 大改版」＝七環
+**M1／M2／M1.5／M2.5 milestone 皆已關閉。** M1.5「戰術板 UI 大改版」＝七環
 （#172–#178），規格住 `docs/layout-spec.md`、相依鏈 `環1 →（環2 ‖ 環3 ‖ 環4）→ 環5 → 環6`；環 1–6
 結構工作全部落地，剩的兩張尾巴（#176 繪圖工具圖示 blocked @tangyi1025、#178 環 7 響應式需線框稿）
 已移入 **M3**，因為兩者都卡在 M1.5 內部推不動的外部輸入。**#199**（戰術板對手球員分色渲染——Court
 從未渲染對手、snapshot player 無 `side`；spec 把 mode D 叫「對手佈陣」的那層 #177 沒做）07-28 補上
 milestone，歸 **M5**。
 
-**當前階段＝M2.5「收斂重複規則」（軟目標日 8/1）**，Project #4 的 Todo 欄剩兩張：**#227**（球場座標
-`*100/*200` 內嵌 12 處、前排門檻已分歧成 `<0.75` 與 `<=0.75`）、**#228**（route handler 儀式：404 樣板
-×33、ownership 守衛 ×25 全靠人記得寫）。**#226 已於 07-30 全部收斂並關閉**（見上方 Current state），
-Project #4 網頁上的卡片待 PO 手動移過去。**#247**（連鎖換人 A→B→C 摺疊後查不到原始先發，#226 PR1 過程
-中發現）是 M2.5 之外的新孤兒，未歸 milestone，需先討論修法方向（`needs-plan` 性質）。
-新加入的 **#238**（比賽狀態詞彙與判準收斂）是同一類問題的小號版本，且**已經飄出錯誤答案**：比賽列表用
-`completedSets.length === 0`、資料夾統計格用 `setsPlayed > 0`，同一場打到第一局一半的比賽在兩處分別
-顯示「尚未開賽」與「進行中」。
+**M2.5「收斂重複規則」（軟目標日 8/1）已全數關閉。** `#228`（route handler 儀式：404 樣板 ×33、
+ownership 守衛 ×25 全靠人記得寫）08-01 完成收尾：`lib/handler.ts` 落地後 12 支 route 檔案
+（tactics/matches/teams/tournaments/people/players/sets/rallies/events/substitutions/timeouts/
+analysis）全部遷移完（PR #256/#262~#272），`owns` 必填欄位讓漏寫擁有權檢查變成編譯錯誤。
+**#226（07-30）／#227（07-30，PR #250）／#238＋#257（08-01，PR #258/#259）都已收斂並關閉**（見下方
+Recently closed），Project #4 網頁上的卡片待 PO 手動移過去。**#247**（連鎖換人 A→B→C 摺疊後查不到
+原始先發，#226 PR1 過程中發現）是 M2.5 之外的新孤兒，未歸 milestone，需先討論修法方向（`needs-plan`
+性質）。下一個階段還沒有明確軟目標日，目前最新落地的是跨 milestone 的獨立缺口 **#251**（戰術板頁
+輪轉/名單面板重複顯示，08-02 已關閉，PR #274，見下方 Recently closed）。
 
 M2 雖已收 milestone，衍生待辦仍在各自 issue：**#214**（分析頁導覽重構，M5）、**#221/#224**（人員合併與
 管理頁，M3）、**#235**（side-out% 等比率統計，M5——資料已足夠，發球方可由 `sets.firstServer` 當種子
@@ -228,9 +244,10 @@ M2 雖已收 milestone，衍生待辦仍在各自 issue：**#214**（分析頁�
 **#168（引入 `@testing-library/react`）** ——現行 `renderToStaticMarkup` 慣例無法觸發事件、讀不到 Radix
 Portal，飛出選單與帶 mutation 副作用的 controller 全在自動測試盲區（#201 的計分頁死結修復就落在這裡，
 僅手動驗證）。**架構掃描把這個盲區量化了，它是 M2.5/M3.5 的實質前置**：每一支刻意抽到 `lib/` 的純函式
-都有測試，每一個握著座標數學、指標事件、輪轉/自由球員規則的元件都沒有（`Court.tsx` 727 行、
-`ScoreSheetCourt.tsx` 594 行、`useRotationTable.ts` 364 行全部零測試）；唯一有測試的 renderer
-`CourtReadOnlyView.tsx` **沒有任何 production caller**。**測試覆蓋的是安全的部分，沒覆蓋的是危險的部分。**
+都有測試，每一個握著座標數學、指標事件、輪轉/自由球員規則的元件都沒有（`Court.tsx`、
+`ScoreSheetCourt.tsx`、`useRotationTable.ts` 364 行全部零測試，座標數學部分已隨 #227 抽成
+`lib/courtGeometry.ts` 並補測試，元件本體互動邏輯仍是零測試）。**測試覆蓋的是安全的部分，
+沒覆蓋的是危險的部分。**
 **#40**（undo/redo 不涵蓋輪轉拖曳，與 #147 同塊邏輯但不同 store）——建議排在 **#231 之後**：先發表示法
 收斂成一份、座標降級為衍生值之後，undo 要回捲的目標才明確，屆時這張可能小很多。
 **#64**（背景寫入失敗不 reconcile）——#201 在 `useScoreSheet.start()` 補了 guard，**堵掉「單機就能製造
@@ -249,6 +266,44 @@ serving≠null 但 record.lineup=null」那條路**，但真正的 reconcile 仍
 
 ### 開發 (aila)
 
+- **#251**（戰術板右欄整併進 `RotationRailPanel`，08-02，PR #274）— tang 實機回報：戰術板佈陣模式
+  同一場比賽的球員清單重複顯示兩三份，根因是 #172/#174 那次右欄元件化漏掉戰術板頁，`TacticsBoard.tsx`
+  一直用著舊版 `RotationTable`（中央欄）＋另一顆臨時的 `TacticsRosterPanel`（右欄），兩者都不是 #174
+  做好的共用元件。這次把兩個 mode（B 瀏覽／D 佈陣）統一改成同一顆 `RotationRailPanel`：新增獨立於
+  `readOnly` 的 `benchDraggable` prop，讓 6 宮格站位維持 ADR-0001 規定的唯讀（戰術板不能寫回輪轉表
+  真相）、但球員清單本身仍可拖到球場——兩者是互不相干的兩個開關。順手抽出 `useRotationStepper`
+  （切輪次的副作用邏輯，含未存內容確認捨棄）取代原本另外一顆長得一樣的 `RotationSwitcher` 元件
+  （已刪除）。中央欄固定 260px 的輪轉表欄整個拿掉，面板固定收在右側 aside，不再依 mode 跳位置。
+  跟 issue 原始建議清單有一點差異（清單建議整個拿掉 3×2 格子，實際依 PO 確認的 mockup 方向改成
+  「格子保留當唯讀參考、只讓清單可拖」），差異已記在 PR body。
+- **#238 ＋ #257**（比賽狀態判準收斂到底，08-01，PR #258/#259）— #238：比賽列表、資料夾統計格、
+  資料夾內頁三處各自判斷「這場比賽算不算開賽」，判準互相矛盾（`completedSets.length === 0` vs
+  `setsPlayed > 0`），同一場打到第一局一半的比賽在不同畫面顯示矛盾答案。收斂成
+  `matchOutcome.deriveMatchStatus(winner, setsPlayed, hasLineup)` 單一函式（`MatchStatus` 五態：
+  `not_started`/`lineup_only`/`in_progress`/`won`/`lost`），`matchSummary.formatMatchResult` 改吃
+  算好的 `status` 而非自己重算，順帶收掉 `MatchList.tsx` 裡跟判準幾乎逐字重複的 `matchNeedsLineup`。
+  `lineup_only` 在列表頁（獨立黃標催辦）與資料夾頁（併進主標籤陳述）呈現不同，是刻意的**呈現差異**、
+  不是狀態本身有兩個答案。實作過程中發現 `TournamentDetail.tsx` 資料源另有一個獨立問題（本機
+  `recordingsByMatch` store 只有「打開過那場」才 hydrate，跟 `MatchList.tsx` 修過的舊坑同款），刻意
+  另開 **#257** 不混進 #238 這個 PR，隔天接著修：資料源換成 `useCrossMatchAnalysis` bulk API，並補上
+  這頁原本沒有的「尚未排先發」黃標。兩頁的推導邏輯刻意不抽共用 hook——資料接線本來就不同，硬抽反而
+  增加耦合。
+- **#228 啟動**（抽出 `lib/handler.ts` 收斂 route ownership 檢查，08-01，PR #256，**issue 仍 open**）—
+  #225（tactics 路由漏 ownership 檢查）暴露的病根是「擁有權檢查靠人記得寫」，`owns` 在既有寫法裡是
+  可選欄位，忘記加不會被 TypeScript 攔下來。新的 `handler(config, fn)` 把 `owns` 改成**必填欄位**
+  （`"public" | OwnsCheck | OwnsSpec | Array<...>`），漏寫從「容易漏看的重複程式碼」變成編譯錯誤。
+  `tactics.ts` 是第一個遷移案例，self-review 時順手發現 GET/PUT/DELETE 三處 `owns` closure 逐字重複，
+  抽成 `lib/ownership.ts` 的 `tacticBelongsToUser` 一併收斂。其餘約 10 支 route 檔案還沒遷移，按
+  一檔一 PR 的節奏陸續進行。
+- **#227**（抽出 `lib/courtGeometry.ts`，07-30，PR #250）— `toSvg`/`toNorm`（normalized↔SVG 換算）、
+  `fromScreen`/`toScreen`（`getScreenCTM` screen↔SVG 換算）、`rowOf`（前後排視覺門檻）三組純函式，
+  收斂 `Court.tsx`/`PlayerNode.tsx`/`ScoreSheetCourt.tsx`/`Markers.tsx`/`DefenseRange.tsx` 原本重複的
+  12+5+4 處實作；中線/三米攻擊線 SVG 抽成 `courtTheme.tsx` 的 `<CourtLines/>`。**`rowOf` 刻意不跟
+  `rotationLogic.ts` 的 `isBackRowPosition` 合併**——前者是純視覺判斷（圓圈該不該套前排配色），後者是
+  領域規則（自由球員站這裡合不合法），門檻數字現在一樣只是巧合，未來各自要調整互不影響。順手刪除
+  `CourtReadOnlyView.tsx`（零 production caller，只有自己的測試在用）。**範圍依 PO 確認收在核心四項**，
+  issue 原本提議但「還沒定案」的鏡射機制統一（`Court.tsx` 三種手寫鏡射並存）與 zone 座標搬家，
+  刻意不做、留在原地。
 - **#226**（得分/輪轉規則收斂成 deep module，07-30，三份 PR）— PR1 #242：side-out 輪轉、換人淨額摺疊、
   「最後一局進行中」慣例收進 `volleyballRules.ts`，live 記分與 replay 重建共用同一份。PR2 #245：局比數
   計算（原本四份手寫比較）收成 `countSetWins`/`setWinner`。PR3 #246：「得分/失分→誰拿到這一分」的換算
@@ -332,22 +387,6 @@ serving≠null 但 record.lineup=null」那條路**，但真正的 reconcile 仍
   唯讀右欄，**刻意不重用 `MatchInfoRail`**（那顆有可寫分支＋讀共用輪轉表 store，會把「可編輯站位」
   語意偷渡進唯讀頁）。**同 PR 修掉一隻既有死結**：`start()` 無條件寫 `serving` 但只條件性凍結
   `record.lineup`，會生出 serving≠null／lineup=null 的局 →「看得到球員拖不動」＋中央顯示「還沒排先發」。
-- **#177**（環 6／新增戰術流程＋佈陣 mode D，07-24）— 「+」在戰術板頁改開**只蓋中央球場的浮層**
-  （`absolute inset-0`＋父容器 `relative`，天然蓋不到左右欄，比 Portal＋算座標省事）。狀態機加一個
-  顯式 `session.arranging` 位元（D/C 兩態 session 形狀相同、無既有欄位可推導，故誠實多存一位）。
-  18 個 store 狀態機測試＋浮層測試。
-- **#176**（環 5 結構部分，PR #197，07-24，**#176 保持 open**）— 編輯戰術時整個右欄換成 132px 工具軌、
-  中央球場放大。頁面層一行 `mode={session ? "C" : "B"}`＋把 mutation 抽成 `useTacticsBoardController`
-  共用 hook（aside 與工具軌看到同一份 pending，不會不同步）。
-- **#175**（環 4／中央列表型，07-23）— `ListItemCard`（資／比 徽章，資料夾與比賽**共用同一顆**，因為
-  線框稿的意圖是兩者混在同一列表，分兩個元件遲早飄成兩種行高）＋`ListScrollArea`（自繪指示條，是指示器
-  不是控制項）＋`matchSummary.ts`。**兩個 PO 實機推翻**：卡高 176→104px；比賽三入口從 modal 改成**選中
-  的卡片就地向下展開**——疊層會把「旁邊還有哪幾場、我捲到哪」一起蓋掉，還多一個返回動作。
-- **#172**（環 1／`AppShell` 三欄骨架，PR #180，07-22）— 詳見上方 Current state。**教訓值得記**：四項
-  檢查全綠但**一項都抓不到版面問題**——捲不動、欄被擠爆、scroll-snap 沒對齊，型別全都合法。這正是 #168
-  要補的盲區，也是為什麼這類 PR 一定得真的開瀏覽器點過。
-- **PR #179**（`docs/layout-spec.md` ＋七環拆解，07-22）— 這顆一度是 stranded commit（比前一次 squash
-  merge 晚 46 分鐘落在本機 main 上、沒被帶走），由 catch-up 的 drift 比對撿回、cherry-pick 重送。
 
 ### 設計 (tang)
 
@@ -378,16 +417,14 @@ serving≠null 但 record.lineup=null」那條路**，但真正的 reconcile 仍
   一條改成左右發展（球場吃左邊、比分＋操作按鈕收右邊一直欄）；背景加 `.tb-beam` 斜向光影。合併 main
   時與 aila 的 #201 在同一段「誰先發球」JSX 衝突（結構不同、對方那版還是舊單欄版面），已手動把判準
   （改看 `lineup` 而非 `serving`）套進新的左右欄結構。
-- **PR #182**（#131 計分表中間計分區深色化，07-22）— `ScoreSheet.tsx` 改吃 `AppShell`、`RadialMenu.tsx`
-  退役最後的 `wobbly-border`。**第一版曾在舊結構上做完，但卡分支期間 aila 合併了 #172，整頁骨架換掉，
-  第一版直接作廢、照新結構重做**（v2 才是實際合併的版本）。
-- **PR #167**（#134 Track B 戰術板球場材質，**#134 保持 open**，07-22）— `.court-glass` 毛玻璃地板、
-  `.court-edge-light` 邊緣繞行光（design-spec 第 6 節「每頁最多一個環境動效」的範本案例）、`PlayerNode`
-  改玻璃圓片。同樣是接在 aila #154/#160 重構之後重做的第二版。
 
 ---
 
 - （更早的條目已修剪——記錄住在各自 issue 留言、`docs/*-spec.md`、git log：
+  #177 環 6 新增戰術流程＋佈陣 mode D、#176 環 5 工具軌結構（PR #197，**#176 仍 open**，剩正式圖示待
+  @tangyi1025，已移 M3）、#175 環 4 中央列表型（`ListItemCard`/`ListScrollArea`/`matchSummary.ts`）、
+  PR #182 計分表計分區深色化、PR #167 戰術板球場材質（**#134 仍 open**）、
+  #172 `AppShell` 三欄骨架（PR #180）、PR #179 `layout-spec.md`＋七環拆解、
   #163 文件同步、#160 C1/C2/C3 三顆 PR、#44 暫停全棧、#147/#149 undo 一次退兩步、
   PR #141 協作規則放寬、PR #142 pattern-language、PR #148 品牌 logo、PR #140 戰術板材質、
   PR #135/#129 深色語言首批，以及更早的 #118/#117/#115/#41/#50/#74/#73/#63/#20 等。）

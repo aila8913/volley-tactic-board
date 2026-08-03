@@ -69,7 +69,6 @@ beforeEach(() => {
     selectedObjectId: null,
     activeTool: "select",
     courtView: "rotation",
-    labelToggles: { zone: false },
   });
 });
 

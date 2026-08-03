@@ -3,6 +3,7 @@ import { eq, getTableColumns } from "drizzle-orm";
 import { db, substitutionsTable, setsTable } from "@workspace/db";
 import { mockAuth } from "../middleware/mockAuth";
 import { setBelongsToUser, matchBelongsToUser, substitutionBelongsToUser } from "../lib/ownership";
+import { handler } from "../lib/handler";
 import {
   ListMatchSubstitutionsParams,
   CreateSubstitutionParams,
@@ -20,82 +21,103 @@ router.use(mockAuth);
 // 前端進頁重建上場名單時用這一支，取代「對每個 set 各發一次請求」的 N+1
 // （跟 GET /matches/:matchId/events 是同一個理由、同一種寫法）。
 // substitutions 自己沒存 matchId，所以 join substitutions→sets，用 sets.matchId 過濾；
-// 先驗 match 屬於這個 user。
-router.get("/matches/:matchId/substitutions", async (req, res) => {
-  const { matchId } = ListMatchSubstitutionsParams.parse(req.params);
+// owns 檢查跟 matches.ts/events.ts 的 GET 一樣，單一 matchBelongsToUser 就夠
+// （沒有第三方 id 要另外驗）。
+router.get(
+  "/matches/:matchId/substitutions",
+  handler(
+    {
+      params: ListMatchSubstitutionsParams,
+      owns: ({ params, userId }) => matchBelongsToUser(params.matchId, userId),
+    },
+    async ({ res, params }) => {
+      // getTableColumns(substitutionsTable) 讓 select 只回傳 substitutions 的欄位（扁平形狀），
+      // 不會因為 join 而變成 { substitutions: {...}, sets: {...} } 的巢狀結構。
+      // 依 setId、(homeScore+awayScore) 排序：換人是按「這局內比分快照」記錄時機的（見
+      // substitutions.ts 的設計說明），比分嚴格遞增，所以這樣排序就能還原「換人發生的先後順序」，
+      // 讓前端可以照順序重放（replay）出每個時間點的上場名單。
+      // 最後再加 id 當 tiebreak：同一分（homeScore/awayScore 完全相同）可能連續換好幾次人
+      // （例如同一球剛結束、教練一次換兩個位置），這時候比分排不出先後，改用 insert 順序
+      // （自增主鍵 id 遞增）當第二層依據，讓「同分內誰先換」永遠是決定性的（deterministic），
+      // 前端 replay 出來的結果每次都一樣，不會因為資料庫排序不穩定而長出不同的重建結果。
+      const rows = await db
+        .select(getTableColumns(substitutionsTable))
+        .from(substitutionsTable)
+        .innerJoin(setsTable, eq(substitutionsTable.setId, setsTable.id))
+        .where(eq(setsTable.matchId, params.matchId))
+        .orderBy(
+          substitutionsTable.setId,
+          substitutionsTable.homeScore,
+          substitutionsTable.awayScore,
+          substitutionsTable.id,
+        );
 
-  if (!(await matchBelongsToUser(matchId, req.userId))) {
-    res.status(404).json({ error: "Not found" });
-    return;
-  }
-
-  // getTableColumns(substitutionsTable) 讓 select 只回傳 substitutions 的欄位（扁平形狀），
-  // 不會因為 join 而變成 { substitutions: {...}, sets: {...} } 的巢狀結構。
-  // 依 setId、(homeScore+awayScore) 排序：換人是按「這局內比分快照」記錄時機的（見
-  // substitutions.ts 的設計說明），比分嚴格遞增，所以這樣排序就能還原「換人發生的先後順序」，
-  // 讓前端可以照順序重放（replay）出每個時間點的上場名單。
-  // 最後再加 id 當 tiebreak：同一分（homeScore/awayScore 完全相同）可能連續換好幾次人
-  // （例如同一球剛結束、教練一次換兩個位置），這時候比分排不出先後，改用 insert 順序
-  // （自增主鍵 id 遞增）當第二層依據，讓「同分內誰先換」永遠是決定性的（deterministic），
-  // 前端 replay 出來的結果每次都一樣，不會因為資料庫排序不穩定而長出不同的重建結果。
-  const rows = await db
-    .select(getTableColumns(substitutionsTable))
-    .from(substitutionsTable)
-    .innerJoin(setsTable, eq(substitutionsTable.setId, setsTable.id))
-    .where(eq(setsTable.matchId, matchId))
-    .orderBy(
-      substitutionsTable.setId,
-      substitutionsTable.homeScore,
-      substitutionsTable.awayScore,
-      substitutionsTable.id,
-    );
-
-  res.json(rows);
-});
+      res.json(rows);
+    },
+  ),
+);
 
 // POST /sets/:setId/substitutions — 記錄一次換人（一般換人或 libero 上/下場）。
 // body 帶的是「當下的比分快照」而非 rallyId，理由見 substitutions.ts：換人發生在下一個
 // rally 開始之前，那時下一個 rally 的 id 還不存在。
-router.post("/sets/:setId/substitutions", async (req, res) => {
-  const { setId } = CreateSubstitutionParams.parse(req.params);
-  const body = CreateSubstitutionBody.parse(req.body);
+// 只需要驗 parent set，body 裡沒有其他要另外驗的第三方 id，所以跟 rallies.ts 的 POST 一樣
+// 是單一 owns 檢查，不用像 players.ts 那樣包成陣列。
+router.post(
+  "/sets/:setId/substitutions",
+  handler(
+    {
+      params: CreateSubstitutionParams,
+      body: CreateSubstitutionBody,
+      owns: ({ params, userId }) => setBelongsToUser(params.setId, userId),
+    },
+    async ({ res, params, body }) => {
+      const [created] = await db
+        .insert(substitutionsTable)
+        // setId 來自路徑（已驗擁有權），不吃 body 的，避免 client 把換人紀錄塞到別局去。
+        // playerInId/playerOutId 用 ?? null 把「body 沒帶」轉成 DB 的 null——
+        // libero 上/下場時，其中一邊本來就可能沒有對應球員（見 substitutions.ts 的欄位註解）。
+        .values({
+          setId: params.setId,
+          homeScore: body.homeScore,
+          awayScore: body.awayScore,
+          playerInId: body.playerInId ?? null,
+          playerOutId: body.playerOutId ?? null,
+          kind: body.kind,
+        })
+        .returning();
 
-  if (!(await setBelongsToUser(setId, req.userId))) {
-    res.status(404).json({ error: "Not found" });
-    return;
-  }
-
-  const [created] = await db
-    .insert(substitutionsTable)
-    // setId 來自路徑（已驗擁有權），不吃 body 的，避免 client 把換人紀錄塞到別局去。
-    // playerInId/playerOutId 用 ?? null 把「body 沒帶」轉成 DB 的 null——
-    // libero 上/下場時，其中一邊本來就可能沒有對應球員（見 substitutions.ts 的欄位註解）。
-    .values({
-      setId,
-      homeScore: body.homeScore,
-      awayScore: body.awayScore,
-      playerInId: body.playerInId ?? null,
-      playerOutId: body.playerOutId ?? null,
-      kind: body.kind,
-    })
-    .returning();
-
-  res.status(201).json(created);
-});
+      res.status(201).json(created);
+    },
+  ),
+);
 
 // DELETE /substitutions/:substitutionId — 刪掉一筆換人紀錄（前端「復原」退掉上一個換人動作用，
 // 見 issue #41）。路徑上只有 substitutionId，所以擁有權要靠 substitutionBelongsToUser 往上
 // join 兩層追到 match.userId。跟 DELETE /rallies/:rallyId 是同一套「undo 就 hard-delete」的作法。
-router.delete("/substitutions/:substitutionId", async (req, res) => {
-  const { substitutionId } = DeleteSubstitutionParams.parse(req.params);
+router.delete(
+  "/substitutions/:substitutionId",
+  handler(
+    {
+      params: DeleteSubstitutionParams,
+      owns: ({ params, userId }) => substitutionBelongsToUser(params.substitutionId, userId),
+    },
+    async ({ res, params }) => {
+      // owns 已經先確認過這筆換人紀錄存在且屬於這個使用者，理論上這裡一定會刪到一列；
+      // .returning() + 長度檢查保留下來是不改變「靠實際刪掉幾列判斷成功與否」的防禦性寫法
+      // （同 people.ts/tournaments.ts/players.ts/rallies.ts/events.ts 的 DELETE，#225 的教訓）。
+      const deleted = await db
+        .delete(substitutionsTable)
+        .where(eq(substitutionsTable.id, params.substitutionId))
+        .returning({ id: substitutionsTable.id });
 
-  if (!(await substitutionBelongsToUser(substitutionId, req.userId))) {
-    res.status(404).json({ error: "Not found" });
-    return;
-  }
+      if (deleted.length === 0) {
+        res.status(404).json({ error: "Not found" });
+        return;
+      }
 
-  await db.delete(substitutionsTable).where(eq(substitutionsTable.id, substitutionId));
-  res.status(204).end();
-});
+      res.status(204).end();
+    },
+  ),
+);
 
 export default router;

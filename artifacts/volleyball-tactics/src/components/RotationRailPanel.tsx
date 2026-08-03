@@ -52,6 +52,12 @@ interface RotationRailPanelProps {
   canStepNext?: boolean;
   // 標題文字，預設「場上站位」。
   title?: string;
+  // true＝球員清單的每一列都是拖曳來源，即使 readOnly 也一樣——issue #251：戰術板要能把
+  // 球員拖到球場上，但輪轉格子本身仍要維持 ADR-0001 訂死的「唯讀、不可從這裡改先發」。
+  // 這兩件事是彼此獨立的兩個開關：readOnly 管的是「格子能不能被改」，benchDraggable 管的是
+  // 「清單這一列能不能被拖走」，拖去球場不算「寫回輪轉真相」，只是既有、本來就允許的
+  // 拖人上場互動（跟這個元件完全無關的另一份 store）。預設 false，維持計分頁既有行為不變。
+  benchDraggable?: boolean;
   // 頁面各自想加在三個區塊下面的額外內容（戰術板放球員設定/輪次選擇/提示；
   // 計分頁目前用不到，留空）。
   footer?: ReactNode;
@@ -126,6 +132,7 @@ export default function RotationRailPanel({
   canStepPrev = true,
   canStepNext = true,
   title = "場上站位",
+  benchDraggable = false,
   footer,
   setStatus,
   score,
@@ -232,7 +239,7 @@ export default function RotationRailPanel({
           {/* 「第 N 輪／第 N 局」永遠顯示，唯讀或可編輯都一樣。這是 #120 第一階段的核心補強——
             在此之前計分頁整頁沒有任何地方顯示 currentSet.ourRotation，教練看得到誰站哪，
             卻不知道現在輪到第幾轉。它本身是純資訊、不是控制項：計分頁的輪次由得分自動推進，
-            戰術板的輪次由 RotationSwitcher 切（那顆帶白板 session 副作用，見 RotationTable）。
+            戰術板的輪次由下面的 stepper 切（切輪次的副作用邏輯見 hooks/useRotationStepper.ts）。
             互動式的切換另外靠下面的 stepper（onStep 有傳才出現），不是靠點這行文字。
             有 stepper 時這裡就不重複顯示：stepper 正中央那格已經是同一個數字，兩個地方
             寫同一件事只會讓人懷疑「這兩個是不是不一樣的東西」。 */}
@@ -326,15 +333,20 @@ export default function RotationRailPanel({
       </div>
 
       {/* layout-spec §4.2 的「輪次切換 stepper」：上一版寫死不做，是因為當時兩個呼叫端
-        （計分頁／戰術板）都不需要互動式切換——計分頁的輪次由得分自動推進，戰術板用
-        RotationSwitcher（帶白板 session 副作用，見 RotationTable.tsx），先寫好卻沒有
-        呼叫端傳 onRotationChange 等於死碼，所以先拔掉、只留純文字顯示。
+        （計分頁／戰術板）都不需要互動式切換——計分頁的輪次由得分自動推進，戰術板用一顆
+        獨立的 RotationSwitcher 元件（帶白板 session 副作用），先寫好卻沒有呼叫端傳
+        onRotationChange 等於死碼，所以先拔掉、只留純文字顯示。
         現在（issue #174）比賽列表右欄要切的是「局」，是貨真價實需要互動的第三個呼叫端，
         才把 stepper 加回來——但做法跟上一版不同：改成 onStep 這個「純粹回報使用者按了
         上/下」的回呼，元件本身不內建 mod 6 或邊界判斷（見 props 註解），輪是環狀、局是
         線性有邊界，這兩種領域規則由呼叫端各自決定要不要允許再往前/後、算完新的值再把
         新的 rotation/lineup 傳回來。元件只負責畫出按鈕、回報方向。
-        沒有 onStep 就完全不渲染這個區塊，維持「純資訊、看戲的人不會誤以為能點」的原樣。 */}
+        沒有 onStep 就完全不渲染這個區塊，維持「純資訊、看戲的人不會誤以為能點」的原樣。
+        issue #251 之後，戰術板的兩個呼叫端（RotationTable/TacticsRosterPanel）也改成
+        傳 onStep 接進這裡的 stepper，原本各自獨立的 RotationSwitcher 元件已刪除
+        （副作用邏輯搬進 hooks/useRotationStepper.ts）——現在三個呼叫端（計分頁的比賽
+        列表、戰術板的兩個 mode）用的是同一份 stepper UI，不再是「這裡文字顯示、戰術板
+        另外自己畫一顆」的兩套。 */}
       {onStep && (
         <div className="mt-2 flex items-center gap-1.5">
           <button
@@ -399,7 +411,14 @@ export default function RotationRailPanel({
           );
 
           return readOnly ? (
-            <div key={p.id} className={rowClass}>
+            // benchDraggable 時仍然是 div（不是 button）：click-to-assign 在唯讀模式下
+            // 本來就不該存在，這裡只加拖曳屬性，不升級成可點擊的互動元件。
+            <div
+              key={p.id}
+              draggable={benchDraggable}
+              onDragStart={benchDraggable ? (e) => startDrag(e, p.id) : undefined}
+              className={`${rowClass} ${benchDraggable ? "cursor-grab hover:border-[#C6F135] hover:text-[#C6F135] active:cursor-grabbing" : ""}`}
+            >
               {rowContent}
             </div>
           ) : (

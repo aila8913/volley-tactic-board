@@ -12,8 +12,14 @@ import MatchEntryLinks from "@/components/MatchEntryLinks";
 import AppShell from "@/components/AppShell";
 import ListNavRail from "@/components/ListNavRail";
 import MatchInfoRail, { MatchListSelection } from "@/components/MatchInfoRail";
+import { APP_BACKGROUND_STYLE, APP_SHELL_CLASS } from "@/lib/appChromeStyles";
 import { formatMatchDateTime, formatMatchResult } from "@/lib/matchSummary";
-import { winsNeededFor, type MatchFormat } from "@/lib/matchOutcome";
+import {
+  deriveMatchStatus,
+  getMatchWinner,
+  winsNeededFor,
+  type MatchFormat,
+} from "@/lib/matchOutcome";
 import { Match } from "@/types/match";
 import { Tournament } from "@/types/tournament";
 
@@ -54,31 +60,35 @@ export default function MatchList() {
   // summaries 的 matchId 是數字（後端 serial），這裡的 domain id 是字串，轉成字串當 key。
   const summaryByMatch = new Map(summaries.map((s) => [String(s.matchId), s]));
 
-  // setResults 只含「已結束局」（後端已排除進行中的最後一局），formatMatchResult 吃的就是
-  // 逐局比分，語意跟原本傳 completedSets 完全一致。查不到（還沒載入 / 這場沒資料）就回
-  // 空陣列 → 顯示「尚未開賽」。
-  //
-  // format（#215）：呼叫端（render 時手上就有這張卡片的 match 物件）把賽制換算成
-  // winsNeeded 一起傳進來，不能再靠 formatMatchResult 內部假設全站都是五戰三勝。
-  const matchResultText = (matchId: string, format: MatchFormat) =>
-    formatMatchResult(summaryByMatch.get(matchId)?.setResults ?? [], winsNeededFor(format));
-
-  // issue #190（軟提醒）：這場是否已排先發，直接看後端 hasLineup（有沒有任一局凍結過先發
-  // 陣容）。刻意在 summaries 還在載入時先不亮黃標——寧可晚半秒出現，也不要在載入瞬間對每場
-  // 都閃一下「尚未排先發」的假警告（那正是使用者回報的困擾）。載完後 hasLineup 為 false 才
-  // 判定「還沒排」。注意：輪轉表上「排好但還沒開賽」的暫存陣容不進 DB（見 useRotationTable
-  // 的 partialize），所以這裡認的是「已凍結進計分流程」的先發；純輪轉表暫存的先發不算，
-  // 這跟「暫存狀態重整就沒了」本來就一致，不是退步。
-  const matchNeedsLineup = (matchId: string): boolean => {
-    if (isSummaryLoading) return false;
+  // issue #238：這場比賽現在是什麼狀態（尚未開賽／已排先發／進行中／贏／輸），全站只有一份
+  // 判準——matchOutcome.deriveMatchStatus。以前這裡（matchResultText 用 completedSets.length
+  // 判斷）跟 matchNeedsLineup（自己手寫一份跟 tournamentSummary.deriveMatchStatus 幾乎逐字
+  // 重複的優先序）各自維護一份規則，同一場正在打第一局的比賽在不同畫面顯示矛盾。現在改成
+  // 先用這支共用函式算出 status，matchResultText / matchNeedsLineup 都只是「怎麼呈現同一個
+  // status」的問題，不再各自重新判斷「這場比賽算不算開賽」。
+  const matchStatus = (matchId: string, format: MatchFormat) => {
     const s = summaryByMatch.get(matchId);
-    if (!s) return true; // 查不到摘要＝這場還沒任何資料，當作「還沒排」
-    // 打過至少一局就不用再提醒——鏡射舊本機邏輯的 completedSets>0 分支。這一條也順手擋掉
-    // 舊資料的邊界：有些早期/被清過 rally 的比賽，sets 還在但對應的 lineups row 已不存在
-    //（hasLineup=false），若只看 hasLineup 會對這種「其實打過球」的比賽誤亮黃標，跟點進去
-    // 計分頁看到的（有完成局、不提醒）就對不上。先看 setsPlayed 能讓兩邊一致。
-    if (s.setsPlayed > 0) return false;
-    return !s.hasLineup;
+    // 查不到摘要（還沒載入 / 這場還沒任何資料）就當作「還沒開打過、也沒排過先發」，
+    // 跟改動前 matchResultText/matchNeedsLineup 各自的 fallback 語意一致。
+    const setResults = s?.setResults ?? [];
+    const winner = getMatchWinner(setResults, winsNeededFor(format));
+    return deriveMatchStatus(winner, s?.setsPlayed ?? 0, s?.hasLineup ?? false);
+  };
+
+  // setResults 只含「已結束局」（後端已排除進行中的最後一局），formatMatchResult 吃的就是
+  // 逐局比分，語意跟原本傳 completedSets 完全一致。
+  const matchResultText = (matchId: string, format: MatchFormat) =>
+    formatMatchResult(summaryByMatch.get(matchId)?.setResults ?? [], matchStatus(matchId, format));
+
+  // issue #190（軟提醒）：這場是否需要提醒「尚未排先發」，現在單純看 status 是不是
+  // lineup_only——deriveMatchStatus 已經把「打過球」「排過先發」「都沒有」這三種情境的優先序
+  // 決定好了（見 matchOutcome.ts 的註解），這裡不用再自己重寫一次判斷式。
+  //
+  // 刻意在 summaries 還在載入時先不亮黃標——寧可晚半秒出現，也不要在載入瞬間對每場都閃一下
+  // 「尚未排先發」的假警告（那正是使用者回報的困擾）。
+  const matchNeedsLineup = (matchId: string, format: MatchFormat): boolean => {
+    if (isSummaryLoading) return false;
+    return matchStatus(matchId, format) === "lineup_only";
   };
 
   // 「最上層」比賽 = 沒有歸到任何資料夾（tournamentId 為 null）。
@@ -143,27 +153,32 @@ export default function MatchList() {
     // 空狀態／資料夾摘要／比賽站位——這一頁只負責把「目前選中什麼」傳過去，不自己判斷要
     // 渲染哪一種畫面。
     //
-    // 純色背景會讓 backdrop-blur 白忙一場（模糊純色還是同一個純色，卡片的玻璃感其實沒有真的
-    // 產生）。這裡疊一層很淡的斜線網格當「球網紋理」，讓 blur 有東西可以模糊，也呼應排球主題
-    // （PR #129 review 建議：docs/design-spec.md 第 4 節寫的玻璃質感本來就是設計給疊在有內容
-    // 的背景上用的）。這些 class/style 以前掛在最外層 div 上，現在原樣搬到 AppShell 的
-    // className/style——AppShell 自己的 h-screen 已經接手了原本 min-h-screen 的角色。
+    // 背景改用 lib/appChromeStyles 的共用常數（tang 2026-07-30 要求全站背景統一）：這裡原本
+    // 是 #131 那次改版之前留下的舊版本——純色底＋一層很淡的斜線網格。收斂成共用常數的完整
+    // 理由（以及為什麼當初會分裂成兩代）寫在那個檔案裡。
     <AppShell
       mode="A"
-      nav={<ListNavRail selected={selected} />}
-      aside={<MatchInfoRail selected={selected} />}
-      className="bg-[#0a0b07] font-dash text-[#f5f5f0]"
-      style={{
-        backgroundImage:
-          "repeating-linear-gradient(45deg, rgba(245,245,240,0.035) 0 1px, transparent 1px 28px)," +
-          "repeating-linear-gradient(-45deg, rgba(245,245,240,0.035) 0 1px, transparent 1px 28px)",
-      }}
+      nav={
+        <div className="relative z-10 h-full">
+          <ListNavRail selected={selected} />
+        </div>
+      }
+      aside={
+        <div className="relative z-10 h-full">
+          <MatchInfoRail selected={selected} />
+        </div>
+      }
+      backdrop={<div className="tb-beam" />}
+      className={APP_SHELL_CLASS}
+      style={APP_BACKGROUND_STYLE}
     >
       {/* 中央主區（issue #175 環 4）。
           捲動責任下放給 ListScrollArea（AppShell 最外層是 overflow-hidden，沒人接手的話長清單
           會被裁掉），它同時負責藏掉原生捲軸、在右邊畫那條 8px 指示條。
-          max-w-[1136px] 是 Figma 的內容寬基準，超寬螢幕下不讓卡片無限拉長。 */}
-      <div className="flex min-h-0 flex-1 flex-col px-8 py-8">
+          max-w-[1136px] 是 Figma 的內容寬基準，超寬螢幕下不讓卡片無限拉長。
+          relative z-10：跟 backdrop 的 .tb-beam（position:absolute + z-index:1）疊圖時要贏過去，
+          理由見 TacticsBoard.tsx 同一種寫法的說明。 */}
+      <div className="relative z-10 flex min-h-0 flex-1 flex-col px-8 py-8">
         <div className="mx-auto flex min-h-0 w-full max-w-[1136px] flex-1 flex-col">
           <div className="mb-8 flex items-center justify-between gap-4">
             <h1 className="font-dash text-2xl font-bold">比賽列表</h1>
@@ -250,7 +265,9 @@ export default function MatchList() {
                       title={`vs ${item.data.opponent}`}
                       dateText={formatMatchDateTime(item.data.dateTime)}
                       secondaryText={matchResultText(item.data.id, item.data.format)}
-                      statusHint={matchNeedsLineup(item.data.id) ? "尚未排先發" : undefined}
+                      statusHint={
+                        matchNeedsLineup(item.data.id, item.data.format) ? "尚未排先發" : undefined
+                      }
                       selected={selected?.kind === "match" && selected.id === item.data.id}
                       onSelect={() => setSelected({ kind: "match", id: item.data.id })}
                       // 比賽卡片沒有 onOpen（不跳頁）：三個入口改成選中後在卡片裡就地展開，
@@ -258,7 +275,7 @@ export default function MatchList() {
                       expandedContent={
                         <MatchEntryLinks
                           matchId={item.data.id}
-                          needsLineup={matchNeedsLineup(item.data.id)}
+                          needsLineup={matchNeedsLineup(item.data.id, item.data.format)}
                         />
                       }
                       onEdit={() => openEditMatchDialog(item.data)}

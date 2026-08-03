@@ -3,11 +3,19 @@
 // 跟 matchSummary.ts / matchOutcome.ts 同一個理由抽成純函式：這是「一個資料夾底下這幾場
 // 比賽合起來戰績多少」的規則，跟 UI 怎麼排版無關，抽出來才能脫離元件單獨測試，也才不會
 // 之後資料頁（M2）要用同一份戰績數字時，右欄跟資料頁各自重寫一份、慢慢飄成兩套答案。
+//
+// issue #238：「這場比賽現在是什麼狀態」（MatchStatus/deriveMatchStatus）原本就定義在這支
+// 檔案裡，但比賽列表頁（MatchList.tsx）另外手寫了一份幾乎逐字重複的優先序判斷，兩份規則
+// 各自維護、答案還不一致（同一場正在打第一局的比賽，兩邊判準居然吵架）。現在把這兩個定義
+// 搬到 matchOutcome.ts（拿掉 Tournament 前綴，因為現在不只資料夾頁在用），這支檔案只留
+// 「用 deriveMatchStatus 算出的 status 去彙總資料夾戰績」這件跟資料夾有關的事。
 import {
   countSetWins,
+  deriveMatchStatus,
   getMatchWinner,
   winsNeededFor,
   type MatchFormat,
+  type MatchStatus,
   type SetScoreLike,
 } from "./matchOutcome";
 
@@ -40,11 +48,6 @@ export interface TournamentMatchInput {
   hasLineup: boolean;
 }
 
-// 逐場戰績的五種狀態，判斷優先序見 deriveMatchStatus 的註解。獨立成 exported type 是因為
-// UI 端（MatchInfoRail.tsx）要拿它當 lookup table 的 key，不想讓 UI 自己重新列一次這五個
-// 字面值字串、跟這裡的定義兩邊各寫一份容易飄掉。
-export type TournamentMatchStatus = "won" | "lost" | "in_progress" | "lineup_only" | "not_started";
-
 export interface TournamentMatchResult {
   matchId: string;
   opponent: string;
@@ -58,7 +61,7 @@ export interface TournamentMatchResult {
   // 但「還沒分勝負」底下其實藏著三種完全不同的情境（打到一半／排好先發還沒開賽／連先發
   // 都還沒排），過去只看 winner === null 就一律顯示「進行中」，把後面兩種也誤標成
   // 「進行中」，這個欄位就是為了修這個問題而加的。
-  status: TournamentMatchStatus;
+  status: MatchStatus;
 }
 
 export interface TournamentStats {
@@ -73,22 +76,6 @@ export interface TournamentStats {
   totalOpponentSets: number;
   // 依 dateTime 由舊到新排序，給右欄逐場清單直接渲染用。
   matches: TournamentMatchResult[];
-}
-
-// 依優先序判斷這場比賽該顯示成哪一種狀態。優先序很重要，不能拆成五個獨立的 if 各自回傳：
-// 例如 winner 已經是 "us" 的比賽，setsPlayed 一定 > 0（贏球必然發生在打過球之後），但這裡
-// 刻意先判 winner，是因為「贏/輸」是終局狀態、比「有沒有開打」更值得優先呈現給使用者，
-// 而不是恰好也能用 setsPlayed 分支涵蓋就偷懶不分先後。
-function deriveMatchStatus(
-  winner: "us" | "opponent" | null,
-  setsPlayed: number,
-  hasLineup: boolean,
-): TournamentMatchStatus {
-  if (winner === "us") return "won";
-  if (winner === "opponent") return "lost";
-  if (setsPlayed > 0) return "in_progress";
-  if (hasLineup) return "lineup_only";
-  return "not_started";
 }
 
 export function computeTournamentStats(inputs: TournamentMatchInput[]): TournamentStats {

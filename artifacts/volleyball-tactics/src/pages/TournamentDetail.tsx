@@ -4,13 +4,19 @@ import { ArrowLeft, Plus, SlidersHorizontal } from "lucide-react";
 import BackToMatchListButton from "@/components/BackToMatchListButton";
 import { useMatchList, useDeleteMatch } from "@/hooks/useMatches";
 import { useTournamentList } from "@/hooks/useTournaments";
-import { useScoreSheet } from "@/hooks/useScoreSheet";
+import { useCrossMatchAnalysis } from "@/hooks/useCrossMatchAnalysis";
+import { APP_BACKGROUND_STYLE, APP_SHELL_CLASS } from "@/lib/appChromeStyles";
 import MatchFormDialog from "@/components/MatchFormDialog";
 import ListItemCard from "@/components/ListItemCard";
 import ListScrollArea from "@/components/ListScrollArea";
 import MatchEntryLinks from "@/components/MatchEntryLinks";
 import { formatMatchDateTime, formatMatchResult } from "@/lib/matchSummary";
-import { winsNeededFor } from "@/lib/matchOutcome";
+import {
+  deriveMatchStatus,
+  getMatchWinner,
+  winsNeededFor,
+  type MatchFormat,
+} from "@/lib/matchOutcome";
 import AppShell from "@/components/AppShell";
 import ListNavRail from "@/components/ListNavRail";
 import MatchInfoRail, { MatchListSelection } from "@/components/MatchInfoRail";
@@ -50,8 +56,45 @@ export default function TournamentDetail() {
   // 型別（而不是另外定義一個只收 string 的窄型別），是因為 MatchInfoRail 的 props 契約本來
   // 就是吃這個型別，兩邊維持同一份型別，日後兩個頁面的行為要保持一致時才不會各自飄掉。
   const [selected, setSelected] = useState<MatchListSelection>(null);
-  // 「3:0 勝」那格的來源，理由同 MatchList.tsx：直接讀共用 store 已有的紀錄，不逐場 hydrate。
-  const recordingsByMatch = useScoreSheet((s) => s.recordingsByMatch);
+  // 卡片右端「3:0 勝」那格、跟「尚未排先發」黃標的來源，改讀後端的跨場彙總
+  // （GET /analysis/matches，#65 視圖②那支），不再讀本機 zustand store。
+  //
+  // issue #257：這頁原本讀 useScoreSheet 的 recordingsByMatch，那是本機 store，只有「使用者
+  // 真的打開過那一場」才會被 hydrate——所以剛進資料夾內頁、還沒點開任何一場比賽時，每張卡都是
+  // 空的，一律誤判成「尚未開賽」，就算那場其實已經打完了也一樣。MatchList.tsx 之前也踩過完全
+  // 一樣的坑，當時（issue #238／#65）就已經改成呼叫這支 bulk endpoint 解決——這裡只是把同一個
+  // 修法原封不動搬過來：一支請求把資料夾內每場比賽的摘要（逐局比分＋是否排過先發）一次拿回來，
+  // 頁面剛載入當下資料就是對的，不必等使用者逐場點開才「補正確」。
+  const { summaries, isLoading: isSummaryLoading } = useCrossMatchAnalysis();
+  // summaries 的 matchId 是後端 serial（數字），這裡的 domain id 是字串，轉成字串當 Map key。
+  const summaryByMatch = new Map(summaries.map((s) => [String(s.matchId), s]));
+
+  // 這場比賽現在是什麼狀態（尚未開賽／已排先發／進行中／贏／輸），全站只有一份判準——
+  // matchOutcome.deriveMatchStatus，跟 MatchList.tsx 共用同一支函式（但刻意不共用這層包裝，
+  // 兩頁各自的 matchId/format 型別跟資料來源接線本來就不同，硬抽成共用 hook 反而增加耦合）。
+  const matchStatus = (matchId: string, format: MatchFormat) => {
+    const s = summaryByMatch.get(matchId);
+    // 查不到摘要（還沒載入完成 / 這場還沒任何資料）就當作「還沒開打過、也沒排過先發」。
+    const setResults = s?.setResults ?? [];
+    const winner = getMatchWinner(setResults, winsNeededFor(format));
+    return deriveMatchStatus(winner, s?.setsPlayed ?? 0, s?.hasLineup ?? false);
+  };
+
+  // setResults 只含「已結束局」（後端已排除進行中的最後一局），formatMatchResult 吃的就是
+  // 逐局比分，語意跟原本傳 completedSets 完全一致。
+  const matchResultText = (matchId: string, format: MatchFormat) =>
+    formatMatchResult(summaryByMatch.get(matchId)?.setResults ?? [], matchStatus(matchId, format));
+
+  // 「尚未排先發」黃標：單純看 status 是不是 lineup_only，deriveMatchStatus 已經把優先序決定
+  // 好了（見 matchOutcome.ts 註解），這裡不用再自己重寫一次判斷式。這頁以前完全沒有這個提醒，
+  // 現在跟著 MatchList.tsx 一起補上，理由同上——都是同一支 bulk 摘要順手一起拿到的欄位。
+  //
+  // 刻意在 summaries 還在載入時先不亮黃標——寧可晚半秒出現，也不要在載入瞬間對每場都閃一下
+  // 「尚未排先發」的假警告。
+  const matchNeedsLineup = (matchId: string, format: MatchFormat): boolean => {
+    if (isSummaryLoading) return false;
+    return matchStatus(matchId, format) === "lineup_only";
+  };
 
   const openCreateDialog = () => {
     setEditingMatch(null);
@@ -103,22 +146,26 @@ export default function TournamentDetail() {
     // 就少一塊。
     <AppShell
       mode="A"
-      nav={<ListNavRail selected={selected} />}
-      aside={<MatchInfoRail selected={selected} />}
+      nav={
+        <div className="relative z-10 h-full">
+          <ListNavRail selected={selected} />
+        </div>
+      }
+      aside={
+        <div className="relative z-10 h-full">
+          <MatchInfoRail selected={selected} />
+        </div>
+      }
       // issue #131：這頁的中央區原本還是 shadcn 預設的白底（`bg-white` ＋ Card/Button），
       // #175 既然要整個重寫這塊，深色語言就在這裡一次做完，不在 #131 底下另外做一次白工。
-      // 背景（純色 ＋ 斜線網格）跟 MatchList.tsx 用同一組值：兩頁是同一個列表體驗的兩層，
-      // 進了資料夾底色卻換一種會很突兀；網格的作用是讓卡片的 backdrop-blur 有東西可以模糊
-      // （純色背景模糊完還是同一個純色，玻璃感等於沒發生）。
-      className="bg-[#0a0b07] font-dash text-[#f5f5f0]"
-      style={{
-        backgroundImage:
-          "repeating-linear-gradient(45deg, rgba(245,245,240,0.035) 0 1px, transparent 1px 28px)," +
-          "repeating-linear-gradient(-45deg, rgba(245,245,240,0.035) 0 1px, transparent 1px 28px)",
-      }}
+      // 背景跟 MatchList.tsx 用同一組值（現在共用 lib/appChromeStyles 的常數，不再各寫一份）：
+      // 兩頁是同一個列表體驗的兩層，進了資料夾底色卻換一種會很突兀。
+      backdrop={<div className="tb-beam" />}
+      className={APP_SHELL_CLASS}
+      style={APP_BACKGROUND_STYLE}
     >
       {/* 版面與捲動的處理跟 MatchList.tsx 完全一致，說明見那邊。 */}
-      <div className="flex min-h-0 flex-1 flex-col px-8 py-8">
+      <div className="relative z-10 flex min-h-0 flex-1 flex-col px-8 py-8">
         <div className="mx-auto flex min-h-0 w-full max-w-[1136px] flex-1 flex-col">
           <BackToMatchListButton className="mb-4 -ml-2" />
 
@@ -167,15 +214,17 @@ export default function TournamentDetail() {
                     kind="match"
                     title={`vs ${match.opponent}`}
                     dateText={formatMatchDateTime(match.dateTime)}
-                    secondaryText={formatMatchResult(
-                      recordingsByMatch[match.id]?.completedSets ?? [],
-                      // #215：這場比賽的賽制換算成贏局門檻，不能再假設全站都是五戰三勝。
-                      winsNeededFor(match.format),
-                    )}
+                    secondaryText={matchResultText(match.id, match.format)}
+                    statusHint={matchNeedsLineup(match.id, match.format) ? "尚未排先發" : undefined}
                     selected={selected?.kind === "match" && selected.id === match.id}
                     onSelect={() => setSelected({ kind: "match", id: match.id })}
                     // 跟 MatchList.tsx 同一套：選中就地展開三個入口，不跳頁也不疊層。
-                    expandedContent={<MatchEntryLinks matchId={match.id} />}
+                    expandedContent={
+                      <MatchEntryLinks
+                        matchId={match.id}
+                        needsLineup={matchNeedsLineup(match.id, match.format)}
+                      />
+                    }
                     onEdit={() => openEditDialog(match)}
                     onDelete={() => handleDelete(match.id)}
                   />

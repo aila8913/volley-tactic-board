@@ -11,6 +11,7 @@ import {
   tournamentsTable,
   teamsTable,
   peopleTable,
+  tacticsTable,
 } from "@workspace/db";
 
 // 巢狀資源（players/sets/rallies/events）自己沒有存 userId，它們的擁有權是「繼承」自所屬的 match。
@@ -138,6 +139,18 @@ export async function timeoutBelongsToUser(timeoutId: number, userId: string): P
     .innerJoin(setsTable, eq(timeoutsTable.setId, setsTable.id))
     .innerJoin(matchesTable, eq(setsTable.matchId, matchesTable.id))
     .where(and(eq(timeoutsTable.id, timeoutId), eq(matchesTable.userId, userId)));
+
+  return row !== undefined;
+}
+
+// tactic（戰術）跟 tournament/team/person 一樣是頂層資源、自己存了 userId，直接比對
+// id + userId，不用 join。GET/PUT/DELETE /tactics/:tacticId 這三支原本各自重複寫了一次
+// 這段查詢（handler() 的 owns closure），收斂成這支共用函式（#228 self-review 時發現的重複）。
+export async function tacticBelongsToUser(tacticId: string, userId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: tacticsTable.id })
+    .from(tacticsTable)
+    .where(and(eq(tacticsTable.id, tacticId), eq(tacticsTable.userId, userId)));
 
   return row !== undefined;
 }

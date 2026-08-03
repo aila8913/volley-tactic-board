@@ -108,7 +108,6 @@ interface TacticsBoardStore {
   activeTool: ToolType;
   selectedObjectId: string | null;
   courtView: "rotation" | "tactics";
-  labelToggles: { zone: boolean };
   // 「新增戰術」中央浮層（issue #177）開關——戰術板頁按左欄或瀏覽面板的「+ 新增戰術」時
   // 開啟，選了起點（或按取消）就關閉。放在這顆 store 而不是頁面的 local state，是因為
   // 「開這個浮層」的觸發點（NavRail 的左欄子清單、TacticsBrowsePanel 的按鈕）跟「畫這個
@@ -120,7 +119,6 @@ interface TacticsBoardStore {
   setActiveTool: (tool: ToolType) => void;
   setSelectedObjectId: (id: string | null) => void;
   setCourtView: (v: "rotation" | "tactics") => void;
-  toggleLabel: (key: keyof TacticsBoardStore["labelToggles"]) => void;
   openNewTactic: () => void;
   closeNewTactic: () => void;
   // 切場（換 matchId）時把所有暫時狀態歸零：丟掉 session、清掉唯讀檢視、跳回輪轉視圖。
@@ -211,7 +209,6 @@ export const useTacticsBoard = create<TacticsBoardStore>()((set, get) => ({
   activeTool: "select",
   selectedObjectId: null,
   courtView: "rotation",
-  labelToggles: { zone: false },
   newTacticOpen: false,
 
   openNewTactic: () => set({ newTacticOpen: true }),
@@ -227,8 +224,6 @@ export const useTacticsBoard = create<TacticsBoardStore>()((set, get) => ({
         ? { courtView: v, viewingScene: null, viewingTacticId: null, viewingTacticName: "" }
         : { courtView: v },
     ),
-  toggleLabel: (key) =>
-    set((state) => ({ labelToggles: { ...state.labelToggles, [key]: !state.labelToggles[key] } })),
   // #119 加這道 reset 是為了防「跨場殘留」：全域共用的 undo 歷史/session 如果不歸零，
   // 從 A 場帶著歷史切到 B 場，再按 Ctrl+Z 會把 A 的快照還原進 B。但病根是「跨場」，不是
   // 「進頁面就該清空」——原本的寫法沒有分辨這兩種情況，所以連「同一場，但由計分頁先
