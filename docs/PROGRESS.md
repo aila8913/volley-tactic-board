@@ -28,7 +28,8 @@
 四類保證不遺失，`lineups` 與戰術板/名單刻意不保證**。#64 PR1（五張表主鍵 `serial → uuid`）、
 PR2（計分頁六個動作收斂成一條有序 write log，一併吃掉 **#230**）、PR3（write log 落地 IndexedDB＋
 開頁重放＋後端冪等寫入）、PR4（退避重送迴圈＋「N 筆未同步」指示器）**四張全數完成，#64 收工**。
-下一步是 #26 部署。
+**#26 部署形態已定案＝Neon（Postgres）＋ Render（單一 Node 服務）＋自己接 Google OAuth**，
+分兩段走：PR1 先把 mockAuth 版推上雲驗環境、PR2 才接登入（見 `docs/deploy.md`）。
 先前條目：#251 戰術板右欄整併（PR #274）、#228 route handler 收斂 12 支檔案全數完成（PR
 #256/#262~#272）、#238＋#257 比賽狀態判準收斂（PR #258/#259）。\_
 
@@ -224,6 +225,19 @@ lives in git log + the issues named).
   改狀態的普通物件，React 看不到。**已知缺口（不在 #64 範圍）**：開頁當下後端就連不上時，
   hydrate 的 query 全失敗 → 計分頁停在「載入計分記錄中…」，未同步徽章根本沒機會顯示；
   要修得先有「整場資料的本機快取」，那是離線讀取、不是離線寫入的題目。
+- **部署形態定案＝單一服務，前端不分開部署（#26 PR1）。** 手冊在 `docs/deploy.md`。
+  關鍵發現：`app.ts` 早就用 `express.static` ＋ SPA fallback 在吐前端 dist，所以 issue #26 body 裡
+  「前端上 Vercel／後端上 Render，`/api` 相對路徑失效，要選 rewrite 還是 CORS」**那題不用選——
+  不要拆**。同一個 origin 讓 `orval.config.ts` 的 `baseUrl: "/api"` 原封不動，也讓 PR2 的 session
+  cookie 完全避開跨站 cookie 那一串。DB 選 **Neon 而非 Supabase**：Supabase 免費專案 7 天無請求
+  會暫停且**要手動 restore**，而這個 app 的前提正是「不知道誰哪天會打開」；Neon 休眠是連線就自己醒。
+  落地的檔案：`render.yaml`（blueprint，把 build/start/健康檢查寫成 code 而非儀表板點選）、
+  `.node-version`＋`package.json` 的 `packageManager`/`engines`（雲端機器預設只有 npm，靠 corepack
+  裝對版本的 pnpm）、`.env.example`、`app.set("trust proxy", 1)`（代理後面 `req.ip`/`req.protocol`
+  才正確，PR2 的 `secure` cookie 少了這行會安靜地發不出去）。`buildCommand` 裡的 `--prod=false` 是
+  必要的：`NODE_ENV=production` 會讓 pnpm 跳過 devDependencies，而 vite/esbuild/tsc 全在那裡。
+  **本階段仍跑 mockAuth，網址先不公開**——刻意把「雲端環境跑不跑得起來」和「OAuth 寫對沒有」
+  分開 debug，一次只查一個變因。
 - **專案 roadmap 已上線。** 時間序住在 repo **Milestones M1–M5**（現為 M1–M5＋M1.5/M2.5/M3.5）（軟目標日
   7/18→9/11，非死線），當下狀態住在 [GitHub Project #4](https://github.com/users/aila8913/projects/4)。
   **M1／M2／M1.5 milestone 皆已關閉**（M1.5 由 PR #239 帶關 #174/#120 後收掉；#176 已移 M3，
