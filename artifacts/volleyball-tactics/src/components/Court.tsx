@@ -319,22 +319,13 @@ export default function Court() {
     topPercent: ((y - vbY) / vbHeight) * 100,
   });
 
-  // L 備位紅框（issue #18，2026-07-15 改成側邊留白）：畫在 1 號位外側——
+  // L 備位圓圈的落點（issue #18，2026-07-15 改成側邊留白；珊瑚色虛線外框已於
+  // 2026-08-04 拿掉，見下面 courtView === "rotation" 那段的說明）：落在 1 號位外側——
   // 我方 1 號位 y=185（見 rotationLogic.ts 的 zoneCoords，zone 1: {x:0.83, y:0.85}，
-  // 我方半場是 y:100~200，100 + 0.85*100 = 185），對方鏡射過來 y=15（200-185）。
-  // 框在留白帶裡置中，尺寸抓玩家圓圈（半徑 6）的 1.5 倍左右。
+  // 我方半場是 y:100~200，100 + 0.85*100 = 185）。
   const OUR_ZONE1_Y = 185;
-  const OPPONENT_ZONE1_Y = COURT_H - OUR_ZONE1_Y; // = 15
   const LIBERO_STRIP_MARGIN = (LIBERO_ZONE_WIDTH - LIBERO_BOX_SIZE) / 2;
-  const ourLiberoBox = {
-    x: COURT_W + LIBERO_STRIP_MARGIN,
-    y: OUR_ZONE1_Y - LIBERO_BOX_SIZE / 2,
-  };
-  const opponentLiberoBox = {
-    x: -LIBERO_ZONE_WIDTH + LIBERO_STRIP_MARGIN,
-    y: OPPONENT_ZONE1_Y - LIBERO_BOX_SIZE / 2,
-  };
-  // 我方紅框正中央的百分比位置，給下面可拖曳的 L 備位圓圈疊上去用。
+  // 落點正中央的百分比位置，給下面可拖曳的 L 備位圓圈疊上去用。
   const ourLiberoCenterPercent = svgPointToPercent(
     COURT_W + LIBERO_STRIP_MARGIN + LIBERO_BOX_SIZE / 2,
     OUR_ZONE1_Y,
@@ -369,28 +360,10 @@ export default function Court() {
               見 index.css 的 .court-edge-light 說明。 */}
           <div className="court-edge-light" />
 
-          {/* 左上／右下對角方塊（issue #176、docs/layout-spec.md §3.2）：示意「場外區塊」——
-              發球位/替補區之類球場本體以外、但仍屬於這片戰術白板的留白區。
-              用一般 HTML 絕對定位的 div 疊在 wrapper 上，而不是畫進 SVG 裡的 <g>：這片 SVG
-              整份用 preserveAspectRatio="none"（見上面 computeTacticsViewBox 的說明），
-              viewBox 會依 wrapper 的寬高比非等比縮放，畫在 SVG 座標系裡的方塊會被拉伸變形
-              （球員圓圈之所以看起來還是正圓，是 PlayerNode 自己用 CTM 反向補償縮放）。
-              這兩個方塊只是純裝飾示意，犯不著也去做那層補償，直接用 CSS box 疊在 wrapper
-              外層——wrapper 本身尺寸固定（撐滿 court-glass 那個容器），這兩個角的 top/left/
-              bottom/right 百分比位置就不會隨球場縮放而漂移，符合 spec 「位置固定不隨球場
-              縮放漂移」的要求。pointer-events-none：它們純粹裝飾，不能擋掉底下球場的
-              點擊/拖放（球場的 pointerDown/drop 事件都掛在 SVG 上，這兩個 div 疊在最上層，
-              沒有這個屬性會吃掉事件）。尺寸刻意抓小（h-8 w-8＝32px）——示意用，不是主角。 */}
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute left-1.5 top-1.5 z-10 h-8 w-8 rounded-md
-              border border-white/[0.15] bg-white/[0.04] backdrop-blur-sm"
-          />
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute bottom-1.5 right-1.5 z-10 h-8 w-8 rounded-md
-              border border-white/[0.15] bg-white/[0.04] backdrop-blur-sm"
-          />
+          {/* 左上／右下對角的半透明玻璃裝飾方塊（issue #176、docs/layout-spec.md §3.2）已於
+              2026-08-03 拿掉（tang 實機確認）：這兩個方塊當初是「示意場外區塊——發球位/替補區
+              之類」的純裝飾佔位，`pointer-events-none`、從沒接過任何功能。真的要做「場外區塊」
+              時再重新設計，不要復原這兩個純裝飾的 div。 */}
           <svg
             id="court-svg"
             ref={courtRef}
@@ -475,33 +448,10 @@ export default function Court() {
               rx="3"
             />
 
-            {/* L 備位紅框（issue #18）：畫在 1 號位後方、球場 baseline 之外，兩側都
-                畫出框線留出版面空間，但只有我方（下方）那個之後會疊一顆可拖曳的
-                球員圓圈——對方（上方）目前沒有球員資料可顯示，純粹保留對稱版面。 */}
-            <rect
-              x={ourLiberoBox.x}
-              y={ourLiberoBox.y}
-              width={LIBERO_BOX_SIZE}
-              height={LIBERO_BOX_SIZE}
-              fill="none"
-              stroke="#fca5a5"
-              strokeWidth="1.5"
-              strokeDasharray="3 2"
-              vectorEffect="non-scaling-stroke"
-              rx="4"
-            />
-            <rect
-              x={opponentLiberoBox.x}
-              y={opponentLiberoBox.y}
-              width={LIBERO_BOX_SIZE}
-              height={LIBERO_BOX_SIZE}
-              fill="none"
-              stroke="#fca5a5"
-              strokeWidth="1.5"
-              strokeDasharray="3 2"
-              vectorEffect="non-scaling-stroke"
-              rx="4"
-            />
+            {/* L 備位珊瑚色虛線框（issue #18）已於 2026-08-04 拿掉（tang 要求，覺得跟現在
+                的畫面風格不搭）——底下留白空間（LIBERO_ZONE_WIDTH 等常數）跟可拖曳的
+                L 備位圓圈（下面 courtView === "rotation" 那段）都還在，只是不再額外畫一圈
+                虛線框標示這塊區域，圓圈本身已經夠清楚。 */}
 
             {/* Center Line (Net) + Attack Lines (3m)：跟計分表球場（ScoreSheetCourt.tsx）
                 共用同一份 <CourtLines/>（lib/courtTheme.tsx，issue #227），改一邊兩邊一起變。
@@ -630,7 +580,10 @@ export default function Court() {
                     // 右鍵點備位區 L = 取消先發設定，備位區變空白
                     if (matchId) setStartingLiberoId(matchId, null);
                   }}
-                  className="w-7 h-7 rounded-full bg-[#0a0b07]/55 border-2 border-[#FF6B00] text-[#FF6B00] flex items-center justify-center text-[10px] font-bold cursor-grab active:cursor-grabbing select-none backdrop-blur-sm"
+                  // 配色跟計分表 ScoreSheetCourt.tsx 的自由球員鈕同步（2026-08-04 定案，見那邊
+                  // 的配色說明）：橘色 #FF6B00 換成跟前排球員同一個綠 #CCFF00，「自由球員」
+                  // 這個語意色全站統一。
+                  className="w-7 h-7 rounded-full bg-[#0a0b07]/55 border-2 border-[#CCFF00] text-[#CCFF00] flex items-center justify-center text-[10px] font-bold cursor-grab active:cursor-grabbing select-none backdrop-blur-sm"
                   title={`${p.name} #${p.number} — 拖到後排（1/5/6）上場；右鍵取消先發`}
                 >
                   #{p.number}
