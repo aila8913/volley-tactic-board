@@ -436,6 +436,16 @@ export default function ScoreSheetCourt({
   const subModeActive = !!selectedBenchPlayer;
 
   const SIDELINE_W = 48;
+  // 自由球員鈕的垂直位置（tang 2026-08-04 要求「跟旁邊的一般球員同一水平高度」，從貼底線
+  // 上移一點）：15% 不是隨便抓的數字，是後排 zone（1/5/6 號位）在 lib/rotationLogic.ts
+  // 的 zoneCoords 裡 y:0.85（從球場頂端算 85%）——從底端算就是 15%，鈕的圓心對齊這個
+  // 高度，剛好跟後排球員圈同高（自由球員本來就只能站後排，兩者對齊在視覺上也說得通）。
+  // calc() 裡再扣半顆鈕的高度，因為 CSS 的 bottom 是量到鈕的下邊界，要讓「圓心」對齊
+  // 15% 那條線，下邊界要再往下多留半顆鈕高。
+  const LIBERO_BUTTON_BOTTOM = `calc(15% - ${SIDELINE_W / 2}px)`;
+  // 選單要浮在鈕正上方＋8px 縫：鈕的上邊界＝LIBERO_BUTTON_BOTTOM 再加一顆鈕高，
+  // 所以是 15% + 半顆鈕高（跟上面 LIBERO_BUTTON_BOTTOM 反向抵銷）再加 8px 縫。
+  const LIBERO_PICKER_BOTTOM = `calc(15% + ${SIDELINE_W / 2 + 8}px)`;
 
   // 球員圓圈顯示名字/背號/位置
   const playerLabel = (p: { name: string; number: number; role: string }) =>
@@ -448,30 +458,38 @@ export default function ScoreSheetCourt({
   return (
     <div className="mx-auto flex h-full w-full max-w-[480px] items-center justify-center gap-2">
       {/* 球場 SVG。court-glass（毛玻璃地板）＋ court-edge-light（邊緣繞行光）跟戰術板
-          Court.tsx 用同一組 index.css class，材質完全一致；改那兩個 class 兩邊一起變。 */}
+          Court.tsx 用同一組 index.css class，材質完全一致；改那兩個 class 兩邊一起變。
+          court-glass 本身有 overflow:hidden（讓邊緣光跟毛玻璃背景乖乖裁在圓角裡）——自由
+          球員鈕用 left:"100%" 貼在球場右邊，這個位置定義上就是在 court-glass 的框框「外面」，
+          直接放在 court-glass 裡面會被這個 overflow:hidden 整個裁掉：畫面上完全看不到、
+          滑鼠事件也點不到（不是疊放順序問題，是根本沒被畫出來）。這裡才多包一層
+          court-shell：court-shell 拿掉 overflow，負責定位／尺寸；court-glass 縮成
+          absolute inset-0 只管視覺裁切，鈕跟選單搬去當 court-shell 的子元素（見下面），
+          兩者尺寸完全對齊，位置算法不用改一行。 */}
       <div
-        className="court-glass relative flex-shrink-0 shadow-lg shadow-black/30"
+        className="court-shell relative flex-shrink-0"
         style={{ height: "100%", aspectRatio: "1/2" }}
       >
-        <div className="court-edge-light" />
-        <svg
-          ref={svgRef}
-          viewBox="0 0 100 200"
-          preserveAspectRatio="none"
-          className="h-full w-full touch-none select-none"
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
-          onPointerLeave={handlePointerLeave}
-        >
-          {/* 底色漸層、線條顏色都從 lib/courtTheme 讀，跟戰術板同一個來源（改那邊兩邊動）。 */}
-          <CourtGradientDefs id="ss-court-gradient" />
-          <rect x="0" y="0" width="100" height="200" fill="url(#ss-court-gradient)" />
-          {/* 中線＋3 米攻擊線：跟戰術板球場（Court.tsx）共用同一份 <CourtLines/>
+        <div className="court-glass absolute inset-0 shadow-lg shadow-black/30">
+          <div className="court-edge-light" />
+          <svg
+            ref={svgRef}
+            viewBox="0 0 100 200"
+            preserveAspectRatio="none"
+            className="h-full w-full touch-none select-none"
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerLeave={handlePointerLeave}
+          >
+            {/* 底色漸層、線條顏色都從 lib/courtTheme 讀，跟戰術板同一個來源（改那邊兩邊動）。 */}
+            <CourtGradientDefs id="ss-court-gradient" />
+            <rect x="0" y="0" width="100" height="200" fill="url(#ss-court-gradient)" />
+            {/* 中線＋3 米攻擊線：跟戰術板球場（Court.tsx）共用同一份 <CourtLines/>
               （lib/courtTheme.tsx，issue #227），改一邊兩邊一起變。 */}
-          <CourtLines />
+            <CourtLines />
 
-          {/* 對手號位圈：跟我方球員圈共用 PlayerMarker（深色玻璃底＋實色邊框＋圈內數字），
+            {/* 對手號位圈：跟我方球員圈共用 PlayerMarker（深色玻璃底＋實色邊框＋圈內數字），
               不再用虛線外框——使用者覺得虛線太醜、要求跟我方同款只是換色。對手沒有名單，
               沒有背號/姓名可顯示，圈裡放的是號位數字，姓名那一行留空；邊框色底色是
               design-spec.md 第 2 節定的「對方球隊色：珊瑚紅 #EF4444」（中途繞了一圈試過
@@ -482,123 +500,128 @@ export default function ScoreSheetCourt({
               發球時的光暈模糊半徑也單獨調過：PlayerMarker 預設 3（原始值，白色/萊姆綠/橘色
               套這個數字一直都好看），但紅色在同一個數字下太誇張，這裡用 glowBlur 覆寫成
               0.75——只影響對手，我方球員（含 PlayerNode.tsx 戰術板的選取態）維持預設不變。 */}
-          {opponentZones.map((slot) => {
-            const isServer = serving === "opponent" && slot.currentZone === 1;
-            const { x, y } = toSvg(slot);
-            return (
-              <g key={`opp-${slot.zone}`} transform={`translate(${x},${y})`}>
-                <PlayerMarker
-                  number={slot.zone}
-                  name=""
-                  color="rgba(239, 68, 68, 0.7)"
-                  radius={isServer ? 7.5 : 6}
-                  emphasized={isServer}
-                  glowBlur={0.75}
-                />
-                {isServer && (
-                  <text y="-9" fontSize="6" textAnchor="middle">
-                    🏐
-                  </text>
-                )}
-              </g>
-            );
-          })}
-
-          {/* 我方球員圈 */}
-          {ourPositions.map((pos) => {
-            // 計分表裡 L 的輪轉格子永遠跳過（和戰術板佔位切開；L 從場邊出發）
-            if (liberoPlayer && pos.playerId === liberoPlayer.id) return null;
-
-            // 套用一般換人，取得格子的「有效主人」
-            const effectiveId = regularSubMap.get(pos.playerId) ?? pos.playerId;
-            const slotPlayer = roster.find((p) => p.id === effectiveId);
-            if (!slotPlayer) return null;
-
-            // L 是否正在「蓋住」此格（蓋住 ≠ 換人；格主不離場）。用原始 pos.playerId 比對
-            // effectiveLiberoSub（同一個 id 空間），不是一般換人後的 effectiveId——否則這個後排格
-            // 先被一般換人換過人時，兩邊 id 對不上，orange L 疊圖不會出現（「自由換被換上場的人不
-            // 顯示」的 bug）。slotPlayer 仍用 effectiveId 找，好在下方顯示「L／被蓋格主的號碼」。
-            const isLiberoOverlay = pos.playerId === effectiveLiberoSub && !!liberoPlayer;
-
-            const isFrontRow = rowOf(pos.y) === "front";
-            const isServer = serving === "us" && pos.x > 0.7 && pos.y > 0.75;
-            const isDropTarget = isLiberoDropHighlight(pos);
-            const isSubTarget = subModeActive && !isFrontRow;
-            // 邊框色＝狀態指示：拖曳提示 > 換人提示 > L 蓋住(橘) > 前排(黃綠) > 後排(白)。
-            // 圓圈本身（深色玻璃底＋背號在圈裡、姓名在圈下）跟戰術板 PlayerNode.tsx 共用
-            // components/PlayerMarker.tsx——這裡只算「這個位置現在該用什麼顏色」。
-            const color = isDropTarget
-              ? "#FF6B00"
-              : isSubTarget
-                ? "#3B82F6"
-                : isLiberoOverlay
-                  ? "#FF6B00"
-                  : isFrontRow
-                    ? "#CCFF00"
-                    : "#FFFFFF";
-            const { x, y } = toSvg(pos);
-            // L 蓋住此格時，顯示的是 L 本人的背號/姓名，姓名後面加註被蓋格主的背號
-            // （原本是圈裡第二行小字，PlayerMarker 只有「背號＋姓名」兩格，改成併進姓名
-            // 那一行，資訊沒有少，只是排版跟著共用元件走）。
-            const displayPlayer = isLiberoOverlay && liberoPlayer ? liberoPlayer : slotPlayer;
-            const displayName =
-              isLiberoOverlay && liberoPlayer
-                ? `${liberoPlayer.name || liberoPlayer.role} /${slotPlayer.number}`
-                : slotPlayer.name || slotPlayer.role;
-
-            return (
-              <g key={pos.playerId} transform={`translate(${x},${y})`}>
-                {/* 拖曳自由球員時的目標提示環 */}
-                {isDropTarget && (
-                  <circle r="10" fill="none" stroke="#FF6B00" strokeWidth="2" opacity="0.6" />
-                )}
-                {/* 換人模式的可選提示環 */}
-                {subModeActive && (
-                  <circle
-                    r="10"
-                    fill="none"
-                    stroke="#3B82F6"
-                    strokeWidth="1.5"
-                    opacity="0.5"
-                    strokeDasharray="3 2"
+            {opponentZones.map((slot) => {
+              const isServer = serving === "opponent" && slot.currentZone === 1;
+              const { x, y } = toSvg(slot);
+              return (
+                <g key={`opp-${slot.zone}`} transform={`translate(${x},${y})`}>
+                  <PlayerMarker
+                    number={slot.zone}
+                    name=""
+                    color="rgba(239, 68, 68, 0.7)"
+                    radius={isServer ? 7.5 : 6}
+                    emphasized={isServer}
+                    glowBlur={0.75}
                   />
-                )}
-                <PlayerMarker
-                  number={displayPlayer.number}
-                  name={displayName}
-                  color={color}
-                  radius={isServer ? 7.5 : 6}
-                  emphasized={isServer}
-                />
-                {isServer && (
-                  <text y="-9" fontSize="6" textAnchor="middle">
-                    🏐
-                  </text>
-                )}
-              </g>
-            );
-          })}
+                  {isServer && (
+                    <text y="-9" fontSize="6" textAnchor="middle">
+                      🏐
+                    </text>
+                  )}
+                </g>
+              );
+            })}
 
-          {/* 手勢軌跡線：黑色在深色球場上會看不見，改用米白（跟球場線條同一色） */}
-          {dragStart && dragCurrent && (
-            <line
-              x1={dragStart.x}
-              y1={dragStart.y}
-              x2={dragCurrent.x}
-              y2={dragCurrent.y}
-              stroke="#F5F5F0"
-              strokeWidth="1.5"
-              strokeDasharray="4 3"
-              className="pointer-events-none"
-            />
-          )}
-        </svg>
+            {/* 我方球員圈 */}
+            {ourPositions.map((pos) => {
+              // 計分表裡 L 的輪轉格子永遠跳過（和戰術板佔位切開；L 從場邊出發）
+              if (liberoPlayer && pos.playerId === liberoPlayer.id) return null;
 
-        {/* 自由球員拖曳鈕（tang 2026-07-31 要求搬出場邊欄，貼在球場右側、跟我方底線同高）：
-            以前跟一般候補球員混在同一直欄清單裡，容易讓人以為它也是「點一下進換人模式」的
-            那種按鈕——但它其實是拖曳操作，跟長按/點擊都不同掛。獨立浮在球場右側、絕對定位
-            相對 court-glass（這個 div 本來就是 position:relative），bottom:0 讓圓圈底端
-            貼齊球場最底那條線的高度——我方在球場下半場，這條線就是我方底線。拖曳判定邏輯
+              // 套用一般換人，取得格子的「有效主人」
+              const effectiveId = regularSubMap.get(pos.playerId) ?? pos.playerId;
+              const slotPlayer = roster.find((p) => p.id === effectiveId);
+              if (!slotPlayer) return null;
+
+              // L 是否正在「蓋住」此格（蓋住 ≠ 換人；格主不離場）。用原始 pos.playerId 比對
+              // effectiveLiberoSub（同一個 id 空間），不是一般換人後的 effectiveId——否則這個後排格
+              // 先被一般換人換過人時，兩邊 id 對不上，orange L 疊圖不會出現（「自由換被換上場的人不
+              // 顯示」的 bug）。slotPlayer 仍用 effectiveId 找，好在下方顯示「L／被蓋格主的號碼」。
+              const isLiberoOverlay = pos.playerId === effectiveLiberoSub && !!liberoPlayer;
+
+              const isFrontRow = rowOf(pos.y) === "front";
+              const isServer = serving === "us" && pos.x > 0.7 && pos.y > 0.75;
+              const isDropTarget = isLiberoDropHighlight(pos);
+              const isSubTarget = subModeActive && !isFrontRow;
+              // 邊框色＝狀態指示：拖曳提示 > 換人提示 > L 蓋住(橘) > 前排(黃綠) > 後排(白)。
+              // 圓圈本身（深色玻璃底＋背號在圈裡、姓名在圈下）跟戰術板 PlayerNode.tsx 共用
+              // components/PlayerMarker.tsx——這裡只算「這個位置現在該用什麼顏色」。
+              const color = isDropTarget
+                ? "#FF6B00"
+                : isSubTarget
+                  ? "#3B82F6"
+                  : isLiberoOverlay
+                    ? "#FF6B00"
+                    : isFrontRow
+                      ? "#CCFF00"
+                      : "#FFFFFF";
+              const { x, y } = toSvg(pos);
+              // L 蓋住此格時，顯示的是 L 本人的背號/姓名，姓名後面加註被蓋格主的背號
+              // （原本是圈裡第二行小字，PlayerMarker 只有「背號＋姓名」兩格，改成併進姓名
+              // 那一行，資訊沒有少，只是排版跟著共用元件走）。
+              const displayPlayer = isLiberoOverlay && liberoPlayer ? liberoPlayer : slotPlayer;
+              const displayName =
+                isLiberoOverlay && liberoPlayer
+                  ? `${liberoPlayer.name || liberoPlayer.role} /${slotPlayer.number}`
+                  : slotPlayer.name || slotPlayer.role;
+
+              return (
+                <g key={pos.playerId} transform={`translate(${x},${y})`}>
+                  {/* 拖曳自由球員時的目標提示環 */}
+                  {isDropTarget && (
+                    <circle r="10" fill="none" stroke="#FF6B00" strokeWidth="2" opacity="0.6" />
+                  )}
+                  {/* 換人模式的可選提示環 */}
+                  {subModeActive && (
+                    <circle
+                      r="10"
+                      fill="none"
+                      stroke="#3B82F6"
+                      strokeWidth="1.5"
+                      opacity="0.5"
+                      strokeDasharray="3 2"
+                    />
+                  )}
+                  <PlayerMarker
+                    number={displayPlayer.number}
+                    name={displayName}
+                    color={color}
+                    radius={isServer ? 7.5 : 6}
+                    emphasized={isServer}
+                  />
+                  {isServer && (
+                    <text y="-9" fontSize="6" textAnchor="middle">
+                      🏐
+                    </text>
+                  )}
+                </g>
+              );
+            })}
+
+            {/* 手勢軌跡線：黑色在深色球場上會看不見，改用米白（跟球場線條同一色） */}
+            {dragStart && dragCurrent && (
+              <line
+                x1={dragStart.x}
+                y1={dragStart.y}
+                x2={dragCurrent.x}
+                y2={dragCurrent.y}
+                stroke="#F5F5F0"
+                strokeWidth="1.5"
+                strokeDasharray="4 3"
+                className="pointer-events-none"
+              />
+            )}
+          </svg>
+        </div>
+
+        {/* 自由球員拖曳鈕（tang 2026-08-04 要求改回球場左側，原本 07-31 版是貼右側，這次是
+            方向對調，不是重新設計；同一天又要求垂直位置從貼底線上移，跟後排球員圈同高，
+            見上面 LIBERO_BUTTON_BOTTOM 的說明）：以前跟一般候補球員混在同一直欄清單裡，
+            容易讓人以為它也是「點一下進換人模式」的那種按鈕——但它其實是拖曳操作，跟
+            長按/點擊都不同掛。獨立浮在球場左側、絕對定位相對 court-shell（court-glass 那層
+            有 overflow:hidden 會裁掉，見上面說明），right:100%（鈕的右邊界貼齊 court-shell
+            左邊界）＋marginRight:8（再往左讓開 8px 縫）跟右側版的 left:100%+marginLeft:8
+            是同一招左右鏡射，bottom 用 LIBERO_BUTTON_BOTTOM 讓圓心對齊後排球員圈的高度。
+            拖曳判定邏輯
             （handleLiberoPointerDown 等）完全沒變，那套邏輯本來就只認 clientX/clientY，
             跟這顆按鈕實際擺在哪裡無關，搬家不用碰任何手勢程式碼。
             兩位候選、還沒選定時（liberoPlayer undefined）鈕顯示通用「L」；長按（跟球場長按
@@ -611,9 +634,9 @@ export default function ScoreSheetCourt({
             onPointerUp={handleLiberoPointerUp}
             className="absolute flex cursor-grab flex-col items-center justify-center rounded-full border-2 border-orange-500 bg-orange-400 font-bold text-white touch-none select-none active:scale-95"
             style={{
-              left: "100%",
-              marginLeft: 8,
-              bottom: 0,
+              right: "100%",
+              marginRight: 8,
+              bottom: LIBERO_BUTTON_BOTTOM,
               width: SIDELINE_W,
               height: SIDELINE_W,
               touchAction: "none",
@@ -637,8 +660,9 @@ export default function ScoreSheetCourt({
         )}
 
         {/* 自由球員選單：只有兩位候選時才會用到（一位的話沒什麼好選，鈕直接代表他）。
-            浮在拖曳鈕正上方，同樣絕對定位相對 court-glass。跟長按換人清單同一套「透明背景點
-            外面＝取消」的關閉手勢（見下面長按選單那段），不用另外做一顆取消鈕。 */}
+            浮在拖曳鈕正上方，同樣絕對定位相對 court-shell（理由同上，court-glass 會裁掉），
+            跟著鈕一起鏡射到左側（right:100%+marginRight:8）。跟長按換人清單同一套「透明
+            背景點外面＝取消」的關閉手勢（見下面長按選單那段），不用另外做一顆取消鈕。 */}
         {liberoPickerOpen && liberoCandidates.length === 2 && (
           <>
             <div
@@ -648,7 +672,7 @@ export default function ScoreSheetCourt({
             />
             <div
               className="absolute z-50 flex flex-col gap-1 rounded-lg border border-white/[0.18] bg-[#12140f]/97 p-1.5 shadow-2xl shadow-black/50 backdrop-blur-lg"
-              style={{ left: "100%", marginLeft: 8, bottom: SIDELINE_W + 8 }}
+              style={{ right: "100%", marginRight: 8, bottom: LIBERO_PICKER_BOTTOM }}
             >
               <p className="px-1 text-[9px] font-bold text-[#a9b096]">選自由球員</p>
               {liberoCandidates.map((p) => (
@@ -672,7 +696,7 @@ export default function ScoreSheetCourt({
       {/* ── 場邊欄：現在只放一般候補球員（點擊進舊版換人模式）──
           自由球員不再出現在這份清單裡：它是拖曳操作、不是點擊操作，混在同一直欄容易讓人
           誤以為兩者操作方式一樣（tang 2026-07-31）。它的按鈕搬到球場右側單獨浮著，見上面
-          court-glass 內的說明；這裡改用 regularSidelinePlayers（排除 role==="L"）。 */}
+          court-shell 內的說明；這裡改用 regularSidelinePlayers（排除 role==="L"）。 */}
       <div
         className="flex h-full flex-shrink-0 flex-col items-center gap-2 overflow-y-auto py-1"
         style={{ width: SIDELINE_W + 8 }}
