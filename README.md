@@ -61,10 +61,12 @@ DATABASE_URL=postgres://<user>:<password>@localhost:5432/<db-name>
 PORT=5173
 BASE_PATH=/
 API_PORT=3000
+COOKIE_SECRET=dev-only-not-a-real-secret
 ```
 
 （根目錄的 `.env.example` 是同一份清單的可複製版本：`cp .env.example .env` 之後只要換掉
-`DATABASE_URL` 就好。）
+`DATABASE_URL` 就好，`COOKIE_SECRET` 本機開發直接沿用範本裡的值即可。Google OAuth 相關的
+三個變數本機不設也沒關係，見 `.env.example` 裡的說明。）
 
 想把它部署到雲端上讓別人試用，見 **[`docs/deploy.md`](docs/deploy.md)**。
 

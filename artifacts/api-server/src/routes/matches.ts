@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
 import { db, matchesTable } from "@workspace/db";
-import { mockAuth } from "../middleware/mockAuth";
+import { requireAuth } from "../middleware/requireAuth";
 import { matchBelongsToUser, tournamentBelongsToUser, teamBelongsToUser } from "../lib/ownership";
 import { handler } from "../lib/handler";
 import {
@@ -12,10 +12,10 @@ import {
   DeleteMatchParams,
 } from "@workspace/api-zod";
 
-// 比賽本體的 CRUD。跟 tactics 一樣用 mockAuth 把 userId 注入到 req.userId，
+// 比賽本體的 CRUD。跟 tactics 一樣用 requireAuth 把 userId 注入到 req.userId，
 // 每個查詢都額外比對 userId，確保使用者只能碰到自己的比賽（擁有權隔離）。
 const router: IRouter = Router();
-router.use(mockAuth);
+router.use(requireAuth);
 
 // GET /matches — 列出目前使用者的所有比賽，依建立時間排序
 // owns: "public" ——理由跟 tactics.ts 的 GET /tactics 一樣：這支路由查的是

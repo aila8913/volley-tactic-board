@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
 import { db, setsTable } from "@workspace/db";
-import { mockAuth } from "../middleware/mockAuth";
+import { requireAuth } from "../middleware/requireAuth";
 import { matchBelongsToUser, setBelongsToUser } from "../lib/ownership";
 import { handler } from "../lib/handler";
 import {
@@ -14,7 +14,7 @@ import {
 
 // 一場比賽裡的各局（set）。跟 players 一樣掛在 match 底下，先驗擁有權再操作。
 const router: IRouter = Router();
-router.use(mockAuth);
+router.use(requireAuth);
 
 // GET /matches/:matchId/sets — 列出這場比賽的所有局，依局數排序
 // owns 檢查跟 players.ts 的 GET 一樣：驗這個 matchId 是不是這個 userId 的。

@@ -29,7 +29,8 @@
 PR2（計分頁六個動作收斂成一條有序 write log，一併吃掉 **#230**）、PR3（write log 落地 IndexedDB＋
 開頁重放＋後端冪等寫入）、PR4（退避重送迴圈＋「N 筆未同步」指示器）**四張全數完成，#64 收工**。
 **#26 部署形態已定案＝Neon（Postgres）＋ Render（單一 Node 服務）＋自己接 Google OAuth**，
-分兩段走：PR1 先把 mockAuth 版推上雲驗環境、PR2 才接登入（見 `docs/deploy.md`）。
+PR1（雲驗環境）＋ PR2（Google OAuth 接線，`mockAuth` 退役成 `requireAuth`）**都已完成**，
+`#26` 保持 open 到實機驗過登入流程再關。
 先前條目：#251 戰術板右欄整併（PR #274）、#228 route handler 收斂 12 支檔案全數完成（PR
 #256/#262~#272）、#238＋#257 比賽狀態判準收斂（PR #258/#259）。\_
 
@@ -238,6 +239,25 @@ lives in git log + the issues named).
   必要的：`NODE_ENV=production` 會讓 pnpm 跳過 devDependencies，而 vite/esbuild/tsc 全在那裡。
   **本階段仍跑 mockAuth，網址先不公開**——刻意把「雲端環境跑不跑得起來」和「OAuth 寫對沒有」
   分開 debug，一次只查一個變因。
+- **Google OAuth 接線＋mockAuth 退役（#26 PR2）。** `mockAuth.ts` 改名 `requireAuth.ts`：
+  session 走簽章 httpOnly cookie（`lib/session.ts`，`cookie-parser` 簽章，不是伺服器端
+  session store——單一行程、無擴充需求，換不到好處只多養一個 store）。`lib/googleAuth.ts`
+  用官方 `google-auth-library` 的 `OAuth2Client` 換 token／驗 id_token（不手刻 JWT 簽章驗證，
+  那是最容易埋身分冒用漏洞的地方）。新增 `/api/auth/google`（導向）、`/callback`（換身分、
+  CSRF state 比對）、`/me`、`/logout`（後兩者才進 `openapi.yaml`／走 codegen，前兩者是純瀏覽器
+  導覽、不是 JSON API）。`requireAuth` 跟 `GET /auth/me` 都保留「開發環境讀不到 session 就退回
+  `mock-user-001`」的 fallback（`resolveDevFallbackUserId`，兩處必須共用同一份判斷——
+  **上線前抓到一個真 bug**：一開始只在 `requireAuth` 加了 dev fallback、`/auth/me` 沒加，
+  會讓本機 `pnpm run dev` 整個打不開，因為前端的 `AuthGate` 靠 `/auth/me` 判斷登入狀態、
+  收到 401 就永遠卡在登入畫面，即使其他 API 底下其實都正常跑在 mock 帳號上——用瀏覽器實測
+  才抓到，純看程式碼／型別檢查看不出來）。收掉全開的 `app.use(cors())`（同源不需要，開著只是
+  多一個攻擊面）。前端新增 `AuthGate.tsx`（未登入時整站只看得到登入畫面，包在 `App.tsx` 最外層、
+  不侵入 `NavRail`/`AppShell` 的三欄骨架，那是 tangyi1025 的設計治理範圍）＋畫面右下角固定的
+  身分/登出小徽章。**既有 `mock-user-001` 測試資料 PO 決定直接清空、不遷移**——雲端 DB 本來就是
+  PR1 新 push 出來的空庫，本機的 mock 資料留給 dev fallback 繼續用。**本機 `.env` 需要新增一個
+  `COOKIE_SECRET`**（`.env.example` 已給可直接複製的開發用值）——這是這張 PR 對既有本機工作流程
+  唯一的 breaking change，`app.ts` 開機時強制要求這個值（cookie-parser 初始化需要），不看
+  `NODE_ENV`。Google Cloud Console 的 OAuth 用戶端申請步驟、`docs/deploy.md` 步驟 5–7。
 - **專案 roadmap 已上線。** 時間序住在 repo **Milestones M1–M5**（現為 M1–M5＋M1.5/M2.5/M3.5）（軟目標日
   7/18→9/11，非死線），當下狀態住在 [GitHub Project #4](https://github.com/users/aila8913/projects/4)。
   **M1／M2／M1.5 milestone 皆已關閉**（M1.5 由 PR #239 帶關 #174/#120 後收掉；#176 已移 M3，

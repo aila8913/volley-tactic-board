@@ -87,13 +87,22 @@ pnpm --filter @workspace/db run push
 1. 到 [render.com](https://render.com) 用 GitHub 登入，授權這個 repo。
 2. **New → Blueprint**，選這個 repo。Render 會讀根目錄的 `render.yaml`，
    build/start 指令、健康檢查路徑、機房都已經寫在裡面，不用手動填。
-3. 它會問你 `DATABASE_URL`（`render.yaml` 裡標了 `sync: false`，代表「不寫在檔案裡」）。
-   貼上 Neon 的連線字串。
-4. 按下 Apply，等第一次 build 跑完（約 3–5 分鐘）。
+3. 它會問幾個 `sync: false` 的環境變數（`render.yaml` 裡列的那幾個，值不寫在檔案裡）。
+   **這一步只填得出 `DATABASE_URL`**（貼上 Neon 的連線字串）——`GOOGLE_CLIENT_ID` /
+   `GOOGLE_CLIENT_SECRET` / `GOOGLE_REDIRECT_URI` 要等步驟 5 拿到正式網址才申請得到，
+   先留白沒關係，Render 會用空字串佔位。
+4. **`COOKIE_SECRET` 這一個現在就要填**，不能等——它是 `app.ts` 開機時強制要求的值
+   （見 `lib/session.ts` 的 `getCookieSecret()`），沒填服務會直接啟動失敗、連
+   `/api/healthz` 都連不上，不像 `GOOGLE_*` 那三個只在真的點登入時才用到。隨便一串夠長的
+   亂數即可，例如用 PowerShell 產生：
+   ```powershell
+   -join ((48..57)+(97..122)|Get-Random -Count 40|%{[char]$_})
+   ```
+5. 按下 Apply，等第一次 build 跑完（約 3–5 分鐘）。
 
 成功的話你會拿到一個 `https://volley-tactics-board.onrender.com` 之類的網址。
 
-### 步驟 4：驗收
+### 步驟 4：驗收（先驗「服務活著」，還沒有登入）
 
 ```powershell
 curl https://<你的網址>/api/healthz   # 應回 {"status":"ok"}
@@ -103,7 +112,48 @@ curl https://<你的網址>/api/healthz   # 應回 {"status":"ok"}
 
 - 首頁載得出來（代表靜態檔有被 serve）
 - 直接開一個深層網址（例如 `/matches/1/board`）重新整理不會 404（代表 SPA fallback 有效）
-- 比賽列表載得出來（代表 API 打得到 Neon）
+
+> 這時候比賽列表應該是**空的**——雲端 Neon 資料庫是全新 push 出來的，沒有種子資料，
+> 這是預期行為，不是壞掉。
+
+### 步驟 5：在 Google Cloud Console 建 OAuth 用戶端
+
+1. 到 [Google Cloud Console](https://console.cloud.google.com/)，建一個新專案（或沿用既有的）。
+2. **OAuth 同意畫面（OAuth consent screen）**：User type 選「外部」，填應用程式名稱、
+   支援電子郵件。發布狀態留在「測試中」就夠——issue #26 body 已經決定不設邀請碼，
+   但 Google 的「測試中」狀態限制的是「有沒有審核」，不是「誰能登入」，公開網址仍然
+   任何人都能連得到，只是 Google 會在同意畫面多顯示一行「未驗證的應用程式」提示。
+3. **憑證 → 建立憑證 → OAuth 用戶端 ID**，應用程式類型選「網頁應用程式」。
+4. **已授權的重新導向 URI** 填步驟 3 拿到的網址加上 callback 路徑，例如：
+   `https://volley-tactics-board.onrender.com/api/auth/google/callback`
+   ——這一串**必須跟伺服器實際送出的 redirect_uri 逐字元相同**（含 `https://`、
+   不能有結尾多一個斜線），對不上 Google 會直接拒絕整個登入流程並顯示
+   `redirect_uri_mismatch`。
+5. 建立後複製「用戶端 ID」跟「用戶端密鑰」。
+
+### 步驟 6：把 OAuth 憑證填回 Render，觸發重新部署
+
+回到 Render 服務的 Environment 分頁，補上步驟 5 拿到的三個值：
+
+- `GOOGLE_CLIENT_ID`
+- `GOOGLE_CLIENT_SECRET`
+- `GOOGLE_REDIRECT_URI` = 步驟 5 填的那串 callback 網址
+
+存檔後 Render 會自動重新部署一次（環境變數變更本身就會觸發）。
+
+### 步驟 7：驗收登入流程
+
+瀏覽器開 `https://<你的網址>/`，應該會看到登入畫面（未登入時整個 app 被擋下）。
+點登入 → 導去 Google 帳號選擇畫面 → 選帳號、同意 → 導回來後應該正常進到比賽列表，
+且列表是空的（新帳號，還沒有任何比賽）。
+
+再打一次 `GET /api/auth/me` 應該回你剛登入的帳號資訊：
+
+```powershell
+# 瀏覽器已經登入的話，直接開這個網址看得到 JSON；
+# curl 沒帶 cookie 打這支會是 401，那是正確行為，不是壞掉。
+curl https://<你的網址>/api/auth/me
+```
 
 ---
 
@@ -115,26 +165,21 @@ Render 免費方案的服務**閒置 15 分鐘會被休眠**，下一個請求�
 issue #26 已經明確接受這個代價：試用是非同步的，第一次打開多等半分鐘不影響判斷。
 Neon 的休眠是另一層（約一秒），兩者疊加最差情況大約一分鐘。
 
-### 還沒有登入 —— 網址先不要公開
+### 本機開發：`.env` 要多一個 `COOKIE_SECRET`
 
-**這一版跑的還是 `mockAuth`，所有請求都被當成同一個使用者 `mock-user-001`。**
-也就是任何拿到網址的人，看到和改到的都是同一份資料。
+`app.ts` 開機一定會讀這個值（cookie-parser 初始化需要），本機開發也不例外，即使根本
+沒有用到 Google 登入。`.env.example` 已經給了一個可直接使用的開發用預留值——複製過去
+就好，不用自己產生。這是這張 PR 對既有本機工作流程唯一的一個 breaking change。
 
-這是刻意的分段：先確認「雲端環境跑得起來」這件事本身，再處理登入——把兩類第一次都會出錯的
-東西分開來 debug，一次只查一個變因。
+### OAuth 憑證只設定在 Render，本機開發預設不需要
 
-在 #26 PR2（Google OAuth）完成之前，**這個網址只給你自己驗，不要發給別人**。
-好消息是 `mockAuth` 的 `x-mock-user-id` 後門在正式環境是關閉的（它用白名單判斷
-`NODE_ENV === "development"`），所以至少沒有人能靠加一個 header 假扮成別人。
+`GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_REDIRECT_URI` 三個都留白時，
+本機開發完全不受影響——`requireAuth` 讀不到合法 session cookie、又偵測到
+`NODE_ENV === "development"`，會退回舊的 `mockAuth` 行為（見
+`middleware/requireAuth.ts`）。只有真的要在本機測完整登入流程時才需要另外申請一組
+測試用的 Google OAuth 憑證（redirect URI 設 `http://localhost:3000/api/auth/google/callback`）。
 
----
+### 目前只給自己或信任的人用
 
-## 之後（#26 PR2）會補上的
-
-- Google OAuth：`/api/auth/google` 導向、callback 驗證、簽章 httpOnly session cookie
-- `mockAuth` 退役，換成 `requireAuth`（開發環境仍走 mockAuth，保留本機工作流程）
-- 既有 `mock-user-001` 資料的歸屬處理
-- `app.use(cors())` 目前是全開的——單一服務下前端根本不需要跨來源請求，接上 cookie 認證時
-  應該一併收掉
-- Google Cloud Console 上的 OAuth app 與 redirect URI 設定（也需要你本人操作，
-  redirect URI 綁定步驟 3 拿到的正式網址）
+現在 OAuth 已經接上，任何人拿到網址都能用自己的 Google 帳號登入、開一份完全隔離的資料
+——不再是所有人共用同一份 `mock-user-001` 的資料。可以視情況公開網址了。

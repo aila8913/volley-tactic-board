@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, and, getTableColumns } from "drizzle-orm";
 import { db, timeoutsTable, setsTable } from "@workspace/db";
-import { mockAuth } from "../middleware/mockAuth";
+import { requireAuth } from "../middleware/requireAuth";
 import { setBelongsToUser, matchBelongsToUser, timeoutBelongsToUser } from "../lib/ownership";
 import { handler } from "../lib/handler";
 import {
@@ -16,7 +16,7 @@ import {
 // 讀（bulk）掛在 /matches/:matchId/timeouts 底下（先驗 match 擁有權）；
 // 寫掛在 /sets/:setId/timeouts 底下（先驗 set 擁有權，往上追到 match.userId）。
 const router: IRouter = Router();
-router.use(mockAuth);
+router.use(requireAuth);
 
 // GET /matches/:matchId/timeouts — 一次拿整場比賽的所有暫停紀錄（跨 set）。
 // 前端進頁重建計分表時用這一支，跟 GET /matches/:matchId/substitutions 是同一個理由、同一種寫法。

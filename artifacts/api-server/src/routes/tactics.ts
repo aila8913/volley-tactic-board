@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
 import { db, tacticsTable } from "@workspace/db";
-import { mockAuth } from "../middleware/mockAuth";
+import { requireAuth } from "../middleware/requireAuth";
 import { matchBelongsToUser, tacticBelongsToUser } from "../lib/ownership";
 import { handler } from "../lib/handler";
 import {
@@ -16,7 +16,7 @@ import {
 const router: IRouter = Router();
 
 // 所有戰術路由都套用 mock auth，userId 會被注入到 req.userId
-router.use(mockAuth);
+router.use(requireAuth);
 
 // GET /tactics — 取得目前使用者的戰術，按建立時間新→舊排列。
 // 帶 ?matchId=<n> 就只回那場比賽的戰術（#119：戰術庫 per-match，面板不再跨場汙染）；

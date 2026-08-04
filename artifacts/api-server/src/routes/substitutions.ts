@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, and, getTableColumns } from "drizzle-orm";
 import { db, substitutionsTable, setsTable } from "@workspace/db";
-import { mockAuth } from "../middleware/mockAuth";
+import { requireAuth } from "../middleware/requireAuth";
 import { setBelongsToUser, matchBelongsToUser, substitutionBelongsToUser } from "../lib/ownership";
 import { handler } from "../lib/handler";
 import {
@@ -15,7 +15,7 @@ import {
 // 讀（bulk）掛在 /matches/:matchId/substitutions 底下（先驗 match 擁有權）；
 // 寫掛在 /sets/:setId/substitutions 底下（先驗 set 擁有權，往上追到 match.userId）。
 const router: IRouter = Router();
-router.use(mockAuth);
+router.use(requireAuth);
 
 // GET /matches/:matchId/substitutions — 一次拿整場比賽的所有換人紀錄（跨 set）。
 // 前端進頁重建上場名單時用這一支，取代「對每個 set 各發一次請求」的 N+1

@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
 import { db, tournamentsTable } from "@workspace/db";
-import { mockAuth } from "../middleware/mockAuth";
+import { requireAuth } from "../middleware/requireAuth";
 import { tournamentBelongsToUser } from "../lib/ownership";
 import { handler } from "../lib/handler";
 import {
@@ -12,10 +12,10 @@ import {
 } from "@workspace/api-zod";
 
 // 資料夾（tournament）的 CRUD。#117 前資料夾只活在前端 localStorage，這支把它收進 DB。
-// 跟 matches 一樣用 mockAuth 注入 userId，每個查詢都比對 userId 做擁有權隔離
+// 跟 matches 一樣用 requireAuth 注入 userId，每個查詢都比對 userId 做擁有權隔離
 // （只碰得到自己的資料夾）。沒有 GET /tournaments/:id 單筆——前端列表一次抓全部就夠用。
 const router: IRouter = Router();
-router.use(mockAuth);
+router.use(requireAuth);
 
 // GET /tournaments — 列出目前使用者的所有資料夾，依建立時間排序
 // owns: "public" ——理由跟 teams.ts 的 GET /teams 一樣：這支路由查的是

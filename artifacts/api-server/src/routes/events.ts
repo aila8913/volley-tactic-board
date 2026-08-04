@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, and, getTableColumns } from "drizzle-orm";
 import { db, eventsTable, ralliesTable, setsTable } from "@workspace/db";
-import { mockAuth } from "../middleware/mockAuth";
+import { requireAuth } from "../middleware/requireAuth";
 import { rallyBelongsToUser, eventBelongsToUser, matchBelongsToUser } from "../lib/ownership";
 import { handler } from "../lib/handler";
 import {
@@ -19,7 +19,7 @@ import {
 // 而 PATCH / DELETE 用扁平的 /events/:eventId（路徑上只有 event id，
 // 所以改用 eventBelongsToUser 一路 join 回 match 驗擁有權）。
 const router: IRouter = Router();
-router.use(mockAuth);
+router.use(requireAuth);
 
 // GET /matches/:matchId/events — 一次拿整場比賽的所有 event（跨 set/rally）。
 // 前端進頁重建計分表時用這一支，取代「對每個 rally 各發一次請求」的 N+1。

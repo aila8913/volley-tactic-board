@@ -10,7 +10,7 @@ import {
   peopleTable,
   eventsTable,
 } from "@workspace/db";
-import { mockAuth } from "../middleware/mockAuth";
+import { requireAuth } from "../middleware/requireAuth";
 import { matchBelongsToUser, personBelongsToUser } from "../lib/ownership";
 import { handler } from "../lib/handler";
 import { GetMatchRotationStatsParams, GetPersonAnalysisParams } from "@workspace/api-zod";
@@ -21,7 +21,7 @@ import { GetMatchRotationStatsParams, GetPersonAnalysisParams } from "@workspace
 // analysis.ts，不硬塞進 rallies.ts——塞進去的話 rallies.ts 會同時混雜「單筆 CRUD」跟
 // 「跨局聚合報表」兩種完全不同的職責，之後不好維護。
 const router: IRouter = Router();
-router.use(mockAuth);
+router.use(requireAuth);
 
 // GET /analysis/matches/:matchId/rotations — 這場比賽「我方各輪次」的得失分。
 //

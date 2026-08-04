@@ -1,10 +1,11 @@
 import express, { type Express, type Request, type Response } from "express";
-import cors from "cors";
+import cookieParser from "cookie-parser";
 import pinoHttp from "pino-http";
 import path from "path";
 import router from "./routes";
 import { errorHandler } from "./middleware/errorHandler";
 import { logger } from "./lib/logger";
+import { getCookieSecret } from "./lib/session";
 
 // import.meta.dirname は Node 21.2+ の ESM 専用のグローバル。
 // ESM の __dirname 相当。
@@ -50,7 +51,17 @@ app.use(
     },
   }),
 );
-app.use(cors());
+// cookie-parser(secret) 除了把 Cookie header 解析成 req.cookies，帶了 secret 之後還會
+// 額外驗證簽章過的 cookie，通過的放進 req.signedCookies（lib/session.ts 讀的就是這包）。
+// getCookieSecret() 在這裡就會執行——沒設 COOKIE_SECRET 的話，服務開機時就直接炸掉，
+// 不會等到第一個要簽 cookie 的請求進來才發現，跟 lib/db/src/index.ts 對 DATABASE_URL
+// 的態度一致：寧可啟動失敗得明明白白。
+app.use(cookieParser(getCookieSecret()));
+
+// 這裡不再掛 cors()：#26 PR1 之後前後端是同一個 origin（同一個 Express 行程同時吐 API
+// 跟前端靜態檔），瀏覽器的同源請求本來就不受 CORS 限制，開著它只是多一個攻擊面——
+// 一個全開的 cors() 等於告訴瀏覽器「任何網域都可以帶著憑證打這支 API」，接上 session
+// cookie 之後這個洞從「讀得到本來就公開的資料」升級成「能代替使用者操作」，必須收掉。
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

@@ -62,8 +62,8 @@ export function handler<P = unknown, B = unknown>(
   return async (req, res) => {
     const params = (config.params ? config.params.parse(req.params) : undefined) as P;
     const body = (config.body ? config.body.parse(req.body) : undefined) as B;
-    // req.userId 是 mockAuth middleware 注入的（見 middleware/mockAuth.ts 對 Express.Request
-    // 的型別擴充），所有掛了 mockAuth 的路由在這裡都保證有值。
+    // req.userId 是 requireAuth middleware 注入的（見 middleware/requireAuth.ts 對 Express.Request
+    // 的型別擴充），所有掛了 requireAuth 的路由在這裡都保證有值。
     const userId = req.userId;
 
     if (config.owns !== "public") {

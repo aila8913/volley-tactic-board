@@ -8,6 +8,8 @@ servers:
   - url: /api
     description: Base API path
 tags:
+  - name: auth
+    description: Google OAuth session (login/callback are browser redirects, not listed here — see /me and /logout)
   - name: health
     description: Health operations
   - name: matches
@@ -17,6 +19,35 @@ tags:
   - name: analysis
     description: Read-only cross-resource report endpoints for the analytics pages (M2)
 paths:
+  /auth/me:
+    get:
+      operationId: getCurrentUser
+      tags: [auth]
+      summary: Get the currently logged-in user
+      description: >
+        Returns the signed-in user's identity from the session cookie. 401 (not 200 with a
+        null body) when nobody is logged in, so the generated client's normal error handling
+        (ApiError with status 401) doubles as the "not authenticated" signal — the frontend
+        doesn't need a second, shape-based check.
+      responses:
+        "200":
+          description: Currently logged-in user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CurrentUser"
+        "401":
+          description: Not authenticated
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Clear the session cookie
+      responses:
+        "204":
+          description: Logged out
+
   /healthz:
     get:
       operationId: healthCheck
@@ -916,6 +947,22 @@ components:
           type: string
       required:
         - status
+
+    CurrentUser:
+      type: object
+      properties:
+        # Google 帳號的 sub 宣告，也是 matches/tournaments/teams/people/tactics 各表 userId
+        # 欄位存的值。給前端用來判斷「已登入」，不是給前端拿去做任何比對邏輯。
+        userId:
+          type: string
+        email:
+          type: string
+        name:
+          type: string
+      required:
+        - userId
+        - email
+        - name
 
     # 跟前端比賽名單的角色定義一致 (artifacts/volleyball-tactics/src/types/match.ts 的 PLAYER_ROLES)
     # 以及後端 DB schema 的 playerRoleEnum (lib/db/src/schema/players.ts)。

@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
 import { db, playersTable } from "@workspace/db";
-import { mockAuth } from "../middleware/mockAuth";
+import { requireAuth } from "../middleware/requireAuth";
 import { matchBelongsToUser, playerBelongsToMatch, personBelongsToUser } from "../lib/ownership";
 import { handler } from "../lib/handler";
 import {
@@ -16,7 +16,7 @@ import {
 // 一場比賽的球員名單。名單掛在 match 底下（不是獨立球隊），路徑本身就反映這個從屬關係。
 // 每個 endpoint 都先驗 parent match 屬於這個使用者，才繼續往下做（見 lib/ownership.ts）。
 const router: IRouter = Router();
-router.use(mockAuth);
+router.use(requireAuth);
 
 // GET /matches/:matchId/players — 列出這場比賽的球員
 // owns 檢查直接查一次「這個 matchId 是不是這個 userId 的」——跟 matches.ts 的

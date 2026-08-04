@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
 import { db, peopleTable } from "@workspace/db";
-import { mockAuth } from "../middleware/mockAuth";
+import { requireAuth } from "../middleware/requireAuth";
 import { personBelongsToUser } from "../lib/ownership";
 import { handler } from "../lib/handler";
 import {
@@ -14,7 +14,7 @@ import {
 // 「人」（person）的 CRUD——幾乎是 teams.ts 的複製貼上，理由見 lib/db/src/schema/people.ts：
 // person 代表一個跨比賽都認得出來的「真實身分」，players.personId 這個外鍵把某場比賽的
 // 一列名單「對應」到某個 person，讓同一個人打了好幾場比賽時，統計能夠正確地把他的數據
-// 加總在一起（而不是把每場的「王小明」都當成不同人）。跟 teams 同一套 mockAuth + userId
+// 加總在一起（而不是把每場的「王小明」都當成不同人）。跟 teams 同一套 requireAuth + userId
 // 擁有權隔離。
 //
 // 跟 teams 幾乎一樣的設計選擇：
@@ -25,7 +25,7 @@ import {
 //      null（那個人在那場比賽的名單列變回「歸屬不明」），**不會刪除任何比賽紀錄**——
 //      歷史比賽事實要保留，刪除的只是「這是同一個人」這個標記本身。
 const router: IRouter = Router();
-router.use(mockAuth);
+router.use(requireAuth);
 
 // GET /people — 列出目前使用者建立過的所有「人」。跟 teams 一樣沒有 createdAt，
 // 用 serial id 排序當作建立順序的近似。
