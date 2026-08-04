@@ -70,26 +70,34 @@ export function applyRally(
 // substitutions 表是 append-only（換幾次就存幾筆），這個函式做的就是把那種流水帳摺疊成
 // 「現在」的淨結果。
 //
-// ⚠️ 連鎖換人的實際行為，跟你可能預期的不一樣，這裡講明白：場上先前已經是「A 被換成 B」
-// （清單有 {out:A,in:B}），這次又把 B 換成 C（新紀錄 {out:B,in:C}）。舊那筆的 inPlayerId=B
-// 剛好等於這次的 outPlayerId=B，所以被濾掉，清單最後只剩 **{out:B,in:C}**——留下的是
-// 「最近一次換人的雙方」，**不是**「最原始的先發 A → 現在的 C」。也就是說摺疊之後，
-// 「A 曾經是先發、現在被頂替掉了」這件事在清單裡消失了。
+// 連鎖換人（issue #247）：場上先前已經是「A 被換成 B」（清單有 {out:A,in:B}），這次又把
+// B 換成 C（新紀錄 {out:B,in:C}）。這裡要找出「這個位置真正的原始先發」——不是這次換人
+// 表面上的 outPlayerId=B，而是往前追一筆：清單裡有沒有一筆 inPlayerId 等於這次的
+// outPlayerId？如果有（{out:A,in:B} 的 inPlayerId=B 命中了），代表 B 本身也是替補上場
+// 的，這個位置的原始先發其實是那一筆的 outPlayerId=A。摺疊結果因此是 **{out:A,in:C}**，
+// 不是 {out:B,in:C}——因為 types/scoresheet.ts 裡 RegularSub 型別的欄位註解本來就寫明
+// 淨疊加該產出「原始先發 → 現在場上的人」，而 ScoreSheetCourt.tsx 是拿 outPlayerId 當
+// key 去查先發名單那格「現在被誰頂替」，查的必須是原始先發 A，查 B 會找不到格子。
 //
-// 這是從 issue #226 之前就存在的既有行為（live 與 replay 兩份實作一致地這樣算，
-// scoreSheetMapping.test.ts 也照這個結果斷言），#226 只負責把兩份合併成一份、不改行為，
-// 所以這裡照實描述而不是偷偷改掉。至於「這個行為本身對不對」——ScoreSheetCourt.tsx 是用
-// outPlayerId 當 key 查「這個先發被誰頂替」，連鎖換人後查不到 A，畫面可能顯示錯人——
-// 那是另一張 issue 的範圍，不在 #226 裡處理。
+// 特例：換人換回原始先發本人（A→B 之後 B→A），這個位置淨效果等於沒換過，整筆從清單
+// 拿掉——留著 {out:A,in:A} 會讓球場畫面誤以為 A 被自己頂替。
 //
 // 這是跟 applyRally 同一種病（live 一次呼叫／replay 逐筆 reduce 重放）、同一種藥，
 // 但刻意不併進 applyRally 變成同一顆函式：換人的輸入形狀（RegularSub 清單 + 一筆新
 // 換人）跟計分的輸入形狀（RuleState + 贏家）完全不同，維持的不變量也不同（換人維持的是
-// 「同一位置只留最新結果」，計分維持的是「比分/輪轉/發球權」），硬併成一個 reducer 只會
-// 讓函式簽名變得四不像。同檔為鄰（都在 volleyballRules.ts）已經解決「兩邊各自維護一份」
-// 的問題，不需要連函式本身都合併。
+// 「同一位置只留原始先發 → 現在的人」，計分維持的是「比分/輪轉/發球權」），硬併成一個
+// reducer 只會讓函式簽名變得四不像。同檔為鄰（都在 volleyballRules.ts）已經解決「兩邊
+// 各自維護一份」的問題，不需要連函式本身都合併。
 export function applyRegularSub(list: RegularSub[], sub: RegularSub): RegularSub[] {
-  return [...list.filter((r) => r.inPlayerId !== sub.outPlayerId), sub];
+  // 這次換下來的人，可能自己就是先前某次換人「換上去」的替補——那樣的話這個格子的
+  // 原始先發是更早那筆的 outPlayerId，要沿用它，而不是這次的 outPlayerId。
+  const prev = list.find((r) => r.inPlayerId === sub.outPlayerId);
+  const rest = list.filter((r) => r.inPlayerId !== sub.outPlayerId);
+  const outPlayerId = prev ? prev.outPlayerId : sub.outPlayerId;
+  // 換回原始先發本人（A→B 之後 B→A）：這個格子淨值歸零，整筆不留——留下
+  // {out:A, in:A} 會讓球場畫面把 A 標成「被自己頂替」。
+  if (outPlayerId === sub.inPlayerId) return rest;
+  return [...rest, { outPlayerId, inPlayerId: sub.inPlayerId }];
 }
 
 // 「最後一個元素＝進行中，其餘都是已結束」——這個慣例在計分表的 reconstructRecording
