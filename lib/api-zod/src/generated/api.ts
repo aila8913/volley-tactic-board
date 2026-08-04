@@ -230,6 +230,21 @@ export const CreatePersonBody = zod.object({
 
 
 /**
+ * @summary List groups of people that look like duplicates of the same real person (same normalized name), for the merge UI to surface as suggestions
+ */
+export const ListMergeCandidatesResponseItem = zod.object({
+  "normalizedName": zod.string(),
+  "people": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "matchCount": zod.number(),
+  "teamNames": zod.array(zod.string())
+}))
+})
+export const ListMergeCandidatesResponse = zod.array(ListMergeCandidatesResponseItem)
+
+
+/**
  * @summary Rename a person
  */
 export const UpdatePersonParams = zod.object({
@@ -251,6 +266,30 @@ export const UpdatePersonResponse = zod.object({
  */
 export const DeletePersonParams = zod.object({
   "personId": zod.coerce.number()
+})
+
+
+/**
+ * @summary Merge one or more source people into this person (the target). Re-points their players.personId to the target, logs the merge for audit, then deletes the source people. Irreversible.
+ */
+export const MergePeopleParams = zod.object({
+  "personId": zod.coerce.number()
+})
+
+
+
+
+export const MergePeopleBody = zod.object({
+  "sourceIds": zod.array(zod.number()).min(1)
+})
+
+export const MergePeopleResponse = zod.object({
+  "target": zod.object({
+  "id": zod.number(),
+  "name": zod.string()
+}),
+  "mergedSourceNames": zod.array(zod.string()),
+  "movedPlayerCount": zod.number()
 })
 
 

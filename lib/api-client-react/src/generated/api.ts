@@ -28,6 +28,9 @@ import type {
   MatchAnalysisSummary,
   MatchEvent,
   MatchSet,
+  MergeCandidateGroup,
+  MergePeopleRequest,
+  MergePeopleResult,
   NewEvent,
   NewLineup,
   NewMatch,
@@ -1394,6 +1397,83 @@ export const useCreatePerson = <TError = ErrorType<unknown>,
       return useMutation(getCreatePersonMutationOptions(options));
     }
 
+export const getListMergeCandidatesUrl = () => {
+
+
+
+
+  return `/api/people/merge-candidates`
+}
+
+/**
+ * @summary List groups of people that look like duplicates of the same real person (same normalized name), for the merge UI to surface as suggestions
+ */
+export const listMergeCandidates = async ( options?: RequestInit): Promise<MergeCandidateGroup[]> => {
+
+  return customFetch<MergeCandidateGroup[]>(getListMergeCandidatesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListMergeCandidatesQueryKey = () => {
+    return [
+    `/api/people/merge-candidates`
+    ] as const;
+    }
+
+
+export const getListMergeCandidatesQueryOptions = <TData = Awaited<ReturnType<typeof listMergeCandidates>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMergeCandidates>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListMergeCandidatesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listMergeCandidates>>> = ({ signal }) => listMergeCandidates({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listMergeCandidates>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListMergeCandidatesQueryResult = NonNullable<Awaited<ReturnType<typeof listMergeCandidates>>>
+export type ListMergeCandidatesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List groups of people that look like duplicates of the same real person (same normalized name), for the merge UI to surface as suggestions
+ */
+
+export function useListMergeCandidates<TData = Awaited<ReturnType<typeof listMergeCandidates>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMergeCandidates>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListMergeCandidatesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
 export const getUpdatePersonUrl = (personId: number,) => {
 
 
@@ -1534,6 +1614,78 @@ export const useDeletePerson = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getDeletePersonMutationOptions(options));
+    }
+
+export const getMergePeopleUrl = (personId: number,) => {
+
+
+
+
+  return `/api/people/${personId}/merge`
+}
+
+/**
+ * @summary Merge one or more source people into this person (the target). Re-points their players.personId to the target, logs the merge for audit, then deletes the source people. Irreversible.
+ */
+export const mergePeople = async (personId: number,
+    mergePeopleRequest: MergePeopleRequest, options?: RequestInit): Promise<MergePeopleResult> => {
+
+  return customFetch<MergePeopleResult>(getMergePeopleUrl(personId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      mergePeopleRequest,)
+  }
+);}
+
+
+
+
+export const getMergePeopleMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof mergePeople>>, TError,{personId: number;data: BodyType<MergePeopleRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof mergePeople>>, TError,{personId: number;data: BodyType<MergePeopleRequest>}, TContext> => {
+
+const mutationKey = ['mergePeople'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof mergePeople>>, {personId: number;data: BodyType<MergePeopleRequest>}> = (props) => {
+          const {personId,data} = props ?? {};
+
+          return  mergePeople(personId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type MergePeopleMutationResult = NonNullable<Awaited<ReturnType<typeof mergePeople>>>
+    export type MergePeopleMutationBody = BodyType<MergePeopleRequest>
+    export type MergePeopleMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Merge one or more source people into this person (the target). Re-points their players.personId to the target, logs the merge for audit, then deletes the source people. Irreversible.
+ */
+export const useMergePeople = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof mergePeople>>, TError,{personId: number;data: BodyType<MergePeopleRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof mergePeople>>,
+        TError,
+        {personId: number;data: BodyType<MergePeopleRequest>},
+        TContext
+      > => {
+      return useMutation(getMergePeopleMutationOptions(options));
     }
 
 export const getListPlayersUrl = (matchId: number,) => {

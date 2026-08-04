@@ -285,6 +285,26 @@ paths:
               schema:
                 $ref: "#/components/schemas/Person"
 
+  # 這支刻意寫在 /people/{personId} 之前——Express 的路由比對是照「註冊順序」一個一個試，
+  # 不是照路徑特異度排序，如果 /people/{personId} 先註冊，一支寫死的 /people/merge-candidates
+  # 就會被 {personId} 這個萬用參數段先攔截、當成 personId="merge-candidates" 誤吃掉。
+  # 目前 /people/{personId} 底下還沒有 GET（只有 PATCH/DELETE），所以現在還踩不到這個雷，
+  # 但先把順序排對，避免之後有人幫 /people/{personId} 加了 GET 才踩雷、還得回頭搬順序。
+  /people/merge-candidates:
+    get:
+      operationId: listMergeCandidates
+      tags: [people]
+      summary: List groups of people that look like duplicates of the same real person (same normalized name), for the merge UI to surface as suggestions
+      responses:
+        "200":
+          description: Groups of same-name people, one group per normalized name (only names with 2+ people are included)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MergeCandidateGroup"
+
   /people/{personId}:
     parameters:
       - $ref: "#/components/parameters/PersonId"
@@ -312,6 +332,27 @@ paths:
       responses:
         "204":
           description: Deleted
+
+  /people/{personId}/merge:
+    parameters:
+      - $ref: "#/components/parameters/PersonId"
+    post:
+      operationId: mergePeople
+      tags: [people]
+      summary: Merge one or more source people into this person (the target). Re-points their players.personId to the target, logs the merge for audit, then deletes the source people. Irreversible.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MergePeopleRequest"
+      responses:
+        "200":
+          description: Merge result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MergePeopleResult"
 
   /matches/{matchId}/players:
     parameters:
@@ -1098,6 +1139,68 @@ components:
       properties:
         name:
           type: string
+
+    # GET /people/merge-candidates 回應裡的一列：這個人在球隊/場次上下文裡的識別資訊，
+    # 讓使用者在合併確認畫面上分得清楚「這兩筆同名的 person，到底是不是真的同一個人」。
+    # 光看名字沒辦法分辨——同名同姓在系隊情境不罕見（見 scripts/backfill-person-ids.ts
+    # 的說明），所以多帶 matchCount/teamNames 這種側面資訊給人工判斷用。
+    MergeCandidatePerson:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        matchCount:
+          type: integer
+        teamNames:
+          type: array
+          items:
+            type: string
+      required: [id, name, matchCount, teamNames]
+
+    # 同一個正規化姓名（見 artifacts/api-server/src/lib/personName.ts 的 normalizePersonName）
+    # 底下的一組候選 person，成員數一定 ≥ 2（只有 1 筆代表沒有同名的人，不算候選）。
+    MergeCandidateGroup:
+      type: object
+      properties:
+        normalizedName:
+          type: string
+        people:
+          type: array
+          items:
+            $ref: "#/components/schemas/MergeCandidatePerson"
+      required: [normalizedName, people]
+
+    # POST /people/{personId}/merge 的請求體：{personId} 是合併後留下來的目標，
+    # sourceIds 是要被併進去、之後會被刪除的來源 person id 清單。至少要有一筆
+    # （minItems: 1）——空陣列代表「什麼都不併」，語意上沒有意義，直接在 schema 層擋掉。
+    MergePeopleRequest:
+      type: object
+      properties:
+        sourceIds:
+          type: array
+          items:
+            type: integer
+          minItems: 1
+      required: [sourceIds]
+
+    # POST /people/{personId}/merge 的回應：target 是合併後（可能改了名字的）完整目標
+    # person；mergedSourceNames 是實際被併掉的來源名字快照（用來讓前端顯示「已合併：王小明、
+    # 王小明」這種確認訊息）；movedPlayerCount 是總共改指了幾筆名單列，給使用者一個
+    # 「這次操作影響了多大範圍」的量級感。
+    MergePeopleResult:
+      type: object
+      properties:
+        target:
+          $ref: "#/components/schemas/Person"
+        mergedSourceNames:
+          type: array
+          items:
+            type: string
+        movedPlayerCount:
+          type: integer
+      required: [target, mergedSourceNames, movedPlayerCount]
 
     Match:
       type: object

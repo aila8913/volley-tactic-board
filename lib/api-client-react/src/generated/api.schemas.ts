@@ -84,6 +84,29 @@ export interface UpdatePerson {
   name?: string;
 }
 
+export interface MergeCandidatePerson {
+  id: number;
+  name: string;
+  matchCount: number;
+  teamNames: string[];
+}
+
+export interface MergeCandidateGroup {
+  normalizedName: string;
+  people: MergeCandidatePerson[];
+}
+
+export interface MergePeopleRequest {
+  /** @minItems 1 */
+  sourceIds: number[];
+}
+
+export interface MergePeopleResult {
+  target: Person;
+  mergedSourceNames: string[];
+  movedPlayerCount: number;
+}
+
 export type MatchFormat = typeof MatchFormat[keyof typeof MatchFormat];
 
 
