@@ -252,7 +252,9 @@ export default function ScoreSheet() {
   const ourPositions =
     activeLineup && currentSet ? lineupToPositions(activeLineup, currentSet.ourRotation) : [];
   const completedSets = record?.completedSets ?? [];
-  const currentSubCount = regularSubs.length;
+  // 換人「次數」要用原始計數 subCount，不能用 regularSubs.length（issue #289）：後者是淨疊加，
+  // 連鎖換人／換回先發會讓兩個數字對不上，教練靠這個數字判斷還能不能換人，必須是原始次數。
+  const currentSubCount = record?.subCount ?? 0;
   const totalSubCount = subCountsHistory.reduce((a, b) => a + b, 0) + currentSubCount;
   // 暫停計數（issue #44）：本局每一方各用了幾次（排球規則每隊每局上限 2 次），加全場累計。
   const ourTimeoutCount = timeouts.filter((t) => t.side === "us").length;

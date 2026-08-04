@@ -131,14 +131,31 @@ describe("undoLast — 一次退一個動作、連按往回（issue #41 重現�
     // 修正後的行為，跟 volleyballRules.ts 的 applyRegularSub 函式註解一致。這也正是為什麼
     // 「逐步倒回」很難用逆運算做、改用快照法：快照存的是每一步當下的完整清單。
     expect(s().recordingsByMatch[M].regularSubs).toEqual([{ outPlayerId: "pA", inPlayerId: "pC" }]);
+    // subCount（issue #289）是原始次數，不摺疊：連鎖兩次換人＝2，即使淨疊加清單只剩 1 筆。
+    expect(s().recordingsByMatch[M].subCount).toBe(2);
 
     // 退一步 → 快照精準還原到「A 換成 B」的中間狀態，而不是清空
     s().undoLast(M);
     expect(s().recordingsByMatch[M].regularSubs).toEqual([{ outPlayerId: "pA", inPlayerId: "pB" }]);
+    expect(s().recordingsByMatch[M].subCount).toBe(1); // 快照法連 subCount 也整包退回
 
     // 再退一步 → 才回到沒換過
     s().undoLast(M);
     expect(s().recordingsByMatch[M].regularSubs).toEqual([]);
+    expect(s().recordingsByMatch[M].subCount).toBe(0);
+  });
+
+  it("換回原始先發（A→B→A）：regularSubs 摺成空，但 subCount 仍是 2（issue #289）", () => {
+    startSet("us");
+    sub("pA", "pB"); // 場上 A 被換成 B → [{pA,pB}]，subCount=1
+    sub("pB", "pA"); // 又換回 A：淨疊加摺成 []，但這仍是實際發生過的第 2 次換人
+    expect(s().recordingsByMatch[M].regularSubs).toEqual([]);
+    expect(s().recordingsByMatch[M].subCount).toBe(2);
+
+    // 復原最後一次換人 → 退回「A 換成 B」的中間狀態，regularSubs 跟 subCount 都要對得上。
+    s().undoLast(M);
+    expect(s().recordingsByMatch[M].regularSubs).toEqual([{ outPlayerId: "pA", inPlayerId: "pB" }]);
+    expect(s().recordingsByMatch[M].subCount).toBe(1);
   });
 });
 

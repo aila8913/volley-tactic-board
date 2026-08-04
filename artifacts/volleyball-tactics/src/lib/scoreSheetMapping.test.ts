@@ -9,6 +9,7 @@ import {
   isSetComplete,
   regularSubToApi,
   reconstructRegularSubs,
+  countRegularSubs,
   timeoutToApi,
   reconstructTimeouts,
   reconstructRecording,
@@ -375,6 +376,7 @@ describe("reconstructRecording", () => {
       lineup: null,
       liberoSubstitution: null,
       regularSubs: [],
+      subCount: 0,
       subCountsHistory: [],
       timeouts: [],
       timeoutCountsHistory: [],
@@ -497,6 +499,7 @@ describe("reconstructRecording", () => {
 
     expect(state.subCountsHistory).toEqual([1]); // 第 1 局（已結束）換了 1 次
     expect(state.regularSubs).toEqual([{ outPlayerId: "3", inPlayerId: "4" }]); // 第 2 局（進行中）
+    expect(state.subCount).toBe(1); // 第 2 局（進行中）只有一筆單純換人，原始次數跟淨疊加清單長度一致
   });
 
   // #63 迴歸測試：按「下一局」後那個「還沒選先發方」的空局，現在會先寫進後端成一筆
@@ -754,6 +757,45 @@ describe("reconstructRegularSubs", () => {
       makeSub({ playerOutId: null, playerInId: "2", homeScore: 4, awayScore: 1 }),
     ];
     expect(reconstructRegularSubs(subs)).toEqual([]);
+  });
+});
+
+// ── countRegularSubs（issue #289）──
+// 「換人次數」跟「淨疊加清單長度」是兩個不同的數字（見 types/scoresheet.ts 的
+// ScoreSheetState.subCount 註解）：三種情境（A→B / A→B→C 連鎖 / A→B→A 換回先發）分別驗證
+// 摺疊後的清單長度（reconstructRegularSubs）跟原始次數（countRegularSubs）什麼時候會發散。
+describe("countRegularSubs", () => {
+  it("A→B: one substitution, count is 1 (matches the collapsed list length)", () => {
+    const subs = [makeSub({ playerOutId: "A", playerInId: "B", homeScore: 0, awayScore: 0 })];
+    expect(countRegularSubs(subs)).toBe(1);
+    expect(reconstructRegularSubs(subs)).toHaveLength(1);
+  });
+
+  it("A→B→C (chained): count is 2, but the collapsed list only has 1 entry", () => {
+    const subs = [
+      makeSub({ playerOutId: "A", playerInId: "B", homeScore: 0, awayScore: 0 }),
+      makeSub({ playerOutId: "B", playerInId: "C", homeScore: 2, awayScore: 0 }),
+    ];
+    expect(countRegularSubs(subs)).toBe(2);
+    expect(reconstructRegularSubs(subs)).toEqual([{ outPlayerId: "A", inPlayerId: "C" }]); // 摺成 1 筆
+  });
+
+  it("A→B→A (subbed back to the original starter): count is 2, but the collapsed list is empty", () => {
+    const subs = [
+      makeSub({ playerOutId: "A", playerInId: "B", homeScore: 0, awayScore: 0 }),
+      makeSub({ playerOutId: "B", playerInId: "A", homeScore: 3, awayScore: 0 }),
+    ];
+    expect(countRegularSubs(subs)).toBe(2);
+    expect(reconstructRegularSubs(subs)).toEqual([]); // 淨疊加摺成 0 筆——這正是 #289 的病灶
+  });
+
+  it("shares the same filtering as reconstructRegularSubs: ignores libero rows and null-player rows", () => {
+    const subs = [
+      makeSub({ playerOutId: "1", playerInId: "2", homeScore: 0, awayScore: 0 }),
+      makeSub({ playerOutId: "6", playerInId: null, kind: "libero", homeScore: 1, awayScore: 0 }),
+      makeSub({ playerOutId: null, playerInId: "3", homeScore: 2, awayScore: 0 }),
+    ];
+    expect(countRegularSubs(subs)).toBe(1);
   });
 });
 

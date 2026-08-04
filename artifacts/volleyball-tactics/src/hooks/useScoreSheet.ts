@@ -111,6 +111,7 @@ export const useScoreSheet = create<ScoreSheetStore>()((set) => ({
       const entry: UndoEntry = {
         currentSet: record.currentSet,
         regularSubs: record.regularSubs,
+        subCount: record.subCount,
         liberoSubstitution: record.liberoSubstitution,
         timeouts: record.timeouts,
         backendRef,
@@ -188,6 +189,7 @@ export const useScoreSheet = create<ScoreSheetStore>()((set) => ({
             ...record,
             currentSet: entry.currentSet,
             regularSubs: entry.regularSubs,
+            subCount: entry.subCount,
             liberoSubstitution: entry.liberoSubstitution,
             timeouts: entry.timeouts,
           },
@@ -231,12 +233,15 @@ export const useScoreSheet = create<ScoreSheetStore>()((set) => ({
             // 換新的一局，自由球員替補狀態歸零（跟原本 handleNextSet 手動呼叫
             // setLiberoSubstitution(null) 是同一件事，現在收進 store 自己的動作裡）。
             liberoSubstitution: null,
-            // 這一局的換人次數（淨疊加清單的長度）先存進歷史，新的一局換人清單歸零。
+            // 這一局的換人次數先存進歷史，新的一局換人清單、計數器都歸零。
             // 以前這兩行是 ScoreSheet.tsx 手動呼叫 setSubCountsHistory/setRegularSubs 做的，
             // 現在既然 regularSubs 搬進 store，順手把「跨局怎麼交接」的邏輯也收進來，
-            // 讓 store 自己對這兩個欄位的一致性負責，不用 UI 元件記得同步做兩件事。
-            subCountsHistory: [...record.subCountsHistory, record.regularSubs.length],
+            // 讓 store 自己對這幾個欄位的一致性負責，不用 UI 元件記得同步做兩件事。
+            // 注意這裡存進歷史的是 record.subCount（原始計數），不是 record.regularSubs.length
+            // （淨疊加）——issue #289：連鎖換人／換回先發會讓兩者發散，賽後統計要的是前者。
+            subCountsHistory: [...record.subCountsHistory, record.subCount],
             regularSubs: [],
+            subCount: 0,
             // 暫停跟換人同一套跨局交接（issue #44）：把這一局的暫停次數收進歷史，新的一局歸零。
             timeoutCountsHistory: [...record.timeoutCountsHistory, record.timeouts.length],
             timeouts: [],
@@ -279,6 +284,9 @@ export const useScoreSheet = create<ScoreSheetStore>()((set) => ({
           [matchId]: {
             ...record,
             regularSubs: applyRegularSub(record.regularSubs, { outPlayerId, inPlayerId }),
+            // 原始計數（issue #289）：每按一次換人就 +1，跟 regularSubs 的淨疊加摺疊無關，
+            // 所以直接累加、不經過 applyRegularSub。
+            subCount: record.subCount + 1,
           },
         },
       };
