@@ -126,10 +126,11 @@ describe("undoLast — 一次退一個動作、連按往回（issue #41 重現�
   it("連續換人（A→B→C）逐次復原能精準倒回上一步，不是整包消失", () => {
     startSet("us");
     sub("pA", "pB"); // 場上 A 被換成 B → [{pA,pB}]
-    sub("pB", "pC"); // B 又被換成 C：dedup 濾掉 in=pB 那筆、接上這筆 → [{pB,pC}]
-    // 註：淨疊加 dedup 保留的是「最後一手」的 out（pB），不是最初的 pA——這是 recordRegularSub
-    // 現有行為（見 issue #41 顧問對帳），也正是為什麼「逐步倒回」很難用逆運算做、改用快照法。
-    expect(s().recordingsByMatch[M].regularSubs).toEqual([{ outPlayerId: "pB", inPlayerId: "pC" }]);
+    sub("pB", "pC"); // B 又被換成 C：往前追一筆找到原始先發是 pA → [{pA,pC}]
+    // 註：淨疊加 dedup 保留的是「原始先發」的 out（pA），不是中間那手的 pB——issue #247
+    // 修正後的行為，跟 volleyballRules.ts 的 applyRegularSub 函式註解一致。這也正是為什麼
+    // 「逐步倒回」很難用逆運算做、改用快照法：快照存的是每一步當下的完整清單。
+    expect(s().recordingsByMatch[M].regularSubs).toEqual([{ outPlayerId: "pA", inPlayerId: "pC" }]);
 
     // 退一步 → 快照精準還原到「A 換成 B」的中間狀態，而不是清空
     s().undoLast(M);

@@ -730,13 +730,14 @@ describe("reconstructRegularSubs", () => {
 
   it("collapses a chained re-substitution the same way the live store's dedup does", () => {
     // 先 {out:1,in:2}，之後 {out:2,in:3}：後者的 outPlayerId="2" 剛好等於前一筆的
-    // inPlayerId，dedup 會把前一筆濾掉，只留下最後這筆——跟 useScoreSheet.ts 的
-    // recordRegularSub 是同一套邏輯（見 scoreSheetMapping.ts 的函式註解）。
+    // inPlayerId，代表 2 本身也是替補上場的——往前追一筆找到這個位置真正的原始先發是
+    // 1，摺疊結果是 {out:1, in:3}——跟 useScoreSheet.ts 的 recordRegularSub 是同一套
+    // 邏輯（見 volleyballRules.ts 的 applyRegularSub 函式註解，issue #247）。
     const subs = [
       makeSub({ playerOutId: "1", playerInId: "2", homeScore: 3, awayScore: 1 }),
       makeSub({ playerOutId: "2", playerInId: "3", homeScore: 5, awayScore: 2 }),
     ];
-    expect(reconstructRegularSubs(subs)).toEqual([{ outPlayerId: "2", inPlayerId: "3" }]);
+    expect(reconstructRegularSubs(subs)).toEqual([{ outPlayerId: "1", inPlayerId: "3" }]);
   });
 
   it("ignores libero rows (issue #43 territory, not regular subs)", () => {

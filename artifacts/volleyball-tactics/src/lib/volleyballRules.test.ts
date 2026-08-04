@@ -73,15 +73,25 @@ describe("applyRally", () => {
 });
 
 describe("applyRegularSub", () => {
-  it("collapses a chained re-substitution: A→B then B→C leaves only the latest swap", () => {
-    // A 被換成 B（out:A,in:B），這個位置之後又被換成 C（out:B,in:C）：
-    // 新紀錄的 outPlayerId="B" 剛好等於舊紀錄的 inPlayerId="B"，舊紀錄被濾掉，
-    // 只留下最新這筆——跟 scoreSheetMapping.test.ts 的 reconstructRegularSubs
+  it("collapses a chained re-substitution: A→B then B→C keeps the original starter (issue #247)", () => {
+    // A 被換成 B（out:A,in:B），這個位置之後又被換成 C（out:B,in:C）：這次的
+    // outPlayerId="B" 剛好等於前一筆的 inPlayerId="B"，代表 B 本身也是替補上場的——
+    // 往前追一筆找到這個位置真正的原始先發是 A，摺疊結果是 {out:A, in:C}，不是
+    // {out:B, in:C}——跟 scoreSheetMapping.test.ts 的 reconstructRegularSubs
     // 「collapses a chained re-substitution」是同一個斷言（同一份實作）。
     let list: RegularSub[] = [];
     list = applyRegularSub(list, { outPlayerId: "A", inPlayerId: "B" });
     list = applyRegularSub(list, { outPlayerId: "B", inPlayerId: "C" });
-    expect(list).toEqual([{ outPlayerId: "B", inPlayerId: "C" }]);
+    expect(list).toEqual([{ outPlayerId: "A", inPlayerId: "C" }]);
+  });
+
+  it("A→B then B→A (换回原始先發) nets out to nothing", () => {
+    // 換人換回原始先發本人：這個位置淨效果等於沒換過，整筆從清單消失，
+    // 不會留下 {out:A, in:A} 這種「被自己頂替」的怪紀錄。
+    let list: RegularSub[] = [];
+    list = applyRegularSub(list, { outPlayerId: "A", inPlayerId: "B" });
+    list = applyRegularSub(list, { outPlayerId: "B", inPlayerId: "A" });
+    expect(list).toEqual([]);
   });
 
   it("keeps unrelated subs at different positions independent", () => {
