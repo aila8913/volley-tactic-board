@@ -67,10 +67,14 @@ export default function PlayerNode({
   // 前排/後排/Libero/備位（over-bench）這套判斷邏輯完全不動——只是把原本「整顆圓實色
   // 填滿」的配色，改成「深色玻璃圓片 + 這個顏色當邊框」（issue #134 材質改版），
   // 顏色本身仍是唯一的狀態指示，邏輯不變。
+  // Libero 跟前排現在同色（#CCFF00，2026-08-04 自由球員配色定案，見
+  // ScoreSheetCourt.tsx 自由球員鈕的配色說明）——排球規則自由球員只能站後排，
+  // isLibero 為真時 isFrontRow 必為假，兩個分支不會同時命中，共用同一個顏色值
+  // 不會造成球場上真的分不清楚是誰。
   const stateColor = isOverBench
     ? "#999999"
     : isLibero
-      ? "#FF6B00"
+      ? "#CCFF00"
       : isFrontRow
         ? "#CCFF00"
         : "#FFFFFF";
@@ -189,6 +193,7 @@ export default function PlayerNode({
         color={stateColor}
         radius={radius}
         emphasized={isSelected}
+        solidFill={isLibero}
       />
     </g>
   );

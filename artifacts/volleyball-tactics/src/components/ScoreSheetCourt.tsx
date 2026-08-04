@@ -542,15 +542,20 @@ export default function ScoreSheetCourt({
               const isServer = serving === "us" && pos.x > 0.7 && pos.y > 0.75;
               const isDropTarget = isLiberoDropHighlight(pos);
               const isSubTarget = subModeActive && !isFrontRow;
-              // 邊框色＝狀態指示：拖曳提示 > 換人提示 > L 蓋住(橘) > 前排(黃綠) > 後排(白)。
-              // 圓圈本身（深色玻璃底＋背號在圈裡、姓名在圈下）跟戰術板 PlayerNode.tsx 共用
-              // components/PlayerMarker.tsx——這裡只算「這個位置現在該用什麼顏色」。
+              // 邊框色＝狀態指示：拖曳提示 > 換人提示 > L 蓋住 > 前排 > 後排(白)。
+              // 拖曳提示／L 蓋住／前排三者現在同色（#CCFF00，2026-08-04 自由球員配色定案
+              // 後跟前排統一成同一個綠——「自由球員」跟「前排」共用同一個色相是刻意的，
+              // 兩者在合法站位下不會同時發生：自由球員只能站後排，isFrontRow 為真時
+              // isLiberoOverlay/isDropTarget 必為假，priority 順序留著只是保留意圖，
+              // 不是靠顏色分辨這三者）。圓圈本身（深色玻璃底＋背號在圈裡、姓名在圈下）
+              // 跟戰術板 PlayerNode.tsx 共用 components/PlayerMarker.tsx——這裡只算
+              // 「這個位置現在該用什麼顏色」。
               const color = isDropTarget
-                ? "#FF6B00"
+                ? "#CCFF00"
                 : isSubTarget
                   ? "#3B82F6"
                   : isLiberoOverlay
-                    ? "#FF6B00"
+                    ? "#CCFF00"
                     : isFrontRow
                       ? "#CCFF00"
                       : "#FFFFFF";
@@ -568,7 +573,7 @@ export default function ScoreSheetCourt({
                 <g key={pos.playerId} transform={`translate(${x},${y})`}>
                   {/* 拖曳自由球員時的目標提示環 */}
                   {isDropTarget && (
-                    <circle r="10" fill="none" stroke="#FF6B00" strokeWidth="2" opacity="0.6" />
+                    <circle r="10" fill="none" stroke="#CCFF00" strokeWidth="2" opacity="0.6" />
                   )}
                   {/* 換人模式的可選提示環 */}
                   {subModeActive && (
@@ -587,6 +592,7 @@ export default function ScoreSheetCourt({
                     color={color}
                     radius={isServer ? 7.5 : 6}
                     emphasized={isServer}
+                    solidFill={isLiberoOverlay}
                   />
                   {isServer && (
                     <text y="-9" fontSize="6" textAnchor="middle">
@@ -626,13 +632,26 @@ export default function ScoreSheetCourt({
             跟這顆按鈕實際擺在哪裡無關，搬家不用碰任何手勢程式碼。
             兩位候選、還沒選定時（liberoPlayer undefined）鈕顯示通用「L」；長按（跟球場長按
             換人同一套手感）打開下面那個選單，選完才變成顯示那位球員的名字/背號，可以拖曳，
-            理由見 handleLiberoPointerDown 的說明。 */}
+            理由見 handleLiberoPointerDown 的說明。
+            配色（tang 2026-08-04，定案前改了七輪，見 PR #260 討論）：橘色（實心或玻璃化）
+            試了幾版都覺得跟畫面不搭，改用萊姆綠。色相直接沿用這個檔案裡 isFrontRow 判斷用
+            的同一個 #CCFF00（不是 design-spec.md 色彩表的品牌萊姆綠 #C6F135，是這個元件
+            實際在用的那個值）——不要另外造一個新綠色色相，L 鈕要跟前排球員圈一眼看出是
+            同一個「綠色家族」。填色關係試過「深底描邊」（跟 PlayerMarker.tsx 一般球員圈
+            同款）跟「實色填滿＋深色邊框」兩種，最後定案是後者。邊框色中途試過米白
+            `#F5F5F0`（跟球場線條同色），使用者比較過後覺得深色 `#0a0b07`（頁面底色）比較
+            好看，改回深色。發光（box-shadow）也試過又拿掉——常駐發光原本是想比照「發球方
+            才發光」那套語言延伸給「L 待命」，但使用者實際看過覺得不需要，光靠「實色填滿的
+            綠圈」本身在深色球場上已經夠醒目。這個顏色/形式決定同一天也同步套到戰術板
+            Court.tsx 的「L 備位圓圈」、PlayerNode.tsx 的球員狀態色、跟這個檔案自己另外兩處
+            自由球員相關的橘色（isDropTarget 拖曳提示、isLiberoOverlay 疊圖）——「自由球員」
+            這個語意在全站現在統一用同一個綠色，不再是橘色。 */}
         {liberoOnSideline && (
           <div
             onPointerDown={handleLiberoPointerDown}
             onPointerMove={handleLiberoPointerMove}
             onPointerUp={handleLiberoPointerUp}
-            className="absolute flex cursor-grab flex-col items-center justify-center rounded-full border-2 border-orange-500 bg-orange-400 font-bold text-white touch-none select-none active:scale-95"
+            className="absolute flex cursor-grab flex-col items-center justify-center rounded-full border-4 border-[#0a0b07] bg-[#CCFF00] font-bold text-[#0a0b07] touch-none select-none active:scale-95"
             style={{
               right: "100%",
               marginRight: 8,
@@ -736,7 +755,9 @@ export default function ScoreSheetCourt({
         })}
       </div>
 
-      {/* 自由球員拖曳殘影 */}
+      {/* 自由球員拖曳殘影：配色跟鈕本體一起同步（見上面鈕本體的配色說明——沿用 isFrontRow
+          同一個 #CCFF00，深色邊框、深色文字、實色填滿，不加光暈），deep 色文字才在亮綠底上
+          讀得清楚（原本是 white，換成亮綠底之後對比會不夠）。 */}
       {draggingLibero && liberoGhostScreen && liberoPlayer && (
         <div
           style={{
@@ -746,15 +767,15 @@ export default function ScoreSheetCourt({
             width: SIDELINE_W,
             height: SIDELINE_W,
             borderRadius: "50%",
-            backgroundColor: "#FF6B00",
-            border: "2px solid #111",
+            backgroundColor: "#CCFF00",
+            border: "2px solid #0a0b07",
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
             justifyContent: "center",
             fontSize: 10,
             fontWeight: "bold",
-            color: "white",
+            color: "#0a0b07",
             pointerEvents: "none",
             zIndex: 9999,
             opacity: 0.85,

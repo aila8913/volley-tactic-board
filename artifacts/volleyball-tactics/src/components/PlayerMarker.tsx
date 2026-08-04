@@ -23,6 +23,11 @@ interface PlayerMarkerProps {
   // 舒服」是實機比較出來的結論，不是同一個數字打天下，所以開一個 prop 讓呼叫端各自決定，
   // 不在這裡用 color 硬猜該套多少（那樣以後多一種顏色又要回來改這個元件）。
   glowBlur?: number;
+  // 自由球員定案配色（2026-08-04）：其他狀態都是「深色玻璃底＋這個顏色描邊」，但自由
+  // 球員要反過來——「這個顏色實色填滿＋深色描邊」，跟計分表 ScoreSheetCourt.tsx 自由球員鈕
+  // 最後定案的樣式一致（見那邊的配色說明）。true 時 fill/stroke 對調；預設 false 維持
+  // 其他狀態原本的樣子，不影響既有呼叫端。
+  solidFill?: boolean;
 }
 
 export default function PlayerMarker({
@@ -32,14 +37,20 @@ export default function PlayerMarker({
   radius = 6,
   emphasized = false,
   glowBlur = 3,
+  solidFill = false,
 }: PlayerMarkerProps) {
   const r = emphasized ? radius + 1.5 : radius;
+  // 背號在圈「裡面」，solidFill 時圈是飽和實色，背號要跟著換深色才有對比；
+  // 姓名畫在圈「下方」，不管圈本身是深底描邊還是實色填滿，姓名底下永遠是深色球場
+  // 背景（不是圈的填色），所以姓名一律用米白，不跟著 solidFill 換色
+  // （tang 2026-08-04：換成自由球員綠底黑框之後姓名變黑字，蓋在深色球場上看不見）。
+  const numberColor = solidFill ? "#0a0b07" : "#F5F5F0";
   return (
     <>
       <circle
         r={r}
-        fill="rgba(10, 11, 7, 0.62)"
-        stroke={color}
+        fill={solidFill ? color : "rgba(10, 11, 7, 0.62)"}
+        stroke={solidFill ? "#0a0b07" : color}
         strokeWidth={emphasized ? 2 : 1.2}
         style={emphasized ? { filter: `drop-shadow(0 0 ${glowBlur}px ${color})` } : undefined}
       />
@@ -47,7 +58,7 @@ export default function PlayerMarker({
         y="1.6"
         fontSize="4.5"
         fontWeight="bold"
-        fill="#F5F5F0"
+        fill={numberColor}
         textAnchor="middle"
         className="font-sans pointer-events-none"
       >
