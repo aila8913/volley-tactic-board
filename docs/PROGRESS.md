@@ -22,16 +22,15 @@
 > 平行 PR 就落在不同行段、git 幾乎都能自動合併，不用真的把檔案拆兩份、也保住一眼 catch-up。
 > 上面的 `_Last updated_` 是共用一行摘要（誰更新了什麼），保持精簡、別長成段落。
 
-\_Last updated: 2026-08-03 (aila) — **M3「部署給真人試用」啟動**：#77 帳號模型已定案並關閉
-（v1 auth＝**Google OAuth、每人一個真帳號**、公開網址不設邀請碼），#75 離線可靠性契約的同步引擎
-設計已產出並貼在該 issue，**契約範圍由 PO 拍板＝`rallies`/`events`/`substitutions`/`timeouts`
-四類保證不遺失，`lineups` 與戰術板/名單刻意不保證**。#64 PR1（五張表主鍵 `serial → uuid`）、
-PR2（計分頁六個動作收斂成一條有序 write log，一併吃掉 **#230**）、PR3（write log 落地 IndexedDB＋
-開頁重放＋後端冪等寫入）、PR4（退避重送迴圈＋「N 筆未同步」指示器）**四張全數完成，#64 收工**。
-**#26 部署形態已定案＝Neon（Postgres）＋ Render（單一 Node 服務）＋自己接 Google OAuth**，
-PR1（雲驗環境）＋ PR2（Google OAuth 接線，`mockAuth` 退役成 `requireAuth`）**都已完成**，
-`#26` 保持 open 到實機驗過登入流程再關。
-先前條目：#251 戰術板右欄整併（PR #274）、#228 route handler 收斂 12 支檔案全數完成（PR
+\_Last updated: 2026-08-04 (aila) — **#26 部署收工，M3 脊椎（#77→#75→#64→#26）全數完成。**
+Neon（Postgres）＋ Render（單一 Node 服務）＋自己接 Google OAuth 三張 PR（PR1 雲端環境 #282、
+PR2 OAuth 接線 #283）都已合併上線，`https://volley-tactics-board.onrender.com` 實機驗過完整
+登入流程（Google 帳號登入→session cookie→右下角帳號徽章→登出），`#26` 已隨 PR #283 合併自動
+關閉。M3「部署給真人試用」目前只剩使用者實際找人試用、收回饋這件事本身，沒有更多程式碼工作。
+先前條目：#77 帳號模型定案（v1＝Google OAuth 每人一個真帳號，公開網址不設邀請碼）、#75 離線
+可靠性契約定案（`rallies`/`events`/`substitutions`/`timeouts` 保證不遺失，`lineups` 與戰術板/
+名單刻意不保證）、#64 四張 PR（主鍵改 uuid／write log 收斂／IndexedDB 落地＋冪等寫入／退避重送＋
+未同步指示器）全數完成。更早：#251 戰術板右欄整併（PR #274）、#228 route handler 收斂（PR
 #256/#262~#272）、#238＋#257 比賽狀態判準收斂（PR #258/#259）。\_
 
 \_Last updated: 2026-07-30 (tang) — 工具軌圖示（PR #248）與全站背景統一（PR #253）兩張 PR 開著待調整；
