@@ -240,16 +240,34 @@ export function regularSubToApi(
 // 只處理 kind==='regular'（libero 上下場的重建是 #43 的範圍，不能混進一般換人清單）；
 // playerInId/playerOutId 為 null 的 regular row 理論上不會出現（一般換人一定知道誰換誰），
 // 保險起見直接跳過、不讓它污染清單。
+//
+// 這道過濾條件被 reconstructRegularSubs（淨疊加清單）跟 countRegularSubs（原始次數，
+// issue #289）兩支函式共用：兩者「認定的是同一批換人 row」，只是一個摺疊、一個單純數數，
+// 過濾條件一定要完全一致——這正是 #226 的教訓，複製貼上兩份的下場是之後改一邊、另一邊忘了跟著改。
+function isRegularSubRow(
+  s: Substitution,
+): s is Substitution & { playerInId: string; playerOutId: string } {
+  return s.kind === "regular" && s.playerInId != null && s.playerOutId != null;
+}
+
 export function reconstructRegularSubs(subs: Substitution[]): RegularSub[] {
   let result: RegularSub[] = [];
   for (const s of subs) {
-    if (s.kind !== "regular") continue;
-    if (s.playerInId == null || s.playerOutId == null) continue;
+    if (!isRegularSubRow(s)) continue;
     const inPlayerId = String(s.playerInId);
     const outPlayerId = String(s.playerOutId);
     result = applyRegularSub(result, { outPlayerId, inPlayerId });
   }
   return result;
+}
+
+// ── 後端 substitution rows → 這一局實際換人的原始次數（issue #289）──
+// 跟 reconstructRegularSubs 用同一個 isRegularSubRow 過濾條件，差別只在這裡不摺疊、
+// 單純數筆數——因為「換了幾次人」要的是原始計數，不是淨疊加後的清單長度（見
+// types/scoresheet.ts 的 ScoreSheetState.subCount 註解：A→B→C 摺成 1 筆但換了 2 次，
+// A→B→A 甚至摺成 0 筆但換了 2 次，這正是這支函式存在的理由）。
+export function countRegularSubs(subs: Substitution[]): number {
+  return subs.filter(isRegularSubRow).length;
 }
 
 // ── TimeoutRecord → 暫停 API body（issue #44）──
@@ -330,6 +348,7 @@ export const emptyRecord = (): ScoreSheetState => ({
   lineup: null,
   liberoSubstitution: null,
   regularSubs: [],
+  subCount: 0,
   subCountsHistory: [],
   timeouts: [],
   timeoutCountsHistory: [],
@@ -433,11 +452,11 @@ export function reconstructRecording(
       lineup: findLineupSnapshotForSet(lineups, s.id),
     };
   });
-  // 已結束各局的換人次數：對每個已結束的 set，重放它的換人紀錄、取淨疊加清單的長度
-  // （跟 nextSet 動作把 record.regularSubs.length 推進 subCountsHistory 是同一個數字，
-  // 只是這裡是從後端資料重算，而不是延續 store 裡當下的值）。陣列順序對齊 completedSets。
-  const subCountsHistory: number[] = completedSetRows.map(
-    (s) => reconstructRegularSubs(subsBySetId.get(s.id) ?? []).length,
+  // 已結束各局的換人次數：對每個已結束的 set，數它的換人紀錄原始筆數（issue #289：不是
+  // 淨疊加清單的長度——跟 nextSet 動作把 record.subCount 推進 subCountsHistory 是同一個
+  // 數字，只是這裡是從後端資料重算，而不是延續 store 裡當下的值）。陣列順序對齊 completedSets。
+  const subCountsHistory: number[] = completedSetRows.map((s) =>
+    countRegularSubs(subsBySetId.get(s.id) ?? []),
   );
   // 已結束各局的暫停次數，對齊 subCountsHistory 的作法：對每個已結束的 set 數它的暫停筆數。
   const timeoutCountsHistory: number[] = completedSetRows.map(
@@ -450,6 +469,8 @@ export function reconstructRecording(
   );
   // 進行中這一局的換人淨疊加清單，直接重放這一局的換人紀錄即可。
   const regularSubs = reconstructRegularSubs(subsBySetId.get(currentSetRow.id) ?? []);
+  // 進行中這一局的原始換人次數（issue #289），跟上面淨疊加清單是同一批 row、不同算法。
+  const subCount = countRegularSubs(subsBySetId.get(currentSetRow.id) ?? []);
   // 進行中這一局的暫停清單（issue #44），直接把這一局的暫停紀錄翻回前端形狀。
   const currentTimeouts = reconstructTimeouts(timeoutsBySetId.get(currentSetRow.id) ?? []);
 
@@ -465,6 +486,7 @@ export function reconstructRecording(
     lineup,
     liberoSubstitution: null,
     regularSubs,
+    subCount,
     subCountsHistory,
     timeouts: currentTimeouts,
     timeoutCountsHistory,

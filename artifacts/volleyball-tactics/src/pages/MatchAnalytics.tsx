@@ -286,9 +286,11 @@ export default function MatchAnalytics() {
   const scoreStepChart = scopedSet ? buildScoreStepChart(scopedSet.history) : null;
 
   // 換人統計：全場＝各局加總；選某一局＝只顯示那一局的次數。已結束各局的次數存在
-  // subCountsHistory（陣列順序對齊 completedSets），進行中那一局是 record.regularSubs 的長度。
+  // subCountsHistory（陣列順序對齊 completedSets），進行中那一局是 record.subCount。
+  // 注意 subCount 是原始換人計數，不是 record.regularSubs.length（issue #289）：後者是淨疊加
+  // 清單，連鎖換人／換回先發會讓兩個數字對不上——換人「次數」統計要的是前者。
   const subCountsHistory = record?.subCountsHistory ?? [];
-  const currentSubCount = record?.regularSubs.length ?? 0;
+  const currentSubCount = record?.subCount ?? 0;
   const totalSubCount = subCountsHistory.reduce((a, b) => a + b, 0) + currentSubCount;
   const subCountForScope = (() => {
     if (scope === "all") return totalSubCount;

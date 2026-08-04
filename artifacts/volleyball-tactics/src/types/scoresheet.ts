@@ -101,6 +101,9 @@ export interface UndoEntry {
   // O(1)、不需要深拷貝，因為那些舊物件之後再也不會被就地改動。
   currentSet: SetRecordingState;
   regularSubs: RegularSub[];
+  // subCount 的快照跟 regularSubs 並列（issue #289）：這兩個欄位在同一個動作裡可能各自
+  // 變化（換人時兩個都會動；undo 也要把兩個都退回去），缺一個就會讓其中一個數字對不上。
+  subCount: number;
   liberoSubstitution: string | null;
   // 暫停清單（issue #44）也一起進快照，undo 才能整包退回叫暫停「之前」的狀態。
   timeouts: TimeoutRecord[];
@@ -155,7 +158,15 @@ export interface ScoreSheetState {
   // substitutions 表（append-only），reload 重建時會 replay 那些歷史、重新收斂成這份淨清單
   // （見 lib/scoreSheetMapping.ts 的 reconstructRegularSubs）。
   regularSubs: RegularSub[];
-  // 已結束各局的換人「次數」（每局淨值，即該局 regularSubs 陣列最終的長度），依局數順序排列。
+  // 「當前這一局」實際換人的原始次數（issue #289）。這個數字**不等於** regularSubs.length：
+  // regularSubs 是「淨疊加」，回答的是「現在場上站的是誰」——連鎖換人（A→B→C）會摺成一筆、
+  // 換回先發（A→B→A）甚至會摺成零筆，兩種情況都會把「真的換了幾次人」這個數字吃掉。
+  // subCount 才是回答「這一局到目前為止按了幾次換人」的原始計數，兩者刻意分成兩個獨立欄位：
+  // 畫面靠 regularSubs 畫「誰在場上」，換人次數統計（教練得知道還能不能換）靠 subCount。
+  // 排球規則：每隊每局換人上限 6 次，教練就是靠這個數字判斷「還能不能再換」——這個上限數的
+  // 是「按了幾次」而非「跟先發比起來現在差幾個人」，所以一定要是原始計數，不能用淨疊加代替。
+  subCount: number;
+  // 已結束各局的換人「次數」（該局 subCount 的最終值），依局數順序排列。
   // 只存數字不存明細，因為賽後只需要「這局換了幾次人」這個統計數字（見 ScoreSheetStats）。
   subCountsHistory: number[];
   // 「當前這一局」的暫停清單（issue #44）。換人是「淨疊加」，暫停沒有覆蓋語意，所以這裡是

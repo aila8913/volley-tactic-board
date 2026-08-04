@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { applyRally, applyRegularSub, type RuleState } from "./volleyballRules";
-import { reconstructSetFromRallies } from "./scoreSheetMapping";
+import { reconstructSetFromRallies, countRegularSubs } from "./scoreSheetMapping";
 import { useScoreSheet } from "../hooks/useScoreSheet";
 import type { RegularSub, Side } from "../types/scoresheet";
-import type { MatchSet, Rally } from "@workspace/api-client-react";
+import type { MatchSet, Rally, Substitution } from "@workspace/api-client-react";
 
 // 這個檔案分成兩層：
 //   1. applyRally / applyRegularSub 本身的單元測試——規則細節（side-out 才輪轉、
@@ -237,4 +237,75 @@ describe("applyRally parity between the live path and the replay path", () => {
     // history/PointRecord 的值，光是最終比分一樣還不夠，逐步過程也不能兜不起來。
     expect(replayState.history.map((h) => h.wasSideOut)).toEqual(liveWasSideOut);
   });
+});
+
+// ── 換人「次數」live ↔ replay 一致性測試（issue #289）──
+//
+// 跟上面 applyRally 的 parity test 是同一個理由：subCount 也有兩條路徑——live 是
+// useScoreSheet.ts 的 recordRegularSub 逐次 +1，replay 是 scoreSheetMapping.ts 的
+// countRegularSubs 數後端 substitution row 的筆數。兩條路徑必須對同一組換人序列算出
+// 同一個數字，尤其是「連鎖換人」「換回原始先發」這兩種會讓淨疊加清單（regularSubs）
+// 跟原始次數（subCount）發散的情境——這正是 #289 要修的病灶，見
+// types/scoresheet.ts 的 ScoreSheetState.subCount 註解。
+describe("subCount parity between the live path and the replay path (issue #289)", () => {
+  // 造一筆後端 substitution row（只填 countRegularSubs 會用到的欄位）。homeScore/awayScore
+  // 只是排序用的時間戳記，這裡不影響次數計算，固定填 0 即可。
+  const makeSub = (outPlayerId: string, inPlayerId: string): Substitution => ({
+    id: `sub-${outPlayerId}-${inPlayerId}`,
+    setId: "set-1",
+    homeScore: 0,
+    awayScore: 0,
+    playerOutId: outPlayerId,
+    playerInId: inPlayerId,
+    kind: "regular",
+    seq: 0,
+  });
+
+  // 三種情境對照表（PO 判定，見 issue #289）：
+  //   A→B          規則上換了 1 次
+  //   A→B→C（連鎖） 規則上換了 2 次（即使淨疊加清單只剩 1 筆 {out:A,in:C}）
+  //   A→B→A（換回先發） 規則上換了 2 次（即使淨疊加清單摺成 0 筆）
+  const scenarios: { name: string; subs: [string, string][]; expectedCount: number }[] = [
+    { name: "A→B", subs: [["A", "B"]], expectedCount: 1 },
+    {
+      name: "A→B→C (chained)",
+      subs: [
+        ["A", "B"],
+        ["B", "C"],
+      ],
+      expectedCount: 2,
+    },
+    {
+      name: "A→B→A (subbed back to the original starter)",
+      subs: [
+        ["A", "B"],
+        ["B", "A"],
+      ],
+      expectedCount: 2,
+    },
+  ];
+
+  for (const { name, subs, expectedCount } of scenarios) {
+    it(`${name}: live subCount and replay subCount both equal ${expectedCount}`, () => {
+      // ── live 路徑：走真正的 zustand store（跟上面 applyRally 的 parity test 同一套理由，
+      //    不在測試檔裡自己再手寫一份計數邏輯）。
+      const MATCH = `subcount-parity-${name}`;
+      useScoreSheet.setState({ recordingsByMatch: {}, undoStacksByMatch: {} });
+      const store = () => useScoreSheet.getState();
+      store().startSet(MATCH, "us");
+      for (const [outPlayerId, inPlayerId] of subs) {
+        store().recordRegularSub(MATCH, outPlayerId, inPlayerId);
+      }
+      const liveSubCount = store().recordingsByMatch[MATCH].subCount;
+
+      // ── replay 路徑：把同一組換人序列包成後端會回傳的 substitution rows，餵給
+      //    countRegularSubs（reload 時真正會走的函式）。
+      const replaySubs = subs.map(([outPlayerId, inPlayerId]) => makeSub(outPlayerId, inPlayerId));
+      const replaySubCount = countRegularSubs(replaySubs);
+
+      expect(liveSubCount).toBe(expectedCount);
+      expect(replaySubCount).toBe(expectedCount);
+      expect(replaySubCount).toBe(liveSubCount);
+    });
+  }
 });
