@@ -157,6 +157,82 @@ curl https://<你的網址>/api/auth/me
 
 ---
 
+## 日常部署：merge 到 main 之後會發生什麼
+
+上面那七步是**一次性**的。服務建好之後，你不用再進 Render 按任何按鈕——`render.yaml`
+綁了 `branch: main`，而 Render 的 auto-deploy 預設是開的，所以「在 GitHub 按下 merge」
+就是這個專案的部署動作。
+
+### 時間軸
+
+```
+你按 merge
+   │
+   ├─ GitHub Actions（.github/workflows/ci.yml）跑 lint / format / typecheck / test
+   │  └─ 這條跟部署「無關」，Render 不會等它，兩條管線各跑各的
+   │
+   └─ GitHub webhook → Render 開始 build
+         ├─ corepack enable && pnpm install --prod=false --frozen-lockfile && pnpm run build
+         │  （monorepo 要裝完整 devDependencies 再 typecheck + build，free plan 約 3–6 分鐘）
+         ├─ 起新的行程，跑 startCommand
+         ├─ 打 /api/healthz 確認新版活著   ← 這關沒過就不切流量，舊版繼續服務
+         └─ 切換流量，舊行程收掉
+```
+
+**重點一：CI 綠燈不等於部署成功。** 這是最容易誤判的地方。GitHub Actions 和 Render 是
+兩條完全獨立的管線，Render 不看 CI 結果就開始 build——理論上 CI 紅燈的 commit 一樣會被
+部署上去。反過來也一樣：CI 全綠但 Render build 掛掉（例如 lockfile 沒跟著更新、
+`--frozen-lockfile` 就會失敗）也完全可能。要看部署狀態只能去 Render Dashboard。
+
+**重點二：切換是零停機的。** health check 沒過之前流量還在舊版上，所以部署失敗不會讓
+網站掛掉，只是「新功能沒上去」。
+
+### 怎麼確認部署成功
+
+1. **Render Dashboard → 你的服務 → Events 分頁**：看最新一筆 deploy 的狀態。
+   `Live` = 成功，`Build failed` / `Deploy failed` 都會在這裡標紅，點進去有完整 log。
+2. **對網址打一次 health check**：
+
+   ```powershell
+   curl https://<你的網址>/api/healthz
+   ```
+
+   > free plan 休眠的話這一發會等 30–60 秒才回應，那是冷啟動不是失敗。
+
+3. **確認跑的是新版**：Events 裡那筆 deploy 會標出 commit SHA，跟你剛 merge 的
+   commit 對一下就知道。
+
+### merge 前要自己多做一步的情況
+
+**動到 `lib/db/src/schema/` 的時候。** 這個 repo 用 `drizzle-kit push`、沒有 migration
+檔，而 `buildCommand` 裡**沒有** push 這一步（刻意的：讓雲端資料庫的結構變更是一個需要
+人明確按下去的動作，而不是 merge 的副作用）。所以 schema 改動 merge 上去之後，程式碼是
+新的、Neon 的欄位還是舊的，會變成 runtime error。正確順序是：
+
+```powershell
+# 1. merge 之前（或至少 build 完成之前）先把 schema 推上雲端
+$env:DATABASE_URL = "<Neon 連線字串>"
+pnpm --filter @workspace/db run push
+# 2. 再去 GitHub 按 merge
+```
+
+> 為什麼是「先推 schema 再上程式碼」：新增欄位/新增表對舊版程式碼是無害的（它不知道那些
+> 欄位存在，也就不會碰），反過來先上程式碼則會有一段時間新程式碼在找不存在的欄位。
+> 這個順序在有真人資料之後會變得更重要——那時 `push` 遇到破壞性變更（改型別、刪欄位）
+> 會要你確認資料怎麼處理，本機那套「砍掉重建」不再是選項，就得補上真正的 migration 流程了。
+
+**改到環境變數的時候。** 那些 `sync: false` 的值（`DATABASE_URL`、`GOOGLE_*`、
+`COOKIE_SECRET`）存在 Render 儀表板裡，不在 git 裡。改 `render.yaml` 的註解不會改到值；
+要改值得進 Environment 分頁改，存檔後 Render 會自己重新部署一次。
+
+### 想暫時關掉自動部署
+
+Render 服務的 Settings → Build & Deploy → Auto-Deploy 可以關成 `No`，之後改成手動按
+「Manual Deploy」。或是在 `render.yaml` 的服務底下加一行 `autoDeploy: false`——後者比較
+符合這個 repo 的習慣（設定寫進檔案、有版本紀錄），但代價是「暫時關一下」也要開一張 PR。
+
+---
+
 ## 已知限制（目前這一版）
 
 ### 冷啟動
