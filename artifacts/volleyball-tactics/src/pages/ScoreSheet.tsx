@@ -13,7 +13,7 @@ import ScoreSheetStats from "@/components/ScoreSheetStats";
 import RotationRailPanel from "@/components/RotationRailPanel";
 import { PlayAction, Side } from "@/types/scoresheet";
 import { isSetComplete, disabledActions, resolveScoringSide } from "@/lib/scoreSheetMapping";
-import { countSetWins } from "@/lib/matchOutcome";
+import { countSetWins, setWinner } from "@/lib/matchOutcome";
 import { APP_BACKGROUND_STYLE, APP_SHELL_CLASS, INFO_RAIL_BASE_CLASS } from "@/lib/appChromeStyles";
 import {
   captureLineupFromRotations,
@@ -480,6 +480,22 @@ export default function ScoreSheet() {
           <span className="text-[11px] font-semibold text-[#a9b096]">對手</span>
         </div>
       </div>
+
+      {/* 局點提示（tang 2026-08-04 要求）：issue #45 當初只讓「下一局」按下去時才檢查
+          isSetComplete（沒達標跳確認視窗），達標之後完全沒有任何提示——教練得自己記得
+          分數、自己想到要按下一局。這裡補一個不擋操作的提示：達標（一般局 25 分／第五局
+          15 分，且淨勝 2 分以上）就跳出琥珀色提示條，跟 MatchEntryLinks.tsx「尚未排先發」
+          用同一套「柔性提醒、不鎖版面」語彙（design-spec 既有慣例）。比分卡、球場手勢
+          完全不受影響——照 #45 的既有理由，比分打到 25 之後可能還有特殊情況要繼續記
+          （教練刻意要求不強制擋），這裡只解決「達標後沒人提醒」，不改動「達標後還能不能
+          繼續記分」。開賽前分數是 0:0，isSetComplete 天然回 false，這個提示不會提早出現
+          在「這局由誰先發球」那個畫面（scoreDisplay 兩處共用同一份 JSX，不用另外分支）。 */}
+      {currentSet &&
+        isSetComplete(currentSet.setNumber, currentSet.ourScore, currentSet.opponentScore) && (
+          <p className="max-w-[220px] rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-1.5 text-center text-xs font-semibold text-amber-300">
+            {setWinner(currentSet) === "us" ? "我方" : "對手"}已達勝局點，可按「下一局」封存
+          </p>
+        )}
     </div>
   );
 
