@@ -9,6 +9,18 @@ import * as zod from 'zod';
 
 
 /**
+ * Returns the signed-in user's identity from the session cookie. 401 (not 200 with a null body) when nobody is logged in, so the generated client's normal error handling (ApiError with status 401) doubles as the "not authenticated" signal — the frontend doesn't need a second, shape-based check.
+
+ * @summary Get the currently logged-in user
+ */
+export const GetCurrentUserResponse = zod.object({
+  "userId": zod.string(),
+  "email": zod.string(),
+  "name": zod.string()
+})
+
+
+/**
  * Returns server health status
  * @summary Health check
  */

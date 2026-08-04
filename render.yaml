@@ -40,9 +40,24 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      # sync: false 代表「這個值不寫在檔案裡，我會到儀表板手動填」。
-      # 資料庫連線字串裡有密碼，是憑證，絕對不能進 git。
+      # 以下全部 sync: false：值不寫在檔案裡，到 Render 儀表板手動填。
+      # 資料庫連線字串、OAuth 憑證、cookie 簽章金鑰都是憑證，絕對不能進 git。
       - key: DATABASE_URL
+        sync: false
+      # Google Cloud Console 的 OAuth 2.0 用戶端 ID／密鑰（docs/deploy.md 有申請步驟）。
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      # 必須跟 Google Cloud Console 裡登記的「已授權的重新導向 URI」逐字元相同，
+      # 例如 https://volley-tactics-board.onrender.com/api/auth/google/callback——
+      # 這串網址要等第一次部署、拿到 Render 分配的網域後才知道，所以沒辦法預先寫死在這裡。
+      - key: GOOGLE_REDIRECT_URI
+        sync: false
+      # 用來簽章 session cookie 的密鑰，隨便一串夠長的亂數即可（例如
+      # `openssl rand -hex 32` 產生的字串）。這串外洩等於任何人都能偽造出「我是任何使用者」
+      # 的合法 session，敏感程度跟資料庫密碼一樣。
+      - key: COOKIE_SECRET
         sync: false
     # PORT 不用寫：Render 會自己注入，artifacts/api-server/src/index.ts 讀得到
     # （它的順序是 API_PORT ?? PORT，本機開發才會設 API_PORT）。

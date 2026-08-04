@@ -79,8 +79,11 @@ export type WriteStatus = "pending" | "syncing" | "synced" | "error" | "cancelle
 export type WriteLogEntry = WriteOp & {
   // 本機遞增序號，決定重放/送出順序，同時是 IndexedDB 裡的主鍵的一半（[matchId, seq]）。
   // 它必須跨 reload 遞增，所以游標另外存在 localStorage（見 writeLogStore.ts 的說明）。
-  // 之後有真的使用者（Google OAuth，#77/#26）時主鍵會擴成 (userId, matchId, seq)；現在
-  // 還是 mockAuth，與其塞一個假 userId 汙染 schema，不如等 OAuth 落地時一次補上。
+  // matchId 是後端指派的全域唯一序號，不會跨使用者撞號，所以主鍵不含 userId 目前不是
+  // 正確性問題。已知但刻意不在 #26 PR2 處理的邊界情況：同一台瀏覽器先後登入兩個不同
+  // Google 帳號時，前一個帳號留下的未送出佇列會在下一個帳號名下被重放送出（write log
+  // 本身不記 userId，送出時一律套用「現在登入的是誰」）。這個情境需要多帳號共用同一台
+  // 裝置才會發生，先記在這裡，不預先為它加防護。
   seq: number;
   matchId: number;
   status: WriteStatus;

@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import authRouter from "./auth";
 import healthRouter from "./health";
 import tacticsRouter from "./tactics";
 import tournamentsRouter from "./tournaments";
@@ -16,6 +17,10 @@ import analysisRouter from "./analysis";
 
 const router: IRouter = Router();
 
+// auth 路由（/auth/google、/auth/me…）不能掛在 requireAuth 底下——使用者連身分都還沒
+// 建立，要求他先證明自己是誰是邏輯倒反。所以刻意跟其他 router.use(...) 一樣平掛在這裡，
+// 「不檢查擁有權」的決定是路由自己內部做的，不是靠漏掉一個 middleware 悄悄達成的。
+router.use(authRouter);
 router.use(healthRouter);
 router.use(tacticsRouter);
 router.use(tournamentsRouter);

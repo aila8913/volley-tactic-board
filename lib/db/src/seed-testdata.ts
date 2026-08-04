@@ -25,13 +25,13 @@ import {
   type InsertEvent,
 } from "./index";
 
-// mock auth 階段所有資料都掛在這個固定使用者底下（見 middleware/mockAuth.ts）。
+// mock auth 階段所有資料都掛在這個固定使用者底下（見 middleware/requireAuth.ts）。
 const USER_ID = "mock-user-001";
 
 // 第二個使用者，底下只掛一場空比賽，**不是給畫面看的**——它整場都不會出現在 UI 裡，
 // 因為每一支查詢都綁 userId，user-001 登入時撈不到它。它的用途是當「別人的資料」：
 // 拿這場的 id 去打 API，就能驗證 ownership 檢查真的擋得住跨使用者存取（#225／#232）。
-// 這兩個字串跟 middleware/mockAuth.ts 的常數是刻意用抄的、沒有共用：lib/ 是被 artifacts/
+// 這兩個字串跟 middleware/requireAuth.ts 的常數是刻意用抄的、沒有共用：lib/ 是被 artifacts/
 // 匯入的下層，反過來 import 上層會把相依方向倒過來（見 CLAUDE.md 的 repo layout）。
 const OTHER_USER_ID = "mock-user-002";
 

@@ -7,6 +7,7 @@
  */
 
 export * from './ballType';
+export * from './currentUser';
 export * from './eventAction';
 export * from './eventSide';
 export * from './eventSource';

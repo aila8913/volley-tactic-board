@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, getTableColumns } from "drizzle-orm";
 import { db, lineupsTable, setsTable } from "@workspace/db";
-import { mockAuth } from "../middleware/mockAuth";
+import { requireAuth } from "../middleware/requireAuth";
 import { setBelongsToUser, matchBelongsToUser } from "../lib/ownership";
 import { ListMatchLineupsParams, PutSetLineupParams, PutSetLineupBody } from "@workspace/api-zod";
 
@@ -13,7 +13,7 @@ import { ListMatchLineupsParams, PutSetLineupParams, PutSetLineupBody } from "@w
 // 讀（bulk）掛在 /matches/:matchId/lineups 底下（先驗 match 擁有權）；
 // 寫掛在 /sets/:setId/lineup 底下（先驗 set 擁有權，往上追到 match.userId）。
 const router: IRouter = Router();
-router.use(mockAuth);
+router.use(requireAuth);
 
 // GET /matches/:matchId/lineups — 一次拿整場比賽所有局的先發（跨 set）。
 // lineups 自己沒存 matchId，所以 join lineups→sets，用 sets.matchId 過濾；先驗 match 屬於這個 user。

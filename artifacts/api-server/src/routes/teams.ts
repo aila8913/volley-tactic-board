@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
 import { db, teamsTable } from "@workspace/db";
-import { mockAuth } from "../middleware/mockAuth";
+import { requireAuth } from "../middleware/requireAuth";
 import { teamBelongsToUser } from "../lib/ownership";
 import { handler } from "../lib/handler";
 import {
@@ -12,7 +12,7 @@ import {
 } from "@workspace/api-zod";
 
 // 球隊（team）的 CRUD。team 只是「分組標籤」——標記一場比賽是哪支隊伍打的，之後才能
-// 按球隊切片統計（#65 視圖二）。跟 tournaments 同一套 mockAuth + userId 擁有權隔離。
+// 按球隊切片統計（#65 視圖二）。跟 tournaments 同一套 requireAuth + userId 擁有權隔離。
 //
 // 跟 tournaments 兩處刻意不同：
 //   1. teams.id 是 serial 整數（DB 自動遞增），不是 client-mintable 的 uuid，所以 POST
@@ -22,7 +22,7 @@ import {
 //      lib/db/src/schema/matches.ts），刪掉一支球隊只會把指著它的比賽 teamId 設回 null
 //      （變「未分類」），比賽本體不受影響——標籤沒了不該牽連比賽紀錄。
 const router: IRouter = Router();
-router.use(mockAuth);
+router.use(requireAuth);
 
 // GET /teams — 列出目前使用者的所有球隊。teams 沒有 createdAt 欄位，用 serial id 排序
 // 當作「建立順序」的近似（id 遞增＝越後面建立）。

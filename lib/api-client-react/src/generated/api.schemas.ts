@@ -9,6 +9,12 @@ export interface HealthStatus {
   status: string;
 }
 
+export interface CurrentUser {
+  userId: string;
+  email: string;
+  name: string;
+}
+
 export type PlayerRole = typeof PlayerRole[keyof typeof PlayerRole];
 
 
