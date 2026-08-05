@@ -14,7 +14,7 @@ import RotationRailPanel from "@/components/RotationRailPanel";
 import UnsyncedWritesBadge from "@/components/UnsyncedWritesBadge";
 import { PlayAction, Side } from "@/types/scoresheet";
 import { isSetComplete, disabledActions, resolveScoringSide } from "@/lib/scoreSheetMapping";
-import { countSetWins } from "@/lib/matchOutcome";
+import { countSetWins, setWinner } from "@/lib/matchOutcome";
 import { APP_BACKGROUND_STYLE, APP_SHELL_CLASS, INFO_RAIL_BASE_CLASS } from "@/lib/appChromeStyles";
 import {
   captureLineupFromRotations,
@@ -155,6 +155,26 @@ export default function ScoreSheet() {
   // regularSubs/subCountsHistory 已搬到上面從 record 衍生；這裡只留「換人模式選中哪個場邊
   // 球員」這個純 UI 互動狀態（跟後端無關，不用持久化）。
   const [selectedBenchPlayer, setSelectedBenchPlayer] = useState<string | null>(null);
+
+  // ── 自由球員選定（名單有兩位候選時，記使用者選了哪一位）──
+  // tang 2026-07-31 要求：這個選擇要撐過重新整理頁面，但又不是「這場比賽的紀錄」（換誰上場
+  // 才是紀錄，這裡只是「鈕現在代表哪一位」的畫面偏好）——所以不走 controller/後端那條路
+  // （那條路是給真的要記錄的動作用的，見 handleLiberoSubstitute 旁的註解「libero 替補是純
+  // 前端狀態、沒寫後端」），改用 localStorage，key 帶上 matchId 避免跟別場比賽的選擇互相污染。
+  // 用 useState 的 lazy initializer 讀初值，避免每個 render 都重新讀一次 localStorage。
+  const [selectedLiberoId, setSelectedLiberoIdState] = useState<string | null>(() =>
+    id ? window.localStorage.getItem(`libero-pick:${id}`) : null,
+  );
+  // matchId 換場時（例如從別場比賽切過來），重新從那一場自己的 localStorage key 讀一次，
+  // 不要沿用上一場殘留在 state 裡的選擇——跟 useRotationTable 用 dataByMatch[matchId] 分片
+  // 是同一種「不同比賽的暫存狀態不該互相污染」的原則（issue #119）。
+  useEffect(() => {
+    setSelectedLiberoIdState(id ? window.localStorage.getItem(`libero-pick:${id}`) : null);
+  }, [id]);
+  const handleSelectLibero = (playerId: string) => {
+    setSelectedLiberoIdState(playerId);
+    if (id) window.localStorage.setItem(`libero-pick:${id}`, playerId);
+  };
 
   // ── 計分表的先發快照（issue #115）──
   // lineup：這場已凍結的先發（開賽時擷取、reload 讀回）。capturableLineup：還沒凍結前，從輪轉表
@@ -473,6 +493,22 @@ export default function ScoreSheet() {
           <span className="text-[11px] font-semibold text-[#a9b096]">對手</span>
         </div>
       </div>
+
+      {/* 局點提示（tang 2026-08-04 要求）：issue #45 當初只讓「下一局」按下去時才檢查
+          isSetComplete（沒達標跳確認視窗），達標之後完全沒有任何提示——教練得自己記得
+          分數、自己想到要按下一局。這裡補一個不擋操作的提示：達標（一般局 25 分／第五局
+          15 分，且淨勝 2 分以上）就跳出琥珀色提示條，跟 MatchEntryLinks.tsx「尚未排先發」
+          用同一套「柔性提醒、不鎖版面」語彙（design-spec 既有慣例）。比分卡、球場手勢
+          完全不受影響——照 #45 的既有理由，比分打到 25 之後可能還有特殊情況要繼續記
+          （教練刻意要求不強制擋），這裡只解決「達標後沒人提醒」，不改動「達標後還能不能
+          繼續記分」。開賽前分數是 0:0，isSetComplete 天然回 false，這個提示不會提早出現
+          在「這局由誰先發球」那個畫面（scoreDisplay 兩處共用同一份 JSX，不用另外分支）。 */}
+      {currentSet &&
+        isSetComplete(currentSet.setNumber, currentSet.ourScore, currentSet.opponentScore) && (
+          <p className="max-w-[220px] rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-1.5 text-center text-xs font-semibold text-amber-300">
+            {setWinner(currentSet) === "us" ? "我方" : "對手"}已達勝局點，可按「下一局」封存
+          </p>
+        )}
     </div>
   );
 
@@ -644,7 +680,7 @@ export default function ScoreSheet() {
                   </div>
                 ) : (
                   <p className="shrink-0 text-center text-xs text-[#a9b096]">
-                    在球場上畫線連到球員，記錄這一球
+                    在球場上畫線連到球員記一球，長按球員可以換人
                   </p>
                 )}
 
@@ -660,7 +696,10 @@ export default function ScoreSheet() {
                     regularSubs={regularSubs}
                     selectedBenchPlayer={selectedBenchPlayer}
                     onBenchPlayerSelect={setSelectedBenchPlayer}
+                    onRegularSub={handleRegularSub}
                     liberoSubstitution={liberoSubstitution}
+                    selectedLiberoId={selectedLiberoId}
+                    onSelectLibero={handleSelectLibero}
                   />
                 </div>
               </div>
