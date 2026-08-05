@@ -212,11 +212,13 @@ export const DeleteTeamParams = zod.object({
 
 
 /**
- * @summary List people (cross-match player identities, used for roster de-duplication)
+ * @summary List people (cross-match player identities), with match count and team names for telling same-named entries apart
  */
 export const ListPeopleResponseItem = zod.object({
   "id": zod.number(),
-  "name": zod.string()
+  "name": zod.string(),
+  "matchCount": zod.number(),
+  "teamNames": zod.array(zod.string())
 })
 export const ListPeopleResponse = zod.array(ListPeopleResponseItem)
 

@@ -257,16 +257,22 @@ paths:
     get:
       operationId: listPeople
       tags: [people]
-      summary: List people (cross-match player identities, used for roster de-duplication)
+      # #224：回應形狀從單純的 Person（id/name）換成 PersonSummary（多帶 matchCount/
+      # teamNames），管理頁列表需要這些資訊才分得清楚同名的兩筆是誰是誰
+      # （見 issue #224「不然同名的兩筆根本分不出誰是誰」）。刻意開一個新的 PersonSummary
+      # schema，不直接放寬 Person 本身——POST/PATCH /people 跟 MergePeopleResult.target
+      # 也回 Person，但那幾支是單純的 insert/update，算不出 matchCount/teamNames，
+      # 硬把 Person 加這兩個必填欄位會讓那幾支回應違反自己的 schema。
+      summary: List people (cross-match player identities), with match count and team names for telling same-named entries apart
       responses:
         "200":
-          description: List of people
+          description: List of people, each with aggregated match count and team names
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/Person"
+                  $ref: "#/components/schemas/PersonSummary"
     post:
       operationId: createPerson
       tags: [people]
@@ -1124,6 +1130,25 @@ components:
         name:
           type: string
       required: [id, name]
+
+    # GET /people 回應裡的一列：Person 的欄位再加上 matchCount/teamNames 這兩個彙整出來的
+    # 識別資訊（#224）。形狀跟下面的 MergeCandidatePerson 一模一樣，但特意分開兩個
+    # schema 名字——語意上 PersonSummary 是「管理頁列表」在用，MergeCandidatePerson 是
+    # 「合併候選組」在用，即使現在欄位相同，以後兩邊需求分岔時不用先拆 schema 再改。
+    PersonSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        matchCount:
+          type: integer
+        teamNames:
+          type: array
+          items:
+            type: string
+      required: [id, name, matchCount, teamNames]
 
     NewPerson:
       type: object

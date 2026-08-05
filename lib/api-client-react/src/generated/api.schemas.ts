@@ -76,6 +76,13 @@ export interface Person {
   name: string;
 }
 
+export interface PersonSummary {
+  id: number;
+  name: string;
+  matchCount: number;
+  teamNames: string[];
+}
+
 export interface NewPerson {
   name: string;
 }
