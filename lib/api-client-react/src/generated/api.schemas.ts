@@ -63,6 +63,15 @@ export interface Team {
   name: string;
 }
 
+export interface RosterSuggestion {
+  personId: number;
+  name: string;
+  number: number;
+  role: PlayerRole;
+  matchCount: number;
+  lastPlayedAt: string;
+}
+
 export interface NewTeam {
   name: string;
 }
@@ -76,12 +85,42 @@ export interface Person {
   name: string;
 }
 
+export interface PersonSummary {
+  id: number;
+  name: string;
+  matchCount: number;
+  teamNames: string[];
+}
+
 export interface NewPerson {
   name: string;
 }
 
 export interface UpdatePerson {
   name?: string;
+}
+
+export interface MergeCandidatePerson {
+  id: number;
+  name: string;
+  matchCount: number;
+  teamNames: string[];
+}
+
+export interface MergeCandidateGroup {
+  normalizedName: string;
+  people: MergeCandidatePerson[];
+}
+
+export interface MergePeopleRequest {
+  /** @minItems 1 */
+  sourceIds: number[];
+}
+
+export interface MergePeopleResult {
+  target: Person;
+  mergedSourceNames: string[];
+  movedPlayerCount: number;
 }
 
 export type MatchFormat = typeof MatchFormat[keyof typeof MatchFormat];

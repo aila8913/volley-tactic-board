@@ -11,6 +11,7 @@ import ScoreSheet from "@/pages/ScoreSheet";
 import MatchAnalytics from "@/pages/MatchAnalytics";
 import CrossMatchAnalytics from "@/pages/CrossMatchAnalytics";
 import PersonAnalytics from "@/pages/PersonAnalytics";
+import PeopleManagement from "@/pages/PeopleManagement";
 import TournamentDetail from "@/pages/TournamentDetail";
 
 const queryClient = new QueryClient();
@@ -29,6 +30,11 @@ function Router() {
       {/* 「視圖③：球員跨場/跨隊分析」(#213)——一樣不帶 matchId，但聚合單位是「人」而不是
           「比賽」，所以另開一個路徑，不跟上面的 /analytics 混用查詢參數區分視圖。 */}
       <Route path="/analytics/people" component={PersonAnalytics} />
+      {/* #224：人員名單管理頁——列出/新增/改名/刪除/合併 people，掛在 /analytics/people
+          底下（比視圖③更深一層），因為它是視圖③球員下拉選單背後那份資料的管理入口，
+          不是另一種分析視角。要放在 /analytics/people 之後，避免 wouter 用前綴比對時
+          搞混（雖然目前兩支路徑用 exact match，但保持具體路徑排在前面是既有慣例）。 */}
+      <Route path="/analytics/people/manage" component={PeopleManagement} />
       <Route component={NotFound} />
     </Switch>
   );

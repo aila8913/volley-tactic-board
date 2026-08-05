@@ -72,9 +72,16 @@ export default function PersonAnalytics() {
             <Users className="h-5 w-5 text-[#c6f135]" />
             數據分析 · 球員跨場分析
           </h1>
-          <Link href="/analytics" className={SECONDARY_BUTTON_CLASS}>
-            回跨場彙總
-          </Link>
+          <div className="flex items-center gap-2">
+            {/* #224：人員名單管理頁的入口——這頁（視圖③）是唯讀的分析入口，改名/刪除/合併
+                都不在這裡做，見 PeopleManagement.tsx 檔頭註解。 */}
+            <Link href="/analytics/people/manage" className={SECONDARY_BUTTON_CLASS}>
+              管理球員名單
+            </Link>
+            <Link href="/analytics" className={SECONDARY_BUTTON_CLASS}>
+              回跨場彙總
+            </Link>
+          </div>
         </header>
 
         <div className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-6">

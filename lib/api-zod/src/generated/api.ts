@@ -187,6 +187,24 @@ export const CreateTeamBody = zod.object({
 
 
 /**
+ * @summary List people who have previously played for this team, one row per person (their most recent match's number/role), for the "new match" form to suggest as roster picks
+ */
+export const ListTeamRosterSuggestionsParams = zod.object({
+  "teamId": zod.coerce.number()
+})
+
+export const ListTeamRosterSuggestionsResponseItem = zod.object({
+  "personId": zod.number(),
+  "name": zod.string(),
+  "number": zod.number(),
+  "role": zod.enum(['S', 'OH', 'MB', 'OPP', 'L']),
+  "matchCount": zod.number(),
+  "lastPlayedAt": zod.coerce.date()
+})
+export const ListTeamRosterSuggestionsResponse = zod.array(ListTeamRosterSuggestionsResponseItem)
+
+
+/**
  * @summary Rename a team
  */
 export const UpdateTeamParams = zod.object({
@@ -212,11 +230,13 @@ export const DeleteTeamParams = zod.object({
 
 
 /**
- * @summary List people (cross-match player identities, used for roster de-duplication)
+ * @summary List people (cross-match player identities), with match count and team names for telling same-named entries apart
  */
 export const ListPeopleResponseItem = zod.object({
   "id": zod.number(),
-  "name": zod.string()
+  "name": zod.string(),
+  "matchCount": zod.number(),
+  "teamNames": zod.array(zod.string())
 })
 export const ListPeopleResponse = zod.array(ListPeopleResponseItem)
 
@@ -227,6 +247,21 @@ export const ListPeopleResponse = zod.array(ListPeopleResponseItem)
 export const CreatePersonBody = zod.object({
   "name": zod.string()
 })
+
+
+/**
+ * @summary List groups of people that look like duplicates of the same real person (same normalized name), for the merge UI to surface as suggestions
+ */
+export const ListMergeCandidatesResponseItem = zod.object({
+  "normalizedName": zod.string(),
+  "people": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "matchCount": zod.number(),
+  "teamNames": zod.array(zod.string())
+}))
+})
+export const ListMergeCandidatesResponse = zod.array(ListMergeCandidatesResponseItem)
 
 
 /**
@@ -251,6 +286,30 @@ export const UpdatePersonResponse = zod.object({
  */
 export const DeletePersonParams = zod.object({
   "personId": zod.coerce.number()
+})
+
+
+/**
+ * @summary Merge one or more source people into this person (the target). Re-points their players.personId to the target, logs the merge for audit, then deletes the source people. Irreversible.
+ */
+export const MergePeopleParams = zod.object({
+  "personId": zod.coerce.number()
+})
+
+
+
+
+export const MergePeopleBody = zod.object({
+  "sourceIds": zod.array(zod.number()).min(1)
+})
+
+export const MergePeopleResponse = zod.object({
+  "target": zod.object({
+  "id": zod.number(),
+  "name": zod.string()
+}),
+  "mergedSourceNames": zod.array(zod.string()),
+  "movedPlayerCount": zod.number()
 })
 
 
