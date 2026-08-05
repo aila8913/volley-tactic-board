@@ -22,19 +22,8 @@
 > 平行 PR 就落在不同行段、git 幾乎都能自動合併，不用真的把檔案拆兩份、也保住一眼 catch-up。
 > 上面的 `_Last updated_` 是共用一行摘要（誰更新了什麼），保持精簡、別長成段落。
 
-\_Last updated: 2026-08-05 (aila) — **#287 交付（球隊帶出歷史名單建議，查詢層推導不改 schema），
-M3 只剩 #218/#209 兩張 UX 題**；順手清掉三筆 PROGRESS drift（PWA 已開成 #278、#284 歸 M5、補記
-#292）。先前條目：#252 定案（不建球隊常態名單，查詢層推導取代）＋ #287 開新實作 issue（M3）。
-更早：#26 部署收工，M3 脊椎（#77→#75→
-#64→#26）全數完成，Neon（Postgres）＋ Render（單一 Node 服務）＋自己接 Google OAuth 三張 PR（PR1
-雲端環境 #282、PR2 OAuth 接線 #283）都已合併上線，`https://volley-tactics-board.onrender.com`
-實機驗過完整登入流程（Google 帳號登入→session cookie→右下角帳號徽章→登出）。M3「部署給真人試用」
-目前只剩使用者實際找人試用、收回饋這件事本身，沒有更多程式碼工作。
-先前條目：#77 帳號模型定案（v1＝Google OAuth 每人一個真帳號，公開網址不設邀請碼）、#75 離線
-可靠性契約定案（`rallies`/`events`/`substitutions`/`timeouts` 保證不遺失，`lineups` 與戰術板/
-名單刻意不保證）、#64 四張 PR（主鍵改 uuid／write log 收斂／IndexedDB 落地＋冪等寫入／退避重送＋
-未同步指示器）全數完成。更早：#251 戰術板右欄整併（PR #274）、#228 route handler 收斂（PR
-#256/#262~#272）、#238＋#257 比賽狀態判準收斂（PR #258/#259）。\_
+\_Last updated: 2026-08-05 (aila) — #287 交付（PR #297），M3 剩 #218/#209 兩張 needs-plan 的 UX 題；
+#232 body 除鏽。\_
 
 \_Last updated: 2026-07-30 (tang) — 工具軌圖示（PR #248）與全站背景統一（PR #253）兩張 PR 開著待調整；
 實機盤點挖出兩個遷移缺口／需求，開了 **#251**（戰術板頁沒接上 `RotationRailPanel`，三份名單重複）與
@@ -475,62 +464,6 @@ serving≠null 但 record.lineup=null」那條路**，但真正的 reconcile 仍
   打天下**）；`courtTheme.tsx` 球場背景從三段深青漸層改單一平色 `#1B6E62`（戰術板與計分表同步變）；
   「沒看到」從球場上兩個虛線框整併進比分卡動作選單，球場內只留「畫線連到明確目標」一種手勢。
   **#220 保持 open**：單色版已上線，但「要不要回頭用漸層」還沒拍板，issue 是刻意留著的討論串。
-- **#174 Stage B**（資料夾統計格，PR #239，07-28）— 右欄兩塊：比賽選中時各局比分藥丸（吃已在手上的
-  `record.completedSets`，不多打 API），資料夾選中時「N 場 · X 勝 Y 敗 ＋ 總局數 ＋ 逐場清單」。
-  **單局統計格 PO 決定不做**（比分已在 `RotationRailPanel` 標題列）。彙總規則抽成
-  `lib/tournamentSummary.ts` 純函式並附測試，**刻意只吃自訂的最小形狀**（matchId/opponent/dateTime/
-  format/completedSets/setsPlayed/hasLineup）而非 `Match`/`MatchAnalysisSummary`——沿用 `matchOutcome.ts`
-  的哲學：排球規則不該反過來認識 API 回應長什麼樣。**「贏幾場」與「贏幾局」是兩個單位分開累加**，
-  未分勝負的比賽不計場次但局數照算，否則資料夾戰績會被打到一半的比賽灌水。`GET /analysis/matches`
-  沒有 `format` 欄位，靠 `MatchList.tsx:63` 既有的 `summaryByMatch` join 補（不新增 endpoint）。
-  **PO 當場抓到的錯**：初版只看 `winner === null` 就標「進行中」，連沒開打的比賽也被誤標；改成看
-  `setsPlayed`（後端 `count(*) filter (where first_server is not null)`＝真的開過球的局）＋`hasLineup`
-  推導五態 `won/lost/in_progress/lineup_only/not_started`，並用 `Record<Status, …>` 查表取代三元鏈
-  以拿到窮盡檢查。這次修正**只做在資料夾這一側**，與比賽列表的分歧已立 **#238**。
-- **PR #233 / #234**（`docs/adr/` 上線，07-28）— 見上方 Current state。**#184 同日關閉**（唯讀 hydrate
-  hook）：範圍併進 #230，理由是只做讀那半的話，`useMatchRecording.ts:68-73` 那份手抄的讀路徑複本還活著
-  ——它少傳 `lineups`/`timeouts` 兩個參數，**同一支 `reconstructRecording`、同一場比賽會給出兩個不同答案**
-  （分析頁的 `record.lineup` 永遠 null、`record.timeouts` 永遠 `[]`）。這個 bug 只有讀寫一起看才會被消掉。
-- **#213**（球員跨場/跨隊分析，07-28）— 三塊：(1) **people 應用層**——`routes/people.ts` CRUD 鏡射
-  teams、`personBelongsToUser` 防 IDOR、`players` 的 POST/PATCH 可寫 `personId`（判斷用 `!== undefined`
-  而非 truthy，因為 `null` 是合法值＝解除歸屬，truthy 會讓解除靜默失效）。(2) **去重 UX**——見上方
-  Current state 的不對稱判準；順帶修掉 `RosterEditDialog` 不帶 `personId` 會靜默清掉既有對應的 bug。
-  (3) **視圖③**——`GET /analysis/people/:personId`＋`pages/PersonAnalytics.tsx`，**只做資料真的支援的
-  五項**（出賽場數／跨隊／各場背號位置／觸球動作分布／先發局數），**刻意不做「這個人得幾分」**——
-  `events.outcome` 恆為 null（#51），做出來只能是近似值假裝，頁面上明講這個限制而不是靜默留白。
-  三種 grain（match／event／set）照 `/analysis/matches` 既有做法拆成三支查詢在 JS 合併。
-  **實測踩到的坑**：`usePeople` 原本寫 `data ?? []`，擋不掉「後端回非陣列」——api-server 沒重啟時請求
-  掉進 SPA fallback 拿回 `index.html` 字串，一路傳到 `people.find(...)` 才炸，錯誤訊息指著使用端、離
-  病根很遠。已改 `Array.isArray` 並連帶補 `useTeams`（同形狀、同坑，只是 `/teams` 早就上線沒發作）。
-- **#215**（賽制欄位化，07-27）— `matches.format` pgEnum（`best_of_3`/`best_of_5`，
-  `notNull().default("best_of_3")`）貫穿 db → openapi → codegen → routes → domain 型別 → 純函式 →
-  四個呼叫端 → `MatchFormDialog` 賽制下拉 → seed。`WINS_NEEDED_TO_CLINCH` 寫死值刪除，
-  `getMatchWinner(sets, winsNeeded)`／`formatMatchResult(sets, winsNeeded)` 第二參數**必填無預設**，
-  賽制→門檻的翻譯由新的 `winsNeededFor(format)` 隔開（維持 matchOutcome.ts「純規則不認識 domain
-  型別」的既有哲學）。`AnalyticsRotationRail` 加 `winsNeeded` prop 而非自己抓資料——它刻意不重用
-  `MatchInfoRail` 的理由就是不要多一條資料依賴。回歸測試鎖住「同一組 2:1 在 best_of_3 是勝、在
-  best_of_5 是 null」。
-- **PR #216**（分析頁範圍選擇器＋seed，07-26）— 比分總覽卡片本身變成篩選按鈕，全頁改由單一 `scope`
-  state 驅動（取代各區塊各自的切換）；各輪次得失分改前端算（`buildRotationStats`），因為後端聚合只能
-  算整場、跟不了選局。`seed-testdata.ts` 入庫：修分數成長圖假象、補每分一顆決定球 event、全部改三戰
-  兩勝。**這批資料當場暴露 #215**（三戰兩勝在列表被誤標「進行中」），當時另立 issue 未在本 PR 修。
-- **PR #208**（#65 續：teams 分組標籤端到端，07-26）— `routes/teams.ts` CRUD 鏡射 tournaments，
-  **兩處刻意分歧**：`teams.id` 是 `serial` 整數（非 client-mintable uuid，故 POST 不收 id）、
-  `matches.teamId` FK 是 `onDelete: set null`（刪球隊只把比賽設回未分類，與 tournaments 的 cascade
-  刻意相反——標籤不該拖著比賽走）。＋`teamBelongsToUser` 防 IDOR＋前端 `useTeams`／`MatchFormDialog`
-  球隊選擇器／視圖②球隊過濾欄。
-- **PR #212**（數據分析入口＝常駐紀錄本，07-26，無對應 issue、PO 當場定方向）— 左欄「數」永遠可到
-  （context-aware），紀錄本頁補上共用導覽軌並標 active，首頁移除重複的 BarChart 入口。計分結束的跳轉
-  沿用既有「結束比賽」按鈕，未新增。
-- **PR #207**（07-26）— 比賽列表卡片改讀後端跨場摘要（`GET /analysis/matches`），修正「一載入就對每場
-  誤顯示尚未開賽/尚未排先發」。換來源的理由：本機 store 只有「打開過那場」才 hydrate，列表剛載入必然
-  是空的；改一支 bulk endpoint 就是 O(場數) 列，不是一場一輪請求的 fan-out。
-- **#190–#193**（右欄三頁補齊，PR #201，07-25）— #190 柔性引導（未排先發顯示琥珀提示、推去右欄排，
-  **不鎖任何版面**——PO 在「引導 vs 鎖住」拍板走引導）；#191 局軸狀態 pill＋#192 當局比分行，兩者都是
-  `axis="set"` 專用的加成式 prop，輪次軸呼叫端不傳就零回歸；#193 數據頁新增 `AnalyticsRotationRail`
-  唯讀右欄，**刻意不重用 `MatchInfoRail`**（那顆有可寫分支＋讀共用輪轉表 store，會把「可編輯站位」
-  語意偷渡進唯讀頁）。**同 PR 修掉一隻既有死結**：`start()` 無條件寫 `serving` 但只條件性凍結
-  `record.lineup`，會生出 serving≠null／lineup=null 的局 →「看得到球員拖不動」＋中央顯示「還沒排先發」。
 
 ### 設計 (tang)
 
