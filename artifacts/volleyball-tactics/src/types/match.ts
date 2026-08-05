@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { MatchFormat } from "@/lib/matchOutcome";
+import type { MatchCompletionStatus, MatchFormat } from "@/lib/matchOutcome";
 
 // 跟 lib/db/src/schema/players.ts 的 playerRoleEnum 保持一致。
 // 位置只分 5 大類，同一類可以有任意人數（例如板凳上可能有 3 個 OH、0 個 MB），
@@ -38,6 +38,12 @@ export interface Match {
   // 賽制（#215）：三戰兩勝／五戰三勝，決定「贏幾局才算贏」（見 lib/matchOutcome.ts 的
   // winsNeededFor）。DB 是 notNull，所以這裡不是 nullable。
   format: MatchFormat;
+  // 比賽狀態（#218）：記錄者有沒有明確按下「結束比賽」。DB notNull，所以不是 nullable。
+  //
+  // 刻意不放進 matchFormSchema：狀態不是「填表填出來的屬性」（像對手、賽制那樣），而是
+  // 「記錄過程中發生的事件的結果」——它只由計分頁的收尾流程改變，不該在編輯比賽的表單裡
+  // 出現一個下拉選單讓人隨手把一場還在打的比賽標成完賽。
+  status: MatchCompletionStatus;
 }
 
 export const matchFormSchema = z.object({

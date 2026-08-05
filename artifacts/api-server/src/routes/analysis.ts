@@ -107,6 +107,8 @@ router.get(
         opponent: matchesTable.opponent,
         date: matchesTable.date,
         teamId: matchesTable.teamId,
+        // 完賽狀態（#218）：下面算 setResults 要用它決定「最後一局算不算已結束局」。
+        status: matchesTable.status,
       })
       .from(matchesTable)
       .where(eq(matchesTable.userId, req.userId))
@@ -134,6 +136,9 @@ router.get(
       .select({
         matchId: setsTable.matchId,
         setNumber: setsTable.setNumber,
+        // firstServer 只用來判斷「這局到底有沒有開球」（#218 已完賽時要砍掉沒開球的尾巴局），
+        // 不會出現在回應裡——下面組 setResults 時會把它拿掉。
+        firstServer: setsTable.firstServer,
         ourScore: sql<number>`count(*) filter (where ${ralliesTable.winner} = 'home')`.mapWith(
           Number,
         ),
@@ -176,10 +181,18 @@ router.get(
 
     // 把逐局比分依 matchId 分組（setScoreRows 已照 matchId, setNumber 排好，所以每組內部
     // 天然就是第 1 局、第 2 局…的順序）。等下對 matches 的每一場查表 O(1) 合併。
-    const setScoresByMatch = new Map<number, { ourScore: number; opponentScore: number }[]>();
+    const setScoresByMatch = new Map<
+      number,
+      { ourScore: number; opponentScore: number; started: boolean }[]
+    >();
     for (const row of setScoreRows) {
       const list = setScoresByMatch.get(row.matchId);
-      const entry = { ourScore: row.ourScore, opponentScore: row.opponentScore };
+      // started＝這局有沒有真的開球（選過先發方）。只在下面砍尾巴時用，不會進回應。
+      const entry = {
+        ourScore: row.ourScore,
+        opponentScore: row.opponentScore,
+        started: row.firstServer !== null,
+      };
       if (list) list.push(entry);
       else setScoresByMatch.set(row.matchId, [entry]);
     }
@@ -189,11 +202,34 @@ router.get(
       const sets = setsByMatch.get(m.matchId);
       // 這場所有局的比分（含進行中的最後一局），已依局序排好。
       const allSetScores = setScoresByMatch.get(m.matchId) ?? [];
-      // setResults 只給「已結束局」：排除最後一局（進行中那局），鏡射前端 reconstructRecording
-      // 的「最後一局＝進行中、其餘＝已結束」慣例（見 lib/scoreSheetMapping.ts）。這樣卡片用
-      // setResults 算出來的局比數，會跟使用者點進計分頁後看到的完全一致。slice(0, -1) 對空
-      // 陣列或單一元素都安全（回空陣列），不用特判。
-      const setResults = allSetScores.slice(0, -1);
+      // setResults 只給「已結束局」，鏡射前端 splitCompletedAndCurrent 的慣例（見
+      // artifacts/volleyball-tactics/src/lib/volleyballRules.ts，那裡有完整的理由說明）。
+      // 這樣卡片用 setResults 算出來的局比數，會跟使用者點進計分頁後看到的完全一致。
+      //
+      // #218：這條慣例現在吃 matches.status——
+      //   - 進行中：排除最後一局（那是還在打的那局）。slice(0, -1) 對空陣列或單一元素都
+      //     安全（回空陣列），不用特判。
+      //   - 已完賽：每一局都是已結束局，不排除任何一局——但要先砍掉「開了卻從沒開球」的
+      //     尾巴局（使用者按了「下一局」才想起比賽已經結束、直接按「結束比賽」）。不砍的話
+      //     各局比分會多出一行 0:0。這段跟前端 reconstructRecording 的 effectiveSets 是
+      //     同一個處理，兩邊要一起改。
+      //   這正是 #218 修掉的病灶：以前「打完的最後一局」永遠被當成進行中而被丟掉，
+      //   比賽列表因此少算一局。
+      // 兩邊是各自實作、靠註解互相指過去（理由見前端那支函式的註解與 ADR-0003），改一邊
+      // 務必同時改另一邊。
+      let setResults: { ourScore: number; opponentScore: number }[];
+      if (m.status === "finished") {
+        let end = allSetScores.length;
+        while (end > 0 && !allSetScores[end - 1].started) end -= 1;
+        setResults = allSetScores.slice(0, end).map(({ ourScore, opponentScore }) => ({
+          ourScore,
+          opponentScore,
+        }));
+      } else {
+        setResults = allSetScores
+          .slice(0, -1)
+          .map(({ ourScore, opponentScore }) => ({ ourScore, opponentScore }));
+      }
       // 整場總得失分＝把每一局的得分加起來（含進行中那局，跟舊 rallyRows 的整場 count 等價）。
       const ourPoints = allSetScores.reduce((sum, s) => sum + s.ourScore, 0);
       const opponentPoints = allSetScores.reduce((sum, s) => sum + s.opponentScore, 0);

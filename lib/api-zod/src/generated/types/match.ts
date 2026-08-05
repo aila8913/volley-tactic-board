@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { MatchFormat } from './matchFormat';
+import type { MatchStatus } from './matchStatus';
 
 export interface Match {
   id: number;
@@ -17,5 +18,6 @@ export interface Match {
   tournamentId?: string | null;
   teamId?: number | null;
   format: MatchFormat;
+  status: MatchStatus;
   createdAt: Date;
 }

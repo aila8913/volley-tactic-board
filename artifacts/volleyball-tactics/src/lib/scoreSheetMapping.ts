@@ -385,6 +385,10 @@ export function reconstructRecording(
   // 整場所有暫停紀錄（GET /matches/:id/timeouts，issue #44）。同樣選填、預設空陣列，讓
   // 分析頁與舊測試不帶它也能用（重建出來的 timeouts / timeoutCountsHistory 會是空的）。
   timeouts: Timeout[] = [],
+  // 這場比賽是不是已經結束（#218，來自 matches.status）。決定「最後一局算不算已結束局」
+  // ——理由全寫在 volleyballRules.ts 的 splitCompletedAndCurrent。呼叫端各自從自己拿到的
+  // match 物件算出 `match.status === "finished"` 傳進來。
+  isFinished = false,
 ): ScoreSheetState {
   // 把整場的 event 依 rallyId 分組，餵給 reconstruct 還原每一分的動作/球員。
   // endpoint 已依 rallyId、sequence 排序，所以同一組內是照 sequence 排好的。
@@ -432,13 +436,35 @@ export function reconstructRecording(
   // 切點會變成「它自己的最後一格」而不是「sets 的最後一格」，兩邊長度一旦不同，就會把某個
   // 已結束局的 rally 當成進行中那局的 rally——比原本的寫法更危險。所以 rally 一律還是用
   // sets 的索引去取，切分只發生在 sets 這一個陣列上。
-  const { completed: completedSetRows, current: currentSetRow } = splitCompletedAndCurrent(sets);
-  // sets.length > 0 已在上面提早 return 擋掉，所以 current 必定有值；但
+  // 已完賽時要先把「開了但從來沒開球」的尾巴局砍掉（#218）。使用者按了「下一局」（#63 之後
+  // 那一刻就會建一筆 firstServer=null 的空 set row），才發現其實比賽已經結束、直接按「結束
+  // 比賽」——這種順序完全合理，但那筆空局若被算成已結束局，各局比分就會多出一行「0:0」。
+  // 只砍**尾巴**、不整份 filter，是為了保住「跟 ralliesBySetIndex 同索引對齊」這個前提：
+  // 砍尾巴只縮短陣列、不會讓前面任何一格的索引位移（中間出現空局理論上不可能，真的出現也
+  // 該讓它顯示出來，那是資料異常，不該被悄悄濾掉）。
+  let effectiveSets = sets;
+  if (isFinished) {
+    let end = sets.length;
+    while (end > 0 && sets[end - 1].firstServer === null) end -= 1;
+    effectiveSets = sets.slice(0, end);
+    // 砍完一局都不剩＝這場標成完賽，但其實一球都沒記過。回空白記錄，跟上面 sets.length === 0
+    // 是同一種狀況。
+    if (effectiveSets.length === 0) return emptyRecord();
+  }
+
+  const { completed: completedSetRows, current: currentSetRow } = splitCompletedAndCurrent(
+    effectiveSets,
+    isFinished,
+  );
+  // 未完賽時：sets.length > 0 已在上面提早 return 擋掉，所以 current 必定有值；但
   // splitCompletedAndCurrent 是泛型函式，簽名上表達不出這個保證，這裡用一道真的 guard
   // （而不是 `?? 假資料` 或 `as` 斷言）讓型別收斂——這樣萬一之後有人改動上面的
   // early return，這行會誠實地走進 emptyRecord()，而不是拿一份捏造的資料繼續算下去。
-  if (!currentSetRow) return emptyRecord();
-  const currentSetIndex = sets.length - 1;
+  //
+  // 已完賽時：current 本來就是 undefined（沒有進行中的那局），這是正常結果、不是錯誤，
+  // 所以 guard 只在 !isFinished 時才觸發。
+  if (!isFinished && !currentSetRow) return emptyRecord();
+  const currentSetIndex = effectiveSets.length - 1;
 
   const completedSets: CompletedSet[] = completedSetRows.map((s, i) => {
     const st = reconstructSetFromRallies(s, ralliesBySetIndex[i] ?? [], eventsByRallyId);
@@ -462,23 +488,39 @@ export function reconstructRecording(
   const timeoutCountsHistory: number[] = completedSetRows.map(
     (s) => (timeoutsBySetId.get(s.id) ?? []).length,
   );
-  const currentSet = reconstructSetFromRallies(
-    currentSetRow,
-    ralliesBySetIndex[currentSetIndex] ?? [],
-    eventsByRallyId,
-  );
+  // 已完賽（currentSetRow === undefined）時，「進行中那局」相關的五個欄位全部給空值：
+  // currentSet 補一個 makeEmptySet 佔位（ScoreSheetState.currentSet 不是 optional，型別上
+  // 必須有東西）。這個佔位不會弄髒畫面——ScoreSheetStats 的各局比分表用
+  // `currentSet.serving !== null` 當守衛，serving 為 null 的空局整格不渲染，所以完賽後
+  // 那張表剛好只列真正打過的局，也不會把最後一局重複列兩次（它已經在 completedSets 裡了）。
+  // 局號給 sets.length + 1 而不是沿用最後一局的號碼，是為了讓「重新開啟比賽」之外的路徑
+  // 若真的從這個佔位開始記分，局號也是往前走的、不會覆蓋掉已結束的那一局。
+  const currentSet = currentSetRow
+    ? reconstructSetFromRallies(
+        currentSetRow,
+        ralliesBySetIndex[currentSetIndex] ?? [],
+        eventsByRallyId,
+      )
+    : makeEmptySet(effectiveSets.length + 1);
   // 進行中這一局的換人淨疊加清單，直接重放這一局的換人紀錄即可。
-  const regularSubs = reconstructRegularSubs(subsBySetId.get(currentSetRow.id) ?? []);
+  const regularSubs = currentSetRow
+    ? reconstructRegularSubs(subsBySetId.get(currentSetRow.id) ?? [])
+    : [];
   // 進行中這一局的原始換人次數（issue #289），跟上面淨疊加清單是同一批 row、不同算法。
-  const subCount = countRegularSubs(subsBySetId.get(currentSetRow.id) ?? []);
+  const subCount = currentSetRow ? countRegularSubs(subsBySetId.get(currentSetRow.id) ?? []) : 0;
   // 進行中這一局的暫停清單（issue #44），直接把這一局的暫停紀錄翻回前端形狀。
-  const currentTimeouts = reconstructTimeouts(timeoutsBySetId.get(currentSetRow.id) ?? []);
+  const currentTimeouts = currentSetRow
+    ? reconstructTimeouts(timeoutsBySetId.get(currentSetRow.id) ?? [])
+    : [];
 
   // 先發快照：一 row 一局（setId），只認「目前這一局自己的」先發（先發每局可不同，不沿用別局）。
   // 進行中這一局若已有先發（已選過先發方）就讀回它；若還沒（例如剛按下一局、firstServer=null 的
   // 空 set，此時還沒選先發方也就還沒寫 lineup）就給 null——此時畫面停在「這局由誰先發球？」、
   // 還不需要顯示球場，等教練選先發方時 start() 會從當下輪轉表擷取這一局的新先發。
-  const lineup: LineupSnapshot | null = findLineupSnapshotForSet(lineups, currentSetRow.id);
+  // 已完賽時沒有「目前這一局」，所以是 null（各局的先發快照都在 completedSets 裡各自帶著）。
+  const lineup: LineupSnapshot | null = currentSetRow
+    ? findLineupSnapshotForSet(lineups, currentSetRow.id)
+    : null;
 
   return {
     currentSet,

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
-import { useParams, Link } from "wouter";
+import { useParams, useLocation, Link } from "wouter";
 import { ArrowLeft } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import NavRail, { matchBackHref } from "@/components/NavRail";
@@ -14,7 +14,7 @@ import RotationRailPanel from "@/components/RotationRailPanel";
 import UnsyncedWritesBadge from "@/components/UnsyncedWritesBadge";
 import { PlayAction, Side } from "@/types/scoresheet";
 import { isSetComplete, disabledActions, resolveScoringSide } from "@/lib/scoreSheetMapping";
-import { countSetWins, setWinner } from "@/lib/matchOutcome";
+import { countSetWins, getMatchWinner, setWinner, winsNeededFor } from "@/lib/matchOutcome";
 import { APP_BACKGROUND_STYLE, APP_SHELL_CLASS, INFO_RAIL_BASE_CLASS } from "@/lib/appChromeStyles";
 import {
   captureLineupFromRotations,
@@ -91,6 +91,9 @@ type Gesture =
 
 export default function ScoreSheet() {
   const { id } = useParams<{ id: string }>();
+  // 導頁用（#218）：結束比賽確認完要把使用者送到分析頁。wouter 的 useLocation 回傳
+  // [目前路徑, 導頁函式]，這裡只需要後者。
+  const [, setLocation] = useLocation();
   const { match, isLoading: isMatchLoading } = useMatchWithRoster(Number(id));
 
   // 讀輪轉表這一場的 rotations——它是全站共用的「目前站位」真相（#120 PO 定案）。開賽前，右欄
@@ -128,6 +131,11 @@ export default function ScoreSheet() {
     // 背景寫入還沒送成功的筆數，＋手動催一次的動作（#64 PR4）。
     pendingWrites,
     retryWrites,
+    // 完賽狀態與切換它的兩個動作（#218）。這兩個動作是「後端優先」的（PATCH 成功後重建），
+    // 跟其他動作的「本地優先」相反，理由見 useScoreSheet.ts 的 setMatchStatus 註解。
+    isFinished,
+    finishMatch,
+    reopenMatch,
   } = useScoreSheetController(id ?? "");
   // 這場比賽目前的自由球員替補狀態——現在跟著 matchId 存在 useScoreSheet 裡（見
   // types/scoresheet.ts 的說明），不會再跟別場比賽的計分表互相污染。
@@ -142,6 +150,10 @@ export default function ScoreSheet() {
   const timeoutCountsHistory = record?.timeoutCountsHistory ?? [];
 
   const [gesture, setGesture] = useState<Gesture | null>(null);
+  // 「結束比賽」確認視窗開著沒（#218）。PO 決策：**不自動彈窗**——勝局條件達成只會把按鈕
+  // 變成強調樣式，彈不彈由記錄者決定。理由是誤判風險：記錯一球就被彈窗打斷，比「忘記按」
+  // 更惱人，而忘記按的成本很低（回列表隨時能再進來按）。
+  const [showFinishConfirm, setShowFinishConfirm] = useState(false);
 
   // ── 自由球員替換記憶 ──
   // useRef 讓 useEffect 讀到最新值，避免陳舊閉包（stale closure）。
@@ -283,6 +295,39 @@ export default function ScoreSheet() {
   const totalTimeoutCount = timeoutCountsHistory.reduce((a, b) => a + b, 0) + currentTimeoutCount;
   // 局比數走 matchOutcome.countSetWins（#226 PR2），不再各頁手寫一份。
   const { ourWins: ourSetsWon, opponentWins: opponentSetsWon } = countSetWins(completedSets);
+
+  // 「這場比賽的勝負已經分出來了嗎」（#218）——決定要不要把「結束比賽」變成強調鈕。
+  //
+  // 這裡刻意**把進行中那一局也算進去**（[...completedSets, currentSet]），而右欄
+  // MatchInfoRail 的 isMatchFinished 只看 completedSets。兩者不是同一個問題，所以沒有抽成
+  // 共用函式：
+  //   - 那邊問的是「已經封存的局數足以定勝負了嗎」（要不要把整場標成已完成的回顧視角）。
+  //   - 這裡問的是「**這一球記完**就分出勝負了嗎」——正是要提示記錄者「可以收尾了」的那個
+  //     瞬間，如果只看 completedSets，得等按了「下一局」才會亮，那時候提示已經沒意義了。
+  // 硬要共用一支函式，只會把「要傳哪些局進去」這個真正重要的決定藏進函式名稱裡。
+  const matchDecided =
+    currentSet !== undefined &&
+    getMatchWinner([...completedSets, currentSet], winsNeededFor(match.format)) !== null;
+
+  // 確認視窗裡要攤開的「最終」比分（#218）。跟上面 matchDecided 同一個道理，要把進行中那局
+  // 也算進去——記錄者正要結束的就是包含剛打完那一局的整場比賽。
+  // 過濾條件跟 ScoreSheetStats 的各局比分表一致（serving !== null＝這局真的開過球）：
+  // 剛按過「下一局」但還沒開球的空局不該出現在最終比分裡。
+  const finalSetScores = [
+    ...completedSets,
+    ...(currentSet && currentSet.serving !== null ? [currentSet] : []),
+  ];
+  const { ourWins: finalOurSetsWon, opponentWins: finalOpponentSetsWon } =
+    countSetWins(finalSetScores);
+
+  // 確認結束：先關掉視窗（避免 await 期間視窗還開著、使用者重複按），再寫後端狀態，
+  // 成功後導去分析頁——分析頁就是 PO 決策 3 選定的「賽後畫面」，不另做一頁賽後摘要
+  // （MatchAnalytics 已經有比分總覽／各局比分／球員矩陣，再做一頁只會變成兩份重複的東西）。
+  const handleFinishMatch = async () => {
+    setShowFinishConfirm(false);
+    await finishMatch();
+    setLocation(`/matches/${id}/analytics`);
+  };
 
   // 統計欄目前只顯示「本場」。跨場統計需要「列出本使用者所有有記錄的場」的 API 策略，
   // 留到 Phase 3b-ii（連同 events 讀回、球員矩陣重建）一起做。
@@ -566,8 +611,13 @@ export default function ScoreSheet() {
             lineup={canEditLineup ? editableLineup : activeLineup}
             roster={match.players}
             rotation={currentSet?.ourRotation ?? 0}
-            readOnly={!canEditLineup}
-            onLineupChange={canEditLineup ? (next) => setLineupFromSnapshot(id, next) : undefined}
+            // 完賽後一律唯讀（#218）：完賽時 record.lineup 是 null（沒有「目前這一局」），
+            // canEditLineup 會算成 true，右欄就會變回可編輯的開賽前樣子——但這場比賽已經打完，
+            // 這裡沒有任何「下一局的先發」要排，讓它可編輯只會讓人以為改了會影響什麼。
+            readOnly={!canEditLineup || isFinished}
+            onLineupChange={
+              canEditLineup && !isFinished ? (next) => setLineupFromSnapshot(id, next) : undefined
+            }
           />
 
           <div className="flex shrink-0 items-center justify-between border-b border-white/[0.10] px-3 py-2 text-xs font-bold text-[#9AA08C]">
@@ -622,7 +672,50 @@ export default function ScoreSheet() {
         </header>
 
         <div className="flex flex-1 min-h-0 justify-center">
-          {!hasLineup ? (
+          {isFinished ? (
+            // ── 完賽態（#218）──
+            // PO 決策：結束後**可逆、且不藏起來**——這一頁照樣進得來，只是不能再記分
+            //（沒有球場、沒有比分卡、沒有暫停/換人/下一局），並且提供「重新開啟比賽」把
+            // status 改回 in_progress 繼續補記。記錄者事後對帳是常態，鎖死只會逼人去砍掉重記。
+            //
+            // 為什麼這個分支要放在最前面：完賽後 record.currentSet 是一個空的佔位局
+            //（serving/lineup 都是 null，見 reconstructRecording），如果讓它往下掉，就會落進
+            // 下面「這局由誰先發球？」的分支——一場已經打完的比賽卻在問誰發球，明顯是錯的。
+            <div className="flex flex-1 flex-col items-center justify-center gap-5 px-4 text-center">
+              <p className="text-sm font-bold tracking-widest text-[#a9b096]">這場比賽已結束</p>
+              {/* 最終局比數。用跟計分板同一套語彙（font-score 大數字＋我方萊姆綠／對手紅），
+                讓「最後結果」在視覺上就是這一頁的主角。 */}
+              <div className="flex items-end gap-4">
+                <div className="flex flex-col items-center gap-1">
+                  <span className="font-score text-6xl tabular-nums text-[#C6F135]">
+                    {ourSetsWon}
+                  </span>
+                  <span className="text-[11px] font-semibold text-[#a9b096]">我方</span>
+                </div>
+                <span className="pb-6 font-score text-3xl text-[#a9b096]">:</span>
+                <div className="flex flex-col items-center gap-1">
+                  <span className="font-score text-6xl tabular-nums text-[#F0776C]">
+                    {opponentSetsWon}
+                  </span>
+                  <span className="text-[11px] font-semibold text-[#a9b096]">{match.opponent}</span>
+                </div>
+              </div>
+              {/* 各局比分不在這裡重畫一份——右欄的 ScoreSheetStats 本來就有一張完整的
+                「各局比分」表，完賽後每一局都在 completedSets 裡，那張表自然就是完整的。 */}
+              <p className="text-xs text-[#a9b096]">各局比分在右欄「比賽統計」。</p>
+              <div className="mt-2 flex gap-3">
+                <Link href={`/matches/${id}/analytics`} className={PRIMARY_BUTTON_CLASS}>
+                  查看分析
+                </Link>
+                <button className={SECONDARY_BUTTON_CLASS} onClick={() => void reopenMatch()}>
+                  重新開啟比賽
+                </button>
+              </div>
+              <p className="max-w-xs text-xs text-[#a9b096]">
+                記錯了？「重新開啟比賽」會回到最後一局繼續記，已記的球不會消失。
+              </p>
+            </div>
+          ) : !hasLineup ? (
             // 這場還沒有先發。以前這裡是一顆「前往戰術板」把使用者踢出計分頁，現在右欄的
             // 站位面板在開賽前本來就是可編輯的（不用另外切換模式），所以這裡只留一句指路，
             // 不再提供離開這一頁的入口（PO 指示），也不連去戰術板——戰術板現在是唯讀的白板，
@@ -747,12 +840,19 @@ export default function ScoreSheet() {
                   <button className={GHOST_BUTTON_CLASS} onClick={handleNextSet}>
                     下一局
                   </button>
-                  {/* 結束比賽（issue #20）：不是「刪除/封存」動作，只是導去賽後統計頁
-                    （MatchAnalytics，路由已存在），所以直接用 Link 而不是 onClick，
-                    跟上面「前往戰術板」是同一種寫法。 */}
-                  <Link href={`/matches/${id}/analytics`} className={GHOST_BUTTON_CLASS}>
+                  {/* 結束比賽（issue #20 → #218 改寫）：以前這裡是一顆 <Link>，按下去只是
+                    導去分析頁——資料上完全沒有「這場打完了」這件事，最後一局也因此永遠被
+                    當成進行中而不算數。現在它是一個**真正的動作**：開確認視窗 → 寫
+                    matches.status = finished → 才導去分析頁。
+                    樣式（#218 PO 決策 2「提示但不強制」）：勝局條件一達成就從 GHOST 換成
+                    PRIMARY（萊姆綠實心），讓記錄者一眼看到「可以收尾了」，但畫面不會被彈窗
+                    打斷、也還能繼續記分——記錯一球被強制中斷，比忘記按更惱人。 */}
+                  <button
+                    className={matchDecided ? PRIMARY_BUTTON_CLASS : GHOST_BUTTON_CLASS}
+                    onClick={() => setShowFinishConfirm(true)}
+                  >
                     結束比賽
-                  </Link>
+                  </button>
                 </div>
               </div>
             </>
@@ -793,6 +893,68 @@ export default function ScoreSheet() {
             onCancel={() => setGesture(null)}
             startAngle={180}
           />
+        )}
+
+        {/* 結束比賽的確認視窗（#218）。
+          為什麼要有這一步、而不是按了就結束：這是這一頁唯一一個「改變整場比賽狀態」的動作，
+          而它右邊就是「下一局」——手滑按錯的成本不對稱（按錯下一局頂多多一局空白，按錯結束
+          會讓比賽在列表變成已完賽）。視窗裡直接把**最終局比數＋各局比分**攤開，讓記錄者用
+          自己記的數字核對一次，而不是只問一句「確定嗎？」——後者其實沒有給人任何判斷依據。
+
+          手刻 overlay 而不是用 shadcn 的 Dialog：跟這一頁其他按鈕同一個理由（見檔案上方
+          PRIMARY_BUTTON_CLASS 那段），shadcn 那套元件的顏色綁在給淺色頁面用的 CSS 變數上，
+          套在這個深色頁面會整個看不見。 */}
+        {showFinishConfirm && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+            // 點視窗外面＝取消（跟按「還沒結束」等價）。onClick 掛在遮罩、內層 stopPropagation，
+            // 是最小成本的「點外面關閉」，不用額外的 ref + document listener。
+            onClick={() => setShowFinishConfirm(false)}
+          >
+            <div
+              className="w-full max-w-sm rounded-2xl border border-white/[0.14] bg-[#14170f] p-6 text-center shadow-2xl shadow-black/60"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2 className="text-base font-bold text-[#f5f5f0]">要結束這場比賽嗎？</h2>
+              <div className="mt-4 flex items-end justify-center gap-3">
+                <span className="font-score text-4xl tabular-nums text-[#C6F135]">
+                  {finalOurSetsWon}
+                </span>
+                <span className="pb-1 font-score text-xl text-[#a9b096]">:</span>
+                <span className="font-score text-4xl tabular-nums text-[#F0776C]">
+                  {finalOpponentSetsWon}
+                </span>
+              </div>
+              <div className="mt-3 space-y-1">
+                {finalSetScores.map((s) => (
+                  <div key={s.setNumber} className="text-xs text-[#a9b096]">
+                    第 {s.setNumber} 局{" "}
+                    <span
+                      className={
+                        setWinner(s) === "us" ? "font-bold text-[#C6F135]" : "text-[#f5f5f0]"
+                      }
+                    >
+                      {s.ourScore}:{s.opponentScore}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-4 text-xs text-[#a9b096]">
+                結束後這一頁會變成唯讀，但隨時可以按「重新開啟比賽」回來補記。
+              </p>
+              <div className="mt-5 flex justify-center gap-3">
+                <button
+                  className={SECONDARY_BUTTON_CLASS}
+                  onClick={() => setShowFinishConfirm(false)}
+                >
+                  還沒結束
+                </button>
+                <button className={PRIMARY_BUTTON_CLASS} onClick={handleFinishMatch}>
+                  確認結束
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </AppShell>

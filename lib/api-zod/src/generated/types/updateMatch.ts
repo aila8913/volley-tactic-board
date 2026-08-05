@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { UpdateMatchFormat } from './updateMatchFormat';
+import type { UpdateMatchStatus } from './updateMatchStatus';
 
 export interface UpdateMatch {
   opponent?: string;
@@ -15,4 +16,5 @@ export interface UpdateMatch {
   tournamentId?: string | null;
   teamId?: number | null;
   format?: UpdateMatchFormat;
+  status?: UpdateMatchStatus;
 }

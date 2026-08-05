@@ -131,6 +131,14 @@ export const MatchFormat = {
   best_of_5: 'best_of_5',
 } as const;
 
+export type MatchStatus = typeof MatchStatus[keyof typeof MatchStatus];
+
+
+export const MatchStatus = {
+  in_progress: 'in_progress',
+  finished: 'finished',
+} as const;
+
 export interface Match {
   id: number;
   name?: string | null;
@@ -141,6 +149,7 @@ export interface Match {
   tournamentId?: string | null;
   teamId?: number | null;
   format: MatchFormat;
+  status: MatchStatus;
   createdAt: string;
 }
 
@@ -171,6 +180,14 @@ export const UpdateMatchFormat = {
   best_of_5: 'best_of_5',
 } as const;
 
+export type UpdateMatchStatus = typeof UpdateMatchStatus[keyof typeof UpdateMatchStatus];
+
+
+export const UpdateMatchStatus = {
+  in_progress: 'in_progress',
+  finished: 'finished',
+} as const;
+
 export interface UpdateMatch {
   opponent?: string;
   date?: string;
@@ -179,6 +196,7 @@ export interface UpdateMatch {
   tournamentId?: string | null;
   teamId?: number | null;
   format?: UpdateMatchFormat;
+  status?: UpdateMatchStatus;
 }
 
 export interface UpdatePlayer {

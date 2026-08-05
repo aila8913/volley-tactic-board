@@ -22,6 +22,18 @@ export function winsNeededFor(format: MatchFormat): number {
   return format === "best_of_3" ? 2 : 3;
 }
 
+// 比賽的「完賽狀態」（#218）：記錄者有沒有明確按下「結束比賽」。跟 MatchFormat 一樣，
+// 字面值跟 lib/db/src/schema/matches.ts 的 matchStatusEnum 對齊，後端回來的值直接當這個型別用。
+//
+// ⚠️ 別跟這支檔案下方的 MatchStatus 搞混，兩者是不同層次的東西：
+//   - MatchCompletionStatus（這個）＝**存在 DB 的事實**，只有兩個值，只由收尾流程改變。
+//   - MatchStatus（下方）＝**畫面上要顯示成哪一種**（not_started / lineup_only /
+//     in_progress / won / lost），是由「局比數 + 打了幾局 + 有沒有排先發」推導出來的呈現用
+//     狀態，沒有存在任何地方。
+// 兩者的關係是：完賽狀態決定「最後一局算不算已結束局」，因而影響推導出來的局比數，
+// 再由 deriveMatchStatus 推出顯示狀態。
+export type MatchCompletionStatus = "in_progress" | "finished";
+
 // 「這一局誰贏」——把 `set.ourScore > set.opponentScore` 這個裸比較收成一個有名字的函式
 // （issue #226 PR2）。它本來散在三個 UI 檔裡各寫一次（MatchInfoRail 的各局比分藥丸、
 // ScoreSheetStats 的比分總覽、MatchAnalytics 的單場數據頁），每一處都自己判斷

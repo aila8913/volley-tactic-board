@@ -1318,10 +1318,17 @@ components:
         format:
           type: string
           enum: [best_of_3, best_of_5]
+        # 這場比賽結束了沒（#218）：in_progress＝還在打／還在補記，finished＝記錄者已經
+        # 明確按下「結束比賽」。這個值決定「sets 的最後一局算不算已結束局」——見
+        # lib/db/src/schema/matches.ts 的 matchStatusEnum 註解與 ADR-0005。
+        # DB 是 notNull + default("in_progress")，所以回應一定有值，放進 required、不用 nullable。
+        status:
+          type: string
+          enum: [in_progress, finished]
         createdAt:
           type: string
           format: date-time
-      required: [id, date, opponent, createdAt, format]
+      required: [id, date, opponent, createdAt, format, status]
 
     NewMatch:
       type: object
@@ -1379,6 +1386,13 @@ components:
         format:
           type: string
           enum: [best_of_3, best_of_5]
+        # 比賽狀態（#218）。計分頁的「結束比賽」送 finished、「重新開啟比賽」送 in_progress
+        # ——收尾／重新開啟不另開端點，就是往這支既有的 PATCH 帶這一個欄位。
+        # 刻意不放進 NewMatch：建立比賽時一律吃 DB 的 default("in_progress")，不給前端
+        # 表達「一建立就是完賽」這種不合理的狀態。
+        status:
+          type: string
+          enum: [in_progress, finished]
 
     UpdatePlayer:
       type: object

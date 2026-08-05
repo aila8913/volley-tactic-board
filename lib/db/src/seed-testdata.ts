@@ -383,13 +383,18 @@ async function insertSetWithRallies(
 //   inProgress：非 null 時代表「這場還沒打完」——會在打完的局之後，多插一局「進行中、比分停在
 //     半路」的局（例如 18:15），當作分析頁的 currentSet。
 //
-// ── 為什麼「已打完」的比賽要在最後多補一局「空的」set（firstServer=null）──
-// 分析頁重建（reconstructRecording）沿用計分表的慣例：「最後一局」永遠當成「進行中的
-// currentSet」。所以如果一場已經打完的比賽，資料裡最後一局就是決勝局本身，分析頁的
-// 「比賽總覽」會把那一決勝局誤標成「進行中」（藍色）。解法是在真正打完的各局之後，補一筆
-// firstServer=null 的空 set：重建時這筆空 set 會變成「還沒開球的 currentSet」（不會顯示、
-// 也不算進局數），真正打過的每一局就全部落進 completedSets、正確顯示成已結束。進行中的
-// 比賽則相反——不補空 set，讓那局半場的 set 自然當 currentSet，總覽就會顯示成藍色進行中。
+// ── #218 之後：已打完的比賽不再需要「補一局空 set」──
+// 這裡以前有一段補丁：已打完的比賽要在最後多插一筆 firstServer=null 的空 set。原因是重建
+// 慣例「最後一局永遠是進行中的 currentSet」——不補的話，決勝局本身會被誤標成「進行中」。
+// 那個補丁其實是在用假資料遷就一條算錯的規則（#218 的病灶）。
+//
+// 現在 matches.status 明確記錄「這場結束了沒」，重建規則會照它切分（見前端
+// lib/volleyballRules.ts 的 splitCompletedAndCurrent），所以：
+//   - 已打完（inProgress = null）：seedMatch 會把 status 設成 "finished"，這裡什麼都不用補，
+//     真正打過的每一局都會落進 completedSets。
+//   - 進行中：status 是 "in_progress"，最後那局半場的 set 自然當 currentSet，總覽顯示藍色。
+// 換句話說，seed 資料現在跟使用者真的打完一場比賽產生的資料**形狀完全一致**，不再有一筆
+// 只為了騙過重建規則而存在的幽靈空局。
 async function seedSets(
   matchId: number,
   completedScores: [number, number][],
@@ -408,14 +413,13 @@ async function seedSets(
     await insertSetWithRallies(matchId, i + 1, firstServerOf(i), specs);
   }
 
-  const nextSetNumber = completedScores.length + 1;
+  // 已打完的比賽在這裡什麼都不做（#218，見上方大段說明）；只有「進行中」的比賽要再多插
+  // 一局半場的 set 當 currentSet。
   if (inProgress) {
+    const nextSetNumber = completedScores.length + 1;
     const [home, away] = inProgress;
     const specs = buildPartialRallies(rng, "", home, away, ourRoster);
     await insertSetWithRallies(matchId, nextSetNumber, firstServerOf(nextSetNumber - 1), specs);
-  } else {
-    // 已打完：補一局空 set（firstServer=null、沒有任何 rally），見上方大段說明。
-    await db.insert(setsTable).values({ matchId, setNumber: nextSetNumber, firstServer: null });
   }
 }
 
@@ -498,7 +502,7 @@ async function main() {
     dateIso: string,
     roster: RosterEntry[],
     completedScores: [number, number][],
-    // null＝這場已打完（seedSets 會補一局空 set 收尾）；給比分＝這場還沒打完，最後多一局
+    // null＝這場已打完（會標成 status:"finished"）；給比分＝這場還沒打完，最後多一局
     // 進行中、比分停在這裡的局（見 seedSets 的 inProgress 說明）。
     inProgress: [number, number] | null = null,
   ) {
@@ -515,6 +519,9 @@ async function main() {
         // format，不靠 DB default 悄悄補上，讓 seed 資料的賽制在這裡看得到、之後改起來也
         // 有跡可循。
         format: "best_of_3",
+        // #218：完賽狀態明確存進資料，不再靠「補一局空 set」讓重建規則猜對（見 seedSets
+        // 上方的說明）。已打完的三場標 finished，唯一那場進行中的標 in_progress。
+        status: inProgress ? "in_progress" : "finished",
       })
       .returning({ id: matchesTable.id });
     // 要 .returning id：event 需要指向這場比賽裡「哪一個球員」做了決定球，那個外鍵存的是

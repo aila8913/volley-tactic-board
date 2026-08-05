@@ -144,6 +144,11 @@ router.patch(
           ...(body.teamId !== undefined && { teamId: body.teamId }),
           // 賽制（#215）：沒帶就不動這一欄，維持原本的賽制不變。
           ...(body.format !== undefined && { format: body.format }),
+          // 比賽狀態（#218）：計分頁的「結束比賽」送 finished、「重新開啟比賽」送
+          // in_progress。收尾／重新開啟刻意不另開端點（例如 POST /matches/:id/finish）——
+          // 它就是「把一個欄位改成另一個值」，跟改對手名稱沒有本質差別，用既有的 PATCH
+          // 表達就夠；開專用端點反而要多維護一條路由、多一份擁有權檢查。
+          ...(body.status !== undefined && { status: body.status }),
         })
         .where(and(eq(matchesTable.id, params.matchId), eq(matchesTable.userId, userId)))
         .returning();
