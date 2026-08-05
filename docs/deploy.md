@@ -52,6 +52,14 @@ app.get("/{*path}", ...); // 剩下的全部回 index.html，交給 wouter 接�
 3. 建好後複製 **connection string**，長得像
    `postgresql://<user>:<password>@ep-xxx.ap-southeast-1.aws.neon.tech/neondb?sslmode=require`。
 
+> **一定要複製「Direct connection」，不要複製「Pooled connection」**（Neon 的 Connection
+> Details 面板兩個都有，差別只在主機名稱有沒有 `-pooler` 這段）。連線池版本走的是 PgBouncer
+> transaction pooling，不支援 `drizzle-kit push` 內省 schema 時用到的 session 層級操作，
+> 用連線池的字串跑 push 會卡在「Pulling schema from database...」然後安靜地失敗、幾乎看不到
+> 有意義的錯誤訊息（#221/#224 那輪部署就在這裡卡了一段時間才查出來）。連線池字串本身沒錯，
+> 是給部署後的應用程式（Render 上的 API server）在執行期用的一般查詢用的，只有 schema push
+> 這種 DDL 操作要換成直連。
+
 > **為什麼是 Neon 而不是 Supabase**：Supabase 免費專案連續 7 天沒有請求就會被暫停，
 > 而且要進儀表板手動 restore。這個 app 的使用情境正是「不知道誰哪天會打開」，
 > 那個失效模式剛好踩在最痛的地方。Neon 免費方案閒置也會休眠，但**連線進來就自己醒**
@@ -211,6 +219,7 @@ curl https://<你的網址>/api/auth/me
 
 ```powershell
 # 1. merge 之前（或至少 build 完成之前）先把 schema 推上雲端
+# 記得用 Direct connection（不是 Pooled connection），理由見步驟 2 的提醒。
 $env:DATABASE_URL = "<Neon 連線字串>"
 pnpm --filter @workspace/db run push
 # 2. 再去 GitHub 按 merge

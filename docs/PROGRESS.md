@@ -22,11 +22,12 @@
 > 平行 PR 就落在不同行段、git 幾乎都能自動合併，不用真的把檔案拆兩份、也保住一眼 catch-up。
 > 上面的 `_Last updated_` 是共用一行摘要（誰更新了什麼），保持精簡、別長成段落。
 
-\_Last updated: 2026-08-04 (aila) — **#26 部署收工，M3 脊椎（#77→#75→#64→#26）全數完成。**
-Neon（Postgres）＋ Render（單一 Node 服務）＋自己接 Google OAuth 三張 PR（PR1 雲端環境 #282、
-PR2 OAuth 接線 #283）都已合併上線，`https://volley-tactics-board.onrender.com` 實機驗過完整
-登入流程（Google 帳號登入→session cookie→右下角帳號徽章→登出），`#26` 已隨 PR #283 合併自動
-關閉。M3「部署給真人試用」目前只剩使用者實際找人試用、收回饋這件事本身，沒有更多程式碼工作。
+\_Last updated: 2026-08-04 (aila) — **#252 定案（不建球隊常態名單，查詢層推導取代）＋ #287 開新
+實作 issue（M3）**。無程式碼異動，純設計決策 session。先前條目：#26 部署收工，M3 脊椎（#77→#75→
+#64→#26）全數完成，Neon（Postgres）＋ Render（單一 Node 服務）＋自己接 Google OAuth 三張 PR（PR1
+雲端環境 #282、PR2 OAuth 接線 #283）都已合併上線，`https://volley-tactics-board.onrender.com`
+實機驗過完整登入流程（Google 帳號登入→session cookie→右下角帳號徽章→登出）。M3「部署給真人試用」
+目前只剩使用者實際找人試用、收回饋這件事本身，沒有更多程式碼工作。
 先前條目：#77 帳號模型定案（v1＝Google OAuth 每人一個真帳號，公開網址不設邀請碼）、#75 離線
 可靠性契約定案（`rallies`/`events`/`substitutions`/`timeouts` 保證不遺失，`lineups` 與戰術板/
 名單刻意不保證）、#64 四張 PR（主鍵改 uuid／write log 收斂／IndexedDB 落地＋冪等寫入／退避重送＋
@@ -118,6 +119,11 @@ lives in git log + the issues named).
   **方向不對稱**：自動建**新身分**安全（最壞是同一人散成多筆待合併，資料仍正確）；自動**合併到既有身分**
   不安全（猜錯就把兩人生涯數據永久混在一起且難以發現）。**判準：能不能給預設值，取決於預設的那個方向
   會不會產生錯誤答案**——#215 兩個方向都會錯所以必填，這裡只有一個方向會錯所以另一個方向可以當預設。
+- **#252 定案：不建「球隊常態名單」資料概念（08-04）。** tang 提的「新增比賽時能否從已知球員挑選」
+  訴求，討論後決定**不**新增 `team_members` 多對多表、也不在 `people` 加 `teamId`——前者會推翻
+  `teams.ts` 現有「teams 只是分組標籤」的決定並引出一串 membership 語意問題，後者跟「一人跨多隊」
+  的產品定位衝突。改用查詢層推導：`matches.teamId → players.personId → people` 撈出「這支球隊歷史
+  用過的人」當建議清單，套用 ADR-0003 判準（讀取不貴、無需物化）。實作追蹤移到 #287（M3），#252 已關。
 - **#65 數據分析頁：視圖①②已上線＋teams 端到端＋入口＝常駐紀錄本。** 視圖①單場分析
   （`pages/MatchAnalytics.tsx`）＝比分總覽＋球員決定球矩陣＋換人統計＋各輪次得失分；**比分總覽已改成
   全頁範圍選擇器**（PR #216：點某局就把底下所有區塊篩到那局、「全場」按鈕顯示局數比數，全頁由單一
@@ -320,11 +326,10 @@ gh issue list --state open                        # 全部
 從未渲染對手、snapshot player 無 `side`；spec 把 mode D 叫「對手佈陣」的那層 #177 沒做）07-28 補上
 milestone，歸 **M5**。
 
-**當前階段＝M3「部署給真人試用」（軟目標日 8/7，10 張 open）。** 脊椎與定案見上方 Current state；
-`gh issue list --milestone "M3 部署給真人試用"`。**#77 已於 08-02 關閉**，剩下的脊椎是 #75 設計已定、
-#64 PR1～PR4（主鍵遷移／寫入 log／IndexedDB 落地＋重放＋冪等／退避重送＋未同步指示器）**全數完成**，
-脊椎只剩 #26 部署。**搭便車、不擋部署的 6 張**：#218（結束比賽節點）、#221/#224/#240（人員合併與管理）、
-#176（工具軌圖示，blocked @tangyi1025）、#178（響應式，需線框稿）。**待新開一張**：「PWA 化：
+**當前階段＝M3「部署給真人試用」（軟目標日 8/7，3 張 open：#287/#218/#209）。** 脊椎已於 08-02
+（#77）與 08-04（#26）全數收尾，M3 剩下的都是不擋部署、搭便車的項目。**#221/#224/#240（人員合併
+與管理）已於 08-05 全數交付並關閉**，#176（工具軌圖示）也已關閉；#178（響應式）已移出 M3 歸 M5。
+**待新開一張**：「PWA 化：
 manifest ＋ vite-plugin-pwa」——跟 #64 資料層零依賴、可平行，且是唯一能自然分給設計夥伴、
 又不需要先懂佇列設計的一塊。
 
@@ -338,9 +343,10 @@ Recently closed），Project #4 網頁上的卡片待 PO 手動移過去。**#24
 性質）。下一個階段還沒有明確軟目標日，目前最新落地的是跨 milestone 的獨立缺口 **#251**（戰術板頁
 輪轉/名單面板重複顯示，08-02 已關閉，PR #274，見下方 Recently closed）。
 
-M2 雖已收 milestone，衍生待辦仍在各自 issue：**#214**（分析頁導覽重構，M5）、**#221/#224**（人員合併與
-管理頁，M3）、**#235**（side-out% 等比率統計，M5——資料已足夠，發球方可由 `sets.firstServer` 當種子
-逐分推導）、**#222**（`RosterEditDialog` 沒有去重 UX，從戰術板那條路徑新增的球員 `personId` 永遠 null）。
+M2 雖已收 milestone，衍生待辦仍在各自 issue：**#214**（分析頁導覽重構，M5）、**#235**（side-out%
+等比率統計，M5——資料已足夠，發球方可由 `sets.firstServer` 當種子逐分推導）、**#222**
+（`RosterEditDialog` 沒有去重 UX，從戰術板那條路徑新增的球員 `personId` 永遠 null）。**#221/#224
+（人員合併與管理頁）已於 08-05 交付，見下方 Recently closed。**
 **#218**（一場比賽「結束」的操作節點與畫面）——目前「結束比賽」只是導去分析頁的 `<Link>`，**最後一局
 不會被封存**（`completedSets` 只在按「下一局」時累積），是資料缺口不只是 UX 缺口。
 
@@ -370,6 +376,22 @@ serving≠null 但 record.lineup=null」那條路**，但真正的 reconcile 仍
 
 ### 開發 (aila)
 
+- **#221 ＋ #224**（人員合併機制與管理頁，08-05，PR #293/#295）— #213 留下的缺口：`people` 只在
+  MatchFormDialog 送出名單時被動建立，同名重複沒地方合併、打錯字沒地方改。#221（後端）：新增
+  `person_merges` append-only 稽核表（一次合併寫 N 列，記 target／來源名字快照／被改指的
+  `players.id` 清單——合併不可逆，這張表是誤併後人工拆得回來的保險）；`POST /people/:id/merge`
+  在單一 transaction 裡「改指向→寫日誌→刪來源」，body 帶進來的 `sourceIds` 額外手動驗擁有權
+  （`owns` closure 只驗得到 path param，驗不到 body 陣列，漏掉就是 #225 那類 IDOR）；候選偵測
+  `normalizePersonName` 刻意比 MatchFormDialog 的去重判準寬（NFKC＋拿掉所有空白含全形空白），
+  因為這裡只是列出來給人勾選確認、猜寬了成本趨近於零，猜漏了才是問題。#224（前端）：
+  `GET /people` 順手補上 `matchCount`/`teamNames`（新 `PersonSummary` schema，`Person` 本身
+  不動，因為 POST/PATCH 那幾支回應算不出這兩個欄位）；新增 `PeopleManagement.tsx`
+  （`/analytics/people/manage`）——列表／新增／行內改名／刪除（`window.confirm` 講清楚只解除
+  跨場關聯不刪比賽資料）／合併建議區塊（每組候選選目標＋來源，確認訊息點名哪些名字會消失）。
+  **實測抓到的坑**：`normalizePersonName` 原本只把內部空白壓成一個而非整個拿掉，「王　小明」
+  （全形空白）配不到「王小明」，正是這功能最該抓的那種手誤，已修正並補測試。**副產品 #294**：
+  合併測試時發現 `GET /matches/{matchId}/players` 沒有 `ORDER BY`，Postgres MVCC 讓任何 UPDATE
+  都把該列擠到名單最後——與合併無關的既有 bug，另開追蹤、不混進這兩張 PR。
 - **#251**（戰術板右欄整併進 `RotationRailPanel`，08-02，PR #274）— tang 實機回報：戰術板佈陣模式
   同一場比賽的球員清單重複顯示兩三份，根因是 #172/#174 那次右欄元件化漏掉戰術板頁，`TacticsBoard.tsx`
   一直用著舊版 `RotationTable`（中央欄）＋另一顆臨時的 `TacticsRosterPanel`（右欄），兩者都不是 #174
