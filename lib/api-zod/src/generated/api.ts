@@ -187,6 +187,24 @@ export const CreateTeamBody = zod.object({
 
 
 /**
+ * @summary List people who have previously played for this team, one row per person (their most recent match's number/role), for the "new match" form to suggest as roster picks
+ */
+export const ListTeamRosterSuggestionsParams = zod.object({
+  "teamId": zod.coerce.number()
+})
+
+export const ListTeamRosterSuggestionsResponseItem = zod.object({
+  "personId": zod.number(),
+  "name": zod.string(),
+  "number": zod.number(),
+  "role": zod.enum(['S', 'OH', 'MB', 'OPP', 'L']),
+  "matchCount": zod.number(),
+  "lastPlayedAt": zod.coerce.date()
+})
+export const ListTeamRosterSuggestionsResponse = zod.array(ListTeamRosterSuggestionsResponseItem)
+
+
+/**
  * @summary Rename a team
  */
 export const UpdateTeamParams = zod.object({

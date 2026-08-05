@@ -225,6 +225,33 @@ paths:
               schema:
                 $ref: "#/components/schemas/Team"
 
+  # #287：新增比賽時，球隊帶出「這支球隊之前登錄過的人」當建議清單，讓使用者用「勾選＋微調」
+  # 取代每場都重打一次名單。這支刻意寫在 /teams/{teamId} 之前——理由跟 /people/merge-candidates
+  # 那段註解一樣：Express 是照路由「註冊順序」一個一個試，不是照路徑特異度排序，如果先註冊了
+  # /teams/{teamId}（本身沒有子路徑段，但同樣的順序規則要顧到，避免以後有人在它下面加更多
+  # 動詞路由時又得回頭搬順序），寫死的 /teams/{teamId}/roster-suggestions 段落要排在前面才安全。
+  /teams/{teamId}/roster-suggestions:
+    parameters:
+      - $ref: "#/components/parameters/TeamId"
+    get:
+      operationId: listTeamRosterSuggestions
+      tags: [teams]
+      summary: >-
+        List people who have previously played for this team, one row per person (their most
+        recent match's number/role), for the "new match" form to suggest as roster picks
+      responses:
+        "200":
+          description: >-
+            Suggested roster entries, newest lastPlayedAt first (only people with a resolved
+            personId are included — a roster row without a cross-match identity can't be
+            offered as a "this is the same person" suggestion)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RosterSuggestion"
+
   /teams/{teamId}:
     parameters:
       - $ref: "#/components/parameters/TeamId"
@@ -1103,6 +1130,32 @@ components:
         name:
           type: string
       required: [id, name]
+
+    # GET /teams/{teamId}/roster-suggestions 回應裡的一列（#287）：這支球隊之前登錄過的某個人，
+    # 取自他在這支球隊「最近一場比賽」的那筆名單列（players）。name/number/role 特意取
+    # players 那一列的值、不是 people.name——people.name 只是跨場身分的標籤，實際登錄在名單上
+    # 的姓名/背號/位置以 players 為準（跟 name/number/role 同一列來源才一致）；取「最近一場」
+    # 而非彙總所有場次，是因為背號/位置本來就會換季換人變，最近一次最可能還是對的。
+    RosterSuggestion:
+      type: object
+      properties:
+        # 只回有對應到跨場身分的建議——沒有 personId 的名單列沒辦法確認「這是同一個人」，
+        # 勾了也串不起統計，所以這裡不是 nullable。
+        personId:
+          type: integer
+        name:
+          type: string
+        number:
+          type: integer
+        role:
+          $ref: "#/components/schemas/PlayerRole"
+        # 這個人在這支球隊出賽過幾場，給使用者判斷是不是常客。
+        matchCount:
+          type: integer
+        lastPlayedAt:
+          type: string
+          format: date-time
+      required: [personId, name, number, role, matchCount, lastPlayedAt]
 
     NewTeam:
       type: object

@@ -63,6 +63,15 @@ export interface Team {
   name: string;
 }
 
+export interface RosterSuggestion {
+  personId: number;
+  name: string;
+  number: number;
+  role: PlayerRole;
+  matchCount: number;
+  lastPlayedAt: string;
+}
+
 export interface NewTeam {
   name: string;
 }

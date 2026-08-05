@@ -48,6 +48,7 @@ import type {
   PersonSummary,
   Player,
   Rally,
+  RosterSuggestion,
   RotationStat,
   Substitution,
   Tactic,
@@ -1107,6 +1108,83 @@ export const useCreateTeam = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getCreateTeamMutationOptions(options));
     }
+
+export const getListTeamRosterSuggestionsUrl = (teamId: number,) => {
+
+
+
+
+  return `/api/teams/${teamId}/roster-suggestions`
+}
+
+/**
+ * @summary List people who have previously played for this team, one row per person (their most recent match's number/role), for the "new match" form to suggest as roster picks
+ */
+export const listTeamRosterSuggestions = async (teamId: number, options?: RequestInit): Promise<RosterSuggestion[]> => {
+
+  return customFetch<RosterSuggestion[]>(getListTeamRosterSuggestionsUrl(teamId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListTeamRosterSuggestionsQueryKey = (teamId: number,) => {
+    return [
+    `/api/teams/${teamId}/roster-suggestions`
+    ] as const;
+    }
+
+
+export const getListTeamRosterSuggestionsQueryOptions = <TData = Awaited<ReturnType<typeof listTeamRosterSuggestions>>, TError = ErrorType<unknown>>(teamId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listTeamRosterSuggestions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListTeamRosterSuggestionsQueryKey(teamId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listTeamRosterSuggestions>>> = ({ signal }) => listTeamRosterSuggestions(teamId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(teamId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listTeamRosterSuggestions>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListTeamRosterSuggestionsQueryResult = NonNullable<Awaited<ReturnType<typeof listTeamRosterSuggestions>>>
+export type ListTeamRosterSuggestionsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List people who have previously played for this team, one row per person (their most recent match's number/role), for the "new match" form to suggest as roster picks
+ */
+
+export function useListTeamRosterSuggestions<TData = Awaited<ReturnType<typeof listTeamRosterSuggestions>>, TError = ErrorType<unknown>>(
+ teamId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listTeamRosterSuggestions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListTeamRosterSuggestionsQueryOptions(teamId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
 
 export const getUpdateTeamUrl = (teamId: number,) => {
 
