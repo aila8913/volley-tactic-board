@@ -419,6 +419,86 @@ describe("reconstructRecording", () => {
     expect(state.currentSet.serverId).toBe(2);
   });
 
+  // #218：同一批資料，只因為 isFinished 不同就該切出不同結果。這是整個 issue 的核心
+  // ——以前打完的最後一局永遠被當成進行中丟掉，局比數就會少算一局。
+  it("counts every set as completed when the match is finished (isFinished = true)", () => {
+    const set1: MatchSet = { id: 1, matchId: 3, setNumber: 1, firstServer: "home" };
+    const set2: MatchSet = { id: 2, matchId: 3, setNumber: 2, firstServer: "away" };
+    const rally = (
+      setId: number,
+      rallyNumber: number,
+      winner: "home" | "away",
+      id: number,
+    ): Rally => ({
+      id,
+      setId,
+      rallyNumber,
+      homeScore: 0,
+      awayScore: 0,
+      homeRotation: 0,
+      awayRotation: 0,
+      winner,
+    });
+    // 第 1 局 2:0、第 2 局 1:0，兩局都是我方拿下——三戰兩勝的話這場就是 2:0 結束了。
+    const set1Rallies = [rally(1, 1, "home", 100), rally(1, 2, "home", 101)];
+    const set2Rallies = [rally(2, 1, "home", 200)];
+
+    const state = reconstructRecording(
+      [set1, set2],
+      [set1Rallies, set2Rallies],
+      [],
+      [],
+      [],
+      [],
+      true,
+    );
+
+    // 兩局都在 completedSets 裡——第 2 局不再被當成「進行中那局」而消失。
+    expect(state.completedSets.map((s) => s.setNumber)).toEqual([1, 2]);
+    expect(state.completedSets[1]).toMatchObject({ ourScore: 1, opponentScore: 0 });
+    // currentSet 是一個空佔位（局號往前走），serving 為 null 讓畫面上的各局比分表不會
+    // 把它多列一行——見 reconstructRecording 裡那段說明。
+    expect(state.currentSet.setNumber).toBe(3);
+    expect(state.currentSet.serving).toBeNull();
+    expect(state.currentSet.serverId).toBeUndefined();
+    expect(state.lineup).toBeNull();
+    expect(state.regularSubs).toEqual([]);
+    expect(state.subCount).toBe(0);
+    expect(state.timeouts).toEqual([]);
+  });
+
+  // #218：按了「下一局」（會先建一筆 firstServer=null 的空 set）之後才想起比賽已經結束、
+  // 直接按「結束比賽」——那筆從沒開球的尾巴局不該被算成一局 0:0。
+  it("drops trailing never-started sets when the match is finished", () => {
+    const set1: MatchSet = { id: 1, matchId: 3, setNumber: 1, firstServer: "home" };
+    const set2: MatchSet = { id: 2, matchId: 3, setNumber: 2, firstServer: "home" };
+    // 第 3 局：按了「下一局」但還沒選先發方（firstServer=null、沒有任何 rally）。
+    const set3: MatchSet = { id: 3, matchId: 3, setNumber: 3, firstServer: null };
+    const rally = (setId: number, id: number): Rally => ({
+      id,
+      setId,
+      rallyNumber: 1,
+      homeScore: 0,
+      awayScore: 0,
+      homeRotation: 0,
+      awayRotation: 0,
+      winner: "home",
+    });
+
+    const state = reconstructRecording(
+      [set1, set2, set3],
+      [[rally(1, 100)], [rally(2, 200)], []],
+      [],
+      [],
+      [],
+      [],
+      true,
+    );
+
+    // 只有真的打過的兩局算數，那筆空的第 3 局不會變成「0:0 的一局」。
+    expect(state.completedSets.map((s) => s.setNumber)).toEqual([1, 2]);
+  });
+
   it("attaches events to the right rallies across multiple sets", () => {
     const set1: MatchSet = { id: 1, matchId: 3, setNumber: 1, firstServer: "home" };
     const set2: MatchSet = { id: 2, matchId: 3, setNumber: 2, firstServer: "home" };

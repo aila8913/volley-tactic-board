@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { applyRally, applyRegularSub, type RuleState } from "./volleyballRules";
+import {
+  applyRally,
+  applyRegularSub,
+  splitCompletedAndCurrent,
+  type RuleState,
+} from "./volleyballRules";
 import { reconstructSetFromRallies, countRegularSubs } from "./scoreSheetMapping";
 import { useScoreSheet } from "../hooks/useScoreSheet";
 import type { RegularSub, Side } from "../types/scoresheet";
@@ -69,6 +74,35 @@ describe("applyRally", () => {
     const { state: s2 } = applyRally(base, "opponent");
     expect(s2.ourScore).toBe(0);
     expect(s2.opponentScore).toBe(1);
+  });
+});
+
+// #218：「最後一局＝進行中」這條慣例現在吃 isFinished。這組測試把兩種切法都釘住——
+// 尤其是 isFinished=true 時「最後一局也算已結束局」，那正是 #218 修掉的病灶（打完的
+// 決勝局以前永遠不算數，局比數因此少一局）。
+describe("splitCompletedAndCurrent", () => {
+  it("比賽進行中：最後一個元素是 current，其餘是 completed", () => {
+    expect(splitCompletedAndCurrent([1, 2, 3])).toEqual({ completed: [1, 2], current: 3 });
+  });
+
+  it("比賽進行中：只有一局時 completed 是空的（那一局就是進行中那局）", () => {
+    expect(splitCompletedAndCurrent([1])).toEqual({ completed: [], current: 1 });
+  });
+
+  it("空陣列：兩種切法都不會爆，current 是 undefined", () => {
+    expect(splitCompletedAndCurrent([])).toEqual({ completed: [], current: undefined });
+    expect(splitCompletedAndCurrent([], true)).toEqual({ completed: [], current: undefined });
+  });
+
+  it("已完賽：每一局都是 completed，沒有 current", () => {
+    expect(splitCompletedAndCurrent([1, 2, 3], true)).toEqual({
+      completed: [1, 2, 3],
+      current: undefined,
+    });
+  });
+
+  it("預設值是「進行中」——沒帶第二個參數時行為跟 #218 之前完全一樣", () => {
+    expect(splitCompletedAndCurrent([1, 2, 3])).toEqual(splitCompletedAndCurrent([1, 2, 3], false));
   });
 });
 

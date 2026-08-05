@@ -43,6 +43,9 @@ export function serverMatchToDomain(m: ApiMatch, players: ApiPlayer[] = []): Mat
     teamId: m.teamId ?? null,
     // 賽制（#215）：後端 DB notNull，一定有值，直接原樣帶過來，不用 ?? 兜底。
     format: m.format,
+    // 比賽狀態（#218）：同上，DB notNull 所以一定有值。這個欄位決定「sets 的最後一局
+    // 算不算已結束局」，見 lib/volleyballRules.ts 的 splitCompletedAndCurrent。
+    status: m.status,
   };
 }
 

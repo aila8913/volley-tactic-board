@@ -17,10 +17,14 @@ import {
   useDeleteTimeout,
   useListMatchLineups,
   usePutSetLineup,
+  useGetMatch,
+  useUpdateMatch,
+  getGetMatchQueryKey,
   listRallies,
   getListRalliesQueryKey,
   ApiError,
 } from "@workspace/api-client-react";
+import type { MatchCompletionStatus } from "../lib/matchOutcome";
 import { ScoreSheetState, PointRecord, Side, UndoEntry, LineupSnapshot } from "../types/scoresheet";
 import {
   sideToApi,
@@ -344,6 +348,10 @@ export function useScoreSheetController(matchId: string) {
   const createTimeout = useCreateTimeout();
   const deleteTimeout = useDeleteTimeout();
   const putLineup = usePutSetLineup();
+  // 改比賽狀態（#218）用的 mutation。它刻意**不走 write log 佇列**：write log 是「一場比賽
+  // 內部的流水帳」（set/rally/event/substitution/timeout）專用的離線佇列，而「這場結束了」
+  // 改的是比賽本體的一個欄位，跟改對手名稱同一類，走普通的 React Query mutation 即可。
+  const updateMatch = useUpdateMatch();
 
   // 持久化記帳：目前這一局在後端的 setId。用 ref 因為它只影響背景寫入、不該觸發重繪。
   // 以前它旁邊還有 rallyIdsRef / subIdsRef / timeoutIdsRef 三疊「建立時 push、undo 時 pop」的
@@ -536,8 +544,16 @@ export function useScoreSheetController(matchId: string) {
   // 整場所有局的先發一次抓（同 bulk endpoint 理由）。issue #115：reload 後把先發快照讀回，
   // 計分表才不會又退回去讀（可能被別場/存檔污染的）全域 store。
   const lineupsQuery = useListMatchLineups(numericMatchId);
+  // 比賽本體（#218）：這裡只要 status 一個欄位——它決定「最後一局算不算已結束局」，是重建
+  // 時必須知道的事（見 splitCompletedAndCurrent）。跟 ScoreSheet.tsx 的 useMatchWithRoster
+  // 是同一個 query key，React Query 會共用同一份快取，不會多打一次請求。
+  const matchQuery = useGetMatch(numericMatchId, {
+    query: { queryKey: getGetMatchQueryKey(numericMatchId) },
+  });
+  const isFinished = matchQuery.data?.status === "finished";
 
   const setsReady = setsQuery.isSuccess;
+  const matchReady = matchQuery.isSuccess;
   const ralliesReady = ralliesQueries.every((q) => q.isSuccess);
   const eventsReady = eventsQuery.isSuccess;
   const subsReady = subsQuery.isSuccess;
@@ -546,6 +562,9 @@ export function useScoreSheetController(matchId: string) {
   const isHydrating =
     !replayDone ||
     !setsReady ||
+    // matchReady 也要進閘門（#218）：status 還沒到位就重建，會用預設的「進行中」切法，
+    // 把已完賽比賽的最後一局誤當成進行中那局——畫面會先閃一次錯的局比數。
+    !matchReady ||
     !eventsReady ||
     !subsReady ||
     !timeoutsReady ||
@@ -554,12 +573,20 @@ export function useScoreSheetController(matchId: string) {
 
   // 只在資料第一次備妥時重建一次，之後不再覆蓋（避免把使用者當下的即時編輯洗掉）。
   // matchId 變了就允許再重建一次。
+  //
+  // rebuildToken（#218）：「結束比賽 / 重新開啟比賽」改變了 matches.status，而 status 會改變
+  // 重建規則本身（最後一局算不算已結束局），所以那兩個動作完成後要**強制再重建一次**。
+  // 用一個遞增的數字併進這個 ref 的比較鍵，是因為單純把 ref 設回 null 不會讓 effect 重跑
+  // （effect 要靠依賴變化才會被 React 重新執行，ref 的改動 React 看不到）。
+  const [rebuildToken, setRebuildToken] = useState(0);
+  const hydrationKey = `${matchId}:${rebuildToken}`;
   const hydratedMatchRef = useRef<string | null>(null);
   useEffect(() => {
-    if (hydratedMatchRef.current === matchId) return;
+    if (hydratedMatchRef.current === hydrationKey) return;
     // 重放沒跑完就先不重建（理由見上面的「重放閘門」）。
     if (!replayDone) return;
-    if (!setsReady || !eventsReady || !subsReady || !timeoutsReady || !lineupsReady) return;
+    if (!setsReady || !matchReady || !eventsReady || !subsReady || !timeoutsReady || !lineupsReady)
+      return;
     if (sets.length > 0 && !ralliesReady) return;
 
     // 「資料到位後怎麼組成 ScoreSheetState」這段純計算已抽到 reconstructRecording
@@ -575,6 +602,7 @@ export function useScoreSheetController(matchId: string) {
       subsQuery.data ?? [],
       lineupsQuery.data ?? [],
       timeoutsQuery.data ?? [],
+      isFinished,
     );
 
     // seed 記帳 ref，讓重建後接著記分能掛到正確的一局底下。
@@ -583,13 +611,14 @@ export function useScoreSheetController(matchId: string) {
     currentSetIdRef.current = state.currentSet.serverId;
 
     hydrate(matchId, state);
-    hydratedMatchRef.current = matchId;
+    hydratedMatchRef.current = hydrationKey;
     // ralliesQueries / eventsQuery.data 每次 render 重建，放進依賴會抖動；用 *Ready 旗標即可。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    matchId,
+    hydrationKey,
     replayDone,
     setsReady,
+    matchReady,
     ralliesReady,
     eventsReady,
     subsReady,
@@ -777,6 +806,34 @@ export function useScoreSheetController(matchId: string) {
     });
   }, [matchId, append]);
 
+  // ── 結束比賽 / 重新開啟比賽（#218）──
+  //
+  // 為什麼這兩個動作跟其他動作（記分/換人/暫停）的結構完全不同——它們是「後端優先」而不是
+  // 「本地優先」：
+  //   - 其他動作是課邊連點，必須零延遲，所以先改本地 store 再背景寫後端。
+  //   - 收尾一場比賽是一場比賽只會做一兩次的事，等一個網路來回完全可以接受。
+  //
+  // 更重要的是**正確性**：status 改變的是「重建規則本身」，不是某一格資料。如果在本地手動
+  // 把 currentSet 搬進 completedSets，「重新開啟」時就得把它搬回來——但 CompletedSet 沒有
+  // 存 serving / ourRotation / opponentRotation / serverId（見 types/scoresheet.ts），搬回來
+  // 的那一局會少掉發球方與輪轉，教練接著記分就會記在錯的輪次上。
+  //
+  // 所以改成：PATCH 成功 → invalidate → 讓 reconstructRecording 用新的 status 重建一次。
+  // 重建是從 rallies 重放算出來的，發球方/輪轉/serverId 全都會被正確還原，不需要維護一套
+  // 「搬過去再搬回來」的逆運算，也不會有兩份規則飄開的風險。
+  const setMatchStatus = useCallback(
+    async (status: MatchCompletionStatus): Promise<void> => {
+      await updateMatch.mutateAsync({ matchId: numericMatchId, data: { status } });
+      // 重抓所有查詢（含這場的 match 本體），再讓上面的重建 effect 跑一次。順序很重要：
+      // 先 await invalidate（等新資料落地），再 bump token 觸發重建，否則會拿舊的 status 重建。
+      await queryClient.invalidateQueries();
+      setRebuildToken((n) => n + 1);
+    },
+    [numericMatchId, updateMatch, queryClient],
+  );
+  const finishMatch = useCallback(() => setMatchStatus("finished"), [setMatchStatus]);
+  const reopenMatch = useCallback(() => setMatchStatus("in_progress"), [setMatchStatus]);
+
   // 一般換人（issue #42 Phase B）。跟 score() 是同一套結構：
   //   1) 先同步擷取「這次換人當下」的比分快照（换人不是掛在某個 rally 底下，
   //      而是記錄「發生時的比分」，見 scoreSheetMapping.ts 的 regularSubToApi 註解）。
@@ -867,5 +924,10 @@ export function useScoreSheetController(matchId: string) {
     callTimeout,
     pendingWrites,
     retryWrites,
+    // #218：這場比賽已完賽嗎，以及切換它的兩個動作。畫面用 isFinished 決定要顯示完賽態
+    // （唯讀 + 重新開啟）還是正常記分態。
+    isFinished,
+    finishMatch,
+    reopenMatch,
   };
 }

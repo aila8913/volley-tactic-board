@@ -22,8 +22,8 @@
 > 平行 PR 就落在不同行段、git 幾乎都能自動合併，不用真的把檔案拆兩份、也保住一眼 catch-up。
 > 上面的 `_Last updated_` 是共用一行摘要（誰更新了什麼），保持精簡、別長成段落。
 
-\_Last updated: 2026-08-05 (aila) — #287 交付（PR #297），M3 剩 #218/#209 兩張 needs-plan 的 UX 題；
-#232 body 除鏽。\_
+\_Last updated: 2026-08-05 (aila) — #218 交付（`matches.status` + 計分頁收尾流程，ADR-0005）；
+#287 交付（PR #297）。M3 的 needs-plan UX 題剩 #209。\_
 
 \_Last updated: 2026-08-04 (tang) — **PR #260 合併，計分表長按換人＋自由球員鈕定案。** 工具軌圖示
 （PR #248）與全站背景統一（PR #253）也已合併（上次記錄的「待調整」都已收斂）。**#176 關閉，
@@ -399,6 +399,18 @@ serving≠null 但 record.lineup=null」那條路**，但真正的 reconcile 仍
 
 ### 開發 (aila)
 
+- **#218**（一場比賽「結束」的操作節點與畫面，08-05）— 表面上是「把計分頁那顆假的『結束比賽』
+  `<Link>` 變成真動作」，實際挖到的病根是全站那條「**sets 最後一局＝進行中**」的推導慣例
+  （前端 `splitCompletedAndCurrent` ＋ 後端 `analysis.ts` 的 SQL 鏡射）：打完的最後一局永遠被當成
+  進行中而**不算數**，局比數／分析頁／資料夾戰績全部少算一局，seed 資料還得靠「補一局空 set」
+  才顯示得對。修法是加 `matches.status`（`in_progress | finished`），讓那條慣例吃它——**ADR-0005**，
+  「不要重新提議」段落釘死「用局比數推導完賽」「補空 set」兩條回頭路。PO 四點拍板：加欄位／
+  達成勝局只把按鈕變強調**不自動彈窗**（誤判成本高於忘記按）／確認 dialog 後導既有分析頁**不做
+  賽後摘要頁**（會跟 `MatchAnalytics` 重複）／**可逆且不藏**（完賽後計分頁唯讀＋「重新開啟比賽」）。
+  兩個實作決定值得記：(1) 切換狀態後**重跑 `reconstructRecording`**，不在本地手搬
+  `currentSet`↔`completedSets`——`CompletedSet` 沒存 serving／輪轉／serverId，搬回來那局會少掉發球方，
+  從 rallies 重放才全對；(2) 完賽時要**砍掉沒開球的尾巴局**（按了「下一局」才想起比賽已結束），
+  否則各局比分多一行 0:0，前後端兩邊都要砍。seed 的假空局一併移除。
 - **#287**（球隊帶出歷史用過的人當建議清單，08-05）— #252 定案的查詢層推導實作：新增
   `GET /teams/:teamId/roster-suggestions`，`matches.teamId → players.personId → people` 一句 join
   撈出「這支球隊登錄過的人」，**不建 `team_members`、完全不動 schema**。**走後端 endpoint 而非前端

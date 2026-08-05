@@ -23,7 +23,14 @@ import type { Rally } from "@workspace/api-client-react";
 import { ScoreSheetState } from "@/types/scoresheet";
 import { reconstructRecording } from "@/lib/scoreSheetMapping";
 
-export function useMatchRecording(matchId: string): {
+export function useMatchRecording(
+  matchId: string,
+  // 這場比賽是不是已完賽（#218，來自 matches.status）。這支 hook 自己不抓 match（它只負責
+  // 「記錄內容」那幾支 query），所以由呼叫端把已經拿到的 match 換算成布林傳進來——分析頁
+  // 本來就用 useMatchWithRoster 拿了 match，不需要在這裡重複抓一次。
+  // 預設 false＝比賽進行中，也就是維持原本的重建行為（理由見 splitCompletedAndCurrent）。
+  isFinished = false,
+): {
   record: ScoreSheetState | undefined;
   // 額外把「每一局的原始 rally 陣列」也交給呼叫端（key＝setNumber），跟 allRallies（整場攤平）
   // 一起用來算「各輪次得失分」——分析頁要能依局篩選那份統計（#65），而 record 重建時已經把
@@ -70,6 +77,11 @@ export function useMatchRecording(matchId: string): {
     ralliesBySetIndex,
     eventsQuery.data ?? [],
     subsQuery.data ?? [],
+    // lineups / timeouts 這支唯讀 hook 不抓（分析頁用不到先發快照與暫停清單），沿用預設的
+    // 空陣列；isFinished 是第 7 個參數，所以這兩個位置要明確補上 []。
+    [],
+    [],
+    isFinished,
   );
 
   // sets 跟 ralliesBySetIndex 是「同索引對齊」的（見上方 useQueries）。把它整理成

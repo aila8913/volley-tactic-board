@@ -105,20 +105,39 @@ export function applyRegularSub(list: RegularSub[], sub: RegularSub): RegularSub
 // setResults 那段）也用同一個慣例算「已結束局」，抽成這支小函式一次講清楚「為什麼」，
 // 不要讓 slice(0, -1) / arr[arr.length-1] 這種魔法切法散落在好幾個地方各自重複。
 //
-// 為什麼「最後一局一定是進行中」這個假設永遠成立：schema 沒有「這局結束了嗎」的旗標，
-// 但 #63 修法之後，教練按「下一局」的當下就會先建一筆 firstServer=null 的空 set row
-// （見 lib/db/src/schema/sets.ts 與 reconstructSetFromRallies 的空局防呆），也就是說
-// 「使用者已經進到的每一局」都保證有對應的 DB row——不會有「剛按下一局但還沒開球」
-// 卻沒寫進後端、reload 後被誤判成上一局還在進行中的情況。所以「陣列最後一個＝目前這局」
-// 這個切法才站得住。
+// 為什麼「最後一局是進行中」在**比賽還沒結束時**成立：#63 修法之後，教練按「下一局」的
+// 當下就會先建一筆 firstServer=null 的空 set row（見 lib/db/src/schema/sets.ts 與
+// reconstructSetFromRallies 的空局防呆），也就是說「使用者已經進到的每一局」都保證有
+// 對應的 DB row——不會有「剛按下一局但還沒開球」卻沒寫進後端、reload 後被誤判成上一局
+// 還在進行中的情況。所以「陣列最後一個＝目前這局」這個切法才站得住。
+//
+// ⚠️ 這個切法**只在比賽還沒結束時**成立，這正是 #218 的病根。原本這裡的註解宣稱這個假設
+// 「永遠成立」，理由是「schema 沒有『這局結束了嗎』的旗標」——但那句話真正的意思是
+// 「我們沒有辦法知道，所以只好一律當進行中」。代價是：打完最後一球、整場比賽結束之後，
+// 那最後一局仍然被當成進行中，於是**局比數、分析頁、資料夾戰績全部少算一局**。當時的
+// 測試資料要靠「補一局空 set」才能讓完賽比賽顯示正確（見 #215），等於這個慣例在逼資料造假。
+//
+// #218 加了 matches.status 欄位（in_progress / finished，見 lib/db/src/schema/matches.ts），
+// 就是當初缺的那個旗標。所以這支函式現在多收一個 isFinished：
+//   - false（預設，比賽還在進行）→ 維持原本的切法，最後一局是進行中那局。
+//   - true（記錄者已按下「結束比賽」）→ 每一局都是已結束局，沒有進行中的那局
+//     （current 回 undefined，呼叫端自己決定要拿什麼當「目前這局」的佔位）。
+// 預設值是 false 而不是必填，是刻意的取捨：這支函式在測試與尚未接上 status 的呼叫端還有
+// 用，預設值選「維持既有行為」那一邊最安全（跟 getMatchWinner 的 winsNeeded 刻意做成必填
+// 是相反的判斷——那裡的預設值會算出**錯的勝負**，這裡的預設值只是保守地少算最後一局）。
 //
 // 泛型（不綁 MatchSet 型別）：呼叫端傳 MatchSet[] 或任何依局序排好的陣列都能用，這裡
 // 只管「陣列位置」的切分邏輯，不需要認識「一局」的欄位長什麼樣子。
 //
-// 後端 api-server/src/routes/analysis.ts 有同一個慣例的 SQL 版鏡射（allSetScores.slice(0,
-// -1)），刻意不共用這支函式——後端是獨立部署的 Node 專案，import 不到前端 src 底下的
-// 檔案；而且照 docs/adr（ADR-0003）的決定，後端聚合本來就該留在 SQL／後端自己算，
-// 不該讓後端反過來依賴前端程式碼。兩邊各自實作、靠註解互相指過去，是刻意的取捨。
-export function splitCompletedAndCurrent<T>(sets: T[]): { completed: T[]; current: T | undefined } {
+// 後端 api-server/src/routes/analysis.ts 有同一個慣例的 SQL 版鏡射（allSetScores 依
+// m.status 決定要不要 slice(0, -1)），刻意不共用這支函式——後端是獨立部署的 Node 專案，
+// import 不到前端 src 底下的檔案；而且照 docs/adr（ADR-0003）的決定，後端聚合本來就該留在
+// SQL／後端自己算，不該讓後端反過來依賴前端程式碼。兩邊各自實作、靠註解互相指過去，是
+// 刻意的取捨——改其中一邊時務必同時改另一邊。
+export function splitCompletedAndCurrent<T>(
+  sets: T[],
+  isFinished = false,
+): { completed: T[]; current: T | undefined } {
+  if (isFinished) return { completed: sets, current: undefined };
   return { completed: sets.slice(0, -1), current: sets[sets.length - 1] };
 }

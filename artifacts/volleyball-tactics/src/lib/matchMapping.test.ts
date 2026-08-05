@@ -75,6 +75,10 @@ describe("server → domain mapping", () => {
         videoUrl: null,
         tournamentId: null,
         createdAt: iso,
+        format: "best_of_3",
+        // #218：完賽狀態原樣帶到 domain（DB notNull，不需要 ?? 兜底）。它決定計分頁/分析頁
+        // 「最後一局算不算已結束局」，漏掉這個欄位的話整場的局比數就會少算一局。
+        status: "finished",
       },
       [{ id: 7, matchId: 3, name: "小明", number: 12, role: "S", personId: null }],
     );
@@ -82,6 +86,8 @@ describe("server → domain mapping", () => {
     expect(domain.opponent).toBe("台大");
     expect(domain.dateTime).toBe("2026-06-24T15:30");
     expect(domain.tournamentId).toBeNull();
+    expect(domain.format).toBe("best_of_3");
+    expect(domain.status).toBe("finished");
     expect(domain.players).toHaveLength(1);
     expect(domain.players[0].id).toBe("7");
   });

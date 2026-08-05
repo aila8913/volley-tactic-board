@@ -172,12 +172,15 @@ export default function MatchAnalytics() {
   const { match, isLoading: isMatchLoading } = useMatchWithRoster(Number(id));
   // record＝重建出來的計分狀態；ralliesBySetNumber/allRallies＝原始 rally，用來算「各輪次
   // 得失分」（可依局篩選，見下方 rotationStats）。三者都來自同一支唯讀 hook，一起 loading。
+  //
+  // 第二個參數（#218）：已完賽的比賽，最後一局也是「已結束局」，不能再被當成進行中那局
+  // 丟掉——這正是以前分析頁少算一局的原因。match 還沒載入完時先當 false，等它到位會重算。
   const {
     record,
     ralliesBySetNumber,
     allRallies,
     isLoading: isRecordLoading,
-  } = useMatchRecording(id ?? "");
+  } = useMatchRecording(id ?? "", match?.status === "finished");
 
   // 全頁共用的「範圍」狀態：整場（"all"）或某一局（setNumber）。這是純前端 UI 狀態——
   // 不影響資料、reload 就重置，用 useState 就夠。React 規定 hooks 不能寫在 if/return 後面

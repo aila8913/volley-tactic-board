@@ -9,6 +9,22 @@ import { tournamentsTable } from "./tournaments";
 // 讓 DB 層直接擋掉打錯字的值（例如 "best-of-3" 或 "bo3"），不用每個地方都手動檢查。
 export const matchFormatEnum = pgEnum("match_format", ["best_of_3", "best_of_5"]);
 
+// 比賽狀態（#218）：這場比賽記錄者有沒有明確按下「結束比賽」。
+//
+// 為什麼需要這個欄位、而不是繼續從局比數推導：這個 repo 有一條散在三處的慣例
+// ——「sets 陣列的最後一局＝進行中，其餘＝已結束」（前端 volleyballRules.ts 的
+// splitCompletedAndCurrent、後端 analysis.ts 的 slice(0, -1)）。那條慣例的存在理由，
+// 當初的註解寫得很白：「schema 沒有『這局結束了嗎』的旗標」。代價是**打完的最後一局
+// 永遠會被當成進行中而被丟掉**，局比數、分析頁、資料夾戰績全都少算一局；測試資料
+// 甚至要靠「補一局空 set」才能讓完賽的比賽顯示正確（見 #215）——等於慣例本身在逼
+// 資料造假。這個欄位就是當初缺的那個旗標：有了它，「最後一局算不算完」變成讀一個
+// 明確的值，不是猜。決策記錄見 docs/adr/0005-match-status-column.md。
+//
+// 目前只做兩個值。棄賽／提前結束（abandoned）確實是「推導做不到、只有欄位能表達」的
+// 情境，但現在沒有任何 UI 會產生它，先加就是死欄位——之後要做，往這個 enum 補一個
+// 值即可（pgEnum 加值是相容的異動，既有資料不受影響）。
+export const matchStatusEnum = pgEnum("match_status", ["in_progress", "finished"]);
+
 // 一場比賽。videoUrl 留空代表目前還沒有可以做「賽後補填」的影片連結。
 export const matchesTable = pgTable("matches", {
   id: serial("id").primaryKey(),
@@ -51,6 +67,12 @@ export const matchesTable = pgTable("matches", {
   // 根本沒有這個概念的舊比賽）在 push 這次 schema 異動時，DB 自動幫每一列補上這個預設值，
   // 不用另外寫遷移腳本去逐筆回填。
   format: matchFormatEnum("format").notNull().default("best_of_3"),
+  // 這場比賽結束了沒（#218）。語意見上面 matchStatusEnum 的說明。
+  // notNull + default("in_progress")：跟 format 同一個理由——既有資料（#218 之前建立、
+  // 根本沒有這個概念的舊比賽）在 push 這次 schema 異動時，DB 會自動幫每一列補上預設值，
+  // 不用另外寫遷移腳本逐筆回填；而預設「進行中」對舊資料也是安全的一邊（頂多是使用者
+  // 要回去補按一次「結束比賽」，不會把還在打的比賽誤標成已完賽）。
+  status: matchStatusEnum("status").notNull().default("in_progress"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
