@@ -8,6 +8,10 @@
     "types": ["node"]
   },
   "include": ["src"],
+  // *.test.ts(x) 都要排除掉——volleyball-tactics 的 tsconfig.json 漏了 **/*.test.tsx
+  // 這個 pattern（見 issue #292），這裡兩種副檔名都寫，別重複同一個坑。目前 api-server
+  // 底下全是 .ts（沒有 React 元件），但寫齊比較保險，之後就算有人加了 .tsx 測試也不會漏。
+  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.test.tsx"],
   "references": [
     {
       "path": "../../lib/db"
