@@ -29,7 +29,7 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { useCreateMatch, useUpdateMatch, useMatchWithRoster } from "@/hooks/useMatches";
-import { useTeamList, useCreateTeam } from "@/hooks/useTeams";
+import { useTeamList, useCreateTeam, useTeamRosterSuggestions } from "@/hooks/useTeams";
 import { usePersonList, useCreatePerson } from "@/hooks/usePeople";
 import {
   Match,
@@ -115,6 +115,72 @@ function PlayerRosterMatchHint({
   );
 }
 
+// #287：這支球隊之前登錄過的人——父層只有在「球隊（可選）」下拉選了既有球隊時才會傳進
+// selectedTeamId（不是 TEAM_NONE／TEAM_NEW），useTeamRosterSuggestions 對 teamId 為 null
+// 不發請求。這支元件負責：濾掉已經在這份表單名單裡的 personId（不能重複加同一個人），
+// 沒有建議時整塊不顯示，否則列出一顆一顆可點的 chip。
+//
+// 刻意不自動整批帶入：issue #287 明講是「勾選＋微調」，不是「自動填」。跟 #213/#215 那條
+// 判準一樣——「能不能給預設，取決於預設的方向會不會產生錯誤答案」：這裡如果自動把整支球隊
+// 的建議名單灌進表單，會覆蓋/淹沒使用者已經打好的列（例如使用者已經先手動加了幾個人，
+// 或這場其實有人請假不來），屬於會產生錯誤答案的方向，所以只給建議、由人決定要不要點。
+function RosterSuggestions({
+  form,
+  selectedTeamId,
+  append,
+  update,
+}: {
+  form: UseFormReturn<MatchFormValues>;
+  selectedTeamId: number | null;
+  append: (value: MatchFormValues["players"][number]) => void;
+  update: (index: number, value: MatchFormValues["players"][number]) => void;
+}) {
+  const { suggestions } = useTeamRosterSuggestions(selectedTeamId);
+  // 用 useWatch 而不是 form.getValues：名單列每次新增/勾選建議都要重新算「還剩哪些建議
+  // 沒被加過」，跟 PlayerRosterMatchHint 同一個理由——要讓這塊隨表單即時更新。
+  const players = useWatch({ control: form.control, name: "players" });
+
+  if (selectedTeamId === null) return null;
+
+  const addedPersonIds = new Set(
+    (players ?? []).map((p) => p.personId).filter((id): id is number => id != null),
+  );
+  const available = suggestions.filter((s) => !addedPersonIds.has(s.personId));
+  if (available.length === 0) return null;
+
+  const handlePick = (s: (typeof available)[number]) => {
+    const current = form.getValues("players");
+    // 名單只有一列、且那列還是空白的 emptyDefaults 佔位列時，用選到的建議「取代」它，
+    // 不是 append——不然會多留一列空白名字，卡在 zod 的 min(1, "請輸入球員姓名") 驗證過不了。
+    const isSinglePlaceholderRow = current.length === 1 && current[0].name.trim() === "";
+    const value = { name: s.name, number: s.number, role: s.role, personId: s.personId };
+    if (isSinglePlaceholderRow) {
+      update(0, value);
+    } else {
+      append(value);
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <Label className="text-muted-foreground">這支球隊登錄過的人</Label>
+      <div className="flex flex-wrap gap-2">
+        {available.map((s) => (
+          <button
+            key={s.personId}
+            type="button"
+            onClick={() => handlePick(s)}
+            className="rounded-full border border-input px-3 py-1 text-sm hover:bg-accent"
+          >
+            {s.name} · #{s.number} · {s.role}
+            <span className="text-muted-foreground"> ({s.matchCount} 場)</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 interface MatchFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -161,10 +227,15 @@ export default function MatchFormDialog({
     defaultValues: emptyDefaults,
   });
 
-  const { fields, append, remove } = useFieldArray({
+  const { fields, append, remove, update } = useFieldArray({
     control: form.control,
     name: "players",
   });
+
+  // #287：只有「球隊（可選）」下拉選了既有球隊（不是「未指定」也不是「建立新球隊…」）時，
+  // 才有 teamId 能拿去查建議名單——TEAM_NEW 選的球隊送出前根本還沒有 id。
+  const selectedTeamId =
+    teamSelection !== TEAM_NONE && teamSelection !== TEAM_NEW ? Number(teamSelection) : null;
 
   // 這個 dialog 元件在新增/編輯之間共用、不會每次開啟都重新 mount，
   // 所以每次打開時要自己用 reset 把表單填成對應的初始值（新增 -> 空白，編輯 -> 帶入既有比賽）。
@@ -315,6 +386,15 @@ export default function MatchFormDialog({
                 />
               )}
             </div>
+
+            {/* #287：這支球隊之前登錄過的人，勾了才加進名單——見 RosterSuggestions 上方註解。
+                編輯模式一樣顯示（回鍋球員一樣好用），不特別擋。 */}
+            <RosterSuggestions
+              form={form}
+              selectedTeamId={selectedTeamId}
+              append={append}
+              update={update}
+            />
 
             <div className="space-y-3">
               <Label>球員名單</Label>

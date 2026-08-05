@@ -47,6 +47,7 @@ export * from './player';
 export * from './playerRole';
 export * from './rally';
 export * from './rallyWinner';
+export * from './rosterSuggestion';
 export * from './rotationStat';
 export * from './servingSide';
 export * from './setResult';
