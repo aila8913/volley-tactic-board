@@ -37,21 +37,74 @@ import {
 const router: IRouter = Router();
 router.use(requireAuth);
 
-// GET /people — 列出目前使用者建立過的所有「人」。跟 teams 一樣沒有 createdAt，
-// 用 serial id 排序當作建立順序的近似。
+// #224：people 管理頁的列表需要帶「出賽場次」「關聯球隊」才分得清楚同名的兩筆是誰是誰
+// （見 issue #224 本文）。這支函式把原本只寫在 GET /people/merge-candidates 裡的
+// join＋彙整邏輯抽出來共用——GET /people（列出全部）跟 GET /people/merge-candidates
+// （只列出「同名重複」那些組）現在都需要同一份「這個使用者名下每個人的場次/球隊摘要」，
+// 差別只在於後者多套一層 groupMergeCandidates 篩選，彙整本身的邏輯完全一樣，抽出來
+// 避免兩支路由各寫一份、以後改 join 條件要改兩次還可能漏改。
+//
+// 回傳的是「這個 userId 名下所有 person」，不管有沒有同名重複——篩掉只留重複組是
+// groupMergeCandidates 的責任，不屬於這支彙整函式該做的事。
+async function getPersonSummaries(
+  userId: string,
+): Promise<Array<{ id: number; name: string; matchCount: number; teamNames: string[] }>> {
+  // 一次 left join 拿到「這個使用者名下每個 person，各自出現在哪幾場比賽、哪支球隊」的
+  // 扁平列表。用 left join（不是 inner join）是因為完全沒出賽過的 person（players 那邊
+  // 一筆都沒有）也要出現在結果裡——不然這個人永遠不會出現在列表/候選組裡。
+  const rows = await db
+    .select({
+      id: peopleTable.id,
+      name: peopleTable.name,
+      matchId: matchesTable.id,
+      teamName: teamsTable.name,
+    })
+    .from(peopleTable)
+    .leftJoin(playersTable, eq(playersTable.personId, peopleTable.id))
+    .leftJoin(matchesTable, eq(playersTable.matchId, matchesTable.id))
+    .leftJoin(teamsTable, eq(matchesTable.teamId, teamsTable.id))
+    .where(eq(peopleTable.userId, userId));
+
+  // 在 JS 端依 person id 把上面的扁平列表彙整成「這個人出賽幾場（去重 matchId）、
+  // 屬於哪些球隊（去重、非 null、排序）」——一個 person 可能因為 join 出多筆比賽/球隊
+  // 而在 rows 裡重複出現好幾次，這裡用 Map + Set 收斂成一筆。
+  const byPersonId = new Map<
+    number,
+    { id: number; name: string; matchIds: Set<number>; teamNames: Set<string> }
+  >();
+  for (const row of rows) {
+    let entry = byPersonId.get(row.id);
+    if (!entry) {
+      entry = { id: row.id, name: row.name, matchIds: new Set(), teamNames: new Set() };
+      byPersonId.set(row.id, entry);
+    }
+    if (row.matchId !== null) entry.matchIds.add(row.matchId);
+    if (row.teamName !== null) entry.teamNames.add(row.teamName);
+  }
+
+  // 依 id 排序——跟改版前 GET /people 的 .orderBy(peopleTable.id) 行為保持一致。
+  // Map 的迭代順序理論上是插入順序，但插入順序是「rows 裡誰先出現」，不保證等於 id
+  // 遞增（join 結果的列順序不一定照 person.id），所以這裡明講排序，不依賴 Map 的隱含順序。
+  return [...byPersonId.values()]
+    .map((entry) => ({
+      id: entry.id,
+      name: entry.name,
+      matchCount: entry.matchIds.size,
+      teamNames: [...entry.teamNames].sort(),
+    }))
+    .sort((a, b) => a.id - b.id);
+}
+
+// GET /people — 列出目前使用者建立過的所有「人」，帶上出賽場次/關聯球隊（#224）方便在
+// 管理頁分辨同名的兩筆。
 // owns: "public" ——理由跟 teams.ts 的 GET /teams 一樣：這支路由查的是
-// 「這個 userId 名下的人」，擁有權篩選發生在下面的 where 條件
+// 「這個 userId 名下的人」，擁有權篩選發生在 getPersonSummaries 內部的 where 條件
 // （eq(peopleTable.userId, ...)），不是靠單一資源的 owns 檢查擋。owns 是必填欄位
 // （見 handler.ts 的說明），所以用 "public" 明講。
 router.get(
   "/people",
   handler({ owns: "public" }, async ({ req, res }) => {
-    const people = await db
-      .select()
-      .from(peopleTable)
-      .where(eq(peopleTable.userId, req.userId))
-      .orderBy(peopleTable.id);
-
+    const people = await getPersonSummaries(req.userId);
     res.json(people);
   }),
 );
@@ -84,57 +137,18 @@ router.post(
 // 萬用參數段誤攔截。這裡雖然 PATCH/DELETE 是不同方法、目前還踩不到，但先把順序排對。
 //
 // owns: "public" ——跟上面 GET /people 一樣，這支路由查的是「這個 userId 名下所有人」，
-// 不是單一資源，擁有權篩選發生在下面查詢的 where 條件裡。
+// 不是單一資源，擁有權篩選發生在 getPersonSummaries 內部的 where 條件裡。
 //
 // 為什麼用「一次查詢＋JS 端彙整」而不是在 SQL 裡直接 groupBy 算出 matchCount/teamNames：
 // people 對單一使用者而言是幾十列量級的小資料（不像分析頁 rally/event 動輒成千上萬列），
 // 在 JS 端用 Map 彙整可讀性明顯更好，效能差異可以忽略。這跟 ADR-0003「後端聚合留在 SQL」
 // 並不衝突——那條講的是分析頁對大量 rally/event 做統計聚合，這裡是小量識別資訊的彙整，
-// 是不同量級下的取捨。
+// 是不同量級下的取捨。這份彙整邏輯本身現在住在上面的 getPersonSummaries()（#224 抽出來給
+// GET /people 共用），這裡只負責再套一層 groupMergeCandidates 篩出「同名重複」的組。
 router.get(
   "/people/merge-candidates",
   handler({ owns: "public" }, async ({ req, res }) => {
-    // 一次 left join 拿到「這個使用者名下每個 person，各自出現在哪幾場比賽、哪支球隊」的
-    // 扁平列表。用 left join（不是 inner join）是因為完全沒出賽過的 person（players 那邊
-    // 一筆都沒有）也要出現在結果裡——不然這個人永遠不會被列進候選組，即使他跟另一個
-    // 同名的人其實該被合併。
-    const rows = await db
-      .select({
-        id: peopleTable.id,
-        name: peopleTable.name,
-        matchId: matchesTable.id,
-        teamName: teamsTable.name,
-      })
-      .from(peopleTable)
-      .leftJoin(playersTable, eq(playersTable.personId, peopleTable.id))
-      .leftJoin(matchesTable, eq(playersTable.matchId, matchesTable.id))
-      .leftJoin(teamsTable, eq(matchesTable.teamId, teamsTable.id))
-      .where(eq(peopleTable.userId, req.userId));
-
-    // 在 JS 端依 person id 把上面的扁平列表彙整成「這個人出賽幾場（去重 matchId）、
-    // 屬於哪些球隊（去重、非 null、排序）」——一個 person 可能因為 join 出多筆比賽/球隊
-    // 而在 rows 裡重複出現好幾次，這裡用 Map + Set 收斂成一筆。
-    const byPersonId = new Map<
-      number,
-      { id: number; name: string; matchIds: Set<number>; teamNames: Set<string> }
-    >();
-    for (const row of rows) {
-      let entry = byPersonId.get(row.id);
-      if (!entry) {
-        entry = { id: row.id, name: row.name, matchIds: new Set(), teamNames: new Set() };
-        byPersonId.set(row.id, entry);
-      }
-      if (row.matchId !== null) entry.matchIds.add(row.matchId);
-      if (row.teamName !== null) entry.teamNames.add(row.teamName);
-    }
-
-    const people = [...byPersonId.values()].map((entry) => ({
-      id: entry.id,
-      name: entry.name,
-      matchCount: entry.matchIds.size,
-      teamNames: [...entry.teamNames].sort(),
-    }));
-
+    const people = await getPersonSummaries(req.userId);
     res.json(groupMergeCandidates(people));
   }),
 );

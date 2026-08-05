@@ -45,6 +45,7 @@ import type {
   NewTournament,
   Person,
   PersonAnalysis,
+  PersonSummary,
   Player,
   Rally,
   RotationStat,
@@ -1258,11 +1259,11 @@ export const getListPeopleUrl = () => {
 }
 
 /**
- * @summary List people (cross-match player identities, used for roster de-duplication)
+ * @summary List people (cross-match player identities), with match count and team names for telling same-named entries apart
  */
-export const listPeople = async ( options?: RequestInit): Promise<Person[]> => {
+export const listPeople = async ( options?: RequestInit): Promise<PersonSummary[]> => {
 
-  return customFetch<Person[]>(getListPeopleUrl(),
+  return customFetch<PersonSummary[]>(getListPeopleUrl(),
   {
     ...options,
     method: 'GET'
@@ -1305,7 +1306,7 @@ export type ListPeopleQueryError = ErrorType<unknown>
 
 
 /**
- * @summary List people (cross-match player identities, used for roster de-duplication)
+ * @summary List people (cross-match player identities), with match count and team names for telling same-named entries apart
  */
 
 export function useListPeople<TData = Awaited<ReturnType<typeof listPeople>>, TError = ErrorType<unknown>>(
