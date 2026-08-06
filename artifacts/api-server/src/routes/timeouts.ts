@@ -1,9 +1,10 @@
 import { Router, type IRouter } from "express";
-import { eq, and, getTableColumns } from "drizzle-orm";
+import { eq, getTableColumns } from "drizzle-orm";
 import { db, timeoutsTable, setsTable } from "@workspace/db";
 import { requireAuth } from "../middleware/requireAuth";
 import { setBelongsToUser, matchBelongsToUser, timeoutBelongsToUser } from "../lib/ownership";
 import { handler } from "../lib/handler";
+import { insertIdempotent } from "../lib/insertIdempotent";
 import {
   ListMatchTimeoutsParams,
   CreateTimeoutParams,
@@ -66,39 +67,27 @@ router.post(
       owns: ({ params, userId }) => setBelongsToUser(params.setId, userId),
     },
     async ({ res, params, body }) => {
-      const [created] = await db
-        .insert(timeoutsTable)
-        // setId 來自路徑（已驗擁有權），不吃 body 的，避免 client 把暫停紀錄塞到別局去。
-        .values({
+      // 冪等寫入 + 重送回既有列（#64 PR3）：做法與理由見 lib/insertIdempotent.ts。
+      const row = await insertIdempotent(
+        timeoutsTable,
+        {
           // 選填的 client-mintable 主鍵（#64 PR2），做法與理由見 sets.ts 的 POST 註解。
           ...(body.id ? { id: body.id } : {}),
+          // setId 來自路徑（已驗擁有權），不吃 body 的，避免 client 把暫停紀錄塞到別局去。
           setId: params.setId,
           homeScore: body.homeScore,
           awayScore: body.awayScore,
           side: body.side,
-        })
-        // 冪等寫入 + 重送回既有列（#64 PR3），做法與理由見 sets.ts 的 POST 註解。
-        .onConflictDoNothing({ target: timeoutsTable.id })
-        .returning();
+        },
+        eq(timeoutsTable.setId, params.setId),
+      );
 
-      if (!created) {
-        const existing = body.id
-          ? await db
-              .select()
-              .from(timeoutsTable)
-              .where(and(eq(timeoutsTable.id, body.id), eq(timeoutsTable.setId, params.setId)))
-              .limit(1)
-          : [];
-
-        if (existing.length === 0) {
-          res.status(409).json({ error: "Conflict" });
-          return;
-        }
-        res.status(201).json(existing[0]);
+      if (!row) {
+        res.status(409).json({ error: "Conflict" });
         return;
       }
 
-      res.status(201).json(created);
+      res.status(201).json(row);
     },
   ),
 );

@@ -1,9 +1,10 @@
 import { Router, type IRouter } from "express";
-import { eq, and, getTableColumns } from "drizzle-orm";
+import { eq, getTableColumns } from "drizzle-orm";
 import { db, eventsTable, ralliesTable, setsTable } from "@workspace/db";
 import { requireAuth } from "../middleware/requireAuth";
 import { rallyBelongsToUser, eventBelongsToUser, matchBelongsToUser } from "../lib/ownership";
 import { handler } from "../lib/handler";
+import { insertIdempotent } from "../lib/insertIdempotent";
 import {
   ListMatchEventsParams,
   ListEventsParams,
@@ -85,12 +86,13 @@ router.post(
       owns: ({ params, userId }) => rallyBelongsToUser(params.rallyId, userId),
     },
     async ({ res, params, body }) => {
-      const [created] = await db
-        .insert(eventsTable)
+      // 冪等寫入 + 重送回既有列（#64 PR3）：做法與理由見 lib/insertIdempotent.ts。
+      const row = await insertIdempotent(
+        eventsTable,
         // rallyId 來自路徑（已驗擁有權）。其餘欄位大多是 nullable：簡易版只記「誰做了什麼動作」，
         // 座標 / ballType / quality 都留空，用 ?? null 把「body 沒帶」轉成 DB 的 null。
         // tags 沒帶時給 []，對齊 DB 欄位的 default（notNull，預設空陣列）。
-        .values({
+        {
           // 選填的 client-mintable 主鍵（#64 PR2），做法與理由見 sets.ts 的 POST 註解。
           ...(body.id ? { id: body.id } : {}),
           rallyId: params.rallyId,
@@ -108,29 +110,16 @@ router.post(
           note: body.note ?? null,
           videoTimestamp: body.videoTimestamp ?? null,
           source: body.source,
-        })
-        // 冪等寫入 + 重送回既有列（#64 PR3），做法與理由見 sets.ts 的 POST 註解。
-        .onConflictDoNothing({ target: eventsTable.id })
-        .returning();
+        },
+        eq(eventsTable.rallyId, params.rallyId),
+      );
 
-      if (!created) {
-        const existing = body.id
-          ? await db
-              .select()
-              .from(eventsTable)
-              .where(and(eq(eventsTable.id, body.id), eq(eventsTable.rallyId, params.rallyId)))
-              .limit(1)
-          : [];
-
-        if (existing.length === 0) {
-          res.status(409).json({ error: "Conflict" });
-          return;
-        }
-        res.status(201).json(existing[0]);
+      if (!row) {
+        res.status(409).json({ error: "Conflict" });
         return;
       }
 
-      res.status(201).json(created);
+      res.status(201).json(row);
     },
   ),
 );

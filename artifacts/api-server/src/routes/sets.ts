@@ -4,6 +4,7 @@ import { db, setsTable } from "@workspace/db";
 import { requireAuth } from "../middleware/requireAuth";
 import { matchBelongsToUser, setBelongsToUser } from "../lib/ownership";
 import { handler } from "../lib/handler";
+import { insertIdempotent } from "../lib/insertIdempotent";
 import {
   ListSetsParams,
   CreateSetParams,
@@ -48,50 +49,33 @@ router.post(
       owns: ({ params, userId }) => matchBelongsToUser(params.matchId, userId),
     },
     async ({ res, params, body }) => {
-      const [created] = await db
-        .insert(setsTable)
-        // firstServer 從 body 帶進來（開局時前端已知道誰先發）；matchId 從路徑取（已驗擁有權）。
-        .values({
+      // 冪等寫入 + 重送回既有列的整套邏輯收在 lib/insertIdempotent.ts（原本這裡有一份、
+      // 另外四張表各抄一份）。第三個參數是重讀既有列時的 scope：確認那列真的掛在這個
+      // 已驗過擁有權的 match 底下，否則就是一條 IDOR 探測管道——理由詳見那支模組的說明。
+      const row = await insertIdempotent(
+        setsTable,
+        {
           // client-mintable 主鍵（#64 PR2）：前端離線記錄時得先有 id 才能把「建立」與之後的
           // 「刪除」排進同一條有序 write log，所以允許 body 指定 id。用條件展開而不是直接寫
           // `id: body.id`，是為了不依賴「drizzle 遇到 undefined 會自動退回 default」這個隱性
           // 行為——沒帶 id 時這個 key 根本不存在，DB 的 defaultRandom() 一定生效。
           ...(body.id ? { id: body.id } : {}),
+          // firstServer 從 body 帶進來（開局時前端已知道誰先發）；matchId 從路徑取（已驗擁有權）。
           matchId: params.matchId,
           setNumber: body.setNumber,
           firstServer: body.firstServer,
-        })
-        // 冪等寫入（#64 PR3）：離線佇列的保證是「至少送一次」——後端已經寫進去、但回應在
-        // 半路掉了的時候，前端重連後會用**同一個 id** 再送一次。沒有這行的話那次重送會撞主鍵、
-        // 回 409，那筆就永遠卡在佇列裡；有了它，重複的第二次就安靜地什麼都不做。
-        // 這正是「主鍵由前端鑄造」的附加價值：id 本身就是冪等鑰匙（idempotency key），
-        // 不必再另外設計一個 request id 欄位。
-        .onConflictDoNothing({ target: setsTable.id })
-        .returning();
+        },
+        eq(setsTable.matchId, params.matchId),
+      );
 
-      if (!created) {
-        // 走到這裡代表這個 id 已經存在。回既有那一列，讓「重送」跟「第一次送」對前端來說
-        // 結果一致。但要先確認它真的掛在這個 match 底下——否則等於提供了一個
-        // 「拿別人的 row id 來換取那列內容」的探測管道（IDOR，同 #225 的教訓）。
-        const existing = body.id
-          ? await db
-              .select()
-              .from(setsTable)
-              .where(and(eq(setsTable.id, body.id), eq(setsTable.matchId, params.matchId)))
-              .limit(1)
-          : [];
-
-        if (existing.length === 0) {
-          res.status(409).json({ error: "Conflict" });
-          return;
-        }
-        // 照樣回 201：對呼叫端而言「這一列照你說的存在了」，跟第一次送沒有差別，
-        // 也讓 openapi 合約維持單一成功狀態碼（不必為重送多開一個 200 分支）。
-        res.status(201).json(existing[0]);
+      if (!row) {
+        res.status(409).json({ error: "Conflict" });
         return;
       }
 
-      res.status(201).json(created);
+      // 新建與重送都回 201：對呼叫端而言「這一列照你說的存在了」，兩者沒有差別，
+      // openapi 合約也才能維持單一成功狀態碼（不必為重送多開一個 200 分支）。
+      res.status(201).json(row);
     },
   ),
 );
