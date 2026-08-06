@@ -344,6 +344,20 @@ export function filterLineupToRoster(
   return Object.fromEntries(kept.map(([zone, playerId]) => [Number(zone), playerId]));
 }
 
+// 「先發排好了沒／可不可以開賽」這道門檻的唯一定義（issue #37 收斂、#231 PR3 換成吃
+// LineupSnapshot）。六個號位都各站一個人才算滿——LineupSnapshot 的 key 天生就是號位，
+// 所以「六個不同號位」直接等於 Object.keys 有六個，不需要另外檢查有沒有人重複站同一格。
+//
+// 為什麼「滿不滿」要跟「現在排了誰」分成兩件事：它們回答的是不同問題。lineup 本身照實
+// 記錄 0~6 人（編輯中必然經過的中間狀態），這支只回答「夠不夠開賽」。以前這兩個語意混在
+// captureLineupFromRotations 一支函式裡（不滿六人回 null），結果拿它去畫編輯中的面板時，
+// 排第一個人就讀回 null 整個變空——「要看到第 1 個人得先有 6 個人」的死結（#174）。
+//
+// 也不必特別檢查有沒有派自由球員：L 是替換上場的，不佔六個號位（跟後端 lineups 表一致）。
+export function isLineupFull(lineup: LineupSnapshot): boolean {
+  return Object.keys(lineup).length === 6;
+}
+
 // 球員從球員設定拖到球場上、或在場上重新拖曳時，放開滑鼠的座標不會剛好落在 6 個
 // 格子的正中心，所以要找「離哪個格子最近」來吸附。x/y 跟 zoneCoords 一樣是 0~1 normalized。
 export function findNearestZone(x: number, y: number): number {

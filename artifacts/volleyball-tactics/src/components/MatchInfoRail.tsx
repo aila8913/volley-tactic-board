@@ -6,7 +6,7 @@ import { useTournamentList } from "@/hooks/useTournaments";
 import { useRotationTable } from "@/hooks/useRotationTable";
 import { useScoreSheet, useScoreSheetController } from "@/hooks/useScoreSheet";
 import { useCrossMatchAnalysis } from "@/hooks/useCrossMatchAnalysis";
-import { readLineupFromRotations } from "@/lib/rotationLogic";
+import { filterLineupToRoster } from "@/lib/rotationLogic";
 import { getMatchWinner, setWinner, winsNeededFor, type MatchStatus } from "@/lib/matchOutcome";
 import { INFO_RAIL_BASE_CLASS } from "@/lib/appChromeStyles";
 import { computeTournamentStats, type TournamentMatchResult } from "@/lib/tournamentSummary";
@@ -95,7 +95,7 @@ function MatchRotationSection({ matchId }: { matchId: string }) {
   const { match } = useMatchWithRoster(Number(matchId));
 
   const setRoster = useRotationTable((state) => state.setRoster);
-  const rotations = useRotationTable((state) => state.dataByMatch[matchId]?.rotations);
+  const storedLineup = useRotationTable((state) => state.dataByMatch[matchId]?.lineup);
   const setLineupFromSnapshot = useRotationTable((state) => state.setLineupFromSnapshot);
 
   const record = useScoreSheet((state) => state.recordingsByMatch[matchId]);
@@ -196,11 +196,11 @@ function MatchRotationSection({ matchId }: { matchId: string }) {
     // 可以直接在這裡編輯——跟 ScoreSheet.tsx 開賽前那段是同一份資料、同一套寫法，教練在
     // 這裡排先發，計分頁/戰術板立刻看到同一份結果，不是各自一份副本。
     //
-    // 用 readLineupFromRotations（照實回報幾個人）而不是 captureLineupFromRotations
-    // （不滿 6 人回 null）：這一格是「編輯中的顯示」，必然會經過 1~5 人的中間狀態。
-    // 原本接錯成把關用的那支，導致排第一個人時面板讀回 null 整個變空，看起來就是
-    // 「點了放不上去」——完整說明見 rotationLogic.ts 兩支函式的註解。
-    lineup = readLineupFromRotations(rotations ?? [], match?.players ?? []);
+    // 這裡照實回報現在排了幾個人（0~6），不套「不滿 6 人就當作沒有」那道門檻：這一格是
+    // 「編輯中的顯示」，必然會經過 1~5 人的中間狀態。原本接錯成把關語意，導致排第一個人時
+    // 面板讀回 null 整個變空，看起來就是「點了放不上去」——完整說明見 rotationLogic.ts 的
+    // isLineupFull 註解。filterLineupToRoster 只負責濾掉已不在名單上的幽靈站位。
+    lineup = filterLineupToRoster(storedLineup ?? {}, match?.players ?? []);
     readOnly = false;
     onLineupChange = (next) => setLineupFromSnapshot(matchId, next);
     setStatus = "upcoming";

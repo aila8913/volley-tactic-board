@@ -16,11 +16,7 @@ import { PlayAction, Side } from "@/types/scoresheet";
 import { isSetComplete, disabledActions, resolveScoringSide } from "@/lib/scoreSheetMapping";
 import { countSetWins, getMatchWinner, setWinner, winsNeededFor } from "@/lib/matchOutcome";
 import { APP_BACKGROUND_STYLE, APP_SHELL_CLASS, INFO_RAIL_BASE_CLASS } from "@/lib/appChromeStyles";
-import {
-  captureLineupFromRotations,
-  readLineupFromRotations,
-  lineupToPositions,
-} from "@/lib/rotationLogic";
+import { filterLineupToRoster, isLineupFull, lineupToPositions } from "@/lib/rotationLogic";
 import { captureFromScoreSheet, captureBlank } from "@/lib/courtSnapshot";
 import { resolveLiberoOnRotation } from "@/lib/liberoRotation";
 
@@ -96,14 +92,14 @@ export default function ScoreSheet() {
   const [, setLocation] = useLocation();
   const { match, isLoading: isMatchLoading } = useMatchWithRoster(Number(id));
 
-  // 讀輪轉表這一場的 rotations——它是全站共用的「目前站位」真相（#120 PO 定案）。開賽前，右欄
+  // 讀輪轉表這一場的先發——它是全站共用的「目前站位」真相（#120 PO 定案）。開賽前，右欄
   // 顯示並直接編輯它；開賽那一刻擷取成該局的凍結快照，之後這一局就改讀快照。
   // （注意：這裡不再是「擷取完就不碰輪轉表」了——那是 #115 的舊解耦模型，已作廢，見 #115 留言。）
   // 輪轉表用 matchId 分片（issue #119），所以
   // 讀 dataByMatch[id] 這一場自己的站位；那場還沒排就 undefined，capturableLineup 會算成 null。
   // 這其實比以前讀全域 state.rotations 更正確——舊寫法會讀到「最後開的那場」的站位（#119 的污染源）。
-  const rotations = useRotationTable((state) =>
-    id ? state.dataByMatch[id]?.rotations : undefined,
+  const storedLineup = useRotationTable((state) =>
+    id ? state.dataByMatch[id]?.lineup : undefined,
   );
   // 開局前，右欄的先發編輯就是直接改這份共用真相（PO 決策：輪轉/先發是跨頁共用的一份，
   // 不是計分頁自己再存一份副本）——教練在計分頁排先發，戰術板也要立刻看到同一份結果。
@@ -188,25 +184,26 @@ export default function ScoreSheet() {
     if (id) window.localStorage.setItem(`libero-pick:${id}`, playerId);
   };
 
-  // ── 計分表的先發快照（issue #115）──
-  // lineup：這場已凍結的先發（開賽時擷取、reload 讀回）。capturableLineup：還沒凍結前，從輪轉表
-  // 當下站位「能不能擷取出一份完整先發」（只收屬於這場、湊滿 6 個號位才算數，否則 null）。
-  // activeLineup：優先用已凍結的，其次用可擷取的——球場渲染、開賽擷取都以它為準。
+  // ── 計分表的先發快照（issue #115，#231 PR3 收斂成「一份資料 + 一道門檻」）──
+  //
+  // 這裡以前有三個 lineup 變數（capturableLineup / editableLineup / activeLineup），是舊表示法
+  // 留下的稅：站位存在 store 裡是六輪座標陣列，所以「讀出來給人看」跟「讀出來判斷能不能開賽」
+  // 各要走一支不同的轉換函式，兩份結果再兜。現在 store 存的就是 LineupSnapshot 本人，只剩：
+  //   editableLineup —— 現在排了誰（0~6 人，照實回報）
+  //   isLineupFull()  —— 夠不夠開賽（獨立的門檻，不會把「還在排」誤判成「沒有」）
+  //
+  // 為什麼「顯示」跟「把關」一定要分開：拿把關語意去畫編輯中的面板，排第一個人就會讀回 null
+  // 整個變空，變成「點了放不上去」的死結（要看到第 1 個人得先有 6 個人）——#174 踩過。
   const lineup = record?.lineup ?? null;
-  const capturableLineup = useMemo(
-    () => (match ? captureLineupFromRotations(rotations ?? [], match.players) : null),
-    [match, rotations],
-  );
-  const activeLineup = lineup ?? capturableLineup;
-  // editableLineup：開賽前右欄面板「顯示」用的那一份，照實回報現在排了幾個人（0~6）。
-  // 為什麼不能沿用 activeLineup：activeLineup 背後是 captureLineupFromRotations，不滿 6 人
-  // 回 null——那是「可不可以開賽」的把關語意（hasLineup / start() 都靠它，不能放寬）。
-  // 拿把關語意去畫編輯中的面板，排第一個人就會讀回 null 整個變空，變成「點了放不上去」的
-  // 死結（要看到第 1 個人得先有 6 個人）。兩種語意在 rotationLogic.ts 已拆成兩支函式。
+  // 開賽前右欄面板「顯示」用的那一份：只濾掉已不在名單上的幽靈站位，人數照實。
   const editableLineup = useMemo(
-    () => (match ? readLineupFromRotations(rotations ?? [], match.players) : null),
-    [match, rotations],
+    () => (match ? filterLineupToRoster(storedLineup ?? {}, match.players) : null),
+    [match, storedLineup],
   );
+  // 還沒凍結前，「能不能從當下站位擷取出一份完整先發」——湊滿 6 個號位才算數，否則 null。
+  const capturableLineup = editableLineup && isLineupFull(editableLineup) ? editableLineup : null;
+  // activeLineup：優先用已凍結的，其次用可擷取的——球場渲染、開賽擷取都以它為準。
+  const activeLineup = lineup ?? capturableLineup;
 
   // ── 自由球員自動輪轉接替 ──
   // 每次我方輪轉（ourRotation 變動）檢查被替換的球員是否已輪到前排。

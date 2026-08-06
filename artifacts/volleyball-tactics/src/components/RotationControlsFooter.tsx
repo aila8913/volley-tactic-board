@@ -25,9 +25,7 @@ interface RotationControlsFooterProps {
 // 現成的 matchId 可以往下傳，直接吃 prop 比每個用到的地方各自重新從路由讀一次更直接，
 // 也方便未來如果哪天要在非路由頁面（例如測試）裡重用。
 export default function RotationControlsFooter({ matchId }: RotationControlsFooterProps) {
-  const resetCurrentRotationPositions = useRotationTable(
-    (state) => state.resetCurrentRotationPositions,
-  );
+  const resetPositions = useRotationTable((state) => state.resetPositions);
   // 戰術白板改成單景 session 後（issue #154 PR C），沒有「常駐的第 N 輪畫筆」可清了：
   // 畫筆只在編輯中的 session 裡存在，所以「清除畫筆」改成清掉當前 session 的畫筆/防守範圍，
   // 沒在編輯（無 session）時停用。
@@ -38,13 +36,17 @@ export default function RotationControlsFooter({ matchId }: RotationControlsFoot
   const session = useTacticsBoard((state) => state.session);
   const clearDrawings = useTacticsBoard((state) => state.clearDrawings);
 
-  // 「重置站位」清空輪轉表這一輪的站位。戰術白板單向化後（issue #154 PR C）已跟輪轉表脫鉤、
+  // 「重置站位」清空輪轉表的先發。戰術白板單向化後（issue #154 PR C）已跟輪轉表脫鉤、
   // 也沒有常駐的每輪畫筆，所以這裡只動輪轉表自己的站位真相，不再連帶清白板。
   // 這個動作沒有 undo，點錯會直接清空——用瀏覽器內建的 window.confirm() 擋一下，
   // 跟 MatchList.tsx / TournamentDetail.tsx 刪除比賽/賽事時用的是同一套簡單彈窗模式。
+  //
+  // 文案改過（#231 PR3）：以前寫「重置目前輪次的站位」，但先發只有一份、六輪共用，
+  // 清掉就是六輪一起清。舊文案在舊表示法下其實也名不副實——清掉第 3 輪之後只要再拖任何
+  // 一個人，六輪就會全部從那一輪重算，「只清一輪」的結果本來就留不住。
   const handleResetRotation = () => {
-    if (!window.confirm("確定要重置目前輪次的站位嗎？此動作無法復原。")) return;
-    resetCurrentRotationPositions(matchId);
+    if (!window.confirm("確定要重置站位嗎？六個輪次會一起清空，此動作無法復原。")) return;
+    resetPositions(matchId);
   };
 
   return (
