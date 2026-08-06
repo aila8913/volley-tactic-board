@@ -22,7 +22,7 @@ import {
   lineupToPositions,
 } from "@/lib/rotationLogic";
 import { captureFromScoreSheet, captureBlank } from "@/lib/courtSnapshot";
-import { rowOf } from "@/lib/courtGeometry";
+import { resolveLiberoOnRotation } from "@/lib/liberoRotation";
 
 // 6 大類跟 lib/db/src/schema/events.ts 的 eventActionEnum 對齊（見
 // types/scoresheet.ts 的說明）。陣列順序就是 RadialMenu 從正上方順時針排列的順序，
@@ -210,6 +210,8 @@ export default function ScoreSheet() {
 
   // ── 自由球員自動輪轉接替 ──
   // 每次我方輪轉（ourRotation 變動）檢查被替換的球員是否已輪到前排。
+  // 規則本體已抽到 lib/liberoRotation.ts（issue #303）——那裡是純函式、有單元測試釘住三條
+  // 分支；這個 effect 只剩「湊出輸入、把結果寫回去」，沒有任何領域判斷。
   const currentSet = record?.currentSet;
   useEffect(() => {
     const libSub = liberoSubRef.current;
@@ -217,26 +219,16 @@ export default function ScoreSheet() {
 
     // 從計分表自己的先發快照算出「這一輪」場上 6 人的座標（不再讀全域 rotations）。
     const positions = lineupToPositions(activeLineup, currentSet.ourRotation);
-    const targetPos = positions.find((p) => p.playerId === libSub);
+    const next = resolveLiberoOnRotation(
+      { current: libSub, previousTarget: prevLiberoRef.current },
+      positions,
+    );
+    // 沒事發生時 resolveLiberoOnRotation 回傳的是同一個物件參照，這裡直接跳過兩次寫入
+    // （少一輪 render，也避免把相同的值重新灌進 store）。
+    if (next.current === libSub && next.previousTarget === prevLiberoRef.current) return;
 
-    const isFrontRow = targetPos && rowOf(targetPos.y) === "front";
-    if (!isFrontRow) return;
-
-    const prev = prevLiberoRef.current;
-    if (prev && prev !== libSub) {
-      const prevPos = positions.find((p) => p.playerId === prev);
-      // 用共用的 rowOf 判「後排」，不要在這裡再寫一次裸門檻（issue #43／#227）：這條
-      // `y > 0.75` 本來是第三份複本，而上面兩行判 libSub 前後排時用的就是 rowOf——
-      // 同一個 effect 裡兩種寫法並存，球場座標系一調整就會漏改這一行。
-      if (prevPos && rowOf(prevPos.y) === "back") {
-        setPreviousLiberoTarget(libSub);
-        setLiberoSubstitution(id, prev);
-        return;
-      }
-    }
-
-    setPreviousLiberoTarget(libSub);
-    setLiberoSubstitution(id, null);
+    setPreviousLiberoTarget(next.previousTarget);
+    setLiberoSubstitution(id, next.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentSet?.ourRotation]);
 
