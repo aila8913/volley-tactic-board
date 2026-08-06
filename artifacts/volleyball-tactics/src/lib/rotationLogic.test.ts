@@ -14,6 +14,8 @@ import {
   rotateLineup,
   assignPlayerToZone,
   removePlayerFromZone,
+  deriveRotation,
+  filterLineupToRoster,
 } from "./rotationLogic";
 import type { RotationPositions } from "../types/rotationTable";
 import type { MatchPlayer } from "../types/match";
@@ -364,5 +366,84 @@ describe("removePlayerFromZone", () => {
     const original = { ...LINEUP };
     removePlayerFromZone(LINEUP, 3);
     expect(LINEUP).toEqual(original);
+  });
+});
+
+describe("deriveRotation（#231 PR3a：從一份先發現算某一輪的站位）", () => {
+  const LINEUP: LineupSnapshot = { 1: "p1", 2: "p2", 3: "p3", 4: "p4", 5: "p5", 6: "p6" };
+
+  it("沒派 L 時＝lineupToPositions 的結果，liberoReplacement 為 null", () => {
+    const rot = deriveRotation(LINEUP, null, null, 0);
+    expect(rot.positions).toEqual(lineupToPositions(LINEUP, 0));
+    expect(rot.liberoReplacement).toBeNull();
+  });
+
+  it("指定了 L 但 liberoZone 是 null（L 這一輪沒上場）→ 一樣不套替換", () => {
+    const rot = deriveRotation(LINEUP, "l1", null, 0);
+    expect(rot.positions.map((p) => p.playerId)).not.toContain("l1");
+    expect(rot.liberoReplacement).toBeNull();
+  });
+
+  it("L 站的那格：原本的人被替下，L 站上去，場上仍是 6 人", () => {
+    const rot = deriveRotation(LINEUP, "l1", 1, 0);
+    const ids = rot.positions.map((p) => p.playerId);
+    expect(rot.positions).toHaveLength(6);
+    expect(ids).toContain("l1");
+    expect(ids).not.toContain("p1");
+    expect(rot.liberoReplacement).toEqual({
+      liberoId: "l1",
+      replacedPosition: { playerId: "p1", ...getZoneCoords(1) },
+    });
+  });
+
+  it("liberoZone 是「當下那一輪的號位」，不跟著輪轉換算——被替下的人隨輪次不同", () => {
+    // 第 0 輪站 1 號位的是 p1；轉一輪之後，落在 1 號位的是原本站 2 號位的 p2
+    //（shiftSequence 1→6→5→4→3→2，2 號位的人轉一格會到 1 號位）。
+    // L 兩輪都站 1 號位（他不輪轉），所以被他蓋住的人跟著換——這正是「被替換者可推導、
+    // 不需要另外存一份」的具體表現。
+    expect(deriveRotation(LINEUP, "l1", 1, 0).liberoReplacement?.replacedPosition.playerId).toBe(
+      "p1",
+    );
+    expect(deriveRotation(LINEUP, "l1", 1, 1).liberoReplacement?.replacedPosition.playerId).toBe(
+      "p2",
+    );
+    // 兩輪 L 本人的座標都固定在 1 號位。
+    for (const r of [0, 1]) {
+      const rot = deriveRotation(LINEUP, "l1", 1, r);
+      expect(rot.positions.find((p) => p.playerId === "l1")).toEqual({
+        playerId: "l1",
+        ...getZoneCoords(1),
+      });
+    }
+  });
+
+  it("L 站的那格本來沒人（先發還沒排滿）→ 直接站上去，liberoReplacement 為 null", () => {
+    const rot = deriveRotation({ 2: "p2" }, "l1", 1, 0);
+    expect(rot.positions.map((p) => p.playerId).sort()).toEqual(["l1", "p2"]);
+    expect(rot.liberoReplacement).toBeNull();
+  });
+});
+
+describe("filterLineupToRoster（#231 PR3a：幽靈站位清理）", () => {
+  const roster: MatchPlayer[] = [
+    { id: "p1", name: "p1", number: 1, role: "OH", personId: null },
+    { id: "p2", name: "p2", number: 2, role: "OH", personId: null },
+  ];
+
+  it("剔除已不在名單上的球員，其餘號位原樣保留", () => {
+    const next = filterLineupToRoster({ 1: "p1", 2: "ghost", 3: "p2" }, roster);
+    expect(next).toEqual({ 1: "p1", 3: "p2" });
+  });
+
+  it("沒有人被剔除時要回傳「原本那個物件參照」（toBe，不是 toEqual）", () => {
+    // 這條是無限重繪防線：setRoster 會被 effect 反覆呼叫，沒清到東西卻換了參照，
+    // 訂閱端就會重繪 → effect 再呼叫 → Maximum update depth exceeded（#69→#70）。
+    // toEqual 測不出這件事——內容一樣就會過；只有 toBe 驗得出參照有沒有換。
+    const lineup: LineupSnapshot = { 1: "p1", 2: "p2" };
+    expect(filterLineupToRoster(lineup, roster)).toBe(lineup);
+  });
+
+  it("名單整個空掉時回傳空快照", () => {
+    expect(filterLineupToRoster({ 1: "p1" }, [])).toEqual({});
   });
 });
