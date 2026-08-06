@@ -20,8 +20,8 @@ export default function TacticsViewingPanel({
   return (
     <section>
       <div className="mb-2 flex items-center justify-between">
-        <h2 className="text-[15px] font-bold">唯讀檢視</h2>
-        <span className="rounded bg-white/[0.08] px-1.5 py-0.5 text-[10px] font-bold text-[#a9b096]">
+        <h2 className="text-panel-title font-bold">唯讀檢視</h2>
+        <span className="rounded bg-white/[0.08] px-1.5 py-0.5 text-micro font-bold text-[#a9b096]">
           唯讀
         </span>
       </div>

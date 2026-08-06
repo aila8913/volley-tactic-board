@@ -118,7 +118,7 @@ export default function NewTacticDialog({
             data-testid="button-new-tactic-from-rotation"
           >
             現有輪轉位
-            <div className="mt-1 text-[10px] font-normal text-[#a9b096]">{captureLabel}</div>
+            <div className="mt-1 text-micro font-normal text-[#a9b096]">{captureLabel}</div>
           </button>
           <button
             onClick={handleBlank}
@@ -126,7 +126,7 @@ export default function NewTacticDialog({
             data-testid="button-new-tactic-blank"
           >
             重新佈陣
-            <div className="mt-1 text-[10px] font-normal text-[#a9b096]">直接拉球員上場</div>
+            <div className="mt-1 text-micro font-normal text-[#a9b096]">直接拉球員上場</div>
           </button>
         </div>
       </div>

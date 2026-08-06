@@ -34,7 +34,7 @@ const SECONDARY_BUTTON_CLASS =
 // 「新增比賽」不用——它是 h-11 / rounded-2xl 的操作列尺寸，跟這個 h-10 / rounded-full 的
 // 圓角 CTA 是兩種不同的按鈕，硬共用一個常數再各自覆蓋反而更難讀。
 const PRIMARY_BUTTON_CLASS =
-  "inline-flex h-10 items-center gap-1.5 rounded-full bg-[#c6f135] px-5 text-[13px] " +
+  "inline-flex h-10 items-center gap-1.5 rounded-full bg-[#c6f135] px-5 text-action " +
   "font-semibold text-[#0a0b07] transition hover:brightness-110";
 
 // 資料夾的內頁——只顯示歸在這個資料夾底下的比賽 (tournamentId 等於這個資料夾的 id)。
@@ -188,7 +188,7 @@ export default function TournamentDetail() {
               <button
                 type="button"
                 onClick={openCreateDialog}
-                className="inline-flex h-11 items-center gap-1.5 rounded-2xl bg-[#c6f135] px-5 text-[13px]
+                className="inline-flex h-11 items-center gap-1.5 rounded-2xl bg-[#c6f135] px-5 text-action
                 font-semibold text-[#0a0b07] transition hover:brightness-110"
               >
                 <Plus className="h-[15px] w-[15px]" />

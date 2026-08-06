@@ -229,7 +229,7 @@ export default function RotationRailPanel({
             （計分頁/戰術板）不傳，這裡就不渲染，畫面跟改動前一模一樣。 */}
           {setStatus && (
             <span
-              className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold ${SET_STATUS_META[setStatus].className}`}
+              className={`shrink-0 rounded border px-1.5 py-0.5 text-micro font-semibold ${SET_STATUS_META[setStatus].className}`}
             >
               {SET_STATUS_META[setStatus].label}
             </span>
@@ -290,7 +290,7 @@ export default function RotationRailPanel({
               <span className="text-xs font-bold leading-tight">
                 {player ? player.number : "—"}
               </span>
-              <span className="text-[10px] leading-tight text-[#9AA08C]">
+              <span className="text-micro leading-tight text-[#9AA08C]">
                 {player ? player.name.slice(0, 3) : ""}
               </span>
             </>
@@ -372,7 +372,7 @@ export default function RotationRailPanel({
       )}
 
       {!readOnly && (
-        <p className="mt-2 text-[11px] leading-snug text-[#9AA08C]">
+        <p className="mt-2 text-caption leading-snug text-[#9AA08C]">
           {selectedZone !== null
             ? `已選 ${selectedZone} 號位，點下面的球員指派過去（他原本在別的號位就互換）`
             : "把球員拖進號位即可上場，拖回清單則下場；也可以先點號位再點球員"}
@@ -405,7 +405,7 @@ export default function RotationRailPanel({
               <span className="font-bold tabular-nums">{p.number}</span>
               <span className="truncate">{p.name}</span>
               {currentZone && (
-                <span className="ml-auto shrink-0 text-[10px] text-[#9AA08C]">{currentZone}</span>
+                <span className="ml-auto shrink-0 text-micro text-[#9AA08C]">{currentZone}</span>
               )}
             </>
           );

@@ -669,8 +669,8 @@ export default function ScoreSheetCourt({
           >
             {liberoPlayer ? (
               <>
-                <span className="text-[10px] leading-none">L</span>
-                <span className="text-[10px] leading-none">#{liberoPlayer.number}</span>
+                <span className="text-micro leading-none">L</span>
+                <span className="text-micro leading-none">#{liberoPlayer.number}</span>
               </>
             ) : (
               <span className="text-xs leading-none">L</span>
@@ -693,7 +693,7 @@ export default function ScoreSheetCourt({
               className="absolute z-50 flex flex-col gap-1 rounded-lg border border-white/[0.18] bg-[#12140f]/97 p-1.5 shadow-2xl shadow-black/50 backdrop-blur-lg"
               style={{ right: "100%", marginRight: 8, bottom: LIBERO_PICKER_BOTTOM }}
             >
-              <p className="px-1 text-[9px] font-bold text-[#a9b096]">選自由球員</p>
+              <p className="px-1 text-marker font-bold text-[#a9b096]">選自由球員</p>
               {liberoCandidates.map((p) => (
                 <button
                   key={p.id}
@@ -702,7 +702,7 @@ export default function ScoreSheetCourt({
                     onSelectLibero?.(p.id);
                     setLiberoPickerOpen(false);
                   }}
-                  className="whitespace-nowrap rounded-md border border-white/[0.14] bg-white/[0.05] px-2 py-1 text-left text-[10px] font-bold text-[#f5f5f0] transition hover:border-[#c6f135] hover:text-[#c6f135]"
+                  className="whitespace-nowrap rounded-md border border-white/[0.14] bg-white/[0.05] px-2 py-1 text-left text-micro font-bold text-[#f5f5f0] transition hover:border-[#c6f135] hover:text-[#c6f135]"
                 >
                   #{p.number} {p.name}
                 </button>
@@ -721,7 +721,7 @@ export default function ScoreSheetCourt({
         style={{ width: SIDELINE_W + 8 }}
       >
         {regularSidelinePlayers.length === 0 && (
-          <p className="mt-4 text-center text-[9px] text-[#a9b096]">場邊</p>
+          <p className="mt-4 text-center text-marker text-[#a9b096]">場邊</p>
         )}
 
         {regularSidelinePlayers.map((player) => {
@@ -742,11 +742,11 @@ export default function ScoreSheetCourt({
               ].join(" ")}
               style={{ width: SIDELINE_W, height: SIDELINE_W }}
             >
-              <span className="leading-none text-[10px]">{label}</span>
-              <span className="leading-none text-[9px] opacity-70">#{player.number}</span>
+              <span className="leading-none text-micro">{label}</span>
+              <span className="leading-none text-marker opacity-70">#{player.number}</span>
               {/* 換下場標記 */}
               {isSubbedOut && (
-                <span className="absolute -bottom-0.5 -right-0.5 rounded-full bg-amber-400 px-0.5 text-[7px] font-bold text-white leading-tight">
+                <span className="absolute -bottom-0.5 -right-0.5 rounded-full bg-amber-400 px-0.5 text-marker-xs font-bold text-white leading-tight">
                   換
                 </span>
               )}
@@ -807,11 +807,11 @@ export default function ScoreSheetCourt({
                 style={{ left: longPressTarget.screenX, top: longPressTarget.screenY + 16 }}
                 data-testid="long-press-sub-menu"
               >
-                <p className="mb-1.5 px-1 text-[11px] font-bold text-[#a9b096]">
+                <p className="mb-1.5 px-1 text-caption font-bold text-[#a9b096]">
                   換下 {outPlayer ? `#${outPlayer.number} ${outPlayer.name}` : ""}
                 </p>
                 {candidates.length === 0 ? (
-                  <p className="px-1 py-1 text-[11px] text-[#a9b096]">場邊沒有人可以換上</p>
+                  <p className="px-1 py-1 text-caption text-[#a9b096]">場邊沒有人可以換上</p>
                 ) : (
                   <div className="flex flex-col gap-1">
                     {candidates.map((p) => (

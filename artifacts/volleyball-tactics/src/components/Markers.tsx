@@ -163,6 +163,12 @@ export default function Markers({ marker }: { marker: MarkerType }) {
             onChange={handleTextChange}
             onBlur={handleTextBlur}
             onKeyDown={(e) => e.key === "Enter" && handleTextBlur()}
+            /* 這個 input 包在 <foreignObject> 裡，x/y/width/height 都是 SVG 使用者座標系
+               （由外層 <svg> 的 viewBox 決定，會隨球場縮放整個跟著縮放），跟螢幕上的實體
+               px 不是同一個單位系統——這裡的 5px 是「viewBox 座標系裡的 5」，不是「螢幕上
+               的 5px」，所以不能跟正文字級 token（--text-micro 等）混在一起收斂，此處保留
+               text-[5px] 任意值，不套用 #310 的語意 token。 */
+            /* eslint-disable-next-line no-restricted-syntax -- SVG viewBox 座標系的 5px，非螢幕字級，見上方註解 */
             className="w-full h-full text-[5px] bg-transparent outline-none border-b border-[#111] text-center font-sans text-[#111]"
             style={{ fontSize: "5px" }}
           />

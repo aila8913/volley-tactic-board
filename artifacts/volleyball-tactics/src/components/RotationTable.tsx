@@ -72,7 +72,7 @@ export function RotationPanel({ matchId, showTips = false }: RotationPanelProps)
           footer={
             <div className="mt-4 space-y-5">
               <div className="flex items-center justify-between">
-                <h2 className="text-[15px] font-bold">球員名單</h2>
+                <h2 className="text-panel-title font-bold">球員名單</h2>
                 <button
                   onClick={rosterEditor.open}
                   className={PANEL_BUTTON_CLASS}
