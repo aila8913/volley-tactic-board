@@ -113,7 +113,7 @@ pnpm --filter @workspace/db run push
 ### 步驟 4：驗收（先驗「服務活著」，還沒有登入）
 
 ```powershell
-curl https://<你的網址>/api/healthz   # 應回 {"status":"ok"}
+curl https://volley-tactics-board.onrender.com/api/healthz   # 應回 {"status":"ok"}
 ```
 
 然後用瀏覽器打開網址本身，確認：
@@ -151,7 +151,7 @@ curl https://<你的網址>/api/healthz   # 應回 {"status":"ok"}
 
 ### 步驟 7：驗收登入流程
 
-瀏覽器開 `https://<你的網址>/`，應該會看到登入畫面（未登入時整個 app 被擋下）。
+瀏覽器開 `https://volley-tactics-board.onrender.com/`，應該會看到登入畫面（未登入時整個 app 被擋下）。
 點登入 → 導去 Google 帳號選擇畫面 → 選帳號、同意 → 導回來後應該正常進到比賽列表，
 且列表是空的（新帳號，還沒有任何比賽）。
 
@@ -160,7 +160,7 @@ curl https://<你的網址>/api/healthz   # 應回 {"status":"ok"}
 ```powershell
 # 瀏覽器已經登入的話，直接開這個網址看得到 JSON；
 # curl 沒帶 cookie 打這支會是 401，那是正確行為，不是壞掉。
-curl https://<你的網址>/api/auth/me
+curl https://volley-tactics-board.onrender.com/api/auth/me
 ```
 
 ---
@@ -202,7 +202,7 @@ curl https://<你的網址>/api/auth/me
 2. **對網址打一次 health check**：
 
    ```powershell
-   curl https://<你的網址>/api/healthz
+   curl https://volley-tactics-board.onrender.com/api/healthz
    ```
 
    > free plan 休眠的話這一發會等 30–60 秒才回應，那是冷啟動不是失敗。
