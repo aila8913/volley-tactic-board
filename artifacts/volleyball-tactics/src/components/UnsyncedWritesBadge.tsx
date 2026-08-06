@@ -26,7 +26,7 @@ export default function UnsyncedWritesBadge({
       // title 而不是可見的說明文字：標題列空間有限，而這顆徽章的完整語意
       //（「資料沒掉、只是還沒上傳」）比它能佔的寬度長得多。
       title="這些記錄已經安全存在這台裝置上，還沒送到雲端。點一下立刻重試。"
-      className="flex items-center gap-1.5 rounded-full border border-amber-400/30 bg-amber-400/10 px-2.5 py-1 text-[11px] font-semibold text-amber-300 transition-colors hover:bg-amber-400/20"
+      className="flex items-center gap-1.5 rounded-full border border-amber-400/30 bg-amber-400/10 px-2.5 py-1 text-caption font-semibold text-amber-300 transition-colors hover:bg-amber-400/20"
     >
       <CloudOff className="h-3.5 w-3.5" />
       {count} 筆未同步

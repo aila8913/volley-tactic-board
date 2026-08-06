@@ -204,7 +204,7 @@ export default function MatchList() {
                 type="button"
                 onClick={openCreateTournamentDialog}
                 className="inline-flex h-11 items-center gap-1.5 rounded-2xl border border-white/[0.26]
-                px-5 text-[13px] font-semibold text-[#f5f5f0] transition hover:border-[#c6f135]
+                px-5 text-action font-semibold text-[#f5f5f0] transition hover:border-[#c6f135]
                 hover:text-[#c6f135]"
               >
                 <Plus className="h-[15px] w-[15px]" />
@@ -213,7 +213,7 @@ export default function MatchList() {
               <button
                 type="button"
                 onClick={openCreateMatchDialog}
-                className="inline-flex h-11 items-center gap-1.5 rounded-2xl bg-[#c6f135] px-5 text-[13px]
+                className="inline-flex h-11 items-center gap-1.5 rounded-2xl bg-[#c6f135] px-5 text-action
                 font-semibold text-[#0a0b07] transition hover:brightness-110"
               >
                 <Plus className="h-[15px] w-[15px]" />
@@ -232,7 +232,7 @@ export default function MatchList() {
               <button
                 type="button"
                 onClick={openCreateMatchDialog}
-                className="inline-flex h-10 items-center gap-1.5 rounded-full bg-[#c6f135] px-5 text-[13px]
+                className="inline-flex h-10 items-center gap-1.5 rounded-full bg-[#c6f135] px-5 text-action
                 font-semibold text-[#0a0b07] transition hover:brightness-110"
               >
                 新增第一場比賽

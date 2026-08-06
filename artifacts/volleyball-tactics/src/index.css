@@ -60,6 +60,28 @@
      font-score，不動 font-dash/font-sans，不會把 Anton 泄漏回中英混排的地方。 */
   --font-score: "Anton", "Space Grotesk", sans-serif;
 
+  /* 字級語意 token（issue #310，源自 #209 第 4 點）。目的是把「這段字有多大」換成
+     「這段字是什麼語意」——Tailwind 4 的 `--text-<name>: <size>` 語法會自動產生對應的
+     `text-<name>` utility class（跟上面 `--radius-sm` 產生 `radius-sm`是同一套機制），
+     所以定義在這裡之後，元件裡就能直接寫 `text-micro`、`text-caption` 這種語意名字，
+     不用再猜任意值的 px 數字代表什麼。
+     **數值本身還不是定案**：全站原本散落 16 種字級（見 docs/design-spec.md 第 3
+     節），要收斂成幾種、每種多大，留給 tang 之後用 Figma 重畫線稿時一次定案。這一輪
+     刻意讓每個 token 的初始值＝現在畫面上實際在用的 px，所以只是換名字、換完畫面
+     完全不變（no-op refactor）；之後定案時只要改這裡的值，不用再回頭掃過 60 個檔案。
+     命名規則是「一個 px 值一個名字」，不是「一個元件一個名字」——所以 10px 在小標籤
+     跟球場球員標記上共用 `--text-micro`，即使兩處語意不完全一樣。這是刻意的：
+     這一輪要維持純機械替換，語意要不要再細分，等真的定案時再說。
+     `--text-marker` / `--text-marker-xs` 是獨立一組，不算進上面那組正文字級：它們是
+     球場畫布上受空間限制的標示文字（球員背號、換人角標），不是給人閱讀的內文，之後
+     定案正文級距時不要把它們一起收進去。 */
+  --text-micro: 10px;
+  --text-caption: 11px;
+  --text-action: 13px;
+  --text-panel-title: 15px;
+  --text-marker: 9px;
+  --text-marker-xs: 7px;
+
   --radius-sm: 4px;
   --radius-md: 6px;
   --radius-lg: 8px;

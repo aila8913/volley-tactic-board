@@ -101,7 +101,7 @@ export default function NewTacticDialogModal({
             data-testid="button-new-tactic-from-rotation"
           >
             擷取目前站位
-            <div className="mt-1 text-[10px] font-normal text-[#a9b096]">{captureLabel}</div>
+            <div className="mt-1 text-micro font-normal text-[#a9b096]">{captureLabel}</div>
           </button>
           <button
             onClick={handleBlank}
@@ -109,7 +109,7 @@ export default function NewTacticDialogModal({
             data-testid="button-new-tactic-blank"
           >
             空站位
-            <div className="mt-1 text-[10px] font-normal text-[#a9b096]">
+            <div className="mt-1 text-micro font-normal text-[#a9b096]">
               從空白球場開始，球員自己從名單拖上場
             </div>
           </button>

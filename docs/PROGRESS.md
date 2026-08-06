@@ -25,7 +25,9 @@
 \_Last updated: 2026-08-06 (aila) — 深模組盤點：收掉五份冪等寫入（`lib/insertIdempotent.ts`）與第三份
 後排裸門檻；新開 #303／#304／#306，#232 補留言。另交付 #292（測試檔進 typecheck）＋#294（players 補
 `ORDER BY`）＋#303（自由球員自動回位抽成 `lib/liberoRotation.ts`）。#304／#306 在 Project #4 的
-Backlog 等排期。\_
+Backlog 等排期。**同日推進 #209 UX 密度盤點**：第 3、4 點定案並拆出 #309（計分頁站位單一真相）／
+#310（字級語意 token），#209 保持 open 當第 2 點的容器；#310 已交付。**M3 已 0 張 open**（#209 依
+tang 08-06 回覆移入 M5）。\_
 
 \_Last updated: 2026-08-05 (aila) — #218 交付（`matches.status` + 計分頁收尾流程，ADR-0005，PR #300）；
 #287 交付（PR #297）。M3 只剩 #209；新開 #301（賽制自訂化，M5）。\_
@@ -351,7 +353,9 @@ gh issue list --state open                        # 全部
 從未渲染對手、snapshot player 無 `side`；spec 把 mode D 叫「對手佈陣」的那層 #177 沒做）07-28 補上
 milestone，歸 **M5**。
 
-**當前階段＝M3「部署給真人試用」（軟目標日 8/7，只剩 1 張 open：#209，`needs-plan` 的 UX 密度題）。**
+**M3「部署給真人試用」（軟目標日 8/7）已 0 張 open。** 最後一張 #209（UX 密度盤點）依 tang 08-06 的
+回覆移入 M5——比照 #178／#284 的既有判準：卡在設計輸入的純外部阻塞項，不掛在有軟目標日的階段。
+tang 選了「暫時沒空、之後回來繼續盤點」，所以那張留著當清單，不擋 M3 收尾。
 #218（一場比賽「結束」的操作節點）已於 08-05 交付並關閉（PR #300），#287（球隊帶出歷史名單建議）
 同日交付，兩張都見下方 Recently closed。**08-05 新開 #301「賽制自訂化」歸 M5**——PO 要友誼賽／
 自訂規則（一局 30 分不 deuce 之類），做法是**廢掉 `matchFormatEnum` 改存四個數字**（局數／一般局
@@ -441,6 +445,22 @@ serving≠null 但 record.lineup=null」那條路**，但真正的 reconcile 仍
   當天才把這裡從裸門檻收斂到 `rowOf`，那一步的重點是「別再寫第三份 `y > 0.75`」，方向沒錯、
   只是停在視覺層。）②**沒有變化時回傳原本那個物件參照**，呼叫端據此跳過兩次寫入——這是
   PR #69→#70 那個坑的預防（effect 裡回傳新參照會多觸發一輪 render，當時演變成無限迴圈）。
+- **#310 ＋ #209 盤點推進**（字級語意 token，08-06）— #209 是 tang 的 UX 密度盤點清單，08-06 把四點
+  重新對過現在的程式碼，第 3、4 點定案並各自拆成可執行 issue（#309／#310），第 2 點留在原 issue 裡，
+  **#209 保持 open** 當容器。查證結果值得記的兩件事：①**16 種字級的數字一種都沒少**——任意值的
+  _用量_ 有在降（`text-[10px]` 從 12 檔案/28 處 → 10 檔案/20 處），但 _種類_ 沒收斂，因為沒有一個叫得
+  出名字的東西可以用，下一個人就會再開一個 `text-[Npx]`。②#209 第 3 點（計分頁站位重複）的顧慮是
+  對的：`ScoreSheetCourt.tsx` 完全沒有拖放指派邏輯，只有 `findNearestZone` 拿來做「發球員不換」的
+  命中判定——但它已經有場邊欄、`Court.tsx` 也有現成協定可抄，缺口比原本寫的小（細節見 #309）。
+  #310 本身是**純換名字、畫面 no-op** 的重構：`index.css` 的 `@theme` 新增六個語意 token
+  （`--text-micro/caption/action/panel-title/marker/marker-xs`），初始值＝現在實際在用的 px，48 處
+  `text-[Npx]` 全部換掉。**命名規則刻意是「一個 px 值一個名字」而不是「一個元件一個名字」**，
+  讓這一輪維持機械替換、不偷渡設計判斷；數值定案仍留給 tang 的 Figma 線稿，屆時只改 `@theme`
+  一處。唯一例外是 `Markers.tsx` 的 `text-[5px]`——那個 input 在 `<foreignObject>` 裡，5px 是 SVG
+  viewBox 座標不是螢幕 px，跟正文字級不同單位系統，留任意值＋`eslint-disable` 註明理由。
+  **真正的價值在那條 eslint 規則**（`no-restricted-syntax`，`Literal` 與 `TemplateElement` 兩個
+  selector 都要，因為不少 className 是模板字串拼的）：沒有它，收斂完照樣會再漂回去——跟 #154
+  把單向依賴焊進 CI 是同一個判準，**把約定寫進 CI 比寫進文件可靠**。
 - **深模組盤點 ＋ 兩處重複收斂（08-06，PR 見 `chore/insert-idempotent-and-rowof-dedup`）** — 用
   「深模組（小介面／大實作）」的判準掃全 repo。結論：`lib/` 層普遍健康（`handler.ts`、
   `writeLog.ts`、`rotationLogic.ts`／`volleyballRules.ts` 都是好例子），問題集中在**頁面元件**與

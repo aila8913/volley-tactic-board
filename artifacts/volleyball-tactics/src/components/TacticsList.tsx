@@ -36,20 +36,20 @@ export default function TacticsList({
 
   return (
     <div className="rounded-lg border border-white/[0.18] bg-white/[0.11] p-2 shadow-sm shadow-black/20 backdrop-blur-lg">
-      <div className="mb-1 text-[10px] font-bold">已儲存 (點擊載入)</div>
+      <div className="mb-1 text-micro font-bold">已儲存 (點擊載入)</div>
       {tactics.length === 0 ? (
-        <p className="py-1 text-[10px] text-[#a9b096]">尚無已儲存戰術</p>
+        <p className="py-1 text-micro text-[#a9b096]">尚無已儲存戰術</p>
       ) : (
         <div className="space-y-1 overflow-y-auto" style={{ maxHeight }}>
           {tactics.map((t) => (
             <div
               key={t.id}
-              className={`flex items-center gap-1 rounded p-1 text-[10px] ${t.id === activeTacticId ? "bg-[#c6f135]/20" : "hover:bg-white/[0.08]"}`}
+              className={`flex items-center gap-1 rounded p-1 text-micro ${t.id === activeTacticId ? "bg-[#c6f135]/20" : "hover:bg-white/[0.08]"}`}
             >
               {editingId === t.id ? (
                 <input
                   autoFocus
-                  className="flex-1 rounded border border-white/[0.26] bg-white/[0.05] px-1 text-[10px]
+                  className="flex-1 rounded border border-white/[0.26] bg-white/[0.05] px-1 text-micro
                     text-[#f5f5f0] outline-none focus:border-[#c6f135]"
                   value={editingName}
                   onChange={(e) => setEditingName(e.target.value)}

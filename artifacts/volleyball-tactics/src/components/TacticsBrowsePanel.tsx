@@ -23,8 +23,8 @@ export default function TacticsBrowsePanel({
   return (
     <>
       <section>
-        <h2 className="mb-2 text-[15px] font-bold">戰術布置</h2>
-        <p className="mb-2 text-[10px] text-[#a9b096]">
+        <h2 className="mb-2 text-panel-title font-bold">戰術布置</h2>
+        <p className="mb-2 text-micro text-[#a9b096]">
           「新增戰術」用輪轉表現在的站位、或空白球場當起點，開一個可編排的戰術。點下面清單的已儲存戰術是「唯讀檢視」（看一張凍結的照片），檢視時按「編輯」才進可修改模式。
         </p>
         <button

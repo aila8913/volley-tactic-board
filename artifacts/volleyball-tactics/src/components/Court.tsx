@@ -583,7 +583,7 @@ export default function Court() {
                   // 配色跟計分表 ScoreSheetCourt.tsx 的自由球員鈕同步（2026-08-04 定案，見那邊
                   // 的配色說明）：橘色 #FF6B00 換成跟前排球員同一個綠 #CCFF00，「自由球員」
                   // 這個語意色全站統一。
-                  className="w-7 h-7 rounded-full bg-[#0a0b07]/55 border-2 border-[#CCFF00] text-[#CCFF00] flex items-center justify-center text-[10px] font-bold cursor-grab active:cursor-grabbing select-none backdrop-blur-sm"
+                  className="w-7 h-7 rounded-full bg-[#0a0b07]/55 border-2 border-[#CCFF00] text-[#CCFF00] flex items-center justify-center text-micro font-bold cursor-grab active:cursor-grabbing select-none backdrop-blur-sm"
                   title={`${p.name} #${p.number} — 拖到後排（1/5/6）上場；右鍵取消先發`}
                 >
                   #{p.number}

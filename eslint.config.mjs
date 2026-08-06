@@ -8,6 +8,12 @@ import reactHooks from "eslint-plugin-react-hooks";
 import globals from "globals";
 import eslintConfigPrettier from "eslint-config-prettier";
 
+// issue #310 那條字級規則要用兩個 selector 攔同一件事（見下方說明），兩邊的錯誤訊息
+// 必須一字不差——如果各寫一份，之後改訊息很容易只改到一邊，同一個錯誤就會依「寫在
+// 純字串還是模板字串裡」給出不同指引。抽成常數讓「同一件事只有一份真相」。
+const ARBITRARY_FONT_SIZE_MESSAGE =
+  "請改用 index.css `@theme` 裡的語意字級 token（text-micro / text-caption / text-action / text-panel-title / text-marker / text-marker-xs）。新開一個 text-[Npx] 等於偷偷長出第 17 種字級——這正是 #310 要擋掉的事。如果真的需要新的級距，先在 `@theme` 加 token 並更新 docs/design-spec.md 第 3 節。";
+
 export default tseslint.config(
   {
     // Skip build output and generated code (lib/api-client-react + lib/api-zod
@@ -104,6 +110,33 @@ export default tseslint.config(
                 "戰術白板必須維持單向：不得 import 輪轉表/計分表 store（會有能力反向寫回，正是 #154 病根）。擷取請在 UI 層用 captureFromRotation 以值傳入 startSession。",
             },
           ],
+        },
+      ],
+    },
+  },
+  {
+    // issue #310：字級技術性收斂。#209 第 4 點跟 design-spec.md 第 3 節都記錄過同一個
+    // 問題——全站曾經散落出 16 種實際字級，其中一半是任意值 `text-[Npx]`，每次有人
+    // 手感抓一個新數字就多長出一種、沒有語意可查。這一輪把既有的任意值全部換成
+    // `index.css` `@theme` 裡定義的語意 token（text-micro/caption/action/panel-title/
+    // marker/marker-xs），但光換掉舊的還不夠——如果沒有東西擋著，下一個人手滑
+    // `text-[14px]` 一樣會通過 review（畢竟語法完全合法），約定又會像上次一樣慢慢
+    // 流失。跟 #154 那條「單向依賴」規則同樣的道理：把約定寫進 CI 比寫在註解或文件裡
+    // 可靠——這裡直接改的話 lint 會紅，而不是要靠人記得去翻 design-spec.md。
+    // 兩個 selector 都要留著：JSX 的 `className="text-[12px]"` 在 AST 上是一般字串
+    // Literal；但這個專案不少地方用模板字串組 className（例如條件式拼接的按鈕樣式），
+    // 那種字級會落在 TemplateElement 裡，只擋 Literal 會漏掉這些。
+    files: ["artifacts/volleyball-tactics/src/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "Literal[value=/text-\\[[0-9.]+px\\]/]",
+          message: ARBITRARY_FONT_SIZE_MESSAGE,
+        },
+        {
+          selector: "TemplateElement[value.raw=/text-\\[[0-9.]+px\\]/]",
+          message: ARBITRARY_FONT_SIZE_MESSAGE,
         },
       ],
     },

@@ -488,7 +488,7 @@ export default function ScoreSheet() {
           <span className="font-score text-5xl tabular-nums text-[#C6F135]">
             {currentSet?.ourScore ?? 0}
           </span>
-          <span className="text-[11px] font-semibold text-[#a9b096]">我方</span>
+          <span className="text-caption font-semibold text-[#a9b096]">我方</span>
         </div>
 
         {/* 局數勝負：原本是「局數 Y:Z」文字，改成兩顆小方框數字——跟翻牌計分板中間那兩張
@@ -528,7 +528,7 @@ export default function ScoreSheet() {
           <span className="font-score text-5xl tabular-nums text-[#ef4444]">
             {currentSet?.opponentScore ?? 0}
           </span>
-          <span className="text-[11px] font-semibold text-[#a9b096]">對手</span>
+          <span className="text-caption font-semibold text-[#a9b096]">對手</span>
         </div>
       </div>
 
@@ -683,14 +683,16 @@ export default function ScoreSheet() {
                   <span className="font-score text-6xl tabular-nums text-[#C6F135]">
                     {ourSetsWon}
                   </span>
-                  <span className="text-[11px] font-semibold text-[#a9b096]">我方</span>
+                  <span className="text-caption font-semibold text-[#a9b096]">我方</span>
                 </div>
                 <span className="pb-6 font-score text-3xl text-[#a9b096]">:</span>
                 <div className="flex flex-col items-center gap-1">
                   <span className="font-score text-6xl tabular-nums text-[#F0776C]">
                     {opponentSetsWon}
                   </span>
-                  <span className="text-[11px] font-semibold text-[#a9b096]">{match.opponent}</span>
+                  <span className="text-caption font-semibold text-[#a9b096]">
+                    {match.opponent}
+                  </span>
                 </div>
               </div>
               {/* 各局比分不在這裡重畫一份——右欄的 ScoreSheetStats 本來就有一張完整的

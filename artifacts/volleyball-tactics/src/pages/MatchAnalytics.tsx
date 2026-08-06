@@ -388,7 +388,7 @@ export default function MatchAnalytics() {
                       : "border-white/[0.18] bg-white/[0.04] hover:border-[#c6f135]/60"
                   }`}
                 >
-                  <span className="text-[11px] leading-none text-[#a9b096]">全場</span>
+                  <span className="text-caption leading-none text-[#a9b096]">全場</span>
                   <span className="mt-1 font-numeric text-sm font-bold leading-none tabular-nums text-[#f5f5f0]">
                     {ourSetsWon}:{opponentSetsWon}
                   </span>
@@ -416,7 +416,7 @@ export default function MatchAnalytics() {
                       aria-pressed={selected}
                       className={`${base} ${tone}`}
                     >
-                      <span className="text-[11px] leading-none text-[#a9b096]">
+                      <span className="text-caption leading-none text-[#a9b096]">
                         第 {s.setNumber} 局{inProgress ? "（進行中）" : ""}
                       </span>
                       <span
@@ -517,7 +517,7 @@ export default function MatchAnalytics() {
                         對手 {scoreStepChart.oppFinal}
                       </text>
                     </svg>
-                    <p className="text-[11px] text-[#a9b096]">
+                    <p className="text-caption text-[#a9b096]">
                       {scopeLabel}分數成長：填色＝當下領先方（萊姆綠我方、紅色對手），帶寬＝分差。
                     </p>
                   </div>
@@ -625,7 +625,7 @@ export default function MatchAnalytics() {
                 次{scope === "all" ? "（全場累計，含進行中的這局）" : ""}
               </span>
             </div>
-            <p className="mt-1 text-[11px] text-[#a9b096]">僅計入一般換人（不含自由球員）。</p>
+            <p className="mt-1 text-caption text-[#a9b096]">僅計入一般換人（不含自由球員）。</p>
           </section>
 
           {/* ── 各輪次得失分（#65 M2） ──
@@ -674,7 +674,7 @@ export default function MatchAnalytics() {
                 </tbody>
               </table>
             )}
-            <p className="mt-2 text-[11px] text-[#a9b096]">
+            <p className="mt-2 text-caption text-[#a9b096]">
               side-out% / 破發率需要更完整的發球序追蹤，規劃中。
             </p>
           </section>
@@ -683,7 +683,7 @@ export default function MatchAnalytics() {
           <section className={`${GLASS_SECTION_CLASS} border-dashed`}>
             <div className="mb-2 flex items-center gap-2">
               <h2 className="text-sm font-bold text-[#f5f5f0]">防守到位率 / 對手球線分布</h2>
-              <span className="rounded bg-white/[0.08] px-1.5 py-0.5 text-[10px] font-semibold text-[#a9b096]">
+              <span className="rounded bg-white/[0.08] px-1.5 py-0.5 text-micro font-semibold text-[#a9b096]">
                 需要進階記錄
               </span>
             </div>

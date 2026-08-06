@@ -233,7 +233,7 @@ function MatchRotationSection({ matchId }: { matchId: string }) {
               return (
                 <span
                   key={index}
-                  className={`flex-1 rounded-full px-1 py-1 text-center text-[11px] font-bold tabular-nums ${
+                  className={`flex-1 rounded-full px-1 py-1 text-center text-caption font-bold tabular-nums ${
                     weWonThisSet
                       ? "bg-[#C6F135]/15 text-[#C6F135]"
                       : "bg-white/[0.06] text-[#9AA08C]"

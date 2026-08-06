@@ -119,12 +119,12 @@ export default function ListItemCard({
           {/* 軟提醒（#190）：只是提示、不是把卡片鎖住——所以是一顆小藥丸而不是整張卡片
             變色或加圖示，避免使用者誤以為這場比賽「壞了」或「不能點」。 */}
           {statusHint && (
-            <span className="rounded border border-amber-400/30 bg-amber-400/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">
+            <span className="rounded border border-amber-400/30 bg-amber-400/10 px-1.5 py-0.5 text-micro font-semibold text-amber-300">
               {statusHint}
             </span>
           )}
           {dateText && (
-            <p className="font-numeric text-[11px] tabular-nums text-[#a9b096]">{dateText}</p>
+            <p className="font-numeric text-caption tabular-nums text-[#a9b096]">{dateText}</p>
           )}
           <p className="text-xs font-semibold text-[#f5f5f0]">{secondaryText}</p>
         </div>
