@@ -132,7 +132,7 @@ export interface UndoEntry {
 //   activeLineup = lineup ?? capturableLineup
 //
 // （這段原本寫的是 issue #115「計分表與全域 store 解耦」的理由，該模型已作廢——解耦的代價
-// 是同一場比賽在不同頁看到不同站位。#115 原本要擋的幽靈站位仍由 captureLineupFromRotations
+// 是同一場比賽在不同頁看到不同站位。#115 原本要擋的幽靈站位仍由 filterLineupToRoster
 // 的名單過濾擋著，跟解耦與否無關。詳見 #115 的作廢留言與 #120。）
 //
 // 只記 6 個非自由球員：L 在計分表裡是「從場邊出發、換人上場」，不列入開局的六個號位

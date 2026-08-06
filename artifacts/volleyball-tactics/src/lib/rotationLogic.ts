@@ -1,85 +1,6 @@
-import type { RotationPositions, PlayerPosition, LiberoReplacement } from "../types/rotationTable";
+import type { RotationPositions, PlayerPosition } from "../types/rotationTable";
 import type { MatchPlayer } from "../types/match";
 import type { LineupSnapshot } from "../types/scoresheet";
-
-// 「先發是否已排好」的共用判定（issue #37）。
-// 輪轉表的 hasRotations 與計分表的 hasLineup 原本各自寫一份
-// `rotations.some((r) => r.positions.length > 0)`——只要「任何一輪有任何一個人」就放行，
-// 連 1~5 人的半套陣容也算排好，而且兩處還各判各的、改一邊會漏另一邊（同一根因、兩份實作）。
-// 這裡收斂成單一定義：至少要有一輪站滿 6 個人才算排好。
-// 為什麼是 positions.length >= 6 就等於「滿員」、而且不必特別檢查自由球員：
-// 自由球員上場是「頂替掉某個人」（被頂替者存到 liberoReplacement，不留在 positions），
-// 所以 positions 存的一直是「場上實際幾個人」——滿員永遠是 6，跟有沒有派 L 無關。
-// （產品決策：門檻是「至少 6 人」，不強制一定要指定自由球員。）
-export function isLineupComplete(rotations: RotationPositions[]): boolean {
-  return rotations.some((r) => r.positions.length >= 6);
-}
-
-// ── 計分表先發快照（issue #115）──
-// 從輪轉表全域 store 的「起始輪次（rotation 0）」擷取一份計分表專用的先發快照
-// （號位 1~6 → 球員 id）。這是計分表跟輪轉表/戰術板解耦的第一步：擷取一次之後，計分表就
-// 只讀自己這份，不再跟著全域 store 變動（見 types/scoresheet.ts 的 LineupSnapshot 說明）。
-//
-// 只收「屬於這場比賽（roster）的非自由球員」：
-//   - 過濾掉 id 不在 roster 裡的站位——這正是防止「載入別場存檔/切到別場」時，id 對不上的
-//     幽靈站位混進來的關鍵（issue #115-A 與跨場導航案例）。
-//   - 自由球員（L）不列入六個號位：計分表裡 L 從場邊出發（跟後端 lineups 表一致）。L 若在
-//     rotation 0 蓋住了某個後排球員，那個「被蓋住的人」存在 liberoReplacement 裡，要還原回來
-//     當作該號位的先發（否則會少一個人）。
-//
-// 湊不滿 6 個不同號位就回 null（代表先發還沒排好、或已被污染），呼叫端據此顯示「請先排先發」。
-//
-// ⚠️ 這個「不滿 6 人就回 null」是**把關語意**（可不可以開賽），不是「讀出現在站位」的語意。
-// 要顯示「編輯中的站位」請改用下面的 readLineupFromRotations——理由見那邊的說明。
-export function captureLineupFromRotations(
-  rotations: RotationPositions[],
-  roster: MatchPlayer[],
-): LineupSnapshot | null {
-  const lineup = readLineupFromRotations(rotations, roster);
-  // 六個號位（1~6）都要各站一個不同球員才算完整；有號位重疊或缺人就視為沒排好。
-  return Object.keys(lineup).length === 6 ? lineup : null;
-}
-
-// ── 「現在站位長什麼樣」的讀法（部分先發也照實回報）──
-//
-// 為什麼需要跟 captureLineupFromRotations 分成兩個函式，而不是加個 boolean 參數：
-// 兩者回答的是不同問題。
-//   - captureLineupFromRotations：「這份先發合格了嗎？可以開賽了嗎？」→ 不滿 6 人 = 不合格 = null
-//   - readLineupFromRotations：「現在場上排了誰？」→ 排了 1 個就回 1 個
-//
-// 這個分野是踩過雷才補上的：右欄「先點號位、再點球員」的編輯流程，本來把「顯示」也接在
-// 把關用的 captureLineupFromRotations 上，結果排第 1 個人時寫進 store 成功、讀回來卻因為
-// 不滿 6 人被判成 null，面板整個變空——使用者看到的是「點了放不上去」，而且是個死結
-// （要看到第 1 個人，得先有 6 個人）。編輯途中必然經過 1~5 人的中間狀態，用把關語意去讀
-// 編輯中的資料，本質上就是問錯問題。
-//
-// 過濾規則（幽靈站位、自由球員還原）兩者完全共用，差別只在最後那道 6 人門檻。
-export function readLineupFromRotations(
-  rotations: RotationPositions[],
-  roster: MatchPlayer[],
-): LineupSnapshot {
-  const rot = rotations[0];
-  if (!rot) return {};
-
-  const liberoIds = new Set(roster.filter((p) => p.role === "L").map((p) => p.id));
-  const validIds = new Set(roster.map((p) => p.id));
-
-  // 先把 L 的站位拿掉，再把「被 L 蓋住的非自由球員」還原回來——這樣不管 rotation 0 有沒有
-  // 派 L 上場，basePositions 都是乾淨的 6 個非自由球員站位（跟 useRotationTable 的
-  // placeLiberoOnCourt 內部算 basePositions 是同一套還原邏輯）。
-  let basePositions = rot.positions.filter((p) => !liberoIds.has(p.playerId));
-  if (rot.liberoReplacement) {
-    basePositions = [...basePositions, rot.liberoReplacement.replacedPosition];
-  }
-
-  const lineup: LineupSnapshot = {};
-  for (const pos of basePositions) {
-    if (!validIds.has(pos.playerId)) continue; // 幽靈站位（id 對不上這場球員）直接略過
-    lineup[findNearestZone(pos.x, pos.y)] = pos.playerId;
-  }
-
-  return lineup;
-}
 
 // 把先發快照（rotation 0 的號位→球員）換算成「第 rotation 輪」時場上 6 個人的座標，
 // 給計分表球場渲染用。排球輪轉：起始號位 z 的人，轉了 rotation 次後落在 rotateZone(z, rotation)，
@@ -91,31 +12,6 @@ export function lineupToPositions(lineup: LineupSnapshot, rotation: number): Pla
     const coords = getZoneCoords(rotateZone(startZone, rotation));
     return { playerId, x: coords.x, y: coords.y };
   });
-}
-
-// lineupToPositions 的反向操作：把「場上一堆座標」吸附回「號位 → 球員 id」的 LineupSnapshot。
-//
-// 為什麼要有這支、而不是繼續用 Map<number, string>：useRotationTable 這個 store 以前自己算了一份
-// 私有的 positionsToZoneMap，回傳的是 Map——但 Map 只是這個檔案自己看得懂的中間格式，跟 app 其他
-// 地方講的語言（LineupSnapshot，一個 plain 的 Record<number, string>）是兩套。換成回傳
-// LineupSnapshot 之後，store 就能直接把結果丟給上面已經測過、也給 SetLineupDialog 用的
-// assignPlayerToZone 去做「交換/擠位」判斷，不用自己再手刻一次同一條規則
-//（見 useRotationTable.placePlayerOnCourt 原本那段跟 assignPlayerToZone 幾乎一模一樣的程式碼）。
-//
-// 刻意寫得很笨、不做任何過濾：每個 position 一律吸附進 lineup，呼叫端要先過濾掉不想要的
-// （例如自由球員的站位）再傳進來。這裡如果順手加一層「只收非 L」的邏輯，這支函式就會跟
-// 「誰是 L」這個跟站位無關的概念綁死，之後換一個不需要濾 L 的呼叫端就用不了。
-// 註：如果兩個 position 吸附到同一個號位，後面的會蓋掉前面的——這跟它取代的
-// Map<number, string> 版本（用 Map.set 覆寫）行為一致，不是這次重構引入的新行為。
-//
-// #231 PR3 之後，store 內部狀態本身就會直接是 LineupSnapshot，屆時就不再需要「座標轉回號位」
-// 這一步轉換了，這支函式（連同 lineupToPositions）的呼叫點會跟著消失。
-export function positionsToLineup(positions: PlayerPosition[]): LineupSnapshot {
-  const lineup: LineupSnapshot = {};
-  for (const pos of positions) {
-    lineup[findNearestZone(pos.x, pos.y)] = pos.playerId;
-  }
-  return lineup;
 }
 
 // 6 個球場格子的座標基準（0~1 normalized，跟戰術板球場 SVG 的 viewBox 對齊）。
@@ -238,56 +134,18 @@ export function removePlayerFromZone(lineup: LineupSnapshot, zone: number): Line
   return next;
 }
 
-// 自由球員上場的共用邏輯（輪轉視圖，格子吸附）：同一時間只能有一位 L 在場上，
-// 上場時要頂替掉目標位置原本的人。戰術布置現在是獨立的自由畫布，不會呼叫這裡。
-// zone 只用來判斷「這個座標蓋到了哪一格」，藉此找出被換下場的人，跟座標系統無關。
-//
-// 從 useRotationTable.ts 搬過來（#231 PR2）：這支函式吃一份 RotationPositions、吐一份新的
-// RotationPositions，跟這個檔案裡其他純函式（assignPlayerToZone 等）是同一種形狀，只是原本
-// 待在 store 檔案裡沒辦法單獨測——搬出來之後才能不啟動整個 store 就直接測四種分支
-// （上場頂替、還原、換另一位 L、頂替空格）。
-export function placeLiberoInRotation(
-  rot: RotationPositions,
-  roster: MatchPlayer[],
-  playerId: string,
-  zone: number,
-): RotationPositions {
-  const liberoIds = new Set(roster.filter((p) => p.role === "L").map((p) => p.id));
-
-  // 先把場上的 L 移除，並還原 liberoReplacement 記錄的被替換者，
-  // 這樣不管原本場上是哪個 L、有沒有 L，都能從乾淨的一般球員站位重新計算。
-  let basePositions = rot.positions.filter((p) => !liberoIds.has(p.playerId));
-  if (rot.liberoReplacement) {
-    basePositions = [...basePositions, rot.liberoReplacement.replacedPosition];
-  }
-
-  // 找目標格子現在站的人（即將被 L 替換的人）
-  const replacedPlayer = basePositions.find((p) => findNearestZone(p.x, p.y) === zone);
-
-  const coords = getZoneCoords(zone);
-  const newPositions = [
-    ...basePositions.filter((p) => findNearestZone(p.x, p.y) !== zone),
-    { playerId, x: coords.x, y: coords.y },
-  ];
-
-  return {
-    positions: newPositions,
-    liberoReplacement: replacedPlayer
-      ? ({ liberoId: playerId, replacedPosition: replacedPlayer } as LiberoReplacement)
-      : null,
-  };
-}
-
 // ── #231 PR3 的推導層：從「一份先發 + L 站哪格」現算出某一輪的座標 ────────────────
 //
-// 這兩支是 PR3 換表示法的地基。背景：輪轉表 store 目前把「六輪各自的座標陣列」
+// 這兩支是 PR3 換表示法的地基。背景：輪轉表 store 以前把「六輪各自的座標陣列」
 // （RotationPositions[]）當成儲存的真相，但那六輪裡真正帶資訊量的只有第 0 輪的六個人 +
 // 自由球員站哪個後排格——其餘 5 輪都是 rotateZone(z, i) 的純函數輸出，liberoReplacement
 // （被 L 蓋住的人）同樣可以從「那一輪誰站在 L 那格」現算出來。
 //
 // 「能推導的東西就不要存」是 docs/event-grammar-spec.md 已經用過的原則：同一件事存了兩份，
 // 就一定有「兩份不同步」這種 bug 的可能；只存一份、其餘現算，那類 bug 從型別上就不存在。
-// 這裡先把「現算」那一半寫成純函式並測起來（PR3a），下一步才把 store 的儲存形狀換掉（PR3b）。
+// PR3a 先把「現算」寫成純函式並測起來，PR3b 換掉 store 的儲存形狀，PR4 刪掉舊表示法留下的
+// 一整批只剩測試在呼叫的函式（isLineupComplete / captureLineupFromRotations /
+// readLineupFromRotations / positionsToLineup / placeLiberoInRotation）。
 
 // 把某一輪的先發快照展開成該輪實際站位，並套上自由球員替換。
 //
