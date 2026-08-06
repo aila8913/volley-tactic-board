@@ -22,6 +22,9 @@
 > 平行 PR 就落在不同行段、git 幾乎都能自動合併，不用真的把檔案拆兩份、也保住一眼 catch-up。
 > 上面的 `_Last updated_` 是共用一行摘要（誰更新了什麼），保持精簡、別長成段落。
 
+\_Last updated: 2026-08-06 (aila) — 深模組盤點：收掉五份冪等寫入（`lib/insertIdempotent.ts`）與第三份
+後排裸門檻；新開 #303／#304，#232 補留言。\_
+
 \_Last updated: 2026-08-05 (aila) — #218 交付（`matches.status` + 計分頁收尾流程，ADR-0005，PR #300）；
 #287 交付（PR #297）。M3 只剩 #209；新開 #301（賽制自訂化，M5）。\_
 
@@ -361,6 +364,9 @@ milestone，歸 **M5**。
 ownership 守衛 ×25 全靠人記得寫）08-01 完成收尾：`lib/handler.ts` 落地後 12 支 route 檔案
 （tactics/matches/teams/tournaments/people/players/sets/rallies/events/substitutions/timeouts/
 analysis）全部遷移完（PR #256/#262~#272），`owns` 必填欄位讓漏寫擁有權檢查變成編譯錯誤。
+**08-06 深模組盤點又補收一份同性質的**：`lib/insertIdempotent.ts` 收掉 sets/rallies/events/
+substitutions/timeouts 五份逐字相同的冪等寫入（各約 22 行），`scope` 參數比照 `owns` 設成**必填**
+——重送撞到既有 id 要重讀那列時，不限定「掛在已驗過擁有權的上層底下」就是 IDOR 探測管道。
 **#226（07-30）／#227（07-30，PR #250）／#238＋#257（08-01，PR #258/#259）都已收斂並關閉**（見下方
 Recently closed），Project #4 網頁上的卡片待 PO 手動移過去。**#247**（連鎖換人 A→B→C 摺疊後查不到
 原始先發，#226 PR1 過程中發現）是 M2.5 之外的新孤兒，未歸 milestone，需先討論修法方向（`needs-plan`
@@ -403,6 +409,17 @@ serving≠null 但 record.lineup=null」那條路**，但真正的 reconcile 仍
 
 ### 開發 (aila)
 
+- **深模組盤點 ＋ 兩處重複收斂（08-06，PR 見 `chore/insert-idempotent-and-rowof-dedup`）** — 用
+  「深模組（小介面／大實作）」的判準掃全 repo。結論：`lib/` 層普遍健康（`handler.ts`、
+  `writeLog.ts`、`rotationLogic.ts`／`volleyballRules.ts` 都是好例子），問題集中在**頁面元件**與
+  **route 檔**。動手做掉兩處：(1) 五份逐字相同的冪等寫入 → `lib/insertIdempotent.ts`（見上方
+  M2.5 段落）；(2) `ScoreSheet.tsx` 自由球員 effect 裡的**第三份 `y > 0.75` 裸門檻** → 改用
+  `courtGeometry.rowOf()`（#43／#227 已收斂過兩份，同一個 effect 上面兩行用的就是 `rowOf`）。
+  盤點結果落成 **#303**（自由球員自動回位規則鎖在 useEffect 裡、測不到，**不用等 #168**）與
+  **#304**（`useTacticsBoard` 35 個成員、三組平行 add/update/remove 三連，低優先）。
+  第三項「api-server 補測試」**沒有開新 issue**——`#232` 已涵蓋且分析更完整，改為留言補證據
+  （`insertIdempotent` 加入「安全關鍵但測不到」名單；api-server 的 vitest 環境其實已備妥，
+  缺的純粹是 db 注入，該張剩餘範圍比 body 讀起來窄）。
 - **#218**（一場比賽「結束」的操作節點與畫面，08-05）— 表面上是「把計分頁那顆假的『結束比賽』
   `<Link>` 變成真動作」，實際挖到的病根是全站那條「**sets 最後一局＝進行中**」的推導慣例
   （前端 `splitCompletedAndCurrent` ＋ 後端 `analysis.ts` 的 SQL 鏡射）：打完的最後一局永遠被當成
