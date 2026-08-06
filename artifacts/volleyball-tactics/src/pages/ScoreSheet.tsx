@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { PointerEvent as ReactPointerEvent } from "react";
 import { useParams, useLocation, Link } from "wouter";
 import { ArrowLeft } from "lucide-react";
 import AppShell from "@/components/AppShell";
@@ -336,15 +335,24 @@ export default function ScoreSheet() {
     setGesture({ step: "action", target });
   };
 
-  // 右欄比分卡本身可以點：不挑細節、只記「這一球是哪一方做的」，取代原本球場上的
-  // 「我方(全體)」「對手(全體)」虛線框（使用者決定改放這裡，省球場版面）。跟球場的
-  // 「畫線連到目標」手勢不同、是單純點擊，但終點一樣進 handlePlayerTouch，後面選動作／
-  // 選得失分那兩步完全共用同一套邏輯，不用另外寫一條平行路徑。
-  // gesture !== null 時代表選單已經開著，不重複觸發；currentSet 不存在（開賽前的「誰
-  // 先發球」畫面也會渲染 scoreDisplay）時記錄沒有意義，一併擋掉。
-  const handleScoreCardTouch = (side: Side) => (e: ReactPointerEvent) => {
+  // 比分卡＝最快的記分入口：點我方卡就是我方得分，點對手卡就是對手得分，**不開選單**
+  //（tang 2026-08-06 要求）。
+  //
+  // 原本這裡跟球場球員一樣走 handlePlayerTouch，要再選「動作」（6 選 1）跟「得分／失分」
+  // 兩層 RadialMenu 才記得成一分。實際記分時球來得很快，三次點擊才記一分跟不上比賽節奏，
+  // 而且比分卡這個入口本來就宣告「不挑細節」——既然不挑細節，中間那兩層選單問的問題
+  //（哪個動作？得還是失？）就沒有答案可挑：點哪一張卡已經回答了「誰得分」。
+  //
+  // 不補 action／touchedBy：兩者在 PointRecord 裡都是 optional、「沒有也不影響比分／輪轉
+  // 怎麼算」（見 types/scoresheet.ts）。這裡我們**真的不知道**是誰碰的球、做了什麼動作
+  //（可能是對方失誤），硬填一個 touchedBy: { side } 等於把猜測寫進資料裡，之後的球員
+  // 統計會被這些假資料汙染。要記細節的路徑仍然在：點球場上的球員，那條走原本的選單流程。
+  //
+  // gesture !== null 時代表球場那條路徑的選單正開著，不重複觸發；currentSet 不存在
+  //（開賽前的「誰先發球」畫面也會渲染 scoreDisplay）時記錄沒有意義，一併擋掉。
+  const handleScoreCardTouch = (side: Side) => () => {
     if (gesture !== null || !currentSet) return;
-    handlePlayerTouch({ side, screenX: e.clientX, screenY: e.clientY });
+    score(side);
   };
 
   const handleActionSelect = (action: PlayAction | "noSight") => {
@@ -470,24 +478,35 @@ export default function ScoreSheet() {
         改成 items-start 對齊上緣，而不是原本跟著比分卡置底；局數框矮很多，跟著同一條上緣
         對齊，整排看起來才像掛在同一條線上、不是各自對齊各自的。 */}
       <div className="flex items-start gap-3">
-        {/* 比分卡現在也是「我方(全體)」的記錄入口（見 handleScoreCardTouch）：點下去跳過球場
-          畫線，直接開「選動作」選單，只知道是我方做的、不挑是場上哪一位球員。cursor-pointer
-          只在真的能記錄時（有 currentSet）才加，開賽前的「誰先發球」畫面共用同一份 JSX，
-          那裡點下去本來就會被 handleScoreCardTouch 內部的 !currentSet 檔掉，游標樣式跟著
-          誠實反映當下能不能點。 */}
-        <div
-          onPointerDown={handleScoreCardTouch("us")}
-          className={`flex flex-col items-center gap-1 rounded-2xl border px-5 py-3 transition-shadow ${
+        {/* 比分卡＝一鍵記分（見 handleScoreCardTouch）：點一下就是我方得一分，不開選單。
+          改成真正的 <button> 而不是掛 onPointerDown 的 <div>：這是現在整頁最主要的操作，
+          鍵盤（Tab + Enter/Space）跟螢幕閱讀器都該用得到，<div> 兩者都拿不到。type="button"
+          一定要寫——HTML 的預設值是 submit，將來這塊被包進任何 <form> 就會誤觸送出。
+          disabled 綁 !currentSet：開賽前的「誰先發球」畫面共用同一份 JSX，那時候記分沒有
+          意義（handleScoreCardTouch 內部也擋，這裡是讓「不能按」在畫面上就看得出來，而不是
+          按了沒反應）。
+          active:scale 給一點按下去的觸覺回饋——記分時眼睛多半在場上不在螢幕，需要一個
+          「這一下真的按到了」的即時訊號。 */}
+        <button
+          type="button"
+          disabled={!currentSet}
+          onClick={handleScoreCardTouch("us")}
+          aria-label={`我方得分（目前 ${currentSet?.ourScore ?? 0} 分）`}
+          className={`flex flex-col items-center gap-1 rounded-2xl border px-5 py-3 transition ${
             currentSet?.serving === "us"
               ? "border-[#C6F135] shadow-[0_0_18px_rgba(198,241,53,0.4)]"
               : "border-white/[0.14] shadow-lg shadow-black/30"
-          } ${currentSet ? "cursor-pointer" : ""} bg-black/30`}
+          } ${
+            currentSet
+              ? "cursor-pointer hover:border-[#C6F135] hover:brightness-110 active:scale-95"
+              : "cursor-default"
+          } bg-black/30`}
         >
           <span className="font-score text-5xl tabular-nums text-[#C6F135]">
             {currentSet?.ourScore ?? 0}
           </span>
           <span className="text-caption font-semibold text-[#a9b096]">我方</span>
-        </div>
+        </button>
 
         {/* 局數勝負：原本是「局數 Y:Z」文字，改成兩顆小方框數字——跟翻牌計分板中間那兩張
           小卡（局/game 計數）同一個語彙，圖像化取代文字標籤，不用再讀「局數」兩個字才懂
@@ -515,19 +534,27 @@ export default function ScoreSheet() {
           </div>
         )}
 
-        <div
-          onPointerDown={handleScoreCardTouch("opponent")}
-          className={`flex flex-col items-center gap-1 rounded-2xl border px-5 py-3 transition-shadow ${
+        {/* 對手卡，跟上面我方卡完全對稱（理由見那邊的說明），只差配色是珊瑚紅那一套。 */}
+        <button
+          type="button"
+          disabled={!currentSet}
+          onClick={handleScoreCardTouch("opponent")}
+          aria-label={`對手得分（目前 ${currentSet?.opponentScore ?? 0} 分）`}
+          className={`flex flex-col items-center gap-1 rounded-2xl border px-5 py-3 transition ${
             currentSet?.serving === "opponent"
               ? "border-[#ef4444] shadow-[0_0_18px_rgba(239,68,68,0.4)]"
               : "border-white/[0.14] shadow-lg shadow-black/30"
-          } ${currentSet ? "cursor-pointer" : ""} bg-black/30`}
+          } ${
+            currentSet
+              ? "cursor-pointer hover:border-[#ef4444] hover:brightness-110 active:scale-95"
+              : "cursor-default"
+          } bg-black/30`}
         >
           <span className="font-score text-5xl tabular-nums text-[#ef4444]">
             {currentSet?.opponentScore ?? 0}
           </span>
           <span className="text-caption font-semibold text-[#a9b096]">對手</span>
-        </div>
+        </button>
       </div>
 
       {/* 局點提示（tang 2026-08-04 要求）：issue #45 當初只讓「下一局」按下去時才檢查
@@ -565,7 +592,6 @@ export default function ScoreSheet() {
       mode="A"
       className={APP_SHELL_CLASS}
       style={APP_BACKGROUND_STYLE}
-      backdrop={<div className="tb-beam" />}
       nav={
         <div className="relative z-10 h-full">
           <NavRail

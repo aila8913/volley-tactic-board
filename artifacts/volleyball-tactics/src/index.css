@@ -154,6 +154,127 @@
   --destructive-foreground: 0 0% 100%;
 }
 
+/* ── 設計系統「戰術版風格」的 token ────────────────────────────────────────────
+   來源是 tang 在 claude.ai/design 建的設計系統專案（2026-08-06 版）。那邊是這些數值的
+   源頭，這裡是 repo 的落地副本——之後設計系統改了，回來同步這一段就好，不用一頁一頁找。
+
+   為什麼寫在 `:root` 而不是上面的 `@theme`：Tailwind 4 的 `@theme` 會替每個變數自動生出
+   一組 utility class（`--text-micro` → `text-micro`）。這批 token 主要是給下面的
+   `.app-canvas` 這種 plain CSS 規則、以及 appChromeStyles.ts 的 inline style 讀的，不需要
+   變成 class；全放進 `@theme` 只會生出幾十個沒人用的 utility，反而讓自動完成變吵。 */
+:root {
+  /* 基底與品牌色。色相全部集中在綠色軸（萊姆／橄欖／球場青綠），警示色只留琥珀與珊瑚紅
+     兩個——設計系統刻意限制語意色數量，多一個顏色就多一種「這是什麼意思」的猜測成本。 */
+  --ds-ink: #0a0b07;
+  --ds-off: #f5f5f0;
+  --ds-sage: #9aa08c;
+  --ds-lime: #c6f135;
+  --ds-lime-hover: #d9fa6a;
+  --ds-olive: #3a4028;
+  --ds-court-teal: #1b6e62;
+  --ds-amber: #f5a623;
+  --ds-coral: #ef4444;
+
+  /* 玻璃兩階。這組數值本來就散在各元件的 Tailwind class 裡（design-spec.md 第 4 節有記
+     錄過同一組數字），收斂成 token 之後才有辦法一次調整整體玻璃質感。
+     層級靠「對比度」拉開，不是靠加邊框：外層 chrome 幾乎全透明、只界定範圍；內層 card
+     更不透明、模糊更重，讀起來比較扎實。 */
+  --ds-glass-chrome-bg: rgba(255, 255, 255, 0.02);
+  --ds-glass-chrome-blur: 6px;
+  --ds-glass-chrome-border: rgba(255, 255, 255, 0.12);
+  --ds-glass-card-bg: rgba(255, 255, 255, 0.11);
+  --ds-glass-card-blur: 18px;
+  --ds-glass-card-border: rgba(255, 255, 255, 0.18);
+  --ds-glass-court-blur: 26px;
+
+  /* 三欄骨架寬度。AppShell.tsx 目前是各自寫死的數字，這裡先把設計系統的定義搬進來當
+     單一來源，之後骨架調整時再讓 AppShell 讀這裡（不在這一輪的範圍）。 */
+  --ds-nav-w: 104px;
+  --ds-nav-w-open: 176px;
+  --ds-aside-w: 288px;
+  --ds-tools-w: 128px;
+
+  /* 背景「製圖紙」的組成。拆成變數而不是直接寫死在下面的 .app-canvas 裡，是因為調氛圍時
+     真正會動的就是這幾個數字（網格多密、光暈多亮），拆出來才不用在一長串 background
+     堆疊裡找。 */
+  --ds-bg-base: #050603;
+  --ds-bg-grid-fine: rgba(198, 241, 53, 0.055);
+  --ds-bg-grid-fine-size: 48px;
+  --ds-bg-grid-major: rgba(198, 241, 53, 0.09);
+  --ds-bg-grid-major-size: 240px;
+  --ds-bg-glow-teal: rgba(27, 110, 98, 0.44);
+  --ds-bg-glow-lime: rgba(198, 241, 53, 0.11);
+  --ds-bg-vignette: rgba(3, 4, 2, 0.88);
+  --ds-bg-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.7' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='.10'/%3E%3C/svg%3E");
+}
+
+/* 整頁背景「製圖紙」。取代 appChromeStyles.ts 原本的兩顆光暈＋斜切漸層。
+   為什麼要換：`backdrop-filter` 模糊的是元件「背後」的東西——背景越接近純色，模糊完
+   就越接近同一個純色，玻璃感其實沒有真的產生（design-spec.md 第 4 節記過這個坑）。
+   網格線＋噪點給了 blur 真正可以攪動的高頻細節，玻璃才會讀起來像玻璃而不是半透明色塊。
+
+   分兩層而不是一整包 background 疊上去：只有網格那層要慢慢飄（下面的 bg-drift），
+   光暈／噪點／暗角必須固定不動——混在同一個 background 裡就沒辦法只動其中一層。
+
+   z-index: -1 搭配 isolation: isolate 的組合是關鍵：isolate 讓 .app-canvas 自己成為一個
+   stacking context，負值 z-index 就被關在裡面出不去，只會疊在 .app-canvas 自己的底色
+   之上、所有內容之下。少了 isolate，-1 會往上竄到整個頁面後面而看不見。 */
+.app-canvas {
+  position: relative;
+  isolation: isolate;
+  background: var(--ds-bg-base);
+}
+.app-canvas::before,
+.app-canvas::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+.app-canvas::before {
+  background:
+    linear-gradient(var(--ds-bg-grid-fine) 1px, transparent 1px) 0 0 / var(--ds-bg-grid-fine-size)
+      var(--ds-bg-grid-fine-size),
+    linear-gradient(90deg, var(--ds-bg-grid-fine) 1px, transparent 1px) 0 0 /
+      var(--ds-bg-grid-fine-size) var(--ds-bg-grid-fine-size),
+    linear-gradient(var(--ds-bg-grid-major) 1px, transparent 1px) 0 0 / var(--ds-bg-grid-major-size)
+      var(--ds-bg-grid-major-size),
+    linear-gradient(90deg, var(--ds-bg-grid-major) 1px, transparent 1px) 0 0 /
+      var(--ds-bg-grid-major-size) var(--ds-bg-grid-major-size);
+  animation: bg-drift 52s ease-in-out infinite;
+}
+.app-canvas::after {
+  background:
+    radial-gradient(58% 48% at 24% 16%, var(--ds-bg-glow-teal), transparent 70%),
+    radial-gradient(46% 42% at 86% 90%, var(--ds-bg-glow-lime), transparent 72%),
+    linear-gradient(
+      100deg,
+      transparent 34%,
+      rgba(198, 241, 53, 0.05) 47%,
+      rgba(198, 241, 53, 0.02) 53%,
+      transparent 64%
+    ),
+    var(--ds-bg-grain),
+    radial-gradient(118% 92% at 50% 38%, transparent 42%, var(--ds-bg-vignette) 100%);
+}
+/* 52 秒一輪、位移不到 2%：符合 design-spec.md 第 6 節「每頁最多一個環境級動效，必須慢
+   且低亮度」那條規則——慢到不會被當成動畫，只是讓網格不完全死板。 */
+@keyframes bg-drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(-1.8%, -1.4%, 0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-canvas::before {
+    animation: none;
+  }
+}
+
 @layer base {
   * {
     @apply border-border;
@@ -179,33 +300,15 @@
     0 0 26px 6px rgba(198, 241, 53, 0.5);
 }
 
-/* 戰術板背景材質（issue #134 Track B：材質強化）——兩層東西疊在球場底色之上：
-   一道幾乎察覺不到的斜向光影（.tb-beam），跟置中放大的字標（.tb-mark），都用
-   plain CSS 寫（同上面 .roster-row 的理由：避免 Tailwind 任意值解析多層 rgba 出錯）。
-   兩者都是 position: absolute，TacticsBoard.tsx 那邊要記得把 header／中間三欄
-   那個外層 div 加上 relative，不然這兩層絕對定位的背景會蓋到前景 UI 上面
-   （沒有明確 stacking context 時，absolute 元素預設蓋在一般文件流的靜態元素上面）。
-   VOLLEY / BOARD 是品牌名稱定案前的佔位字，之後改文字就好，樣式不用動。 */
-.tb-beam {
-  position: absolute;
-  z-index: 1;
-  width: 160%;
-  height: 380px;
-  left: -30%;
-  top: 2%;
-  transform: rotate(-14deg);
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(245, 245, 240, 0.05) 45%,
-    rgba(245, 245, 240, 0.07) 52%,
-    rgba(245, 245, 240, 0.05) 60%,
-    transparent 100%
-  );
-  filter: blur(30px);
-  pointer-events: none;
-}
+/* 戰術板背景字標（issue #134 Track B：材質強化）——置中放大的品牌字標，用 plain CSS 寫
+   （同上面 .roster-row 的理由：避免 Tailwind 任意值解析多層 rgba 出錯）。
+   position: absolute，TacticsBoard.tsx 那邊要記得把 header／中間三欄那個外層 div 加上
+   relative，不然這層絕對定位的背景會蓋到前景 UI 上面（沒有明確 stacking context 時，
+   absolute 元素預設蓋在一般文件流的靜態元素上面）。
+   VOLLEY / BOARD 是品牌名稱定案前的佔位字，之後改文字就好，樣式不用動。
 
+   原本這裡還有一個 .tb-beam（斜向光影），2026-08-06 隨設計系統「戰術版風格」落地刪除
+   ——製圖紙背景 `.app-canvas` 已經含一道斜光束，而且是全站都有，不需要各頁再掛一次。 */
 .tb-mark {
   position: absolute;
   z-index: 1;
@@ -258,15 +361,15 @@
 }
 
 /* 球場毛玻璃地板（issue #134）：#court-wrapper 包住整個 SVG 球場，backdrop-filter
-   會模糊「這個 div 後面」的東西（也就是 TacticsBoard.tsx 那兩層背景光暈 .tb-beam /
-   .tb-mark），球場本身（SVG 子元素）畫在上面維持清晰——這是 backdrop-filter 的特性：
+   會模糊「這個 div 後面」的東西（製圖紙背景的網格與光暈、加上戰術板的 .tb-mark 字標），
+   球場本身（SVG 子元素）畫在上面維持清晰——這是 backdrop-filter 的特性：
    模糊背後、不模糊自己。球場的玻璃質感因此不是自己做出來的，是「模糊看穿它後面的
    環境光」做出來的，跟外層 panel 的玻璃是同一套視覺語言但更霧（見 design-spec.md
    第 4 節 Glassmorphism 深化說明）。 */
 .court-glass {
   border-radius: 14px;
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(var(--ds-glass-court-blur));
+  -webkit-backdrop-filter: blur(var(--ds-glass-court-blur));
   box-shadow:
     inset 0 0 0 1px rgba(245, 245, 240, 0.08),
     0 12px 30px rgba(0, 0, 0, 0.35);

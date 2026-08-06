@@ -346,7 +346,6 @@ export default function MatchAnalytics() {
           />
         </div>
       }
-      backdrop={<div className="tb-beam" />}
       // 背景改用 lib/appChromeStyles 的共用常數（tang 2026-07-30 要求全站背景統一）：
       // 這裡原本停在 #131 改版之前的斜線網格版本，說明見那個檔案。
       className={APP_SHELL_CLASS}

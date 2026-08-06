@@ -213,10 +213,13 @@ export default function TacticsBoard() {
         </div>
       }
       backdrop={
-        // issue #134 Track B（材質強化）：低調斜向光影 + 置中放大的字標，破除原本
-        // 「整片平」的單調感。VOLLEY / BOARD 是品牌名稱定案前的佔位字。
+        // issue #134 Track B（材質強化）：置中放大的字標，破除原本「整片平」的單調感。
+        // VOLLEY / BOARD 是品牌名稱定案前的佔位字。
+        //
+        // 原本這裡還有一道 .tb-beam 斜向光影，2026-08-06 隨設計系統「戰術版風格」落地移除
+        // ——製圖紙背景（index.css `.app-canvas`）本身就含一道斜光束，而且是全站都有。
+        // 設計系統的慣例明講背景層只掛一次，兩道疊在一起會在交界處出現不自然的亮帶。
         <>
-          <div className="tb-beam" />
           <div className="tb-mark">
             <div className="tb-mark-flourish">
               <span></span>

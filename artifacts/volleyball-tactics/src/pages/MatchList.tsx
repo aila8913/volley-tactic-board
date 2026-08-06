@@ -168,7 +168,6 @@ export default function MatchList() {
           <MatchInfoRail selected={selected} />
         </div>
       }
-      backdrop={<div className="tb-beam" />}
       className={APP_SHELL_CLASS}
       style={APP_BACKGROUND_STYLE}
     >
