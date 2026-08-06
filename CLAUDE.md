@@ -47,7 +47,7 @@ docs/        specs and decision records
   `openapi.yaml`, then re-typechecks libs. Run this any time `openapi.yaml` changes.
 - `pnpm --filter @workspace/db run push` — push Drizzle schema changes straight to the DB (dev only, no
   migration files are generated)
-- `pnpm run test` — runs `vitest` for `@workspace/volleyball-tactics` (the only package with tests so far)
+- `pnpm run test` — runs `vitest` for `@workspace/volleyball-tactics` and `@workspace/api-server`
 
 ## Required env vars
 
@@ -63,9 +63,12 @@ copy-pasteable `.env` block); the enforcing code is `lib/db/src/index.ts` and `v
 - `vitest` **is** configured for `@workspace/volleyball-tactics` (`vitest.config.ts`, jsdom environment) —
   run via root `pnpm run test` (fans out to every package with a `test` script) or scoped with
   `pnpm --filter @workspace/volleyball-tactics run test`. Test files exist (e.g. `src/lib/
-matchMapping.test.ts`, `src/types/match.test.ts`). No test framework exists for the other packages
-  (api-server, db, etc.) yet, so root `pnpm run test` currently only actually runs volleyball-tactics's
-  suite.
+matchMapping.test.ts`, `src/types/match.test.ts`). `@workspace/api-server` also has vitest now
+  (`src/lib/personName.test.ts`, added with #221), so root `pnpm run test` fans out to both. `db` and the
+  other packages still have no `test` script.
+- **Test files are typechecked** (#292): no tsconfig excludes `**/*.test.ts(x)` anymore, so a type error in
+  a test fails `pnpm run typecheck` / CI just like production code. The exclusions used to hide the fact
+  that fixtures had drifted a whole refactor behind the DTOs they mock.
 - ESLint (`eslint.config.mjs`) and Prettier (`.prettierrc.json`) are now configured at the root — run via
   `pnpm run lint` / `pnpm run format`.
 - `lib/db/src/schema/index.ts` defines `matches` / `players` / `sets` / `rallies` / `events` (see

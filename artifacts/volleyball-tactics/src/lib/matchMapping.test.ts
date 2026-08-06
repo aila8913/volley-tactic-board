@@ -33,7 +33,10 @@ describe("server → domain mapping", () => {
   it("maps a player, stringifying its id", () => {
     expect(
       serverPlayerToDomain({
-        id: 7,
+        // players.id 在 #64 PR1 後從自增整數改成 client-mintable uuid，這裡的後端 DTO
+        // 型別（ApiPlayer.id）已經是 string，測試 fixture 要跟著改成字串，
+        // 不然「stringifying its id」這個測試名稱本身就對不上型別了。
+        id: "7",
         matchId: 3,
         name: "小明",
         number: 12,
@@ -53,7 +56,7 @@ describe("server → domain mapping", () => {
     // personId 是「跨場身分」的對應（#213），跟 id/matchId 一樣直接照抄，不用轉換。
     expect(
       serverPlayerToDomain({
-        id: 7,
+        id: "7",
         matchId: 3,
         name: "小明",
         number: 12,
@@ -80,7 +83,7 @@ describe("server → domain mapping", () => {
         // 「最後一局算不算已結束局」，漏掉這個欄位的話整場的局比數就會少算一局。
         status: "finished",
       },
-      [{ id: 7, matchId: 3, name: "小明", number: 12, role: "S", personId: null }],
+      [{ id: "7", matchId: 3, name: "小明", number: 12, role: "S", personId: null }],
     );
     expect(domain.id).toBe("3");
     expect(domain.opponent).toBe("台大");

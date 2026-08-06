@@ -23,7 +23,8 @@
 > 上面的 `_Last updated_` 是共用一行摘要（誰更新了什麼），保持精簡、別長成段落。
 
 \_Last updated: 2026-08-06 (aila) — 深模組盤點：收掉五份冪等寫入（`lib/insertIdempotent.ts`）與第三份
-後排裸門檻；新開 #303／#304，#232 補留言。\_
+後排裸門檻；新開 #303／#304，#232 補留言。另交付 #292（測試檔進 typecheck）＋#294（players 補
+`ORDER BY`）。\_
 
 \_Last updated: 2026-08-05 (aila) — #218 交付（`matches.status` + 計分頁收尾流程，ADR-0005，PR #300）；
 #287 交付（PR #297）。M3 只剩 #209；新開 #301（賽制自訂化，M5）。\_
@@ -262,8 +263,9 @@ lives in git log + the issues named).
 - **專案 roadmap 已上線。** 時間序住在 repo **Milestones M1–M5**（現為 M1–M5＋M1.5/M2.5/M3.5）（軟目標日
   7/18→9/11，非死線），當下狀態住在 [GitHub Project #4](https://github.com/users/aila8913/projects/4)。
   **M1／M2／M1.5 milestone 皆已關閉**（M1.5 由 PR #239 帶關 #174/#120 後收掉；#176 已移 M3，
-  它卡在 @tangyi1025 的圖示、不該讓一個純外部阻塞項把階段一直掛在逾期狀態）。**Todo 欄已填上 M2.5 的
-  #226/#227/#228**——下一步直接看 Todo 欄就好，不用再重推。維護規則與 CLI id 在
+  它卡在 @tangyi1025 的圖示、不該讓一個純外部阻塞項把階段一直掛在逾期狀態）。**下一步直接看 Todo 欄，
+  不用再重推**（08-06 對過一輪：當時有 14 張 open issue 完全沒有 Status、#168 甚至不在板上，等於「看
+  Todo 欄」只看得到一張卡——沒有 Status 的卡是隱形的，新開 issue 記得順手歸位）。維護規則與 CLI id 在
   `.claude/skills/wrap-up/SKILL.md` step 5＋`reference.md`。尚待 PO 在網頁完成：Workflows 自動化＋三個 view。
 - **記錄成本預算（#74，已關）＝`docs/recording-cost-budget.md`**：簡易/進階是懸崖式硬分界——簡易版
   一分打完後在死球空檔記**恰好一筆決定球**＋排先發＋換人/暫停＋「沒看到」escape valve；任何 per-touch／
@@ -380,10 +382,7 @@ M2 雖已收 milestone，衍生待辦仍在各自 issue：**#214**（分析頁�
 **#218**（一場比賽「結束」的操作節點與畫面）——目前「結束比賽」只是導去分析頁的 `<Link>`，**最後一局
 不會被封存**（`completedSets` 只在按「下一局」時累積），是資料缺口不只是 UX 缺口。
 
-其餘 open 的技術債與待辦：
-**#292（tsconfig `exclude` 漏了 `*.test.tsx` 的對稱項）** ——`*.test.ts` 測試檔完全沒進 typecheck，
-所以測試裡的型別錯誤 CI 抓不到；跟 #294（`GET /matches/{matchId}/players` 缺 `ORDER BY`，Postgres
-MVCC 讓任何 UPDATE 把該列擠到名單最後）同為 #221/#224 期間發現的既有缺口，兩張都歸 **M3.5**。
+其餘 open 的技術債與待辦（**#292／#294 已於 08-06 交付並關閉**，見下方 Recently closed）：
 **#168（引入 `@testing-library/react`）** ——現行 `renderToStaticMarkup` 慣例無法觸發事件、讀不到 Radix
 Portal，飛出選單與帶 mutation 副作用的 controller 全在自動測試盲區（#201 的計分頁死結修復就落在這裡，
 僅手動驗證）。**架構掃描把這個盲區量化了，它是 M2.5/M3.5 的實質前置**：每一支刻意抽到 `lib/` 的純函式
@@ -409,6 +408,21 @@ serving≠null 但 record.lineup=null」那條路**，但真正的 reconcile 仍
 
 ### 開發 (aila)
 
+- **#292 ＋ #294**（測試檔進 typecheck／players 名單補 `ORDER BY`，08-06）— #292 表面上是「tsconfig
+  的 `exclude` 少寫一個 `*.test.tsx` 對稱項」，拿掉排除後才看見代價的規模：**7 個測試檔冒出約 90 個
+  型別錯誤，全部是既有的脫節**。來源是三次重構——#64 PR1（主鍵改 uuid，fixture 還在寫 `id: 1`）、
+  #213（`MatchPlayer` 多了必填 `personId`）、#230（`backendRef` 從字串分類改成 `{ table, id }`）。
+  最值得記的是 `scoreSheetMapping.test.ts` 佔了其中約 80 處：**它是 replay 重建邏輯的核心測試，
+  假資料整整落後一個主鍵型別遷移，而 217 個測試一路全綠**——因為那些 id 在測試裡只被搬運、沒被
+  當字串用。**判準：測試通過只證明執行期沒爆，不證明它斷言的還是現在這套型別**；把測試排除在
+  typecheck 之外，等於讓重構的安全網成為唯一沒有型別保護的地方。修法只改假資料型別，沒刪測試、
+  沒加 `any`／`@ts-expect-error`。api-server 的 tsconfig 一併拿掉排除（它上個月才被加上、註解還
+  引用 #292 說「兩邊都排除才一致」——那是往錯的方向對齊），CLAUDE.md 補上「測試檔會被 typecheck」
+  的約定免得有人加回去。#294：`GET /matches/:matchId/players` 補
+  `.orderBy(number, name, id)`——**Postgres MVCC 下 `UPDATE` 是「舊版本標記失效＋heap 尾端寫新版本」**，
+  所以沒有 `ORDER BY` 時任何一次 PATCH 都會把該列擠到名單最後（#221 合併時看到的「名單跳動」只是
+  最容易察覺的觸發方式）。三層排序鍵是因為 `number` 沒有 unique constraint，只排 number 仍是偏序，
+  補 `name`／`id`（uuid，對人無意義但唯一穩定）才是全序。其餘 15 支 route 掃過沒有第二處遺漏。
 - **深模組盤點 ＋ 兩處重複收斂（08-06，PR 見 `chore/insert-idempotent-and-rowof-dedup`）** — 用
   「深模組（小介面／大實作）」的判準掃全 repo。結論：`lib/` 層普遍健康（`handler.ts`、
   `writeLog.ts`、`rotationLogic.ts`／`volleyballRules.ts` 都是好例子），問題集中在**頁面元件**與

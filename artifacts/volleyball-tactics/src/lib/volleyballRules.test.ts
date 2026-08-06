@@ -160,10 +160,13 @@ describe("applyRally parity between the live path and the replay path", () => {
 
   // 同一組序列包成後端會回傳的形狀，兩個測試共用。firstServer="home"＝我方先發，
   // 跟 live 路徑的 startSet(MATCH, "us") 對齊。
-  const paritySet: MatchSet = { id: 1, matchId: 1, setNumber: 1, firstServer: "home" };
+  // sets.id / rallies.id / rallies.setId 都是 client-mintable uuid（#64 PR1），
+  // 後端 DTO 型別已經是 string——這裡用字串化的序號充當假 uuid，反正 reconstruct
+  // 不看這個欄位的值本身，只要型別對、id 之間彼此一致即可。
+  const paritySet: MatchSet = { id: "set-1", matchId: 1, setNumber: 1, firstServer: "home" };
   const parityRallies: Rally[] = winners.map((winner, i) => ({
-    id: i + 1,
-    setId: 1,
+    id: `rally-${i + 1}`,
+    setId: "set-1",
     rallyNumber: i + 1,
     // reconstruct 不讀這幾個 before-score/before-rotation 欄位（它靠 replay 自己重算，
     // 見 ADR-0003：欄位是重放結果的物化，重放才是真相來源），所以這裡填什麼都不影響。

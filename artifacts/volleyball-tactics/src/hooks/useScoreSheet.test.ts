@@ -25,14 +25,20 @@ function startSet(serving: "us" | "opponent" = "us") {
 }
 
 // 模擬 controller.score()：先存 rally 快照，再跑記分 reducer。
+// backendRef 的型別在 #230 後從單純的分類字串（'rally' | 'substitution' | 'timeout'）
+// 改成 { table: DeletableTable; id: string }（見 types/scoresheet.ts 的 UndoEntry 註解、
+// hooks/useScoreSheet.ts 實際呼叫處）——因為主鍵改成前端可自己鑄造的 uuid 後，
+// 動作發生當下就知道「我要刪的是哪一筆」，不用再等 POST 回來才補記。這裡的測試只在乎
+// undo 堆疊的長度/覆蓋行為，不會真的去打後端 DELETE，所以 id 用什麼字串不影響測試斷言，
+// 隨意給一個能辨識用途的假 uuid 字串即可。
 function score(side: "us" | "opponent") {
-  s().snapshotForUndo(M, "rally");
+  s().snapshotForUndo(M, { table: "rallies", id: "rally-fake-id" });
   s().scorePoint(M, side);
 }
 
 // 模擬 controller.substitute()：先存 substitution 快照，再跑換人 reducer。
 function sub(outId: string, inId: string) {
-  s().snapshotForUndo(M, "substitution");
+  s().snapshotForUndo(M, { table: "substitutions", id: "sub-fake-id" });
   s().recordRegularSub(M, outId, inId);
 }
 

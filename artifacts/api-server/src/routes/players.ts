@@ -30,10 +30,25 @@ router.get(
       owns: ({ params, userId }) => matchBelongsToUser(params.matchId, userId),
     },
     async ({ res, params }) => {
+      // 一定要明講 orderBy，不能靠「反正資料庫大概會照建立順序回」的直覺（issue #294）：
+      // Postgres 沒有 ORDER BY 時完全不保證回傳順序，而且它用的 MVCC（多版本併發控制，
+      // 為了讓讀寫不互相鎖住，UPDATE 不會「原地改」，而是把舊版本標記失效、在 heap 的
+      // 尾端新插一份新版本）代表任何一次 PATCH（改背號/位置/名字）或
+      // POST /people/:id/merge（會 update players.personId）都可能把那一列「physically」
+      // 挪到回傳結果的最後面——使用者會看到名單順序無故跳動，即使他只是改了一個人的背號。
+      //
+      // 排序鍵選 number（背號）優先：最符合使用者對「名單」的直覺，紙本記錄表本來就是照
+      // 背號排。但 number 在 schema 上只是 integer().notNull()，沒有 unique constraint，
+      // 同一場比賽理論上可能出現重複背號（例如打字打錯、或球隊真的還沒分配好）——這種情況下
+      // 光靠 number 排序仍然是「部分排序」，同背號的幾列彼此順序還是不保證穩定。所以再疊
+      // name、最後疊 id 當 tiebreaker：id 是 uuid，對使用者沒有可讀意義，但它一定唯一、
+      // 一定穩定，放在排序鏈最後一環，保證整條鍵是「全序」（total order）——不管背號/名字
+      // 有沒有撞名，最終一定能排出唯一、每次查詢都一致的順序。
       const players = await db
         .select()
         .from(playersTable)
-        .where(eq(playersTable.matchId, params.matchId));
+        .where(eq(playersTable.matchId, params.matchId))
+        .orderBy(playersTable.number, playersTable.name, playersTable.id);
 
       res.json(players);
     },

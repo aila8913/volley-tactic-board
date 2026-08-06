@@ -75,14 +75,15 @@ describe("isLineupComplete", () => {
 // 該不該收」——這正是跨場導航/載入存檔把先發掃空的根因，用測試把它釘死。
 describe("captureLineupFromRotations", () => {
   // 6 個非自由球員 id "1"~"6"，外加一個自由球員 "7"。
+  // personId: null——這裡測的是輪轉/先發快照邏輯，不看 personId，給 null 只是滿足型別。
   const roster: MatchPlayer[] = [
-    { id: "1", name: "A", number: 1, role: "OH" },
-    { id: "2", name: "B", number: 2, role: "MB" },
-    { id: "3", name: "C", number: 3, role: "S" },
-    { id: "4", name: "D", number: 4, role: "OH" },
-    { id: "5", name: "E", number: 5, role: "MB" },
-    { id: "6", name: "F", number: 6, role: "OPP" },
-    { id: "7", name: "L", number: 7, role: "L" },
+    { id: "1", name: "A", number: 1, role: "OH", personId: null },
+    { id: "2", name: "B", number: 2, role: "MB", personId: null },
+    { id: "3", name: "C", number: 3, role: "S", personId: null },
+    { id: "4", name: "D", number: 4, role: "OH", personId: null },
+    { id: "5", name: "E", number: 5, role: "MB", personId: null },
+    { id: "6", name: "F", number: 6, role: "OPP", personId: null },
+    { id: "7", name: "L", number: 7, role: "L", personId: null },
   ];
 
   // 把「號位→球員 id」擺成 rotation 0 的 positions（座標用該號位中心，findNearestZone 才吸得準）。

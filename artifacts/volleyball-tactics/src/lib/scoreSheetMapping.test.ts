@@ -165,12 +165,13 @@ describe("pointRecordToEvent", () => {
 
 // 造一個後端 event（只填重建會用到的欄位，其他 nullable 給預設）。
 const makeEvent = (over: Partial<MatchEvent> & Pick<MatchEvent, "rallyId">): MatchEvent => ({
-  id: 1,
+  id: "1",
   sequence: 1,
   side: "home",
   playerId: null,
   action: "attack",
-  ballType: null,
+  // ballType 是 `BallType | undefined`（optional，不是 nullable）——跟其他欄位不同，
+  // 不能填 null 當預設值，這裡直接不給、讓它維持 undefined（optional 屬性沒帶等同 undefined）。
   quality: null,
   fromX: null,
   fromY: null,
@@ -186,13 +187,13 @@ const makeEvent = (over: Partial<MatchEvent> & Pick<MatchEvent, "rallyId">): Mat
 describe("eventToMeta", () => {
   it("maps our player's event back to touchedBy (int id → string)", () => {
     expect(
-      eventToMeta(makeEvent({ rallyId: 1, side: "home", playerId: "12", action: "attack" })),
+      eventToMeta(makeEvent({ rallyId: "1", side: "home", playerId: "12", action: "attack" })),
     ).toEqual({ action: "attack", touchedBy: { side: "us", playerId: "12" } });
   });
 
   it("maps an opponent-side event with null player to undefined playerId", () => {
     expect(
-      eventToMeta(makeEvent({ rallyId: 1, side: "away", playerId: null, action: "serve" })),
+      eventToMeta(makeEvent({ rallyId: "1", side: "away", playerId: null, action: "serve" })),
     ).toEqual({ action: "serve", touchedBy: { side: "opponent", playerId: undefined } });
   });
 
@@ -204,17 +205,24 @@ describe("eventToMeta", () => {
       touchedBy: { side: "us", playerId: "7" },
     };
     const ev = pointRecordToEvent(point, 1)!;
-    const meta = eventToMeta(makeEvent({ ...ev, rallyId: 1 }));
+    const meta = eventToMeta(makeEvent({ ...ev, rallyId: "1" }));
     expect(meta.action).toBe("block");
     expect(meta.touchedBy).toEqual({ side: "us", playerId: "7" });
   });
 });
 
 describe("reconstructSetFromRallies", () => {
-  const set: MatchSet = { id: 9, matchId: 3, setNumber: 1, firstServer: "home" };
-  const rally = (rallyNumber: number, winner: "home" | "away", id = rallyNumber): Rally => ({
+  // sets.id / rallies.id / rallies.setId 都是 client-mintable uuid（#64 PR1），後端 DTO
+  // 型別已經是 string——這裡沿用「數字字面量當假 uuid」的簡便寫法（跟 volleyballRules.test.ts
+  // 的 parity 測試同一套慣例），只是包一層字串，數值本身完全不影響任何斷言。
+  const set: MatchSet = { id: "9", matchId: 3, setNumber: 1, firstServer: "home" };
+  const rally = (
+    rallyNumber: number,
+    winner: "home" | "away",
+    id: string = String(rallyNumber),
+  ): Rally => ({
     id,
-    setId: 9,
+    setId: "9",
     rallyNumber,
     homeScore: 0, // 重建時不看 rally 存的 before-score，靠 replay 自己算，這幾欄在測試裡不重要
     awayScore: 0,
@@ -233,7 +241,7 @@ describe("reconstructSetFromRallies", () => {
       ourRotation: 0,
       opponentRotation: 0,
       history: [],
-      serverId: 9,
+      serverId: "9",
     });
   });
 
@@ -257,7 +265,7 @@ describe("reconstructSetFromRallies", () => {
     expect(state.ourRotation).toBe(0);
     expect(state.opponentRotation).toBe(1);
     expect(state.history[0].wasSideOut).toBe(true);
-    expect(state.history[0].serverId).toBe(1);
+    expect(state.history[0].serverId).toBe("1");
   });
 
   it("replays an alternating exchange, tracking both rotations independently", () => {
@@ -286,31 +294,31 @@ describe("reconstructSetFromRallies", () => {
   });
 
   it("attaches action/touchedBy from events when the map is provided (3b-ii)", () => {
-    const rallies = [rally(1, "home", 100), rally(2, "away", 200)];
-    const eventsByRallyId = new Map<number, MatchEvent[]>([
-      [100, [makeEvent({ rallyId: 100, side: "home", playerId: "12", action: "attack" })]],
-      [200, [makeEvent({ rallyId: 200, side: "away", playerId: null, action: "serve" })]],
+    const rallies = [rally(1, "home", "100"), rally(2, "away", "200")];
+    const eventsByRallyId = new Map<string, MatchEvent[]>([
+      ["100", [makeEvent({ rallyId: "100", side: "home", playerId: "12", action: "attack" })]],
+      ["200", [makeEvent({ rallyId: "200", side: "away", playerId: null, action: "serve" })]],
     ]);
     const state = reconstructSetFromRallies(set, rallies, eventsByRallyId);
     expect(state.history[0]).toMatchObject({
       side: "us",
-      serverId: 100,
+      serverId: "100",
       action: "attack",
       touchedBy: { side: "us", playerId: "12" },
     });
     expect(state.history[1]).toMatchObject({
       side: "opponent",
-      serverId: 200,
+      serverId: "200",
       action: "serve",
       touchedBy: { side: "opponent", playerId: undefined },
     });
   });
 
   it("leaves a rally with no event as a 沒看到 point (no action/touchedBy)", () => {
-    const rallies = [rally(1, "home", 100), rally(2, "home", 200)];
+    const rallies = [rally(1, "home", "100"), rally(2, "home", "200")];
     // 只有 rally 100 有 event；rally 200 是「沒看到」，map 裡沒有它。
-    const eventsByRallyId = new Map<number, MatchEvent[]>([
-      [100, [makeEvent({ rallyId: 100, side: "home", playerId: "5", action: "dig" })]],
+    const eventsByRallyId = new Map<string, MatchEvent[]>([
+      ["100", [makeEvent({ rallyId: "100", side: "home", playerId: "5", action: "dig" })]],
     ]);
     const state = reconstructSetFromRallies(set, rallies, eventsByRallyId);
     expect(state.history[0].action).toBe("dig");
@@ -319,13 +327,19 @@ describe("reconstructSetFromRallies", () => {
   });
 
   it("picks the first event (lowest sequence) when a rally has several", () => {
-    const rallies = [rally(1, "home", 100)];
-    const eventsByRallyId = new Map<number, MatchEvent[]>([
+    const rallies = [rally(1, "home", "100")];
+    const eventsByRallyId = new Map<string, MatchEvent[]>([
       [
-        100,
+        "100",
         [
-          makeEvent({ rallyId: 100, sequence: 1, side: "home", playerId: "3", action: "receive" }),
-          makeEvent({ rallyId: 100, sequence: 2, side: "home", playerId: "9", action: "attack" }),
+          makeEvent({
+            rallyId: "100",
+            sequence: 1,
+            side: "home",
+            playerId: "3",
+            action: "receive",
+          }),
+          makeEvent({ rallyId: "100", sequence: 2, side: "home", playerId: "9", action: "attack" }),
         ],
       ],
     ]);
@@ -351,8 +365,12 @@ describe("regularSubToApi", () => {
 const makeSub = (
   over: Partial<Substitution> & Pick<Substitution, "playerInId" | "playerOutId">,
 ): Substitution => ({
-  id: 1,
-  setId: 9,
+  id: "1",
+  setId: "9",
+  // seq 是伺服器插入時指派的順序流水號（見 lib/db/src/schema/substitutions.ts），
+  // 只用在「同一分內幾筆換人的先後」排序，這裡的重建邏輯測試不看這個欄位的值，
+  // 給固定的 1 只是為了滿足型別（Substitution.seq 是必填欄位）。
+  seq: 1,
   homeScore: 0,
   awayScore: 0,
   kind: "regular",
@@ -384,13 +402,13 @@ describe("reconstructRecording", () => {
   });
 
   it("treats the last set (highest setNumber) as in-progress, earlier ones as completed", () => {
-    const set1: MatchSet = { id: 1, matchId: 3, setNumber: 1, firstServer: "home" };
-    const set2: MatchSet = { id: 2, matchId: 3, setNumber: 2, firstServer: "away" };
+    const set1: MatchSet = { id: "1", matchId: 3, setNumber: 1, firstServer: "home" };
+    const set2: MatchSet = { id: "2", matchId: 3, setNumber: 2, firstServer: "away" };
     const rally = (
-      setId: number,
+      setId: string,
       rallyNumber: number,
       winner: "home" | "away",
-      id: number,
+      id: string,
     ): Rally => ({
       id,
       setId,
@@ -402,9 +420,9 @@ describe("reconstructRecording", () => {
       winner,
     });
     // 第 1 局：home 先發，home 連得 2 分 → 2:0 已結束。
-    const set1Rallies = [rally(1, 1, "home", 100), rally(1, 2, "home", 101)];
+    const set1Rallies = [rally("1", 1, "home", "100"), rally("1", 2, "home", "101")];
     // 第 2 局：away 先發，home 得 1 分（side-out）→ 1:0 進行中。
-    const set2Rallies = [rally(2, 1, "home", 200)];
+    const set2Rallies = [rally("2", 1, "home", "200")];
 
     const state = reconstructRecording([set1, set2], [set1Rallies, set2Rallies], [], []);
 
@@ -416,19 +434,19 @@ describe("reconstructRecording", () => {
     expect(state.currentSet.setNumber).toBe(2);
     expect(state.currentSet.ourScore).toBe(1);
     expect(state.currentSet.opponentScore).toBe(0);
-    expect(state.currentSet.serverId).toBe(2);
+    expect(state.currentSet.serverId).toBe("2");
   });
 
   // #218：同一批資料，只因為 isFinished 不同就該切出不同結果。這是整個 issue 的核心
   // ——以前打完的最後一局永遠被當成進行中丟掉，局比數就會少算一局。
   it("counts every set as completed when the match is finished (isFinished = true)", () => {
-    const set1: MatchSet = { id: 1, matchId: 3, setNumber: 1, firstServer: "home" };
-    const set2: MatchSet = { id: 2, matchId: 3, setNumber: 2, firstServer: "away" };
+    const set1: MatchSet = { id: "1", matchId: 3, setNumber: 1, firstServer: "home" };
+    const set2: MatchSet = { id: "2", matchId: 3, setNumber: 2, firstServer: "away" };
     const rally = (
-      setId: number,
+      setId: string,
       rallyNumber: number,
       winner: "home" | "away",
-      id: number,
+      id: string,
     ): Rally => ({
       id,
       setId,
@@ -440,8 +458,8 @@ describe("reconstructRecording", () => {
       winner,
     });
     // 第 1 局 2:0、第 2 局 1:0，兩局都是我方拿下——三戰兩勝的話這場就是 2:0 結束了。
-    const set1Rallies = [rally(1, 1, "home", 100), rally(1, 2, "home", 101)];
-    const set2Rallies = [rally(2, 1, "home", 200)];
+    const set1Rallies = [rally("1", 1, "home", "100"), rally("1", 2, "home", "101")];
+    const set2Rallies = [rally("2", 1, "home", "200")];
 
     const state = reconstructRecording(
       [set1, set2],
@@ -470,11 +488,11 @@ describe("reconstructRecording", () => {
   // #218：按了「下一局」（會先建一筆 firstServer=null 的空 set）之後才想起比賽已經結束、
   // 直接按「結束比賽」——那筆從沒開球的尾巴局不該被算成一局 0:0。
   it("drops trailing never-started sets when the match is finished", () => {
-    const set1: MatchSet = { id: 1, matchId: 3, setNumber: 1, firstServer: "home" };
-    const set2: MatchSet = { id: 2, matchId: 3, setNumber: 2, firstServer: "home" };
+    const set1: MatchSet = { id: "1", matchId: 3, setNumber: 1, firstServer: "home" };
+    const set2: MatchSet = { id: "2", matchId: 3, setNumber: 2, firstServer: "home" };
     // 第 3 局：按了「下一局」但還沒選先發方（firstServer=null、沒有任何 rally）。
-    const set3: MatchSet = { id: 3, matchId: 3, setNumber: 3, firstServer: null };
-    const rally = (setId: number, id: number): Rally => ({
+    const set3: MatchSet = { id: "3", matchId: 3, setNumber: 3, firstServer: null };
+    const rally = (setId: string, id: string): Rally => ({
       id,
       setId,
       rallyNumber: 1,
@@ -487,7 +505,7 @@ describe("reconstructRecording", () => {
 
     const state = reconstructRecording(
       [set1, set2, set3],
-      [[rally(1, 100)], [rally(2, 200)], []],
+      [[rally("1", "100")], [rally("2", "200")], []],
       [],
       [],
       [],
@@ -500,12 +518,12 @@ describe("reconstructRecording", () => {
   });
 
   it("attaches events to the right rallies across multiple sets", () => {
-    const set1: MatchSet = { id: 1, matchId: 3, setNumber: 1, firstServer: "home" };
-    const set2: MatchSet = { id: 2, matchId: 3, setNumber: 2, firstServer: "home" };
+    const set1: MatchSet = { id: "1", matchId: 3, setNumber: 1, firstServer: "home" };
+    const set2: MatchSet = { id: "2", matchId: 3, setNumber: 2, firstServer: "home" };
     const set1Rallies: Rally[] = [
       {
-        id: 100,
-        setId: 1,
+        id: "100",
+        setId: "1",
         rallyNumber: 1,
         homeScore: 0,
         awayScore: 0,
@@ -516,8 +534,8 @@ describe("reconstructRecording", () => {
     ];
     const set2Rallies: Rally[] = [
       {
-        id: 200,
-        setId: 2,
+        id: "200",
+        setId: "2",
         rallyNumber: 1,
         homeScore: 0,
         awayScore: 0,
@@ -527,8 +545,8 @@ describe("reconstructRecording", () => {
       },
     ];
     const events: MatchEvent[] = [
-      makeEvent({ rallyId: 100, side: "home", playerId: "5", action: "serve" }),
-      makeEvent({ rallyId: 200, side: "home", playerId: "9", action: "attack" }),
+      makeEvent({ rallyId: "100", side: "home", playerId: "5", action: "serve" }),
+      makeEvent({ rallyId: "200", side: "home", playerId: "9", action: "attack" }),
     ];
 
     const state = reconstructRecording([set1, set2], [set1Rallies, set2Rallies], events, []);
@@ -544,12 +562,12 @@ describe("reconstructRecording", () => {
   });
 
   it("rebuilds subCountsHistory per completed set and regularSubs for the in-progress set", () => {
-    const set1: MatchSet = { id: 1, matchId: 3, setNumber: 1, firstServer: "home" };
-    const set2: MatchSet = { id: 2, matchId: 3, setNumber: 2, firstServer: "home" };
+    const set1: MatchSet = { id: "1", matchId: 3, setNumber: 1, firstServer: "home" };
+    const set2: MatchSet = { id: "2", matchId: 3, setNumber: 2, firstServer: "home" };
     const set1Rallies: Rally[] = [
       {
-        id: 100,
-        setId: 1,
+        id: "100",
+        setId: "1",
         rallyNumber: 1,
         homeScore: 0,
         awayScore: 0,
@@ -560,8 +578,8 @@ describe("reconstructRecording", () => {
     ];
     const set2Rallies: Rally[] = [
       {
-        id: 200,
-        setId: 2,
+        id: "200",
+        setId: "2",
         rallyNumber: 1,
         homeScore: 0,
         awayScore: 0,
@@ -571,8 +589,8 @@ describe("reconstructRecording", () => {
       },
     ];
     const subs = [
-      makeSub({ setId: 1, playerOutId: "1", playerInId: "2", homeScore: 0, awayScore: 0 }),
-      makeSub({ setId: 2, playerOutId: "3", playerInId: "4", homeScore: 1, awayScore: 0 }),
+      makeSub({ setId: "1", playerOutId: "1", playerInId: "2", homeScore: 0, awayScore: 0 }),
+      makeSub({ setId: "2", playerOutId: "3", playerInId: "4", homeScore: 1, awayScore: 0 }),
     ];
 
     const state = reconstructRecording([set1, set2], [set1Rallies, set2Rallies], [], subs);
@@ -586,13 +604,13 @@ describe("reconstructRecording", () => {
   // firstServer=null 的 set row。重建時它是最後一局（進行中），必須還原成「這局由誰先發球？」
   // 的空狀態——而不是退回顯示上一局（那正是 #63 修好前的錯誤行為）。
   it("rebuilds a trailing firstServer=null set as an empty in-progress set (issue #63)", () => {
-    const set1: MatchSet = { id: 1, matchId: 3, setNumber: 1, firstServer: "home" };
+    const set1: MatchSet = { id: "1", matchId: 3, setNumber: 1, firstServer: "home" };
     // 剛按下一局建出來的空局：firstServer 還沒選，是 null，底下一定沒有任何 rally。
-    const set2: MatchSet = { id: 2, matchId: 3, setNumber: 2, firstServer: null };
+    const set2: MatchSet = { id: "2", matchId: 3, setNumber: 2, firstServer: null };
     const set1Rallies: Rally[] = [
       {
-        id: 100,
-        setId: 1,
+        id: "100",
+        setId: "1",
         rallyNumber: 1,
         homeScore: 0,
         awayScore: 0,
@@ -601,8 +619,8 @@ describe("reconstructRecording", () => {
         winner: "home",
       },
       {
-        id: 101,
-        setId: 1,
+        id: "101",
+        setId: "1",
         rallyNumber: 2,
         homeScore: 1,
         awayScore: 0,
@@ -625,17 +643,17 @@ describe("reconstructRecording", () => {
     expect(state.currentSet.ourScore).toBe(0);
     expect(state.currentSet.opponentScore).toBe(0);
     expect(state.currentSet.history).toEqual([]);
-    expect(state.currentSet.serverId).toBe(2);
+    expect(state.currentSet.serverId).toBe("2");
   });
 
   // issue #115：reload 後把每一局的先發從後端 lineups 讀回來，計分表才不會又退回去讀
   // （可能被別場/存檔污染的）全域 store。
   it("seeds the current set's lineup from the lineups list", () => {
-    const set1: MatchSet = { id: 1, matchId: 3, setNumber: 1, firstServer: "home" };
+    const set1: MatchSet = { id: "1", matchId: 3, setNumber: 1, firstServer: "home" };
     const set1Rallies: Rally[] = [
       {
-        id: 100,
-        setId: 1,
+        id: "100",
+        setId: "1",
         rallyNumber: 1,
         homeScore: 0,
         awayScore: 0,
@@ -646,8 +664,8 @@ describe("reconstructRecording", () => {
     ];
     const lineups: Lineup[] = [
       {
-        id: 1,
-        setId: 1,
+        id: 1, // Lineup.id 是 DB serial 整數（不是 uuid），跟其他表不同，維持 number
+        setId: "1",
         zone1PlayerId: "11",
         zone2PlayerId: "12",
         zone3PlayerId: "13",
@@ -665,12 +683,12 @@ describe("reconstructRecording", () => {
     // 先發每局可不同：剛按下一局的空局（set2, firstServer=null）還沒寫自己的 lineup，就給 null
     // ——畫面停在「這局誰先發球」、還不需要顯示球場，等教練選先發方時才擷取這一局的新先發。
     // 不沿用 set1 的先發，才能支援逐局換陣。
-    const set1: MatchSet = { id: 1, matchId: 3, setNumber: 1, firstServer: "home" };
-    const set2: MatchSet = { id: 2, matchId: 3, setNumber: 2, firstServer: null };
+    const set1: MatchSet = { id: "1", matchId: 3, setNumber: 1, firstServer: "home" };
+    const set2: MatchSet = { id: "2", matchId: 3, setNumber: 2, firstServer: null };
     const set1Rallies: Rally[] = [
       {
-        id: 100,
-        setId: 1,
+        id: "100",
+        setId: "1",
         rallyNumber: 1,
         homeScore: 0,
         awayScore: 0,
@@ -682,7 +700,7 @@ describe("reconstructRecording", () => {
     const lineups: Lineup[] = [
       {
         id: 1,
-        setId: 1,
+        setId: "1",
         zone1PlayerId: "11",
         zone2PlayerId: "12",
         zone3PlayerId: "13",
@@ -699,12 +717,12 @@ describe("reconstructRecording", () => {
 
   it("reads the in-progress set's own lineup, independent of earlier sets (per-set lineup)", () => {
     // set2 進行中，且有自己的先發（跟 set1 不同人）——要讀回 set2 自己那一份，不是 set1 的。
-    const set1: MatchSet = { id: 1, matchId: 3, setNumber: 1, firstServer: "home" };
-    const set2: MatchSet = { id: 2, matchId: 3, setNumber: 2, firstServer: "home" };
+    const set1: MatchSet = { id: "1", matchId: 3, setNumber: 1, firstServer: "home" };
+    const set2: MatchSet = { id: "2", matchId: 3, setNumber: 2, firstServer: "home" };
     const set1Rallies: Rally[] = [
       {
-        id: 100,
-        setId: 1,
+        id: "100",
+        setId: "1",
         rallyNumber: 1,
         homeScore: 0,
         awayScore: 0,
@@ -715,8 +733,8 @@ describe("reconstructRecording", () => {
     ];
     const set2Rallies: Rally[] = [
       {
-        id: 200,
-        setId: 2,
+        id: "200",
+        setId: "2",
         rallyNumber: 1,
         homeScore: 0,
         awayScore: 0,
@@ -728,7 +746,7 @@ describe("reconstructRecording", () => {
     const lineups: Lineup[] = [
       {
         id: 1,
-        setId: 1,
+        setId: "1",
         zone1PlayerId: "11",
         zone2PlayerId: "12",
         zone3PlayerId: "13",
@@ -738,7 +756,7 @@ describe("reconstructRecording", () => {
       },
       {
         id: 2,
-        setId: 2,
+        setId: "2",
         zone1PlayerId: "21",
         zone2PlayerId: "22",
         zone3PlayerId: "23",
@@ -753,11 +771,11 @@ describe("reconstructRecording", () => {
   });
 
   it("leaves lineup null when no lineups are provided", () => {
-    const set1: MatchSet = { id: 1, matchId: 3, setNumber: 1, firstServer: "home" };
+    const set1: MatchSet = { id: "1", matchId: 3, setNumber: 1, firstServer: "home" };
     const set1Rallies: Rally[] = [
       {
-        id: 100,
-        setId: 1,
+        id: "100",
+        setId: "1",
         rallyNumber: 1,
         homeScore: 0,
         awayScore: 0,
@@ -786,7 +804,7 @@ describe("lineup snapshot mapping", () => {
     });
     const row: Lineup = {
       id: 9,
-      setId: 2,
+      setId: "2",
       zone1PlayerId: "11",
       zone2PlayerId: "12",
       zone3PlayerId: "13",
@@ -887,10 +905,13 @@ describe("timeout mapping", () => {
   });
 
   it("reconstructs timeouts back to front-end side, preserving order (no dedup)", () => {
+    // seq 是伺服器插入順序流水號（同上方 makeSub 的註解），這裡照陣列順序遞增給值，
+    // 湊出「這幾筆本來就是照這個順序插入」的合理假資料，不影響這個測試本身要驗的
+    // 「reconstructTimeouts 不對這份清單做任何 dedup，原樣照順序轉換」這件事。
     const rows: Timeout[] = [
-      { id: 1, setId: 7, homeScore: 4, awayScore: 2, side: "home" },
-      { id: 2, setId: 7, homeScore: 4, awayScore: 8, side: "away" },
-      { id: 3, setId: 7, homeScore: 20, awayScore: 15, side: "home" },
+      { id: "1", setId: "7", homeScore: 4, awayScore: 2, side: "home", seq: 1 },
+      { id: "2", setId: "7", homeScore: 4, awayScore: 8, side: "away", seq: 2 },
+      { id: "3", setId: "7", homeScore: 20, awayScore: 15, side: "home", seq: 3 },
     ];
     expect(reconstructTimeouts(rows)).toEqual([
       { side: "us" },
