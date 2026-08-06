@@ -8,6 +8,12 @@ import reactHooks from "eslint-plugin-react-hooks";
 import globals from "globals";
 import eslintConfigPrettier from "eslint-config-prettier";
 
+// issue #310 那條字級規則要用兩個 selector 攔同一件事（見下方說明），兩邊的錯誤訊息
+// 必須一字不差——如果各寫一份，之後改訊息很容易只改到一邊，同一個錯誤就會依「寫在
+// 純字串還是模板字串裡」給出不同指引。抽成常數讓「同一件事只有一份真相」。
+const ARBITRARY_FONT_SIZE_MESSAGE =
+  "請改用 index.css `@theme` 裡的語意字級 token（text-micro / text-caption / text-action / text-panel-title / text-marker / text-marker-xs）。新開一個 text-[Npx] 等於偷偷長出第 17 種字級——這正是 #310 要擋掉的事。如果真的需要新的級距，先在 `@theme` 加 token 並更新 docs/design-spec.md 第 3 節。";
+
 export default tseslint.config(
   {
     // Skip build output and generated code (lib/api-client-react + lib/api-zod
@@ -126,13 +132,11 @@ export default tseslint.config(
         "error",
         {
           selector: "Literal[value=/text-\\[[0-9.]+px\\]/]",
-          message:
-            "請改用 index.css `@theme` 裡的語意字級 token（text-micro / text-caption / text-action / text-panel-title / text-marker / text-marker-xs）。新開一個 text-[Npx] 等於偷偷長出第 17 種字級——這正是 #310 要擋掉的事。如果真的需要新的級距，先在 `@theme` 加 token 並更新 docs/design-spec.md 第 3 節。",
+          message: ARBITRARY_FONT_SIZE_MESSAGE,
         },
         {
           selector: "TemplateElement[value.raw=/text-\\[[0-9.]+px\\]/]",
-          message:
-            "請改用 index.css `@theme` 裡的語意字級 token（text-micro / text-caption / text-action / text-panel-title / text-marker / text-marker-xs）。新開一個 text-[Npx] 等於偷偷長出第 17 種字級——這正是 #310 要擋掉的事。如果真的需要新的級距，先在 `@theme` 加 token 並更新 docs/design-spec.md 第 3 節。",
+          message: ARBITRARY_FONT_SIZE_MESSAGE,
         },
       ],
     },
