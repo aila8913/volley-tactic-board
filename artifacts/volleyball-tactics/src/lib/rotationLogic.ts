@@ -278,6 +278,72 @@ export function placeLiberoInRotation(
   };
 }
 
+// ── #231 PR3 的推導層：從「一份先發 + L 站哪格」現算出某一輪的座標 ────────────────
+//
+// 這兩支是 PR3 換表示法的地基。背景：輪轉表 store 目前把「六輪各自的座標陣列」
+// （RotationPositions[]）當成儲存的真相，但那六輪裡真正帶資訊量的只有第 0 輪的六個人 +
+// 自由球員站哪個後排格——其餘 5 輪都是 rotateZone(z, i) 的純函數輸出，liberoReplacement
+// （被 L 蓋住的人）同樣可以從「那一輪誰站在 L 那格」現算出來。
+//
+// 「能推導的東西就不要存」是 docs/event-grammar-spec.md 已經用過的原則：同一件事存了兩份，
+// 就一定有「兩份不同步」這種 bug 的可能；只存一份、其餘現算，那類 bug 從型別上就不存在。
+// 這裡先把「現算」那一半寫成純函式並測起來（PR3a），下一步才把 store 的儲存形狀換掉（PR3b）。
+
+// 把某一輪的先發快照展開成該輪實際站位，並套上自由球員替換。
+//
+// liberoZone 是「這一輪 L 站在哪個號位」（1/5/6），null＝這一輪沒派 L。注意它跟 lineup 的
+// key 不是同一個基準：lineup 的 key 是**起始號位**（第 0 輪站哪），會跟著 rotation 換算；
+// liberoZone 是**當下那一輪的實際號位**，因為自由球員不參與輪轉（規則上他是替換上場的，
+// 不佔輪轉序），每一輪各自記各自的。
+//
+// 回傳型別刻意仍是 RotationPositions（positions + liberoReplacement），這樣呼叫端（Court.tsx
+// 畫球場、擷取戰術快照）完全不用改——對它們來說「這一輪長什麼樣」的答案格式沒變，只是從
+// 「store 裡撈出來的」變成「現場算出來的」。
+export function deriveRotation(
+  lineup: LineupSnapshot,
+  liberoId: string | null,
+  liberoZone: number | null,
+  rotation: number,
+): RotationPositions {
+  const basePositions = lineupToPositions(lineup, rotation);
+  if (liberoId === null || liberoZone === null) {
+    return { positions: basePositions, liberoReplacement: null };
+  }
+
+  // 「L 蓋住了誰」＝這一輪輪轉之後，誰剛好落在 liberoZone 那一格。舊模型是把這個人另外
+  // 存進 liberoReplacement（存了第二份），新模型直接算——所以「被蓋住的人」永遠跟先發那
+  // 一份對得起來，不可能出現「lineup 說是 A、liberoReplacement 說是 B」的不同步。
+  const replaced = basePositions.find((p) => findNearestZone(p.x, p.y) === liberoZone) ?? null;
+  const coords = getZoneCoords(liberoZone);
+  return {
+    positions: [
+      ...basePositions.filter((p) => findNearestZone(p.x, p.y) !== liberoZone),
+      { playerId: liberoId, x: coords.x, y: coords.y },
+    ],
+    liberoReplacement: replaced ? { liberoId, replacedPosition: replaced } : null,
+  };
+}
+
+// 把先發快照裡「已經不在名單上的球員」剔除（幽靈站位清理，issue #35）。
+//
+// 舊模型要在六輪座標陣列裡逐輪 filter，還要另外檢查 liberoReplacement 裡有沒有卡到人；
+// 新模型只有一份 lineup，掃一次就完事——這就是「單一表示法」省下來的東西。
+//
+// 沒有任何人被剔除時**回傳原本那個物件參照**，不是內容相同的新物件。這不是效能微調而是
+// 正確性：setRoster 會被 TacticsBoard 的 effect 反覆呼叫，若每次都換新參照，訂閱 lineup 的
+// 元件就會重繪 → effect 再呼叫 setRoster → 無限迴圈（Maximum update depth exceeded，
+// issue #69→#70 踩過）。這條規則有測試用 toBe 釘住。
+export function filterLineupToRoster(
+  lineup: LineupSnapshot,
+  roster: MatchPlayer[],
+): LineupSnapshot {
+  const validIds = new Set(roster.map((p) => p.id));
+  const entries = Object.entries(lineup);
+  const kept = entries.filter(([, playerId]) => validIds.has(playerId));
+  if (kept.length === entries.length) return lineup;
+  return Object.fromEntries(kept.map(([zone, playerId]) => [Number(zone), playerId]));
+}
+
 // 球員從球員設定拖到球場上、或在場上重新拖曳時，放開滑鼠的座標不會剛好落在 6 個
 // 格子的正中心，所以要找「離哪個格子最近」來吸附。x/y 跟 zoneCoords 一樣是 0~1 normalized。
 export function findNearestZone(x: number, y: number): number {
