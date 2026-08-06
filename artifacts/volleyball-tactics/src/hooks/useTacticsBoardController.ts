@@ -10,6 +10,7 @@ import {
 import { useTacticsBoard, isSessionDirty, DISCARD_MSG } from "./useTacticsBoard";
 import { useRotationTable } from "./useRotationTable";
 import { captureFromRotation } from "../lib/courtSnapshot";
+import { deriveRotation } from "../lib/rotationLogic";
 import { useToast } from "@/hooks/use-toast";
 import type { CourtSnapshot } from "../types/courtSnapshot";
 
@@ -131,7 +132,10 @@ export function useTacticsBoardController(matchId: string | undefined) {
   const captureCurrentFromRotation = (): CourtSnapshot => {
     const rt = useRotationTable.getState().dataByMatch[matchId ?? ""];
     const r = rt?.currentRotation ?? 0;
-    const positions = rt?.rotations[r]?.positions ?? [];
+    // 這一輪的座標改用 deriveRotation 現算（#231 PR3：store 不再存六輪座標）。
+    const positions = rt
+      ? deriveRotation(rt.lineup, rt.startingLiberoId, rt.liberoZones[r] ?? null, r).positions
+      : [];
     const roster = rt?.roster ?? [];
     return captureFromRotation(positions, roster, { matchId: matchId ?? "", rotation: r });
   };

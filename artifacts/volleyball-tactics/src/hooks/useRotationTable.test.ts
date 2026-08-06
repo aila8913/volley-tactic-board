@@ -1,26 +1,26 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { useRotationTable } from "./useRotationTable";
-import { getZoneCoords, BACK_ROW_ZONES } from "../lib/rotationLogic";
+import { getZoneCoords, BACK_ROW_ZONES, deriveRotation } from "../lib/rotationLogic";
 import type { MatchPlayer } from "../types/match";
 import type { LineupSnapshot } from "../types/scoresheet";
 
-// ── 這份是什麼、為什麼現在寫（issue #231 PR1）──────────────────────────────────
+// ── 這份是什麼、為什麼長這樣（issue #231 PR1 建立、PR3 改寫）─────────────────────
 //
-// `useRotationTable.ts`（輪轉表 store）目前零測試，卻放著整個 app 最容易寫錯的領域邏輯：
-// 交換 vs 擠位、六輪傳播公式、自由球員替補/還原、幽靈站位清理……相較之下 lib/ 底下的純函式
-// 幾乎都有測試，等於「安全的部分被測到，危險的部分沒被測到」。
+// `useRotationTable.ts`（輪轉表 store）放著整個 app 最容易寫錯的領域邏輯：交換 vs 擠位、
+// 六輪傳播公式、自由球員替補/還原、幽靈站位清理。這份是它的 characterization test
+// （特徵化測試）：釘住「使用者觀察得到的行為」，好在重構時分辨「不小心改了行為」跟
+// 「原本就這樣」。
 //
-// 這份測試檔是 characterization test（特徵化測試）：只釘住「現在程式碼實際的行為」，
-// 不判斷這個行為對不對。之所以要先寫這種測試，是因為接下來兩個 PR 要動這份邏輯本身：
-//   - PR2 會把這裡面的座標運算（交換/擠位/六輪傳播）抽成 lib/ 底下的純函式；
-//   - PR3 會把 store 內部的資料表示法從 RotationPositions[]（六輪座標陣列）
-//     整個換成 LineupSnapshot（號位 → 球員 id）。
-// 這兩個都是「該重構」——重構的定義是「外部行為不變，只換內部實作」。如果沒有一份先釘住
-// 「現在的行為長什麼樣」的測試，就沒辦法區分「重構後的失敗」是「不小心改了行為」還是
-// 「原本就會這樣」。所以斷言全部打在 store 的公開 action + 使用者觀察得到的 state 語意上
-// （場上誰在哪個號位、liberoReplacement 記了誰、rotations 陣列的參照有沒有變），
-// 刻意不斷言「內部演算法怎麼算的」，這樣 PR2/PR3 換掉內部實作之後，這份測試應該要原封不動
-// 照樣全綠——如果它跟著實作細節一起垮，代表測試寫得不夠「行為導向」，等於白寫。
+// PR3 動了 store 的**內部儲存形狀**（六輪座標陣列 → 一份 LineupSnapshot + L 各輪的號位），
+// 所以這份測試跟著改了一件事、也只改了這件事：**怎麼把「這一輪誰站哪」讀出來**。
+// 以前是 `dataByMatch[A].rotations[0].positions`（直接撈存好的），現在是
+// `rotationOf(A, 0).positions`（用 deriveRotation 現算）。斷言本身——誰在哪個號位、有沒有
+// 少人、被 L 蓋住的是誰——幾乎逐字保留，因為那些才是行為。
+//
+// 有三條是真的改了行為，各自在原地標了「⚠️ 行為變更」並寫了理由：
+//   1. 一般球員拖到 L 站著的格子（原本會疊兩個人，現在只有一個）—— bug 修掉了
+//   2. 「重置站位」從只清一輪變成清全部
+//   3. setLineupFromSnapshot 不再需要「展開成六輪」
 
 // 一個最小的 MatchPlayer（跟 useTacticsBoard.test.ts 的 player() 同款寫法）。
 // personId 給 null——這裡測的是輪轉表的站位邏輯，不看跨場身分對應。
@@ -37,6 +37,15 @@ const B = "match-B";
 
 const rt = () => useRotationTable.getState();
 
+// 「這一輪誰站哪」——store 現在只存先發 + L 的號位，畫面上看到的站位是現算的，所以測試也
+// 走同一條推導路徑來觀察。這正是這份測試該有的視角：使用者看得到的是球場上的圈圈，不是
+// store 裡的欄位長相。省略 rotation 參數時看目前輪次。
+const rotationOf = (matchId: string, rotation?: number) => {
+  const m = rt().dataByMatch[matchId];
+  const r = rotation ?? m.currentRotation;
+  return deriveRotation(m.lineup, m.startingLiberoId, m.liberoZones[r] ?? null, r);
+};
+
 // store 是 module 級單例，每個 it() 之間會共用同一份記憶體，不重設的話上一個測試排的站位
 // 會滲進下一個測試。這裡選擇直接重設 dataByMatch 為空物件（而不是逐一呼叫 resetAll(A)）——
 // 因為好幾個測試要驗證「per-match 分片互不污染」（見最後一個 describe），乾脆一次把所有
@@ -49,8 +58,8 @@ describe("placePlayerOnCourt — 交換 vs 擠位（#231 清單 1）", () => {
   // 這段在測「拖到一個已經有人的格子」時，兩條分支選錯一條會怎樣：
   //   - 兩個都在場上的人互拖 → 應該是互換（誰也沒被踢出場）
   //   - 板凳的人拖去佔別人格子 → 應該是擠位（原本站那格的人直接離場，不會被安置到別的格子）
-  // 這兩條路徑共用同一段程式碼（sourceZone !== null 是不是 true 決定分岔），寫錯很容易讓
-  // 「擠位」誤觸發成「互換」，或反過來把互換誤判成擠位、憑空少一個人。
+  // 這兩條路徑共用同一段程式碼（這個人本來在不在場上決定分岔），寫錯很容易讓「擠位」誤觸發
+  // 成「互換」，或反過來把互換誤判成擠位、憑空少一個人。
 
   it("兩個都在場上的球員互拖 → 互換位置，場上仍是原班 6 人", () => {
     rt().setRoster(A, [player("p1"), player("p2")]);
@@ -60,7 +69,7 @@ describe("placePlayerOnCourt — 交換 vs 擠位（#231 清單 1）", () => {
     // p1 拖去 p2 的格子（2 號位）
     rt().placePlayerOnCourt(A, "p1", 2);
 
-    const positions = rt().dataByMatch[A].rotations[0].positions;
+    const positions = rotationOf(A, 0).positions;
     const byId = new Map(positions.map((p) => [p.playerId, p]));
     expect(positions).toHaveLength(2); // 互換不會少人也不會多人
     expect(byId.get("p1")).toEqual({ playerId: "p1", ...getZoneCoords(2) });
@@ -75,7 +84,7 @@ describe("placePlayerOnCourt — 交換 vs 擠位（#231 清單 1）", () => {
     // p3 還在板凳（沒上過場），直接拖去 p2 的格子（2 號位）
     rt().placePlayerOnCourt(A, "p3", 2);
 
-    const positions = rt().dataByMatch[A].rotations[0].positions;
+    const positions = rotationOf(A, 0).positions;
     const ids = positions.map((p) => p.playerId);
     expect(positions).toHaveLength(2); // 擠位：場上人數不變（p2 出場、p3 入場），不是 3 人
     expect(ids).toContain("p3");
@@ -93,44 +102,46 @@ describe("placePlayerOnCourt — 交換 vs 擠位（#231 清單 1）", () => {
 
     rt().placePlayerOnCourt(A, "p1", 1); // 拖回自己原本的格子
 
-    // 程式碼在 sourceZone === zone 時直接 `return m`（原封不動的舊物件），沒有 return 新物件，
-    // 所以連這一場的分片本身都是同一個參照，用 toBe 才驗得出「真的什麼都沒做」。
+    // 程式碼在「這一格站的已經是他」時直接 `return m`（原封不動的舊物件），沒有 return
+    // 新物件，所以連這一場的分片本身都是同一個參照，用 toBe 才驗得出「真的什麼都沒做」。
     expect(rt().dataByMatch[A]).toBe(before);
   });
 });
 
 describe("六輪傳播公式（#231 清單 2）：排好一輪，其他 5 輪自動推算", () => {
-  // 教練只需要排「目前這一輪」的站位，其他 5 輪要照 1→6→5→4→3→2 逆時針的輪轉規則自動算出來
-  // （lib/rotationLogic.ts 的 shiftSequence + rotateZone）。這條公式如果被 PR2 抽出去時算錯方向
-  // 或算錯輪次差，畫面上其他 5 輪的站位會整組錯掉但不容易一眼看出來（座標仍在球場範圍內，
-  // 只是站錯號位），所以特別需要釘住幾個具體的號位換算數字。
+  // 教練只需要排「目前這一輪」的站位，其他 5 輪要照 1→6→5→4→3→2 逆時針的輪轉規則算出來
+  // （lib/rotationLogic.ts 的 shiftSequence + rotateZone）。這條公式如果算錯方向或算錯輪次差，
+  // 畫面上其他 5 輪的站位會整組錯掉但不容易一眼看出來（座標仍在球場範圍內，只是站錯號位），
+  // 所以特別需要釘住幾個具體的號位換算數字。
+  //
+  // PR3 之後「其他 5 輪」不再是被寫進 state 的資料，而是 deriveRotation 現算的結果——
+  // 但對使用者來說沒有差別（畫面一樣），所以這兩條斷言原封不動。
 
   it("在輪次 0（目前輪次預設值）排 1 號位，輪次 1 的座標要等於 6 號位（逆時針轉一格）", () => {
     rt().setRoster(A, [player("p1")]);
     rt().placePlayerOnCourt(A, "p1", 1); // 不傳 referenceRotation，用目前輪次（預設 0）
 
-    const rotation1Pos = rt().dataByMatch[A].rotations[1].positions[0];
-    expect(rotation1Pos).toEqual({ playerId: "p1", ...getZoneCoords(6) });
+    expect(rotationOf(A, 1).positions[0]).toEqual({ playerId: "p1", ...getZoneCoords(6) });
   });
 
   it("以輪次 2 為基準排位，回推輪次 0 也要照公式推算正確（referenceRotation 參數）", () => {
     rt().setRoster(A, [player("p1")]);
-    // 站在「輪次 2」時是 1 號位 → 回推輪次 0（往前推 2 格，i - r = 0 - 2 = -2）：
+    // 站在「輪次 2」時是 1 號位 → 回推輪次 0（往前推 2 格）：
     // shiftSequence = [1,6,5,4,3,2]，1 的 index 是 0，(0-2+6)%6=4，shiftSequence[4]=3 號位。
     rt().placePlayerOnCourt(A, "p1", 1, 2);
 
-    const rotation0Pos = rt().dataByMatch[A].rotations[0].positions[0];
-    const rotation2Pos = rt().dataByMatch[A].rotations[2].positions[0];
-    expect(rotation2Pos).toEqual({ playerId: "p1", ...getZoneCoords(1) }); // 基準輪次本身維持 1 號位
-    expect(rotation0Pos).toEqual({ playerId: "p1", ...getZoneCoords(3) });
+    expect(rotationOf(A, 2).positions[0]).toEqual({ playerId: "p1", ...getZoneCoords(1) }); // 基準輪次本身維持 1 號位
+    expect(rotationOf(A, 0).positions[0]).toEqual({ playerId: "p1", ...getZoneCoords(3) });
   });
 });
 
 describe("自由球員上場/替補/還原（#231 清單 3）", () => {
   // 自由球員（L）跟一般球員的站位邏輯完全獨立：L 不參與六輪傳播，每輪各自記錄；同時間只能有
-  // 一位 L 在場上，上場時會「頂替」目標格原本站的人，該被頂替的人存進 liberoReplacement、
-  // 不留在 positions 裡（Court.tsx 找不到就不會畫出兩個人疊在同一格）。這一段是 issue #14
-  // 兩個 L 同時出現的 bug 根源，最需要釘死。
+  // 一位 L 在場上，上場時會「頂替」目標格原本站的人，該被頂替的人不會留在 positions 裡
+  //（Court.tsx 才不會畫出兩個人疊在同一格）。這一段是 issue #14 兩個 L 同時出現的 bug 根源。
+  //
+  // PR3 之後「被頂替的是誰」不再是存起來的欄位（liberoReplacement），而是 deriveRotation
+  // 從先發現算的結果——所以不可能再出現「先發說是 A、替補紀錄說是 B」的不同步。斷言本身不變。
 
   function setupSixOnCourt() {
     const roster = [
@@ -149,11 +160,11 @@ describe("自由球員上場/替補/還原（#231 清單 3）", () => {
     }
   }
 
-  it("L 上場頂替後排某格：那格原本的人進 liberoReplacement，不再留在 positions 裡", () => {
+  it("L 上場頂替後排某格：那格原本的人被蓋住，不再出現在場上位置清單裡", () => {
     setupSixOnCourt();
     rt().placePlayerOnCourt(A, "l1", 1); // 1 號位是後排，p1 原本站這裡
 
-    const rot0 = rt().dataByMatch[A].rotations[0];
+    const rot0 = rotationOf(A, 0);
     const ids = rot0.positions.map((p) => p.playerId);
     expect(ids).toContain("l1");
     expect(ids).not.toContain("p1"); // p1 被頂替，不在場上位置清單裡
@@ -164,12 +175,12 @@ describe("自由球員上場/替補/還原（#231 清單 3）", () => {
     });
   });
 
-  it("換另一位 L 上場：前一位的被替換者要先被還原，場上不會同時出現兩個 L、也不會少人", () => {
+  it("換另一位 L 上場：場上不會同時出現兩個 L、也不會少人", () => {
     setupSixOnCourt();
     rt().placePlayerOnCourt(A, "l1", 1); // l1 先頂替 p1
     rt().placePlayerOnCourt(A, "l2", 1); // l2 換上同一格
 
-    const rot0 = rt().dataByMatch[A].rotations[0];
+    const rot0 = rotationOf(A, 0);
     const ids = rot0.positions.map((p) => p.playerId);
     expect(ids).not.toContain("l1"); // l1 已經被換下場
     expect(ids).toContain("l2");
@@ -177,22 +188,23 @@ describe("自由球員上場/替補/還原（#231 清單 3）", () => {
     expect(rot0.positions).toHaveLength(6); // 全程都只有 6 人在場，不會多也不會少
     expect(rot0.liberoReplacement).toEqual({
       liberoId: "l2",
-      // 關鍵：replacedPosition 記的是 p1（先還原 l1 頂替的人，再讓 l2 頂替他），
-      // 不是誤記成「l1」被頂替——那樣會把一個自由球員記成被替換者，場上邏輯全亂。
+      // 關鍵：被替換的是 p1（先發裡站 1 號位的人），不是誤記成前一位自由球員 l1——
+      // 舊模型要靠「先還原 l1 頂替的人、再讓 l2 頂替他」這串手續才做得對，新模型裡
+      // l1 從來就沒進過先發，所以這件事不可能算錯。
       replacedPosition: { playerId: "p1", ...getZoneCoords(1) },
     });
   });
 
-  it("removePlayerFromCourt(L)：只清當前輪次，被替換者回到 positions，liberoReplacement 變 null", () => {
+  it("removePlayerFromCourt(L)：只清當前輪次，被替換者回到場上", () => {
     setupSixOnCourt();
     rt().placePlayerOnCourt(A, "l1", 1);
 
     rt().removePlayerFromCourt(A, "l1");
 
-    const rot0 = rt().dataByMatch[A].rotations[0];
+    const rot0 = rotationOf(A, 0);
     const ids = rot0.positions.map((p) => p.playerId);
     expect(ids).not.toContain("l1");
-    expect(ids).toContain("p1"); // 被頂替的 p1 還原回場上
+    expect(ids).toContain("p1"); // 被頂替的 p1 露出來（他其實一直都在先發裡）
     expect(rot0.positions).toHaveLength(6);
     expect(rot0.liberoReplacement).toBeNull();
   });
@@ -226,22 +238,16 @@ describe("排 L 時同步 startingLiberoId（#231 清單 5 / issue #14 bug 1 的
   });
 });
 
-describe("⚠️ 已知 bug：一般球員拖到自由球員正站著的格子（釘住現況，不是釘住應然）", () => {
-  // characterization test 的定義是「描述現在的行為」，不是「描述正確的行為」——所以這一條
-  // 刻意把一個**確認過的 bug** 也釘住。理由：如果不釘，PR2 抽純函式或 PR3 換表示法時，
-  // 這個行為可能被「順手修掉」或「變成另一種錯法」，而兩者在 diff 上都看不出來。釘住之後，
-  // 行為一旦改變這條就會紅，強迫那個 PR 明講「我改了這件事」。
+describe("⚠️ 行為變更：一般球員拖到自由球員正站著的格子（PR1 釘住的 bug，PR3 修掉）", () => {
+  // PR1 這一條原本釘住的是一個**確認過的 bug**：兩個人會同時被寫進 1 號位的座標，畫面上
+  // 兩顆圈疊在一起。成因是舊的 placePlayerOnCourt 在算「目標格有沒有人」之前，會先把所有
+  // 自由球員的站位過濾掉——L 站的格子因此看起來是空的，不觸發互換也不觸發擠位。
   //
-  // bug 本身：placePlayerOnCourt 的一般球員分支在算「目標格現在有沒有人」之前，會先把所有
-  // 自由球員的站位過濾掉（見 useRotationTable.ts 的 currentPositions）。所以當 L 正站在某格
-  // 時，那格在 zoneMap 裡看起來是「空的」——一般球員拖過去不會觸發任何互換/擠位，L 也不會
-  // 被移開，兩個人就同時被寫進同一個座標，畫面上兩顆圈疊在一起。
-  //
-  // 這跟 issue #14「場上出現兩個自由球員」是同一族的病：自由球員的身分散在
-  // startingLiberoId / liberoReplacement / positions 三個地方，任何一段程式碼只看其中一兩個
-  // 就會做出跟其他段不一致的判斷。#231 PR3 把 liberoReplacement 收斂成 liberoZone 之後，
-  // 「那格有沒有人」才會只有一個答案。
-  it("目前會讓兩個人疊在同一個號位（PR3 應該讓這條變成 1，屆時請一併更新這個斷言）", () => {
+  // PR3 換掉表示法之後這個 bug 自然消失，不是「順手修了一行」：先發（lineup）裡本來就沒有
+  // 自由球員，「那格有沒有人」只剩一個答案；L 是渲染時蓋在先發上面的一層，蓋子底下站著誰
+  // 由 deriveRotation 現算。這正是 characterization test 存在的意義——行為變了，這條就會紅，
+  // 逼這個 PR 明講「我改了這件事」，而不是讓它混在 diff 裡溜過去。
+  it("1 號位只會有一個人（L 站在上面，被他蓋住的是新拖進來的 p7）", () => {
     const roster = [
       player("p1"),
       player("p2"),
@@ -256,91 +262,104 @@ describe("⚠️ 已知 bug：一般球員拖到自由球員正站著的格子�
     for (let zone = 1; zone <= 6; zone++) {
       rt().placePlayerOnCourt(A, `p${zone}`, zone);
     }
-    rt().placePlayerOnCourt(A, "l1", 1); // l1 頂替 p1，站上 1 號位
+    rt().placePlayerOnCourt(A, "l1", 1); // l1 頂替 1 號位
 
     rt().placePlayerOnCourt(A, "p7", 1); // 板凳的 p7 也被拖到 1 號位
 
+    const rot0 = rotationOf(A, 0);
     const zone1 = getZoneCoords(1);
-    const atZone1 = rt().dataByMatch[A].rotations[0].positions.filter(
-      (p) => p.x === zone1.x && p.y === zone1.y,
-    );
-    expect(atZone1.map((p) => p.playerId).sort()).toEqual(["l1", "p7"]); // ← 現況：疊了兩個人
+    const atZone1 = rot0.positions.filter((p) => p.x === zone1.x && p.y === zone1.y);
+    expect(atZone1.map((p) => p.playerId)).toEqual(["l1"]); // ← 只有一個人，不再疊圈
+    // p7 確實進了先發（他擠掉 p1），只是這一輪被 L 蓋住而已——L 一下場他就會露出來。
+    expect(rot0.liberoReplacement?.replacedPosition.playerId).toBe("p7");
+    expect(rot0.positions.map((p) => p.playerId)).not.toContain("p1"); // p1 被 p7 擠掉了
   });
 });
 
 describe("setRoster 幽靈站位清理（#231 清單 6 / issue #35）", () => {
-  it("被移出名單的一般球員，若還卡在 positions 裡會被掃掉", () => {
+  it("被移出名單的一般球員，若還卡在先發裡會被掃掉", () => {
     rt().setRoster(A, [player("p1"), player("p2")]);
     rt().placePlayerOnCourt(A, "p1", 1);
     rt().placePlayerOnCourt(A, "p2", 2);
 
     rt().setRoster(A, [player("p1")]); // p2 被移出名單
 
-    const rot0 = rt().dataByMatch[A].rotations[0];
-    expect(rot0.positions.map((p) => p.playerId)).toEqual(["p1"]);
+    expect(rotationOf(A, 0).positions.map((p) => p.playerId)).toEqual(["p1"]);
   });
 
-  it("被移出名單的球員若卡在 liberoReplacement 裡（不管是 L 本人還是被替換者），一併清掉", () => {
+  it("被 L 蓋住的人若被移出名單，替補紀錄跟著消失（不會留下指向不存在球員的殘留）", () => {
     rt().setRoster(A, [player("p1"), player("l1", "L")]);
     rt().placePlayerOnCourt(A, "p1", 1);
-    rt().placePlayerOnCourt(A, "l1", 1); // l1 頂替 p1，liberoReplacement 記著 p1
+    rt().placePlayerOnCourt(A, "l1", 1); // l1 蓋住 p1
 
-    rt().setRoster(A, [player("l1", "L")]); // p1 被移出名單（雖然人已經不在 positions 上，但還卡在 liberoReplacement 裡）
+    rt().setRoster(A, [player("l1", "L")]); // p1 被移出名單
 
-    expect(rt().dataByMatch[A].rotations[0].liberoReplacement).toBeNull();
+    // 舊模型要特地去檢查 liberoReplacement 裡有沒有卡到已刪除的球員；新模型只要 p1 從
+    // 先發被掃掉，「被蓋住的人」現算的結果自然就是 null，沒有第二個地方需要同步。
+    expect(rotationOf(A, 0).liberoReplacement).toBeNull();
+  });
+
+  it("先發 L 被移出名單時，他在各輪的站位也一併撤掉", () => {
+    rt().setRoster(A, [player("p1"), player("l1", "L")]);
+    rt().placePlayerOnCourt(A, "p1", 1);
+    rt().placePlayerOnCourt(A, "l1", 1);
+
+    rt().setRoster(A, [player("p1")]); // 名單裡沒有任何 L 了
+
+    expect(rt().dataByMatch[A].startingLiberoId).toBeNull();
+    expect(rt().dataByMatch[A].liberoZones.every((z) => z === null)).toBe(true);
+    expect(rotationOf(A, 0).positions.map((p) => p.playerId)).toEqual(["p1"]); // p1 露出來
   });
 });
 
 describe("setRoster 的 stable reference 優化（#231 清單 7，最重要的一條）", () => {
-  // 這段程式碼的長註解說得很白：「沒清到任何東西時，必須回傳原本那個 rotations 陣列參照」，
-  // 而不是每次都重新 .map() 出一份「內容相等但參照不同」的新陣列。
+  // 「沒清到任何東西時，必須回傳原本那個先發物件的參照」，而不是每次都產生一份「內容相等
+  // 但參照不同」的新物件。
   //
   // 為什麼這不是效能微調而是正確性問題：TacticsBoard 進頁的 effect 會用 match.players 呼叫
   // setRoster，而 match 每次 render 都是新物件，所以 setRoster 會被反覆呼叫。如果每次呼叫都
-  // 換掉 rotations 的參照，訂閱 rotations 的元件就會判定「這個 slice 變了」而重繪，重繪又觸發
-  // 那個 effect 再呼叫一次 setRoster——形成無限迴圈，React 會丟出
-  // "Maximum update depth exceeded"（issue #69→#70 就是踩過這個雷）。
+  // 換掉先發的參照，訂閱它的元件就會判定「這個 slice 變了」而重繪，重繪又觸發那個 effect
+  // 再呼叫一次 setRoster——形成無限迴圈，React 會丟出 "Maximum update depth exceeded"
+  //（issue #69→#70 就是踩過這個雷）。
   //
   // 所以這裡刻意用 toBe（身分比較：兩個變數是不是指向記憶體裡同一個物件）而不是 toEqual
-  // （內容比較：兩個物件長得一不一樣）。toEqual 沒辦法測出這個 bug——就算每次都重新 .map()
-  // 出一份新陣列，只要內容一樣，toEqual 照樣會過；能測出「有沒有換參照」的只有 toBe。
-  // 這正是本節唯一在乎「內部實作細節」（而不是純行為）的例外：因為這裡的「參照穩不穩定」
-  // 本身就是外部可觀察的行為（會不會觸發無限重繪），不是藏在黑盒子裡的實作細節。
+  //（內容比較）。toEqual 沒辦法測出這個 bug——就算每次都重新產生新物件，只要內容一樣照樣
+  // 會過；能測出「有沒有換參照」的只有 toBe。這正是本節唯一在乎「內部實作細節」的例外：
+  // 因為「參照穩不穩定」本身就是外部可觀察的行為（會不會觸發無限重繪）。
 
-  it("沒有任何球員被清掉時，setRoster 後的 rotations 要是原本那個陣列參照（toBe）", () => {
+  it("沒有任何球員被清掉時，setRoster 後的先發要是原本那個物件參照（toBe）", () => {
     const roster = [player("p1"), player("p2")];
     rt().setRoster(A, roster);
     rt().placePlayerOnCourt(A, "p1", 1);
-    const before = rt().dataByMatch[A].rotations;
+    const before = rt().dataByMatch[A].lineup;
 
     // 用同樣的球員名單（沒有刪任何人）再呼叫一次 setRoster——模擬 effect 被反覆觸發的情境。
     rt().setRoster(A, [player("p1"), player("p2")]);
 
-    expect(rt().dataByMatch[A].rotations).toBe(before);
+    expect(rt().dataByMatch[A].lineup).toBe(before);
   });
 
-  it("真的刪掉一個在場上的球員時，rotations 參照要換掉（跟上面那條剛好相反）", () => {
+  it("真的刪掉一個在場上的球員時，先發參照要換掉（跟上面那條剛好相反）", () => {
     const roster = [player("p1"), player("p2")];
     rt().setRoster(A, roster);
     rt().placePlayerOnCourt(A, "p1", 1);
-    const before = rt().dataByMatch[A].rotations;
+    const before = rt().dataByMatch[A].lineup;
 
     rt().setRoster(A, [player("p2")]); // p1 真的被刪了
 
-    expect(rt().dataByMatch[A].rotations).not.toBe(before);
+    expect(rt().dataByMatch[A].lineup).not.toBe(before);
   });
 });
 
 describe("removePlayerFromCourt — 一般球員 vs 自由球員（#231 清單 8）", () => {
-  it("一般球員：從全部 6 個輪次移除", () => {
+  it("一般球員：從全部 6 個輪次消失", () => {
     rt().setRoster(A, [player("p1")]);
-    rt().placePlayerOnCourt(A, "p1", 1); // 會連動寫入全部 6 輪（六輪傳播公式）
+    rt().placePlayerOnCourt(A, "p1", 1);
 
     rt().removePlayerFromCourt(A, "p1");
 
-    const rotations = rt().dataByMatch[A].rotations;
-    for (const rot of rotations) {
-      expect(rot.positions.map((p) => p.playerId)).not.toContain("p1");
+    for (let r = 0; r < 6; r++) {
+      expect(rotationOf(A, r).positions.map((p) => p.playerId)).not.toContain("p1");
     }
   });
 
@@ -356,69 +375,71 @@ describe("removePlayerFromCourt — 一般球員 vs 自由球員（#231 清單 8
     rt().setCurrentRotation(A, 0);
     rt().removePlayerFromCourt(A, "l1"); // 目前輪次是 0，只該清輪次 0
 
-    const rotations = rt().dataByMatch[A].rotations;
-    expect(rotations[0].positions.map((p) => p.playerId)).not.toContain("l1");
-    expect(rotations[1].positions.map((p) => p.playerId)).toContain("l1"); // 輪次 1 沒被動到
+    expect(rotationOf(A, 0).positions.map((p) => p.playerId)).not.toContain("l1");
+    expect(rotationOf(A, 1).positions.map((p) => p.playerId)).toContain("l1"); // 輪次 1 沒被動到
   });
 });
 
 describe("setLineupFromSnapshot（#231 清單 9）", () => {
-  it("把 LineupSnapshot 展開成全部 6 輪座標，liberoReplacement 一律清 null", () => {
+  it("先發直接就是傳進來那一份，L 各輪站位一律清空", () => {
     const lineup: LineupSnapshot = { 1: "p1", 2: "p2" };
-    // 先手動塞一個 liberoReplacement，確認 setLineupFromSnapshot 真的會把它清掉，
-    // 而不是「本來就是 null，測不出有沒有清」。
+    // 先手動塞一個 L 站位，確認 setLineupFromSnapshot 真的會把它清掉，
+    // 而不是「本來就是空的，測不出有沒有清」。
     useRotationTable.setState((state) => ({
       dataByMatch: {
         ...state.dataByMatch,
         [A]: {
           roster: [],
           currentRotation: 0,
-          startingLiberoId: null,
-          rotations: Array(6)
-            .fill(null)
-            .map(() => ({
-              positions: [],
-              liberoReplacement: {
-                liberoId: "leftover-l",
-                replacedPosition: { playerId: "leftover-p", x: 0, y: 0 },
-              },
-            })),
+          startingLiberoId: "leftover-l",
+          lineup: {},
+          liberoZones: [1, 5, null, null, null, null],
         },
       },
     }));
 
     rt().setLineupFromSnapshot(A, lineup);
 
-    const rotations = rt().dataByMatch[A].rotations;
-    expect(rotations[0].positions).toEqual(
+    // ⚠️ 行為變更（表述層面）：以前這個 action 要把號位快照「展開」成六輪座標寫進 state，
+    // 現在 store 存的本來就是同一種格式，直接放進去即可——少掉的正是那層翻譯。
+    expect(rt().dataByMatch[A].lineup).toEqual(lineup);
+    expect(rt().dataByMatch[A].liberoZones.every((z) => z === null)).toBe(true);
+
+    // 使用者看得到的結果沒變：輪次 0 照排，輪次 1 起始站 1 號位的人（p1）落在 6 號位。
+    expect(rotationOf(A, 0).positions).toEqual(
       expect.arrayContaining([
         { playerId: "p1", ...getZoneCoords(1) },
         { playerId: "p2", ...getZoneCoords(2) },
       ]),
     );
-    // 輪次 1：起始站 1 號位的人（p1）轉一輪後落在 6 號位，跟六輪傳播公式的算法一致。
-    expect(rotations[1].positions).toEqual(
+    expect(rotationOf(A, 1).positions).toEqual(
       expect.arrayContaining([{ playerId: "p1", ...getZoneCoords(6) }]),
     );
-    for (const rot of rotations) {
-      expect(rot.liberoReplacement).toBeNull();
-    }
   });
 });
 
-describe("resetCurrentRotationPositions（#231 清單 10）", () => {
-  it("只清目前輪次的站位，其他輪次不受影響", () => {
-    rt().setRoster(A, [player("p1")]);
-    rt().placePlayerOnCourt(A, "p1", 1); // 六輪傳播：全部 6 輪都會有站位
+describe("⚠️ 行為變更：resetPositions 清全部輪次（原 resetCurrentRotationPositions 只清一輪）", () => {
+  // PR1 這一條釘的是「只清目前輪次，其他輪次不受影響」。新表示法下那件事不再可表示——
+  // 先發只有一份、六輪共用，沒有「只有第 3 輪是空的」這種狀態。
+  //
+  // 這個行為其實舊版也名不副實：清掉第 3 輪之後，只要再拖任何一個人，六輪就會全部從那一輪
+  // 重新推算，被清掉的其他輪資料本來就留不住——「只清一輪」是舊表示法多存了五份副本才變得
+  // 出來的假象。所以改成誠實地清全部，按鈕的確認文案也一併改過（RotationControlsFooter）。
+  it("清掉之後六個輪次都沒有人，L 站位也一併清空", () => {
+    rt().setRoster(A, [player("p1"), player("l1", "L")]);
+    rt().placePlayerOnCourt(A, "p1", 1);
+    rt().placePlayerOnCourt(A, "l1", 5);
 
     rt().setCurrentRotation(A, 2);
-    rt().resetCurrentRotationPositions(A);
+    rt().resetPositions(A);
 
-    const rotations = rt().dataByMatch[A].rotations;
-    expect(rotations[2].positions).toEqual([]);
-    expect(rotations[2].liberoReplacement).toBeNull();
-    // 輪次 0（跟其他沒被重置的輪次）站位還在，不會被連坐清空。
-    expect(rotations[0].positions).not.toEqual([]);
+    for (let r = 0; r < 6; r++) {
+      expect(rotationOf(A, r).positions).toEqual([]);
+      expect(rotationOf(A, r).liberoReplacement).toBeNull();
+    }
+    // 名單跟目前輪次不受影響——清的是站位，不是整場重來（那是 resetAll）。
+    expect(rt().dataByMatch[A].roster).toHaveLength(2);
+    expect(rt().dataByMatch[A].currentRotation).toBe(2);
   });
 });
 
@@ -433,7 +454,7 @@ describe("per-match 分片互不污染（#231 清單 11 / issue #119）", () => 
     rt().placePlayerOnCourt(B, "p9", 6);
 
     // 兩場的站位各自獨立：B 的操作不會讓 A 的球員跑出來，A 的操作也不會混進 B。
-    expect(rt().dataByMatch[A].rotations[0].positions.map((p) => p.playerId)).toEqual(["p1"]);
-    expect(rt().dataByMatch[B].rotations[0].positions.map((p) => p.playerId)).toEqual(["p9"]);
+    expect(rotationOf(A, 0).positions.map((p) => p.playerId)).toEqual(["p1"]);
+    expect(rotationOf(B, 0).positions.map((p) => p.playerId)).toEqual(["p9"]);
   });
 });

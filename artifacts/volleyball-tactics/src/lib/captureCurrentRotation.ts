@@ -1,4 +1,5 @@
 import { useRotationTable } from "../hooks/useRotationTable";
+import { deriveRotation } from "./rotationLogic";
 import { captureFromRotation } from "./courtSnapshot";
 import type { CourtSnapshot } from "../types/courtSnapshot";
 
@@ -23,7 +24,17 @@ import type { CourtSnapshot } from "../types/courtSnapshot";
 export function captureCurrentRotation(matchId: string): CourtSnapshot {
   const data = useRotationTable.getState().dataByMatch[matchId];
   const rotation = data?.currentRotation ?? 0;
-  const positions = data?.rotations[rotation]?.positions ?? [];
+  // #231 PR3 之後 store 不再存「六輪各一份座標」，這一輪的座標要用 deriveRotation 現算。
+  // 對這裡沒有實質差別：擷取要的一直都是「按下去那一刻，這一輪誰站哪」，以前是從快取撈、
+  // 現在是當場算，算出來的東西一模一樣（deriveRotation 是純函式，同輸入必同輸出）。
+  const positions = data
+    ? deriveRotation(
+        data.lineup,
+        data.startingLiberoId,
+        data.liberoZones[rotation] ?? null,
+        rotation,
+      ).positions
+    : [];
   const roster = data?.roster ?? [];
   return captureFromRotation(positions, roster, { matchId, rotation });
 }
