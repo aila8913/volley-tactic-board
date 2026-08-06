@@ -23,8 +23,9 @@
 > 上面的 `_Last updated_` 是共用一行摘要（誰更新了什麼），保持精簡、別長成段落。
 
 \_Last updated: 2026-08-06 (aila) — 深模組盤點：收掉五份冪等寫入（`lib/insertIdempotent.ts`）與第三份
-後排裸門檻；新開 #303／#304，#232 補留言。另交付 #292（測試檔進 typecheck）＋#294（players 補
-`ORDER BY`）。\_
+後排裸門檻；新開 #303／#304／#306，#232 補留言。另交付 #292（測試檔進 typecheck）＋#294（players 補
+`ORDER BY`）＋#303（自由球員自動回位抽成 `lib/liberoRotation.ts`）。#304／#306 在 Project #4 的
+Backlog 等排期。\_
 
 \_Last updated: 2026-08-05 (aila) — #218 交付（`matches.status` + 計分頁收尾流程，ADR-0005，PR #300）；
 #287 交付（PR #297）。M3 只剩 #209；新開 #301（賽制自訂化，M5）。\_
@@ -418,11 +419,28 @@ serving≠null 但 record.lineup=null」那條路**，但真正的 reconcile 仍
   typecheck 之外，等於讓重構的安全網成為唯一沒有型別保護的地方。修法只改假資料型別，沒刪測試、
   沒加 `any`／`@ts-expect-error`。api-server 的 tsconfig 一併拿掉排除（它上個月才被加上、註解還
   引用 #292 說「兩邊都排除才一致」——那是往錯的方向對齊），CLAUDE.md 補上「測試檔會被 typecheck」
-  的約定免得有人加回去。#294：`GET /matches/:matchId/players` 補
+  的約定免得有人加回去。**修的過程本身變成 #306 的證據**：光這一次型別遷移，`scoreSheetMapping.test.ts`
+  就要手改 36 處假資料，因為每個 fixture 都是就地展開的字面物件——下次任何一個必填欄位變動都會
+  重演一次，所以開了 #306 把假資料抽成 fixture builder（Backlog，不擋任何事）。
+  #294：`GET /matches/:matchId/players` 補
   `.orderBy(number, name, id)`——**Postgres MVCC 下 `UPDATE` 是「舊版本標記失效＋heap 尾端寫新版本」**，
   所以沒有 `ORDER BY` 時任何一次 PATCH 都會把該列擠到名單最後（#221 合併時看到的「名單跳動」只是
   最容易察覺的觸發方式）。三層排序鍵是因為 `number` 沒有 unique constraint，只排 number 仍是偏序，
   補 `name`／`id`（uuid，對人無意義但唯一穩定）才是全序。其餘 15 支 route 掃過沒有第二處遺漏。
+- **#303**（自由球員自動回位抽成 `lib/liberoRotation.ts`，08-06）— 深模組盤點開出的第一張債還掉。
+  規則本體原本整段住在 `ScoreSheet.tsx` 的 `useEffect` 裡，要驗證它得先 render 元件＋模擬輪轉，
+  而這專案沒有 `@testing-library/react`（#168）——**結果最容易寫錯的那條「誰接替誰」啟發式反而是
+  零覆蓋**。抽出來的 `resolveLiberoOnRotation(state, positions)` 不需要 React（輸入是「現在誰被頂替
+  ＋上一輪的頂替目標＋這一輪六人站位」，輸出是新的頂替狀態），9 條測試把三條分支＋兩種幽靈 id
+  ＋繞完一整圈六輪釘死；元件那邊只剩「湊輸入、寫回去」。**不等 #168 就做得到**，跟
+  `assignPlayerToZone`（#120 時從 `SetLineupDialog` 抽出）是同一招。
+  兩個順帶的決定：①**前後排判定從 `courtGeometry.rowOf` 換成 `rotationLogic.isBackRowPosition`**
+  ——對這裡的輸入兩者答案完全相同（座標必定是六個號位的精確值），但語意層次不同：`rowOf` 是
+  「圓圈該不該上前排配色」的純視覺判斷、`isBackRowPosition` 是從 `BACK_ROW_ZONES` 導出的領域規則，
+  `courtGeometry.ts` 的註解本來就警告過別把兩者混為一談，而這支函式整個就是領域規則。（PR #305
+  當天才把這裡從裸門檻收斂到 `rowOf`，那一步的重點是「別再寫第三份 `y > 0.75`」，方向沒錯、
+  只是停在視覺層。）②**沒有變化時回傳原本那個物件參照**，呼叫端據此跳過兩次寫入——這是
+  PR #69→#70 那個坑的預防（effect 裡回傳新參照會多觸發一輪 render，當時演變成無限迴圈）。
 - **深模組盤點 ＋ 兩處重複收斂（08-06，PR 見 `chore/insert-idempotent-and-rowof-dedup`）** — 用
   「深模組（小介面／大實作）」的判準掃全 repo。結論：`lib/` 層普遍健康（`handler.ts`、
   `writeLog.ts`、`rotationLogic.ts`／`volleyballRules.ts` 都是好例子），問題集中在**頁面元件**與
