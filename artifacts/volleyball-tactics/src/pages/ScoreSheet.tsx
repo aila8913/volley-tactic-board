@@ -219,13 +219,11 @@ export default function ScoreSheet() {
 
     // 從計分表自己的先發快照算出「這一輪」場上 6 人的座標（不再讀全域 rotations）。
     const positions = lineupToPositions(activeLineup, currentSet.ourRotation);
-    const next = resolveLiberoOnRotation(
-      { current: libSub, previousTarget: prevLiberoRef.current },
-      positions,
-    );
-    // 沒事發生時 resolveLiberoOnRotation 回傳的是同一個物件參照，這裡直接跳過兩次寫入
-    // （少一輪 render，也避免把相同的值重新灌進 store）。
-    if (next.current === libSub && next.previousTarget === prevLiberoRef.current) return;
+    const state = { current: libSub, previousTarget: prevLiberoRef.current };
+    const next = resolveLiberoOnRotation(state, positions);
+    // 沒事發生時 resolveLiberoOnRotation 回傳的就是傳進去的那個物件，比對參照即可跳過
+    // 兩次寫入（少一輪 render，也避免把相同的值重新灌進 store）。
+    if (next === state) return;
 
     setPreviousLiberoTarget(next.previousTarget);
     setLiberoSubstitution(id, next.current);
