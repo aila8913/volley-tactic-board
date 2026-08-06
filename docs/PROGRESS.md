@@ -22,6 +22,12 @@
 > 平行 PR 就落在不同行段、git 幾乎都能自動合併，不用真的把檔案拆兩份、也保住一眼 catch-up。
 > 上面的 `_Last updated_` 是共用一行摘要（誰更新了什麼），保持精簡、別長成段落。
 
+\_Last updated: 2026-08-06 (aila) — **#231 先發單一表示法四個 PR 都寫完，但還在本機、一個都沒 push**
+（`test/231-pr1-…` → `refactor/231-pr2-…` → `-pr3a-` → `-pr3b-` → `-pr4-`，HEAD `7033e8c`）。輪轉表 store
+從「六輪座標陣列」換成「一份 `lineup` ＋ `liberoZones[6]`」，其餘現算（`deriveRotation`）。**兩處偏離
+原計畫、待 PO 確認**：L 用六格陣列而非單一 `liberoZone`；`resetCurrentRotationPositions` → `resetPositions`
+（清全部輪次）。#14 的疊圈 bug 順帶消失。**手動 QA 尚未跑**。\_
+
 \_Last updated: 2026-08-06 (aila) — 深模組盤點：收掉五份冪等寫入（`lib/insertIdempotent.ts`）與第三份
 後排裸門檻；新開 #303／#304／#306，#232 補留言。另交付 #292（測試檔進 typecheck）＋#294（players 補
 `ORDER BY`）＋#303（自由球員自動回位抽成 `lib/liberoRotation.ts`）。#304／#306 在 Project #4 的
@@ -66,6 +72,19 @@ lives in git log + the issues named).
   幽靈站位掃空先發仍由 `filterLineupToRoster` 的名單過濾擋著（`lib/rotationLogic.ts`；#231 PR3
   之前這件事由 `captureLineupFromRotations` 兼著做）。
   已在 #115 補留言註記其解耦模型作廢（多處文件曾拿它當法規引用）。
+- **輪轉表 store 的站位表示法只剩一份（#231，08-06 寫完但尚未 push／merge）。**
+  `PerMatchRotationState` 現在只存 `lineup: LineupSnapshot`（起始號位 → playerId，**0~6 人皆合法**）
+  ＋ `liberoZones: (number|null)[]`（長度 6，L 這一輪站哪個後排格）＋ `startingLiberoId`；
+  舊的 `rotations: RotationPositions[]`（六輪座標）與 `liberoReplacement`（被 L 蓋住的人）都刪了，
+  改由 `deriveRotation(lineup, liberoId, liberoZone, rotation)` 在渲染時現算。原則是
+  `docs/event-grammar-spec.md` 那條**「能推導就不存」**套到前端 store。
+  - `liberoZones` 是六格陣列**不是**單一值：L 不佔輪轉序（規則上是替換上場），所以「L 站哪格」
+    本來就無法從第 0 輪推到其他輪，是各輪獨立的真實資訊。真正冗餘、因此被刪的是 `liberoReplacement`。
+  - `resetCurrentRotationPositions` → **`resetPositions`（清全部六輪）**：一份共用 `lineup` 下
+    「只有第 3 輪是空的」不可表示；舊行為本來也名不副實（清完再拖一個人，六輪就全部重算）。
+  - 「可不可以開賽」的門檻獨立成 `isLineupFull`，跟「現在排了誰」徹底分家（#174 死結的根因）。
+  - 副作用：**#14 的「一般球員疊到 L 站的格子」消失了**——`lineup` 天生不含 L，
+    `assignPlayerToZone` 看得到那格的真實佔用者，改成正常的擠位。
 - **衍生文件不維護（07-21 PO 決定，`docs/flow-diagrams.html` 已刪）。判準值得記住：決策文件
   （`docs/*-spec.md`、issue 留言）值得維護，「描述程式碼現在怎麼跑」的衍生文件不值得**——它註定
   落後，而落後時**主動誤導**（#163 整張 issue 就在處理這件事：它描述的 API 不是「舊」而是已被刪除，
@@ -395,7 +414,12 @@ Portal，飛出選單與帶 mutation 副作用的 controller 全在自動測試�
 都有測試，每一個握著座標數學、指標事件、輪轉/自由球員規則的元件都沒有（`Court.tsx`、
 `ScoreSheetCourt.tsx`、`useRotationTable.ts` 364 行全部零測試，座標數學部分已隨 #227 抽成
 `lib/courtGeometry.ts` 並補測試，元件本體互動邏輯仍是零測試）。**測試覆蓋的是安全的部分，
-沒覆蓋的是危險的部分。**
+沒覆蓋的是危險的部分。**（**`useRotationTable.ts` 的部分已於 #231 PR1 補上 21 條特徵化測試**，
+`Court.tsx`／`ScoreSheetCourt.tsx` 仍是零測試，等 #168 引入 `@testing-library/react`。）
+**#231 的四個 PR 都還沒 push**，下面幾條依賴它的判斷要等它 merge 才成立：
+**#309**（計分頁站位單一真相）設計上卡在 #231 PR3，程式面現在已經不卡了；
+**#14** 雖已關閉，但它的「一般球員疊到 L 那格」在 #231 PR3b 才真正消失（過去只是關 issue 沒解根因），
+merge 後值得再實測一次；**ADR-0006**（單一表示法決策 ＋「persist 永不能帶 match 資料」不變條件）尚未寫。
 **#40**（undo/redo 不涵蓋輪轉拖曳，與 #147 同塊邏輯但不同 store）——建議排在 **#231 之後**：先發表示法
 收斂成一份、座標降級為衍生值之後，undo 要回捲的目標才明確，屆時這張可能小很多。
 **#64**（背景寫入失敗不 reconcile）——#201 在 `useScoreSheet.start()` 補了 guard，**堵掉「單機就能製造
