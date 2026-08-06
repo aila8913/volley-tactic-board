@@ -8,6 +8,8 @@ import {
   captureLineupFromRotations,
   readLineupFromRotations,
   lineupToPositions,
+  positionsToLineup,
+  placeLiberoInRotation,
   rotateZone,
   rotateLineup,
   assignPlayerToZone,
@@ -169,6 +171,94 @@ describe("lineupToPositions", () => {
       playerId: "1",
       ...getZoneCoords(rotateZone(1, 1)),
     });
+  });
+});
+
+// positionsToLineup 是 lineupToPositions 的反向操作（#231 PR2）：把座標吸附回號位。
+// 這支函式取代了原本 useRotationTable 私有的 positionsToZoneMap（回傳 Map），
+// 換成回傳 LineupSnapshot 之後 store 才能直接複用 assignPlayerToZone，不用再手刻一次
+// 「交換 vs 擠位」的規則——round-trip 測試釘住「跟 lineupToPositions 互為逆運算」這件事，
+// 這正是這次重構敢動 store 內部演算法的底氣（兩支函式合起來要跟以前的 Map 版本行為一致）。
+describe("positionsToLineup", () => {
+  const FULL = { 1: "1", 2: "2", 3: "3", 4: "4", 5: "5", 6: "6" };
+
+  it("round-trips with lineupToPositions：先展開成座標、再吸附回號位要拿回原本的快照", () => {
+    const positions = lineupToPositions(FULL, 0);
+    expect(positionsToLineup(positions)).toEqual(FULL);
+  });
+
+  it("拖放放開時的座標不會剛好在格子正中心，要吸附到最近的號位", () => {
+    // 跟 findNearestZone 自己的測試用同一組偏移座標（isBackRowPosition 那組），
+    // 靠近 6 號位（0.5, 0.85）的點應該吸附進 6 號位。
+    expect(positionsToLineup([{ playerId: "p1", x: 0.52, y: 0.83 }])).toEqual({
+      6: "p1",
+    });
+  });
+
+  it("空陣列 → 空物件", () => {
+    expect(positionsToLineup([])).toEqual({});
+  });
+
+  it("兩個座標吸附到同一個號位時，後面的蓋過前面的（跟它取代的 Map.set 覆寫行為一致）", () => {
+    const zone1 = getZoneCoords(1);
+    const positions = [
+      { playerId: "first", x: zone1.x, y: zone1.y },
+      { playerId: "second", x: zone1.x, y: zone1.y },
+    ];
+    expect(positionsToLineup(positions)).toEqual({ 1: "second" });
+  });
+});
+
+// placeLiberoInRotation 是「L 上場頂替」的完整邏輯，從 useRotationTable.ts 搬出來
+//（#231 PR2）才有辦法不啟動整個 store 就直接測。這裡釘住的三個分支正是 issue #14
+// 「場上同時出現兩個 L」那個 bug 的根源——L 的身分分散在 positions/liberoReplacement 兩處，
+// 任何一步漏還原就會讓兩個人疊在同一格。
+describe("placeLiberoInRotation", () => {
+  const roster: MatchPlayer[] = [
+    { id: "p1", name: "P1", number: 1, role: "OH", personId: null },
+    { id: "l1", name: "L1", number: 7, role: "L", personId: null },
+    { id: "l2", name: "L2", number: 8, role: "L", personId: null },
+  ];
+
+  const c1 = getZoneCoords(1);
+  const rotWithP1AtZone1: RotationPositions = {
+    positions: [{ playerId: "p1", x: c1.x, y: c1.y }],
+    liberoReplacement: null,
+  };
+
+  it("L 頂替一個後排格：占格的人進 liberoReplacement，L 出現在 positions、被頂替的人不再出現", () => {
+    const next = placeLiberoInRotation(rotWithP1AtZone1, roster, "l1", 1);
+
+    const ids = next.positions.map((p) => p.playerId);
+    expect(ids).toContain("l1");
+    expect(ids).not.toContain("p1");
+    expect(next.liberoReplacement).toEqual({
+      liberoId: "l1",
+      replacedPosition: { playerId: "p1", x: c1.x, y: c1.y },
+    });
+  });
+
+  it("換第二位 L 上場：第一位 L 頂替掉的人要先被還原，replacedPosition 記的是原本那個非自由球員，不是前一位 L", () => {
+    const afterL1 = placeLiberoInRotation(rotWithP1AtZone1, roster, "l1", 1);
+
+    const afterL2 = placeLiberoInRotation(afterL1, roster, "l2", 1);
+
+    const ids = afterL2.positions.map((p) => p.playerId);
+    expect(ids).not.toContain("l1"); // l1 已經被換下場，不會跟 l2 同時出現在場上
+    expect(ids).toContain("l2");
+    expect(afterL2.liberoReplacement).toEqual({
+      liberoId: "l2",
+      replacedPosition: { playerId: "p1", x: c1.x, y: c1.y }, // 記的是 p1，不是 l1
+    });
+  });
+
+  it("L 頂替一個空格：沒有人被替換，liberoReplacement 是 null", () => {
+    const emptyRot: RotationPositions = { positions: [], liberoReplacement: null };
+
+    const next = placeLiberoInRotation(emptyRot, roster, "l1", 5);
+
+    expect(next.positions.map((p) => p.playerId)).toEqual(["l1"]);
+    expect(next.liberoReplacement).toBeNull();
   });
 });
 
