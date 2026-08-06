@@ -225,7 +225,10 @@ export default function ScoreSheet() {
     const prev = prevLiberoRef.current;
     if (prev && prev !== libSub) {
       const prevPos = positions.find((p) => p.playerId === prev);
-      if (prevPos && prevPos.y > 0.75) {
+      // 用共用的 rowOf 判「後排」，不要在這裡再寫一次裸門檻（issue #43／#227）：這條
+      // `y > 0.75` 本來是第三份複本，而上面兩行判 libSub 前後排時用的就是 rowOf——
+      // 同一個 effect 裡兩種寫法並存，球場座標系一調整就會漏改這一行。
+      if (prevPos && rowOf(prevPos.y) === "back") {
         setPreviousLiberoTarget(libSub);
         setLiberoSubstitution(id, prev);
         return;

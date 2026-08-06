@@ -1,9 +1,10 @@
 import { Router, type IRouter } from "express";
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db, ralliesTable } from "@workspace/db";
 import { requireAuth } from "../middleware/requireAuth";
 import { setBelongsToUser, rallyBelongsToUser } from "../lib/ownership";
 import { handler } from "../lib/handler";
+import { insertIdempotent } from "../lib/insertIdempotent";
 import {
   ListRalliesParams,
   CreateRallyParams,
@@ -52,12 +53,13 @@ router.post(
       owns: ({ params, userId }) => setBelongsToUser(params.setId, userId),
     },
     async ({ res, params, body }) => {
-      const [created] = await db
-        .insert(ralliesTable)
-        // setId 來自路徑（已驗擁有權），不吃 body 的，避免 client 把 rally 塞到別局去。
-        .values({
+      // 冪等寫入 + 重送回既有列（#64 PR3）：做法與理由見 lib/insertIdempotent.ts。
+      const row = await insertIdempotent(
+        ralliesTable,
+        {
           // 選填的 client-mintable 主鍵（#64 PR2），做法與理由見 sets.ts 的 POST 註解。
           ...(body.id ? { id: body.id } : {}),
+          // setId 來自路徑（已驗擁有權），不吃 body 的，避免 client 把 rally 塞到別局去。
           setId: params.setId,
           rallyNumber: body.rallyNumber,
           homeScore: body.homeScore,
@@ -65,29 +67,16 @@ router.post(
           homeRotation: body.homeRotation,
           awayRotation: body.awayRotation,
           winner: body.winner,
-        })
-        // 冪等寫入 + 重送回既有列（#64 PR3），做法與理由見 sets.ts 的 POST 註解。
-        .onConflictDoNothing({ target: ralliesTable.id })
-        .returning();
+        },
+        eq(ralliesTable.setId, params.setId),
+      );
 
-      if (!created) {
-        const existing = body.id
-          ? await db
-              .select()
-              .from(ralliesTable)
-              .where(and(eq(ralliesTable.id, body.id), eq(ralliesTable.setId, params.setId)))
-              .limit(1)
-          : [];
-
-        if (existing.length === 0) {
-          res.status(409).json({ error: "Conflict" });
-          return;
-        }
-        res.status(201).json(existing[0]);
+      if (!row) {
+        res.status(409).json({ error: "Conflict" });
         return;
       }
 
-      res.status(201).json(created);
+      res.status(201).json(row);
     },
   ),
 );

@@ -1,9 +1,10 @@
 import { Router, type IRouter } from "express";
-import { eq, and, getTableColumns } from "drizzle-orm";
+import { eq, getTableColumns } from "drizzle-orm";
 import { db, substitutionsTable, setsTable } from "@workspace/db";
 import { requireAuth } from "../middleware/requireAuth";
 import { setBelongsToUser, matchBelongsToUser, substitutionBelongsToUser } from "../lib/ownership";
 import { handler } from "../lib/handler";
+import { insertIdempotent } from "../lib/insertIdempotent";
 import {
   ListMatchSubstitutionsParams,
   CreateSubstitutionParams,
@@ -78,48 +79,34 @@ router.post(
       owns: ({ params, userId }) => setBelongsToUser(params.setId, userId),
     },
     async ({ res, params, body }) => {
-      const [created] = await db
-        .insert(substitutionsTable)
-        // setId 來自路徑（已驗擁有權），不吃 body 的，避免 client 把換人紀錄塞到別局去。
-        // playerInId/playerOutId 用 ?? null 把「body 沒帶」轉成 DB 的 null——
-        // libero 上/下場時，其中一邊本來就可能沒有對應球員（見 substitutions.ts 的欄位註解）。
-        .values({
+      // 冪等寫入 + 重送回既有列（#64 PR3）：做法與理由見 lib/insertIdempotent.ts。
+      // 重送不會多配一個 seq：它內部用 DO NOTHING，代表那一列根本沒有再被 insert 一次。
+      const row = await insertIdempotent(
+        substitutionsTable,
+        {
           // 選填的 client-mintable 主鍵（#64 PR2），做法與理由見 sets.ts 的 POST 註解。
           // 注意這裡指定的是 id，不是 seq——seq 仍由 DB 自增，它守的是「同一分內的插入順序」
           // （見 lib/db/src/schema/substitutions.ts），跟前端鑄不鑄 id 是兩件事。
           ...(body.id ? { id: body.id } : {}),
+          // setId 來自路徑（已驗擁有權），不吃 body 的，避免 client 把換人紀錄塞到別局去。
           setId: params.setId,
           homeScore: body.homeScore,
           awayScore: body.awayScore,
+          // playerInId/playerOutId 用 ?? null 把「body 沒帶」轉成 DB 的 null——
+          // libero 上/下場時，其中一邊本來就可能沒有對應球員（見 schema 的欄位註解）。
           playerInId: body.playerInId ?? null,
           playerOutId: body.playerOutId ?? null,
           kind: body.kind,
-        })
-        // 冪等寫入 + 重送回既有列（#64 PR3），做法與理由見 sets.ts 的 POST 註解。
-        // 重送不會多配一個 seq：DO NOTHING 代表那一列根本沒有再被 insert 一次。
-        .onConflictDoNothing({ target: substitutionsTable.id })
-        .returning();
+        },
+        eq(substitutionsTable.setId, params.setId),
+      );
 
-      if (!created) {
-        const existing = body.id
-          ? await db
-              .select()
-              .from(substitutionsTable)
-              .where(
-                and(eq(substitutionsTable.id, body.id), eq(substitutionsTable.setId, params.setId)),
-              )
-              .limit(1)
-          : [];
-
-        if (existing.length === 0) {
-          res.status(409).json({ error: "Conflict" });
-          return;
-        }
-        res.status(201).json(existing[0]);
+      if (!row) {
+        res.status(409).json({ error: "Conflict" });
         return;
       }
 
-      res.status(201).json(created);
+      res.status(201).json(row);
     },
   ),
 );
