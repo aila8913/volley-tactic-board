@@ -1,38 +1,15 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { PerMatchRotationState, RotationPositions, CircleLabelType } from "../types/rotationTable";
 import {
-  PerMatchRotationState,
-  RotationPositions,
-  PlayerPosition,
-  LiberoReplacement,
-  CircleLabelType,
-} from "../types/rotationTable";
-import {
-  findNearestZone,
-  getZoneCoords,
-  rotateZone,
   BACK_ROW_ZONES,
   lineupToPositions,
+  positionsToLineup,
+  assignPlayerToZone,
+  placeLiberoInRotation,
 } from "../lib/rotationLogic";
 import type { MatchPlayer } from "../types/match";
 import type { LineupSnapshot } from "../types/scoresheet";
-
-// 把目前場上的站位轉成「哪個格子站了誰」，方便用格子（1~6 號位）做吸附/換位/
-// 推算其他輪次的邏輯，而不用每次都跟 x/y 浮點數打交道。
-function positionsToZoneMap(positions: PlayerPosition[]): Map<number, string> {
-  const map = new Map<number, string>();
-  for (const pos of positions) {
-    map.set(findNearestZone(pos.x, pos.y), pos.playerId);
-  }
-  return map;
-}
-
-function zoneMapToPositions(zoneMap: Map<number, string>): PlayerPosition[] {
-  return Array.from(zoneMap.entries()).map(([zone, playerId]) => {
-    const coords = getZoneCoords(zone);
-    return { playerId, x: coords.x, y: coords.y };
-  });
-}
 
 const emptyRotations: RotationPositions[] = Array(6)
   .fill(null)
@@ -46,41 +23,6 @@ const emptyPerMatch = (): PerMatchRotationState => ({
   currentRotation: 0,
   startingLiberoId: null,
 });
-
-// 自由球員上場的共用邏輯（輪轉視圖，格子吸附）：同一時間只能有一位 L 在場上、
-// 上場時要頂替掉目標位置原本的人。戰術布置現在是獨立的自由畫布，不會呼叫這裡。
-// zone 只用來判斷「這個座標蓋到了哪一格」，藉此找出被換下場的人，跟座標系統無關。
-function placeLiberoOnCourt(
-  rot: RotationPositions,
-  roster: MatchPlayer[],
-  playerId: string,
-  zone: number,
-  coords: { x: number; y: number },
-): RotationPositions {
-  const liberoIds = new Set(roster.filter((p) => p.role === "L").map((p) => p.id));
-
-  // 先把場上的 L 移除，並還原 liberoReplacement 記錄的被替換者，
-  // 這樣不管原本場上是哪個 L、有沒有 L，都能從乾淨的一般球員站位重新計算。
-  let basePositions = rot.positions.filter((p) => !liberoIds.has(p.playerId));
-  if (rot.liberoReplacement) {
-    basePositions = [...basePositions, rot.liberoReplacement.replacedPosition];
-  }
-
-  // 找目標格子現在站的人（即將被 L 替換的人）
-  const replacedPlayer = basePositions.find((p) => findNearestZone(p.x, p.y) === zone);
-
-  const newPositions = [
-    ...basePositions.filter((p) => findNearestZone(p.x, p.y) !== zone),
-    { playerId, x: coords.x, y: coords.y },
-  ];
-
-  return {
-    positions: newPositions,
-    liberoReplacement: replacedPlayer
-      ? ({ liberoId: playerId, replacedPosition: replacedPlayer } as LiberoReplacement)
-      : null,
-  };
-}
 
 interface RotationTableStore {
   // ── 全域顯示偏好（不隨 match 走）──
@@ -232,13 +174,7 @@ export const useRotationTable = create<RotationTableStore>()(
 
               const r = m.currentRotation;
               const newRotations = [...m.rotations];
-              newRotations[r] = placeLiberoOnCourt(
-                newRotations[r],
-                m.roster,
-                playerId,
-                zone,
-                getZoneCoords(zone),
-              );
+              newRotations[r] = placeLiberoInRotation(newRotations[r], m.roster, playerId, zone);
               // 不管這個 L 是從備位區拖上場、還是直接從名單拖上場，
               // 都要同步把它設成 startingLiberoId——這樣每場只會追蹤一個「先發」L，
               // 備位區才不會跟場上狀態脫節（這正是 issue #14 bug 1 的根本原因）。
@@ -249,48 +185,32 @@ export const useRotationTable = create<RotationTableStore>()(
             // referenceRotation 讓呼叫方指定「以哪個輪次為基準」來推算其他 5 輪。
             const r = referenceRotation ?? m.currentRotation;
 
-            // 排除 L 球員再建立格子 Map——L 不參與輪轉推算，每輪獨立記錄。
+            // 排除 L 球員再轉成 LineupSnapshot（號位 → 球員 id）——L 不參與輪轉推算，
+            // 每輪獨立記錄，交換/擠位規則不該連 L 也一起判斷。
             const liberoIds = new Set(m.roster.filter((p) => p.role === "L").map((p) => p.id));
-            const currentPositions = m.rotations[r].positions.filter(
-              (p) => !liberoIds.has(p.playerId),
+            // 刻意沿用「先把 L 的站位濾掉」這個既有寫法（含它已知的 bug——見 useRotationTable.test.ts
+            // 那條標著 ⚠️ 已知 bug 的測試）。這個 PR 是純重構，不在這裡改行為。
+            const lineup = positionsToLineup(
+              m.rotations[r].positions.filter((p) => !liberoIds.has(p.playerId)),
             );
-            const zoneMap = positionsToZoneMap(currentPositions);
+            if (lineup[zone] === playerId) return m; // 拖到自己原本站的格子，沒變化
 
-            // 這個人現在在不在場上：場上重新拖曳 vs 從名單把新人拖上場，要分開處理。
-            let sourceZone: number | null = null;
-            let occupantZone: number | null = null;
-            let occupantId: string | undefined;
-            for (const [z, id] of zoneMap.entries()) {
-              if (id === playerId) sourceZone = z;
-              if (z === zone) {
-                occupantZone = z;
-                occupantId = id;
-              }
-            }
-            if (sourceZone === zone) return m; // 拖到自己原本站的格子，沒變化
+            // 「拖到已有人的格子要互換、拖上場的新人要擠掉原本佔格的人」這條規則，
+            // 跟換局換輪視窗（SetLineupDialog）重新排位是同一條領域規則，已經抽成
+            // assignPlayerToZone 並在 rotationLogic.test.ts 測過四種分支，這裡直接複用、
+            // 不再自己手刻第二份一模一樣的判斷（見 issue #231 的 finding）。
+            const next = assignPlayerToZone(lineup, zone, playerId);
 
-            if (sourceZone !== null) zoneMap.delete(sourceZone);
-            if (occupantZone !== null) zoneMap.delete(occupantZone);
-            // 目標格子原本有人：如果這個人是從場上別的格子拖過來的，互換位置；
-            // 如果是從名單拖上場的新人，原本佔格的人就被換下場（回到名單，不留在場上）。
-            if (occupantId && sourceZone !== null) {
-              zoneMap.set(sourceZone, occupantId);
-            }
-            zoneMap.set(zone, playerId);
-
-            // 這個輪次排好之後，其他 5 個輪次依「輪轉了幾格」的公式自動推算；
+            // 這個輪次排好之後，其他 5 個輪次依「輪轉了幾格」的公式自動推算——
+            // 跟計分表 lineupToPositions 換算其他輪次座標是同一條公式，這裡直接複用；
             // 同時保留每個輪次各自的 L 位置（L 不跟著輪轉）。
-            const newRotations = m.rotations.map((rotation, i) => {
-              const shiftedMap = new Map<number, string>();
-              for (const [z, id] of zoneMap.entries()) {
-                shiftedMap.set(rotateZone(z, i - r), id);
-              }
-              const liberoPositions = rotation.positions.filter((p) => liberoIds.has(p.playerId));
-              return {
-                ...rotation,
-                positions: [...zoneMapToPositions(shiftedMap), ...liberoPositions],
-              };
-            });
+            const newRotations = m.rotations.map((rotation, i) => ({
+              ...rotation,
+              positions: [
+                ...lineupToPositions(next, i - r),
+                ...rotation.positions.filter((p) => liberoIds.has(p.playerId)),
+              ],
+            }));
 
             return { ...m, rotations: newRotations };
           }),
