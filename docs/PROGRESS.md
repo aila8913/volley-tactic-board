@@ -63,7 +63,8 @@ lives in git log + the issues named).
   （白板不影響資料紀錄）。共存機制是「**共用現役＋開局凍結**」：共用的是「目前站位」，每局開賽
   那一刻擷取成該局的凍結快照（`ScoreSheetState.lineup` 語意＝歷史快照，不是平行的第二份先發），
   此後該局唯讀，事後編輯污染不到歷史統計。判斷式只有一行 `activeLineup = lineup ?? capturableLineup`。
-  幽靈站位掃空先發仍由 `captureLineupFromRotations` 的名單過濾擋著（`lib/rotationLogic.ts`）。
+  幽靈站位掃空先發仍由 `filterLineupToRoster` 的名單過濾擋著（`lib/rotationLogic.ts`；#231 PR3
+  之前這件事由 `captureLineupFromRotations` 兼著做）。
   已在 #115 補留言註記其解耦模型作廢（多處文件曾拿它當法規引用）。
 - **衍生文件不維護（07-21 PO 決定，`docs/flow-diagrams.html` 已刪）。判準值得記住：決策文件
   （`docs/*-spec.md`、issue 留言）值得維護，「描述程式碼現在怎麼跑」的衍生文件不值得**——它註定

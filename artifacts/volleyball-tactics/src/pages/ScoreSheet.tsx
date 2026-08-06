@@ -254,7 +254,8 @@ export default function ScoreSheet() {
 
   // 開始記錄前要求先發已排好。改讀計分表自己的快照（issue #115）：已凍結的先發，或還沒凍結前
   // 「輪轉表當下能擷取出一份完整先發」（activeLineup 非 null）就放行。門檻仍是「滿 6 個號位」
-  // （captureLineupFromRotations 內建，跟舊的 isLineupComplete 同一條規則，見 issue #37）。
+  // （#231 PR3 之後由 isLineupFull 單獨定義；在那之前這道門檻藏在 captureLineupFromRotations
+  // 的「不滿六人回 null」裡，見 issue #37）。
   const hasLineup = activeLineup !== null;
   // 先發只有在「這一局還沒開打」時能改（開局凍結，見 hooks/useScoreSheet.ts 的 start()）：
   // 開賽前右欄顯示的是共用真相（capturableLineup），可以直接編輯、每一次改動都即時生效
