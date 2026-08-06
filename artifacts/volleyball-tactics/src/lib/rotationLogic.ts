@@ -1,4 +1,4 @@
-import type { RotationPositions, PlayerPosition } from "../types/rotationTable";
+import type { RotationPositions, PlayerPosition, LiberoReplacement } from "../types/rotationTable";
 import type { MatchPlayer } from "../types/match";
 import type { LineupSnapshot } from "../types/scoresheet";
 
@@ -91,6 +91,31 @@ export function lineupToPositions(lineup: LineupSnapshot, rotation: number): Pla
     const coords = getZoneCoords(rotateZone(startZone, rotation));
     return { playerId, x: coords.x, y: coords.y };
   });
+}
+
+// lineupToPositions 的反向操作：把「場上一堆座標」吸附回「號位 → 球員 id」的 LineupSnapshot。
+//
+// 為什麼要有這支、而不是繼續用 Map<number, string>：useRotationTable 這個 store 以前自己算了一份
+// 私有的 positionsToZoneMap，回傳的是 Map——但 Map 只是這個檔案自己看得懂的中間格式，跟 app 其他
+// 地方講的語言（LineupSnapshot，一個 plain 的 Record<number, string>）是兩套。換成回傳
+// LineupSnapshot 之後，store 就能直接把結果丟給上面已經測過、也給 SetLineupDialog 用的
+// assignPlayerToZone 去做「交換/擠位」判斷，不用自己再手刻一次同一條規則
+//（見 useRotationTable.placePlayerOnCourt 原本那段跟 assignPlayerToZone 幾乎一模一樣的程式碼）。
+//
+// 刻意寫得很笨、不做任何過濾：每個 position 一律吸附進 lineup，呼叫端要先過濾掉不想要的
+// （例如自由球員的站位）再傳進來。這裡如果順手加一層「只收非 L」的邏輯，這支函式就會跟
+// 「誰是 L」這個跟站位無關的概念綁死，之後換一個不需要濾 L 的呼叫端就用不了。
+// 註：如果兩個 position 吸附到同一個號位，後面的會蓋掉前面的——這跟它取代的
+// Map<number, string> 版本（用 Map.set 覆寫）行為一致，不是這次重構引入的新行為。
+//
+// #231 PR3 之後，store 內部狀態本身就會直接是 LineupSnapshot，屆時就不再需要「座標轉回號位」
+// 這一步轉換了，這支函式（連同 lineupToPositions）的呼叫點會跟著消失。
+export function positionsToLineup(positions: PlayerPosition[]): LineupSnapshot {
+  const lineup: LineupSnapshot = {};
+  for (const pos of positions) {
+    lineup[findNearestZone(pos.x, pos.y)] = pos.playerId;
+  }
+  return lineup;
 }
 
 // 6 個球場格子的座標基準（0~1 normalized，跟戰術板球場 SVG 的 viewBox 對齊）。
@@ -211,6 +236,46 @@ export function removePlayerFromZone(lineup: LineupSnapshot, zone: number): Line
   const next: LineupSnapshot = { ...lineup };
   delete next[zone];
   return next;
+}
+
+// 自由球員上場的共用邏輯（輪轉視圖，格子吸附）：同一時間只能有一位 L 在場上，
+// 上場時要頂替掉目標位置原本的人。戰術布置現在是獨立的自由畫布，不會呼叫這裡。
+// zone 只用來判斷「這個座標蓋到了哪一格」，藉此找出被換下場的人，跟座標系統無關。
+//
+// 從 useRotationTable.ts 搬過來（#231 PR2）：這支函式吃一份 RotationPositions、吐一份新的
+// RotationPositions，跟這個檔案裡其他純函式（assignPlayerToZone 等）是同一種形狀，只是原本
+// 待在 store 檔案裡沒辦法單獨測——搬出來之後才能不啟動整個 store 就直接測四種分支
+// （上場頂替、還原、換另一位 L、頂替空格）。
+export function placeLiberoInRotation(
+  rot: RotationPositions,
+  roster: MatchPlayer[],
+  playerId: string,
+  zone: number,
+): RotationPositions {
+  const liberoIds = new Set(roster.filter((p) => p.role === "L").map((p) => p.id));
+
+  // 先把場上的 L 移除，並還原 liberoReplacement 記錄的被替換者，
+  // 這樣不管原本場上是哪個 L、有沒有 L，都能從乾淨的一般球員站位重新計算。
+  let basePositions = rot.positions.filter((p) => !liberoIds.has(p.playerId));
+  if (rot.liberoReplacement) {
+    basePositions = [...basePositions, rot.liberoReplacement.replacedPosition];
+  }
+
+  // 找目標格子現在站的人（即將被 L 替換的人）
+  const replacedPlayer = basePositions.find((p) => findNearestZone(p.x, p.y) === zone);
+
+  const coords = getZoneCoords(zone);
+  const newPositions = [
+    ...basePositions.filter((p) => findNearestZone(p.x, p.y) !== zone),
+    { playerId, x: coords.x, y: coords.y },
+  ];
+
+  return {
+    positions: newPositions,
+    liberoReplacement: replacedPlayer
+      ? ({ liberoId: playerId, replacedPosition: replacedPlayer } as LiberoReplacement)
+      : null,
+  };
 }
 
 // 球員從球員設定拖到球場上、或在場上重新拖曳時，放開滑鼠的座標不會剛好落在 6 個
