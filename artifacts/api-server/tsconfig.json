@@ -8,10 +8,14 @@
     "types": ["node"]
   },
   "include": ["src"],
-  // *.test.ts(x) 都要排除掉——volleyball-tactics 的 tsconfig.json 漏了 **/*.test.tsx
-  // 這個 pattern（見 issue #292），這裡兩種副檔名都寫，別重複同一個坑。目前 api-server
-  // 底下全是 .ts（沒有 React 元件），但寫齊比較保險，之後就算有人加了 .tsx 測試也不會漏。
-  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.test.tsx"],
+  // 測試檔（*.test.ts(x)）刻意「不」排除在 typecheck 之外（issue #292）：以前這裡跟
+  // volleyball-tactics 一樣把測試檔排除掉，理由是「typecheck 只顧生產程式碼」，但這樣會讓
+  // 測試檔悄悄地跟型別脫節——例如某個介面改了形狀，生產程式碼會被 tsc 擋下來逼你改，
+  // 測試檔裡的 mock/helper 卻因為完全不進 typecheck 而毫無察覺，直到 vitest 真的跑起來
+  // 才在執行期爆炸（甚至更糟：型別不合但恰好執行不到那條分支，完全不會被發現）。
+  // 測試是重構時的安全網，如果安全網本身沒有型別保護，等於在最該被保護的地方留了破洞。
+  // 所以現在跟生產程式碼吃同一套 include/exclude，兩者一起被 tsc 檢查。
+  "exclude": ["node_modules", "dist"],
   "references": [
     {
       "path": "../../lib/db"

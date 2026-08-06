@@ -10,6 +10,8 @@ const makePlayer = (id: string, number: number): MatchPlayer => ({
   number,
   name: `球員${number}`,
   role: "OH",
+  // personId: null——這裡的邏輯不看它，給 null 只是滿足型別（同上方註解）。
+  personId: null,
 });
 
 describe("buildPlayerMatrix", () => {

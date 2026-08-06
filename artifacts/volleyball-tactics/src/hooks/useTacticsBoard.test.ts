@@ -18,6 +18,8 @@ const player = (id: string, role: MatchPlayer["role"] = "OH"): MatchPlayer => ({
   name: id,
   number: 1,
   role,
+  // personId: null——這裡測的是戰術白板 session 邏輯，不看它，給 null 只是滿足型別。
+  personId: null,
 });
 
 // 一筆 SnapshotPlayer（反正規化：身分＋座標都凍在裡面，沒有回名單查的欄位）。

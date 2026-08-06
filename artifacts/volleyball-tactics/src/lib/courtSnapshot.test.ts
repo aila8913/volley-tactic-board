@@ -8,10 +8,12 @@ import type { SavedTacticDataV2 } from "../types/courtSnapshot";
 // 這些函式都是純函式（不碰 store），跟 matchMapping.test.ts 一樣直接餵資料進去斷言輸出。
 // 重點測「denormalize（凍結 join 結果）」跟「read-adapter 相容轉檔」這兩件事有沒有做對。
 
+// personId: null——這裡測的是快照擷取/轉檔邏輯，完全不看 personId（那是名單去重 UX
+// 用的欄位，見 types/match.ts 的 MatchPlayer 註解），給 null 只是為了滿足型別，不影響斷言。
 const roster: MatchPlayer[] = [
-  { id: "p1", name: "小明", number: 1, role: "S" },
-  { id: "p2", name: "小華", number: 2, role: "OH" },
-  { id: "pL", name: "自由人", number: 9, role: "L" },
+  { id: "p1", name: "小明", number: 1, role: "S", personId: null },
+  { id: "p2", name: "小華", number: 2, role: "OH", personId: null },
+  { id: "pL", name: "自由人", number: 9, role: "L", personId: null },
 ];
 
 describe("captureFromRotation", () => {
@@ -98,7 +100,7 @@ describe("parseSavedTactic", () => {
     // parseSavedTactic 完全不接收這份名單當參數，這裡只是拿來對照、確認轉檔函式沒有
     // 偷偷用某個全域 import 去查它。
     const currentRoster: MatchPlayer[] = [
-      { id: "someone-else", name: "別人", number: 1, role: "S" },
+      { id: "someone-else", name: "別人", number: 1, role: "S", personId: null },
     ];
     expect(currentRoster.find((p) => p.id === "old-p1")).toBeUndefined();
 
