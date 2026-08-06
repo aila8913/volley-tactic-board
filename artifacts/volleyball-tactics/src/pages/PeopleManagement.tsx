@@ -109,7 +109,6 @@ export default function PeopleManagement() {
           <NavRail backHref="/" active="analytics" />
         </div>
       }
-      backdrop={<div className="tb-beam" />}
       className={APP_SHELL_CLASS}
       style={APP_BACKGROUND_STYLE}
     >

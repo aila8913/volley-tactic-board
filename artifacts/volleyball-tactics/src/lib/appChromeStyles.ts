@@ -13,19 +13,21 @@ import type { CSSProperties } from "react";
 //
 // 同一種「外殼材質」只該有一個家。之後要調整整頁氛圍，改這個檔案，全站一起變。
 
-// 整頁背景：兩顆柔光暈（左上萊姆綠、右下深青）疊一層底層斜切漸層。比單純兩色漸層更有層次，
-// 也讓卡片/球場的 backdrop-blur 有東西可以模糊——純色背景會讓毛玻璃白忙一場（模糊純色還是
-// 同一個純色，玻璃感其實沒有真的產生）。搭配 backdrop 插槽的 .tb-beam 斜向光影一起用。
-export const APP_BACKGROUND_STYLE: CSSProperties = {
-  background:
-    "radial-gradient(ellipse 55% 45% at 18% 12%, rgba(198,241,53,0.10), transparent 70%), " +
-    "radial-gradient(ellipse 65% 55% at 88% 92%, rgba(42,110,106,0.30), transparent 70%), " +
-    "linear-gradient(160deg, #0a0b07 0%, #16241c 55%, #0a0b07 100%)",
-};
+// 整頁背景：改由 index.css 的 `.app-canvas` 提供（見 APP_SHELL_CLASS）。
+//
+// 2026-08-06 換成設計系統「戰術版風格」的「製圖紙」背景——網格 + 青綠／萊姆雙光暈 + 斜光束
+// + 噪點 + 暗角。原本這裡是兩顆柔光暈疊一層斜切漸層，理由跟現在一樣（要讓 backdrop-blur
+// 有東西可以模糊），但漸層本身太平滑、模糊完幾乎還原成純色，玻璃感其實沒真的出來。網格線
+// 跟噪點是高頻細節，blur 攪得動，玻璃才讀得出來是玻璃。
+//
+// 這個常數保留成空物件而不是直接刪掉：8 個頁面都在用 `style={APP_BACKGROUND_STYLE}`，
+// 留著讓「整頁背景的調整入口」還是這個檔案——之後若有需要用 inline style 覆寫的情況
+// （例如某頁要暫時關掉背景），改這裡仍然是全站一起生效。
+export const APP_BACKGROUND_STYLE: CSSProperties = {};
 
-// 整頁最外層容器的 class（跟 APP_BACKGROUND_STYLE 成對使用）。relative 是給 backdrop 的
-// .tb-beam（position:absolute）當定位基準。
-export const APP_SHELL_CLASS = "relative font-dash text-[#f5f5f0]";
+// 整頁最外層容器的 class。relative 是給 backdrop 的 .tb-mark（position:absolute）當定位
+// 基準；app-canvas 帶進整頁背景層（見 index.css）。
+export const APP_SHELL_CLASS = "app-canvas font-dash text-[#f5f5f0]";
 
 // 右側資訊欄（aside）的外殼：MatchInfoRail／AnalyticsRotationRail／ScoreSheet 右欄共用。
 //

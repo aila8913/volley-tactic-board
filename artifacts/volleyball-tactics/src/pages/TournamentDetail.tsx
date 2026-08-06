@@ -160,7 +160,6 @@ export default function TournamentDetail() {
       // #175 既然要整個重寫這塊，深色語言就在這裡一次做完，不在 #131 底下另外做一次白工。
       // 背景跟 MatchList.tsx 用同一組值（現在共用 lib/appChromeStyles 的常數，不再各寫一份）：
       // 兩頁是同一個列表體驗的兩層，進了資料夾底色卻換一種會很突兀。
-      backdrop={<div className="tb-beam" />}
       className={APP_SHELL_CLASS}
       style={APP_BACKGROUND_STYLE}
     >
