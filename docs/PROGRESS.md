@@ -37,6 +37,10 @@
 ／M6 介面精簡與導覽重構／M7 打磨與雜項**（詳見 Current state 該條）。新開 #331（#209 第 2 點落地）、
 新建 `epic` 標籤、#40 掛上 #328 前置條件；`CONTRIBUTING.md` 的 `needs-plan` 定義修正。無程式碼變更。\_
 
+\_Last updated: 2026-08-07 (aila) — **#229 交付：`routes/analysis.ts` 的合併規則抽成
+`lib/analysisSummary.ts` 的兩支純函式＋14 條測試**。PO 拍板**只抽純函式、不做 query adapter／DI**
+（一個實作的 adapter ＝假 seam）。順手刪掉零 caller 的 `useMatchRotationStats.ts`。\_
+
 ## Current state
 
 Where the project actually stands right now (durable "current" facts; per-session detail
@@ -53,6 +57,13 @@ lives in git log + the issues named).
   「M5」這種會滾動的編號不該被抄進靜態文件——那行 `--milestone "M5 體驗重整與雜項"` 今天起會執行失敗）。
   同批把 `CONTRIBUTING.md` 的 **`needs-plan` 定義修正成「動工時要好好規劃」**（原本寫「範圍或設計還沒
   定案」，害這次盤點差點把 10 張可動工的票當成待決策凍結）並補上新的 `epic` 標籤。
+- **後端「合併規則」現在測得到了（#229，08-07）。** `routes/analysis.ts` 兩支彙總 endpoint 的 JS 合併
+  段（哪一局算已結束、已完賽要砍沒開球的尾巴局、跨場去重、teamBreakdown）搬進
+  `artifacts/api-server/src/lib/analysisSummary.ts` 的 `summariseMatches` / `summarisePerson`，
+  餵 literal rows 就能斷言、不用開 Postgres。**PO 拍板的取捨要記住：只抽純函式，不做 query adapter、
+  不做 DI**——issue body 自己的警告成立，只有一個實作的 adapter 是假 seam、只是多一層。因此
+  **#232（`createDb` 注入）並沒有被這張帶掉**，它剩下的價值要單獨評估：真要動就得同時接上第二個
+  adapter，並把 `insertIdempotent`／`handler` 的 owns 這兩個「收斂過的守衛」補上測試。
 - **Backend match-recording API is fully implemented and live (dev DB).** matches / players /
   sets / rallies / events / substitutions / lineups / timeouts / tournaments / teams CRUD +
   tactics/health + `analysis` 唯讀報表路由，全部 ownership-scoped。前端計分表**已完全脫離

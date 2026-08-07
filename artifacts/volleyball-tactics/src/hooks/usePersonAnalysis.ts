@@ -1,6 +1,6 @@
 // 分析頁「視圖③：球員跨場/跨隊分析」的資料存取層（#213）。純讀取、不碰任何全域 store——
-// 跟 useCrossMatchAnalysis.ts / useMatchRotationStats.ts 是同一套理由（見那兩檔開頭註解）：
-// 這種唯讀彙總頁不該意外污染正在進行中的計分表 optimistic 快取（#115/#117 的教訓）。
+// 跟 useCrossMatchAnalysis.ts 是同一套理由（見該檔開頭註解）：這種唯讀彙總頁不該
+// 意外污染正在進行中的計分表 optimistic 快取（#115/#117 的教訓）。
 //
 // 這裡只是薄薄包一層 codegen 產生的 useGetPersonAnalysis（見 lib/api-client-react，
 // operationId 對應 openapi.yaml 的 getPersonAnalysis），讓呼叫端不用知道底層 hook
@@ -24,8 +24,8 @@ export function usePersonAnalysis(personId: number | undefined) {
   });
 
   return {
-    // 後端回的是單一物件（不是陣列），所以防呆邏輯跟 useCrossMatchAnalysis/
-    // useMatchRotationStats 的「用 Array.isArray 擋非陣列」不同：這裡改成檢查
+    // 後端回的是單一物件（不是陣列），所以防呆邏輯跟 useCrossMatchAnalysis
+    // 的「用 Array.isArray 擋非陣列」不同：這裡改成檢查
     // 「拿到的東西是不是一個有 personId 欄位的物件」。理由一樣——api-server 若還沒重啟、
     // 這支新 endpoint 還沒掛上時，請求會掉進 SPA fallback 回一頁 index.html（200 +
     // text/html），customFetch 依 content-type 判成文字塞進 data，此時 data 會是字串，
