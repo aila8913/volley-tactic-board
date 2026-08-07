@@ -234,7 +234,9 @@ export default function PersonAnalytics() {
                           {a.teamId != null ? (teamNameById.get(a.teamId) ?? "—") : "未分類"}
                         </td>
                         <td className="py-1.5 text-[#a9b096]">{formatMatchDateTime(a.date)}</td>
-                        <td className="py-1.5 text-right font-numeric tabular-nums text-[#f5f5f0]">
+                        {/* 背號屬於「分數、背號」規則（2026-08-07 tang 定案），從 font-numeric
+                            換成 font-score，跟其他頁面的背號顯示一致。 */}
+                        <td className="py-1.5 text-right font-score tabular-nums text-[#f5f5f0]">
                           #{a.number}
                         </td>
                         <td className="py-1.5 text-right text-[#f5f5f0]">{a.role}</td>

@@ -9,7 +9,7 @@ import type { SnapshotPlayer } from "../types/courtSnapshot";
 import PlayerNode from "./PlayerNode";
 import Markers from "./Markers";
 import DefenseRange from "./DefenseRange";
-import { COURT_GRADIENT_STOPS, CourtLines } from "../lib/courtTheme";
+import { CourtGradientDefs, CourtSurface, CourtBorder, CourtLines } from "../lib/courtTheme";
 import { COURT_W, COURT_H, fromScreen, toNorm, rowOf } from "../lib/courtGeometry";
 
 // 這一場還沒有分片資料時用的空白預設值（模組層、參照穩定，避免每 render 換新陣列造成重繪）。
@@ -392,20 +392,11 @@ export default function Court() {
             className="touch-none select-none"
           >
             <defs>
-              {/* 球場底色深青漸層（design-spec.md 第 5 節，2026-07-15 選定的方案 B）改讀
-                  lib/courtTheme 的共用常數，跟計分表球場（ScoreSheetCourt）同一個來源——
-                  改那邊兩個球場一起變。stopOpacity 不是 100% 的理由見 courtTheme 的註解
-                  （毛玻璃地板要讓 wrapper 後面的背景透一點出來）。 */}
-              <linearGradient id="court-gradient" x1="0" y1="0" x2="0" y2="1">
-                {COURT_GRADIENT_STOPS.map((stop) => (
-                  <stop
-                    key={stop.offset}
-                    offset={stop.offset}
-                    stopColor={stop.color}
-                    stopOpacity={stop.opacity}
-                  />
-                ))}
-              </linearGradient>
+              {/* 球場材質 v4（lib/courtTheme.tsx，2026-08-07 對齊 Claude Design 的
+                  court-material-v4.html）：球場本身沒有底色，這裡的 <defs> 只剩球網網格
+                  pattern（CourtGradientDefs，跟計分表球場 ScoreSheetCourt.tsx 共用同一份
+                  來源，id 各自取避免同頁互搶）跟畫箭頭用的 marker。 */}
+              <CourtGradientDefs id="court-gradient" />
               <marker
                 id="arrowhead"
                 markerWidth="6"
@@ -428,70 +419,27 @@ export default function Court() {
               </marker>
             </defs>
 
-            {/* Court Background */}
-            <rect
-              id="court-bg"
-              x="0"
-              y="0"
-              width={COURT_W}
-              height={COURT_H}
-              fill="url(#court-gradient)"
-            />
+            {/* 球場底：透明矩形，只給拖曳/點擊空白處的命中判斷用（lib/courtTheme.tsx
+                CourtSurface）——v4 之前這裡是深青漸層，模板球場其實沒有底色，深色是
+                透出頁面底色 #050603，不是球場自己塗的。 */}
+            <CourtSurface />
 
-            {/* 球場粗框：兩個視圖都畫在 SVG 裡、貼著球場本身（0,0 到 100,200），不會
-                被上下 L 備位留白帶撐大（過去輪轉視圖是靠 wrapper 的 CSS border 畫框，
-                但 wrapper 現在比球場高，CSS border 會框住整個留白帶，所以統一改成
-                跟戰術視圖一樣畫在 SVG 裡）。vectorEffect="non-scaling-stroke"：這個
-                svg 用 preserveAspectRatio="none"，viewBox 的寬高會依 panel/wrapper
-                形狀各自獨立縮放，框線粗細若不加這個屬性會跟著被壓扁——尤其面板偏
-                窄長時，垂直方向縮放比例較小，下緣那條水平線就會顯得特別細。加上這個
-                屬性後粗細固定用「螢幕像素」計算，兩個視圖看起來粗細一致。 */}
-            <rect
-              id="court-border"
-              x="0"
-              y="0"
-              width={COURT_W}
-              height={COURT_H}
-              fill="none"
-              stroke="#F5F5F0"
-              strokeOpacity="0.6"
-              strokeWidth="3"
-              vectorEffect="non-scaling-stroke"
-              rx="3"
-            />
+            {/* 球場外框（lib/courtTheme.tsx CourtBorder）：兩個視圖都畫在 SVG 裡、貼著
+                球場本身（0,0 到 100,200），不會被上下 L 備位留白帶撐大（過去輪轉視圖是
+                靠 wrapper 的 CSS border 畫框，但 wrapper 現在比球場高，CSS border 會框住
+                整個留白帶，所以統一改成跟戰術視圖一樣畫在 SVG 裡）。vectorEffect=
+                "non-scaling-stroke" 的理由見 CourtBorder 本體的註解。 */}
+            <CourtBorder />
 
             {/* L 備位珊瑚色虛線框（issue #18）已於 2026-08-04 拿掉（tang 要求，覺得跟現在
                 的畫面風格不搭）——底下留白空間（LIBERO_ZONE_WIDTH 等常數）跟可拖曳的
                 L 備位圓圈（下面 courtView === "rotation" 那段）都還在，只是不再額外畫一圈
                 虛線框標示這塊區域，圓圈本身已經夠清楚。 */}
 
-            {/* Center Line (Net) + Attack Lines (3m)：跟計分表球場（ScoreSheetCourt.tsx）
-                共用同一份 <CourtLines/>（lib/courtTheme.tsx，issue #227），改一邊兩邊一起變。
-                （這裡原本手寫死 #F5F5F0/0.6，跟 COURT_LINE_COLOR/COURT_LINE_OPACITY 這兩個
-                共用常數的值剛好一樣，只是沒有真的讀常數——換成 CourtLines 之後順便把這處
-                drift 修掉，畫面顏色不變。） */}
-            <CourtLines />
-
-            <text
-              x="50"
-              y="15"
-              fontSize="6"
-              fill="#F5F5F0"
-              textAnchor="middle"
-              className="font-sans"
-            >
-              對手
-            </text>
-            <text
-              x="50"
-              y="192"
-              fontSize="6"
-              fill="#F5F5F0"
-              textAnchor="middle"
-              className="font-sans"
-            >
-              我方
-            </text>
+            {/* 攻擊線 + 球網：跟計分表球場（ScoreSheetCourt.tsx）共用同一份 <CourtLines/>
+                （lib/courtTheme.tsx），改一邊兩邊一起變。id 要跟上面 <CourtGradientDefs/>
+                傳的 "court-gradient" 一致，球網的網格帶才找得到 pattern。 */}
+            <CourtLines id="court-gradient" />
 
             {/* 畫筆標記與防守範圍只在「戰術視圖」模式下顯示，
               輪轉視圖只看站位圓圈，避免標記干擾判斷球員站哪裡。 */}
@@ -592,13 +540,22 @@ export default function Court() {
                     // 右鍵點備位區 L = 取消先發設定，備位區變空白
                     if (matchId) setStartingLiberoId(matchId, null);
                   }}
-                  // 配色跟計分表 ScoreSheetCourt.tsx 的自由球員鈕同步（2026-08-04 定案，見那邊
-                  // 的配色說明）：橘色 #FF6B00 換成跟前排球員同一個綠 #CCFF00，「自由球員」
-                  // 這個語意色全站統一。
-                  className="w-7 h-7 rounded-full bg-[#0a0b07]/55 border-2 border-[#CCFF00] text-[#CCFF00] flex items-center justify-center text-micro font-bold cursor-grab active:cursor-grabbing select-none backdrop-blur-sm"
+                  // 2026-08-07 對齊 Claude Design PlayerMarker 元件卡的「自由球員」樣式
+                  // （components/PlayerMarker/card.html，跟 components/PlayerMarker.tsx
+                  // 那顆 SVG 版本同一套視覺語言，這裡是 HTML 版）：深色玻璃底描邊改成
+                  // 「這個顏色實色填滿＋圈角一顆深底 L 徽章」，背號不再加 # 前綴，文字用
+                  // 深色墨（DS 的 filled 狀態規則：實色亮綠底上深色字才有足夠對比）。
+                  className="relative flex h-7 w-7 cursor-grab select-none items-center justify-center rounded-full font-score text-micro backdrop-blur-sm active:cursor-grabbing"
+                  style={{ background: "#CCFF00", color: "#0a0b07" }}
                   title={`${p.name} #${p.number} — 拖到後排（1/5/6）上場；右鍵取消先發`}
                 >
-                  #{p.number}
+                  {p.number}
+                  <span
+                    className="absolute -bottom-1 -right-1 rounded-full px-1 text-marker-xs font-sans font-bold leading-[1.4]"
+                    style={{ background: "#0a0b07", color: "#CCFF00" }}
+                  >
+                    L
+                  </span>
                 </div>
               ))}
             </div>

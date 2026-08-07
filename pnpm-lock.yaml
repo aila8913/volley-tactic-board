@@ -556,6 +556,9 @@ importers:
       '@vitejs/plugin-react':
         specifier: 'catalog:'
         version: 5.2.0(vite@7.3.3(@types/node@25.6.2)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.21.0)(yaml@2.8.4))
+      '@vp-tw/taipei-sans-tc':
+        specifier: ^0.2.0
+        version: 0.2.0
       '@workspace/api-client-react':
         specifier: workspace:*
         version: link:../../lib/api-client-react
@@ -2019,6 +2022,9 @@ packages:
 
   '@vitest/utils@3.2.6':
     resolution: {integrity: sha512-lI23nIs4bnT3T8NIoh+vFaz5s2/DdP0Jgt2jxwgWljvwn82cLJtyi/If+fjFyoLMGIOz0U/fKvWE0d4jsNQEfg==}
+
+  '@vp-tw/taipei-sans-tc@0.2.0':
+    resolution: {integrity: sha512-zdcYaCsgw3XEgSzIR7+SvrEr+G15vQET7O9pmogMJCWV7RPQL5N9UKnB0W3J+3oKTjV3pK9JiRZ2e6EC3KCgaQ==}
 
   accepts@2.0.0:
     resolution: {integrity: sha512-5cvg6CtKwfgdmVqY1WIiXKc3Q1bkRqGLi+2W/6ao+6Y7gu/RCwRuAhGEzh5B4KlszSuTLgZYuqFqo5bImjNKng==}
@@ -5908,6 +5914,8 @@ snapshots:
       '@vitest/pretty-format': 3.2.6
       loupe: 3.2.1
       tinyrainbow: 2.0.0
+
+  '@vp-tw/taipei-sans-tc@0.2.0': {}
 
   accepts@2.0.0:
     dependencies:

@@ -1,12 +1,23 @@
-// 球場上球員圈的共用視覺（issue #134 玻璃圓片格式）：深色半透明底 + 狀態色細邊框，
-// 圈裡固定顯示背號、圈下方小字顯示姓名。原本這份 SVG 標記各寫一份在 PlayerNode.tsx
-// （戰術板）跟 ScoreSheetCourt.tsx（計分表）——兩邊視覺一樣但程式碼各自維護，改一邊
-// 忘記改另一邊就會不同步。抽成這個純展示元件後，兩邊只負責「算出這個人現在該用
-// 什麼顏色/要不要放大強調」，圓圈本身長什麼樣只有這裡一份。
+// 球場上球員圈的共用視覺。原本這份 SVG 標記各寫一份在 PlayerNode.tsx（戰術板）跟
+// ScoreSheetCourt.tsx（計分表）——兩邊視覺一樣但程式碼各自維護，改一邊忘記改另一邊
+// 就會不同步。抽成這個純展示元件後，兩邊只負責「算出這個人現在該用什麼顏色/要不要
+// 強調」，圓圈本身長什麼樣只有這裡一份。
+//
+// 2026-08-07：對齊 Claude Design 的 PlayerMarker 元件卡（components/PlayerMarker/card.html），
+// 這次是視覺準則本身換了，不是照抄那張卡的 HTML/CSS——那張卡是 div+span 的一般 DOM 元件，
+// 這裡仍是畫進球場 <svg> 的 circle+text，兩者渲染技術不同，但下面這幾個決定改成跟卡片一致：
+//   - 邊框寬度固定 1.5（不再依 emphasized 從 1.2 長到 2）、圈本身也不再因為 emphasized 放大
+//     半徑——「這個人現在特別重要」現在純靠發光表達，呼叫端如果真的要連圓圈一起放大
+//     （例如發球中的球員），自己傳更大的 radius，元件不再暗自疊加。
+//   - 背號字體從 font-sans 粗體換成 font-numeric（跟 --font-score 一樣是「數字展示」
+//     語彙，而不是一般內文字重），非實色填滿時背號顏色也跟著邊框色走（不再永遠白色）。
+//   - 自由球員除了原本「反轉填色」，圈角再疊一顆深底小圓「L」徽章——之前只靠填色區分，
+//     卡片版本明確加了文字徽章，辨識度更高。
+//   - 姓名改用 --sage（卡片裡「meta 資訊」慣用的顏色），不再是半透明米白。
 //
 // 只管畫，不管互動——拖曳、點擊、右鍵這些行為留在呼叫端的 <g onPointerDown=...> 包起來，
-// 這裡只回傳要放進那個 <g> 裡的 SVG 內容（circle + 兩行 text），呼叫端自己決定要不要再疊加
-// 選取環、發球圖示、換人提示這類「這個情境才有」的裝飾。
+// 這裡只回傳要放進那個 <g> 裡的 SVG 內容，呼叫端自己決定要不要再疊加選取環、發球圖示、
+// 換人提示這類「這個情境才有」的裝飾。
 interface PlayerMarkerProps {
   number: number;
   name: string;
@@ -14,8 +25,8 @@ interface PlayerMarkerProps {
   // 這裡只負責畫出來。
   color: string;
   radius?: number;
-  // 強調態（戰術板：被選取；計分表：目前發球）共用同一套放大＋加粗邊框＋發光的處理，
-  // 讓兩邊「這個人現在特別重要」的視覺語言一致。
+  // 強調態（戰術板：被選取；計分表：目前發球）共用同一套發光處理，讓兩邊「這個人
+  // 現在特別重要」的視覺語言一致。
   emphasized?: boolean;
   // 發光的模糊半徑，只有 emphasized 時有意義。預設 3（原始值）——白色/萊姆綠/橘色這些
   // 有色相的顏色在這個模糊半徑下讀起來是柔光，效果一直都好；但同樣的數字套在紅色上
@@ -25,8 +36,8 @@ interface PlayerMarkerProps {
   glowBlur?: number;
   // 自由球員定案配色（2026-08-04）：其他狀態都是「深色玻璃底＋這個顏色描邊」，但自由
   // 球員要反過來——「這個顏色實色填滿＋深色描邊」，跟計分表 ScoreSheetCourt.tsx 自由球員鈕
-  // 最後定案的樣式一致（見那邊的配色說明）。true 時 fill/stroke 對調；預設 false 維持
-  // 其他狀態原本的樣子，不影響既有呼叫端。
+  // 最後定案的樣式一致（見那邊的配色說明）。true 時 fill/stroke 對調、圈角再加「L」徽章；
+  // 預設 false 維持其他狀態原本的樣子，不影響既有呼叫端。
   solidFill?: boolean;
 }
 
@@ -39,33 +50,73 @@ export default function PlayerMarker({
   glowBlur = 3,
   solidFill = false,
 }: PlayerMarkerProps) {
-  const r = emphasized ? radius + 1.5 : radius;
-  // 背號在圈「裡面」，solidFill 時圈是飽和實色，背號要跟著換深色才有對比；
-  // 姓名畫在圈「下方」，不管圈本身是深底描邊還是實色填滿，姓名底下永遠是深色球場
-  // 背景（不是圈的填色），所以姓名一律用米白，不跟著 solidFill 換色
-  // （tang 2026-08-04：換成自由球員綠底黑框之後姓名變黑字，蓋在深色球場上看不見）。
-  const numberColor = solidFill ? "#0a0b07" : "#F5F5F0";
+  // 背號在圈「裡面」，solidFill 時圈是飽和實色，背號要跟著換深色才有對比；非實色時
+  // 背號直接用邊框色（卡片版本的決定：不再永遠白色，讓數字也是狀態指示的一部分）。
+  const numberColor = solidFill ? "#0a0b07" : color;
+  // 邊框寬度：DS 卡片是固定 1.5 CSS px 套在 34px（半徑 17）的圓上，等於「邊框:半徑」
+  // 8.8% 這個比例——上一版直接把 1.5 當成 SVG 單位寫死，結果套在我們半徑 6 的球場座標
+  // 系（court viewBox 是 100x200，實際畫面上會被放大好幾倍）上看起來遠比 DS 卡片粗。
+  // 改成照 DS 的比例算，半徑變（例如發球中放大到 7.5）邊框跟著等比變、不會突然變粗。
+  const strokeWidth = radius * (1.5 / 17);
+  // 發光：DS 卡片用 box-shadow「blur=glowBlur*7、spread=glowBlur*2」兩個數字疊出來，
+  // 一樣是 CSS px 套在半徑 17 的圓上，一樣要按上面 strokeWidth 的邏輯換算成我們的
+  // SVG 座標比例，不能直接拿 21px/6px 這種數字用（會變成整片糊掉的巨大光暈）。
+  // SVG 的 drop-shadow 沒有「spread」這個參數（只有模糊半徑），這裡疊兩層 drop-shadow
+  // 逼近 box-shadow 的效果：小模糊那層負責「spread 撐出來的實心光圈」，大模糊那層
+  // 負責外圍的柔光暈開，兩層顏色相同、疊加起來視覺上接近 DS 那種「核心亮、外圍散」的光。
+  const glowSpread = radius * ((glowBlur * 2) / 17);
+  const glowBlurPx = radius * ((glowBlur * 7) / 17);
   return (
     <>
       <circle
-        r={r}
-        fill={solidFill ? color : "rgba(10, 11, 7, 0.62)"}
+        r={radius}
+        fill={solidFill ? color : "rgba(10, 11, 7, 0.55)"}
         stroke={solidFill ? "#0a0b07" : color}
-        strokeWidth={emphasized ? 2 : 1.2}
-        style={emphasized ? { filter: `drop-shadow(0 0 ${glowBlur}px ${color})` } : undefined}
+        strokeWidth={strokeWidth}
+        style={
+          emphasized
+            ? {
+                filter: `drop-shadow(0 0 ${glowSpread}px ${color}) drop-shadow(0 0 ${glowBlurPx}px ${color})`,
+              }
+            : undefined
+        }
       />
       <text
-        y="1.6"
-        fontSize="4.5"
-        fontWeight="bold"
+        y={radius * 0.27}
+        fontSize={radius * 0.84}
+        fontWeight="400"
         fill={numberColor}
         textAnchor="middle"
-        className="font-sans pointer-events-none"
+        className="font-score pointer-events-none"
+        style={{ letterSpacing: "0.02em" }}
       >
         {number}
       </text>
+      {solidFill && (
+        <g
+          transform={`translate(${radius * 0.72}, ${radius * 0.72})`}
+          className="pointer-events-none"
+        >
+          <circle r="2.3" fill="#0a0b07" />
+          <text
+            y="1"
+            fontSize="3.2"
+            fontWeight="700"
+            fill={color}
+            textAnchor="middle"
+            className="font-sans"
+          >
+            L
+          </text>
+        </g>
+      )}
+      {/* 2026-08-07：這裡原本先後試過 var(--sage)、var(--off)，兩次都「看起來沒變」，
+          真正原因抓到了——這兩個 CSS 變數是 Claude Design 那邊 styles.css 的命名，我們
+          app 的 index.css 從來沒有定義過 --sage / --off，var() 找不到值時 SVG fill
+          退回預設的黑色，所以怎麼換名字畫面都一樣黑。改成直接寫死米白色碼（跟
+          COURT_LINE_COLOR 用的是同一個色號），不依賴任何未定義的 CSS 變數。 */}
       <text
-        y={r + 5.5}
+        y={radius + 5.5}
         fontSize="3.2"
         fill="#F5F5F0"
         fillOpacity="0.75"

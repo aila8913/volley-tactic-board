@@ -388,7 +388,10 @@ export default function MatchAnalytics() {
                   }`}
                 >
                   <span className="text-caption leading-none text-[#a9b096]">全場</span>
-                  <span className="mt-1 font-numeric text-sm font-bold leading-none tabular-nums text-[#f5f5f0]">
+                  {/* 局數比分（X:Y）：跟計分板大比分同一套「分數展示」語彙，2026-08-07 從
+                      font-numeric 改用 font-score（Anton）——這裡不是表格裡的普通統計數字，
+                      是真的分數比例。 */}
+                  <span className="mt-1 font-score text-sm font-bold leading-none tabular-nums text-[#f5f5f0]">
                     {ourSetsWon}:{opponentSetsWon}
                   </span>
                 </button>
@@ -418,8 +421,9 @@ export default function MatchAnalytics() {
                       <span className="text-caption leading-none text-[#a9b096]">
                         第 {s.setNumber} 局{inProgress ? "（進行中）" : ""}
                       </span>
+                      {/* 單局比分（X:Y），理由同上面「全場」那顆——font-score 不是 font-numeric。 */}
                       <span
-                        className={`mt-1 font-numeric text-sm font-bold leading-none tabular-nums ${
+                        className={`mt-1 font-score text-sm font-bold leading-none tabular-nums ${
                           inProgress ? "text-sky-300" : weWon ? "text-[#c6f135]" : "text-[#ef4444]"
                         }`}
                       >
@@ -579,14 +583,19 @@ export default function MatchAnalytics() {
                   <tbody>
                     {playerRows.map((row) => (
                       <tr key={row.playerId} className="border-b border-white/[0.06]">
-                        <td className="py-1 font-semibold text-[#f5f5f0]">{row.number}</td>
+                        {/* 背號跟得/失都是「分數、背號」規則管的東西（2026-08-07 tang 定案，
+                            跟 components/ScoreSheetStats.tsx 那張同構的表一起改），從
+                            font-numeric 換成 font-score。 */}
+                        <td className="py-1 font-score font-semibold text-[#f5f5f0]">
+                          {row.number}
+                        </td>
                         {ACTIONS.flatMap((a) => {
                           const s = row.stats[a];
                           const hasData = s.won + s.lost > 0;
                           return [
                             <td
                               key={`${a}-won`}
-                              className={`py-1 text-right font-numeric tabular-nums border-l border-white/[0.08] px-1 ${
+                              className={`py-1 text-right font-score tabular-nums border-l border-white/[0.08] px-1 ${
                                 hasData ? "text-[#c6f135]" : "text-white/20"
                               }`}
                             >
@@ -594,7 +603,7 @@ export default function MatchAnalytics() {
                             </td>,
                             <td
                               key={`${a}-lost`}
-                              className={`py-1 text-right font-numeric tabular-nums px-1 ${
+                              className={`py-1 text-right font-score tabular-nums px-1 ${
                                 hasData ? "text-[#ef4444]" : "text-white/20"
                               }`}
                             >
@@ -658,10 +667,12 @@ export default function MatchAnalytics() {
                         <td className="py-1 font-semibold text-[#f5f5f0]">
                           第 {r.rotation + 1} 輪
                         </td>
-                        <td className="py-1 text-right font-numeric tabular-nums text-[#c6f135]">
+                        {/* 得/失是真的分數（不是得分率那種衍生百分比），2026-08-07 跟
+                            上面球員動作統計表一起從 font-numeric 換成 font-score。 */}
+                        <td className="py-1 text-right font-score tabular-nums text-[#c6f135]">
                           {r.pointsWon}
                         </td>
-                        <td className="py-1 text-right font-numeric tabular-nums text-[#ef4444]">
+                        <td className="py-1 text-right font-score tabular-nums text-[#ef4444]">
                           {r.pointsLost}
                         </td>
                         <td className="py-1 text-right font-numeric tabular-nums text-[#a9b096]">

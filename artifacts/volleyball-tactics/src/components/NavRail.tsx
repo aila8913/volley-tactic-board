@@ -6,6 +6,7 @@ import { useTacticsBoard, isSessionDirty, DISCARD_MSG } from "../hooks/useTactic
 import { useRotationTable } from "../hooks/useRotationTable";
 import { useToast } from "@/hooks/use-toast";
 import { exportCourtAsPng, exportStateAsJson, importStateFromJson } from "../lib/exportUtils";
+import BrandLogo from "./BrandLogo";
 import NewTacticDialogModal from "./NewTacticDialogModal";
 import NavListIcon from "./icons/NavListIcon";
 import NavSwordsIcon from "./icons/NavSwordsIcon";
@@ -300,6 +301,13 @@ export default function NavRail(props: NavRailProps) {
           移到浮層途中會不會有一段空隙導致 hover 意外中斷」的問題——因為滑鼠移動路徑全程都
           還在同一個 <nav> 的範圍內。 */}
       <div className="flex flex-1 flex-col items-center gap-1 py-3">
+        {/* 品牌字標，2026-08-07 對齊 Claude Design 的 tokens/logo.html：置頂、置中，
+            22px（DS 文件標明的漸層版可讀下限，剛好對應導覽軌這種窄欄情境）。收合／
+            展開兩態各自的容器寬度不同，所以下面展開面板頂端另外重複渲染一次，不是
+            共用同一個 DOM 節點（展開面板是 absolute 疊上去的另一層，見下方說明）。 */}
+        <div className="flex w-full justify-center pb-2">
+          <BrandLogo style={{ fontSize: 22 }} />
+        </div>
         <CollapsedEntry
           glyph="比"
           icon={<NavListIcon className="size-5" />}
@@ -359,6 +367,11 @@ export default function NavRail(props: NavRailProps) {
           className="absolute inset-0 z-30 flex flex-col overflow-y-auto border-r
             border-white/[0.14] bg-[#12140f]/97 p-2 shadow-2xl shadow-black/50 backdrop-blur-lg"
         >
+          {/* 展開態是另一層疊上去的 DOM（absolute inset-0），跟上面收合本體的字標不是
+              同一個節點，所以要在這裡重複放一次，見上面收合本體那邊的說明。 */}
+          <div className="flex w-full justify-center pb-2">
+            <BrandLogo style={{ fontSize: 22 }} />
+          </div>
           <div className="flex flex-col gap-1">
             <ExpandedEntry
               glyph="比"

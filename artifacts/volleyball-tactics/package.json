@@ -51,6 +51,7 @@
     "@types/react-dom": "catalog:",
     "@types/uuid": "^11.0.0",
     "@vitejs/plugin-react": "catalog:",
+    "@vp-tw/taipei-sans-tc": "^0.2.0",
     "@workspace/api-client-react": "workspace:*",
     "class-variance-authority": "catalog:",
     "clsx": "catalog:",

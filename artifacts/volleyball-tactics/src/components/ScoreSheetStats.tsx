@@ -229,16 +229,19 @@ export default function ScoreSheetStats({
                 </tr>
               </thead>
               <tbody>
+                {/* 背號跟得/失都是「分數、背號」這條規則管的東西（2026-08-07 tang 定案：
+                    跟分數、背號有關的數字全部用 font-score/Anton，不是只有 X:Y 格式的
+                    比分比例）——這張表原本兩者都沒特別指定字體，補上去。 */}
                 {playerRows.map((row) => (
                   <tr key={row.playerId} className="border-b border-white/[0.06]">
-                    <td className="py-1 font-semibold text-[#F5F5F0]">{row.number}</td>
+                    <td className="py-1 font-score font-semibold text-[#F5F5F0]">{row.number}</td>
                     {ACTIONS.flatMap((a) => {
                       const s = row.stats[a];
                       const hasData = s.won + s.lost > 0;
                       return [
                         <td
                           key={`${a}-won`}
-                          className={`py-1 text-right tabular-nums border-l border-white/[0.10] px-1 ${
+                          className={`py-1 text-right font-score tabular-nums border-l border-white/[0.10] px-1 ${
                             hasData ? "text-[#C6F135]" : "text-white/20"
                           }`}
                         >
@@ -246,7 +249,7 @@ export default function ScoreSheetStats({
                         </td>,
                         <td
                           key={`${a}-lost`}
-                          className={`py-1 text-right tabular-nums px-1 ${
+                          className={`py-1 text-right font-score tabular-nums px-1 ${
                             hasData ? "text-[#EF4444]" : "text-white/20"
                           }`}
                         >
