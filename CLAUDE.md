@@ -54,9 +54,20 @@ docs/        specs and decision records
 - `DATABASE_URL` — Postgres connection string (throws on startup if missing, see `lib/db/src/index.ts`)
 - `PORT` — required by both the API server and the Vite frontends
 - `BASE_PATH` — required by the Vite frontends (used as the Vite `base`)
+- `API_PORT` — the API server's local dev port. Dev runs backend/frontend as two processes
+  (Vite `5173`, Express `3000`); `artifacts/api-server/src/index.ts` reads `API_PORT ?? PORT`, and Vite's
+  `server.proxy` forwards `/api/*` to it. **Not set in production** — there it's a single process serving
+  both, using the platform-injected `PORT`.
+- `COOKIE_SECRET` — signs the session cookie (#26 PR2). `app.ts` calls this at startup unconditionally
+  (`cookie-parser` needs a key to initialize even when nothing is actually doing Google OAuth) — missing it
+  throws immediately rather than letting the server half-start. Any string works locally; production should
+  generate a real one (`openssl rand -hex 32`).
 
-No `.env.example` exists yet. The human-facing list lives in `README.md`'s 「快速上手」 section (with a
-copy-pasteable `.env` block); the enforcing code is `lib/db/src/index.ts` and `vite.config.ts`.
+`.env.example` exists at the repo root and documents all five (plus the optional Google OAuth trio) with the
+same reasoning inline — copy it (`cp .env.example .env`) and only `DATABASE_URL` needs a real value. The
+human-facing list also lives in `README.md`'s 「快速上手」 section (copy-pasteable `.env` block); the
+enforcing code is `lib/db/src/index.ts`, `vite.config.ts`, `artifacts/api-server/src/index.ts`, and
+`artifacts/api-server/src/lib/session.ts`.
 
 ## Current gaps (don't assume otherwise)
 
