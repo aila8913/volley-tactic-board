@@ -22,7 +22,10 @@
 目前做到哪、下一步是什麼，看這兩個會被主動維護的來源，別在這裡重抄：
 
 - `docs/PROGRESS.md` — 近一週快照＋當下狀態。
-- GitHub Issues / Milestones — `gh issue list --state open`（backlog 依 M1–M5 分階段）。
+- GitHub Issues / Milestones — `gh issue list --state open`（backlog 依 M1–M7 分階段；
+  各 milestone 的收件標準見 `.claude/skills/wrap-up/reference.md`）。
+- [Project #4](https://github.com/users/aila8913/projects/4) 的 Status 欄 — 當下卡在哪。
+  三個軸各司其職：**標籤管分類、milestone 管時程、Project 管狀態**。
 
 ## 為什麼產品／DB／API 分成三份文件而不是一份
 

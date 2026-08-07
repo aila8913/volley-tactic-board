@@ -99,7 +99,7 @@ numbers.
 5. **Sync the roadmap (Milestones + GitHub Project).** The time-ordered roadmap
    lives in two GitHub structures with distinct jobs — each fact has exactly one
    home（single source of truth）:
-   - **Milestones M1–M5 = 階段（時間序）**. Every open issue should carry exactly
+   - **Milestones M1–M7 = 階段（時間序）**. Every open issue should carry exactly
      one — assign new issues from step 4 in the same pass. Milestones carry **soft
      due dates** that feed the Roadmap view's timeline, not deadlines; if reality
      has drifted noticeably, propose adjusted dates (PO confirms).
