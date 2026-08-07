@@ -551,7 +551,7 @@ export default function Court() {
                 >
                   {p.number}
                   <span
-                    className="absolute -bottom-1 -right-1 rounded-full px-1 text-[8px] font-sans font-bold leading-[1.4]"
+                    className="absolute -bottom-1 -right-1 rounded-full px-1 text-marker-xs font-sans font-bold leading-[1.4]"
                     style={{ background: "#0a0b07", color: "#CCFF00" }}
                   >
                     L
