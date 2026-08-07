@@ -348,10 +348,14 @@ export default function ScoreSheet() {
   //（可能是對方失誤），硬填一個 touchedBy: { side } 等於把猜測寫進資料裡，之後的球員
   // 統計會被這些假資料汙染。要記細節的路徑仍然在：點球場上的球員，那條走原本的選單流程。
   //
-  // gesture !== null 時代表球場那條路徑的選單正開著，不重複觸發；currentSet 不存在
-  //（開賽前的「誰先發球」畫面也會渲染 scoreDisplay）時記錄沒有意義，一併擋掉。
+  // gesture !== null 時代表球場那條路徑的選單正開著，不重複觸發；currentSet 不存在，或存在
+  // 但還沒選發球方（開賽前的「誰先發球」畫面渲染的是 makeEmptySet 佔位物件，serving: null）
+  // 時記錄沒有意義，一併擋掉——這裡雖然按鈕本身已經用 disabled 擋過一次（見 scoreDisplay 的
+  // canScoreFromCard），但保留這道防呆是為了不讓這個函式本身依賴「呼叫端一定記得檢查
+  // disabled」這個隱性假設（2026-08-07：原本這裡漏了 serving 檢查，靠的正是這個隱性假設，
+  // 結果按鈕的 disabled 判斷式當時也漏了同一件事，兩邊剛好互相掩護、都沒抓到）。
   const handleScoreCardTouch = (side: Side) => () => {
-    if (gesture !== null || !currentSet) return;
+    if (gesture !== null || !currentSet || currentSet.serving === null) return;
     score(side);
   };
 
@@ -457,6 +461,13 @@ export default function ScoreSheet() {
     });
   };
 
+  // 比分卡能不能點：currentSet 存在、且已經選過發球方。**不能只看 !!currentSet**——開賽前
+  // 「誰先發球」畫面共用同一份 scoreDisplay，那時候的 currentSet 其實是 makeEmptySet 佔位
+  // 物件（見 lib/scoreSheetMapping.ts），serving: null 但物件本身是 truthy。2026-08-07
+  // 修正：拆成一個共用布林，兩張卡的 disabled／cursor 都讀這一個值，避免像原本那樣兩處各寫
+  // 一份判斷式、其中一份忘了排除 serving===null。
+  const canScoreFromCard = currentSet !== undefined && currentSet.serving !== null;
+
   // 局數 label + 大比分 + 我方/對手：開賽前的「誰先發球」畫面跟比賽進行中的右欄操作區都會用到，
   // 抽成一個區塊避免兩處各寫一份、日後改一邊忘另一邊漂移。
   const scoreDisplay = (
@@ -482,14 +493,17 @@ export default function ScoreSheet() {
           改成真正的 <button> 而不是掛 onPointerDown 的 <div>：這是現在整頁最主要的操作，
           鍵盤（Tab + Enter/Space）跟螢幕閱讀器都該用得到，<div> 兩者都拿不到。type="button"
           一定要寫——HTML 的預設值是 submit，將來這塊被包進任何 <form> 就會誤觸送出。
-          disabled 綁 !currentSet：開賽前的「誰先發球」畫面共用同一份 JSX，那時候記分沒有
-          意義（handleScoreCardTouch 內部也擋，這裡是讓「不能按」在畫面上就看得出來，而不是
-          按了沒反應）。
+          disabled 綁 !canScoreFromCard（2026-08-07 修正，原本只擋 !currentSet 是錯的：開賽前
+          「誰先發球」畫面共用同一份 JSX，那時候的 currentSet 其實是 makeEmptySet 佔位物件
+          ——serving: null，但物件本身是 truthy——所以舊判斷式從沒真的生效過，按鈕看起來
+          完全可按，點下去卻因為 score() 內部的 serving===null 防呆而靜默無反應，使用者會
+          以為「按了沒用」。canScoreFromCard 跟 handleScoreCardTouch 內部保持一致，見上面
+          該常數的說明。
           active:scale 給一點按下去的觸覺回饋——記分時眼睛多半在場上不在螢幕，需要一個
           「這一下真的按到了」的即時訊號。 */}
         <button
           type="button"
-          disabled={!currentSet}
+          disabled={!canScoreFromCard}
           onClick={handleScoreCardTouch("us")}
           aria-label={`我方得分（目前 ${currentSet?.ourScore ?? 0} 分）`}
           className={`flex flex-col items-center gap-1 rounded-2xl border px-5 py-3 transition ${
@@ -497,7 +511,7 @@ export default function ScoreSheet() {
               ? "border-[#C6F135] shadow-[0_0_18px_rgba(198,241,53,0.4)]"
               : "border-white/[0.14] shadow-lg shadow-black/30"
           } ${
-            currentSet
+            canScoreFromCard
               ? "cursor-pointer hover:border-[#C6F135] hover:brightness-110 active:scale-95"
               : "cursor-default"
           } bg-black/30`}
@@ -537,7 +551,7 @@ export default function ScoreSheet() {
         {/* 對手卡，跟上面我方卡完全對稱（理由見那邊的說明），只差配色是珊瑚紅那一套。 */}
         <button
           type="button"
-          disabled={!currentSet}
+          disabled={!canScoreFromCard}
           onClick={handleScoreCardTouch("opponent")}
           aria-label={`對手得分（目前 ${currentSet?.opponentScore ?? 0} 分）`}
           className={`flex flex-col items-center gap-1 rounded-2xl border px-5 py-3 transition ${
@@ -545,7 +559,7 @@ export default function ScoreSheet() {
               ? "border-[#ef4444] shadow-[0_0_18px_rgba(239,68,68,0.4)]"
               : "border-white/[0.14] shadow-lg shadow-black/30"
           } ${
-            currentSet
+            canScoreFromCard
               ? "cursor-pointer hover:border-[#ef4444] hover:brightness-110 active:scale-95"
               : "cursor-default"
           } bg-black/30`}
