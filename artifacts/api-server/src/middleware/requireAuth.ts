@@ -33,6 +33,14 @@ const MOCK_USER_HEADER = "x-mock-user-id";
 export function resolveDevFallbackUserId(req: {
   header: (name: string) => string | undefined;
 }): string | null {
+  // ⚠️ 這道 gate 刻意寫成白名單（`=== "development"` 才放行），不是黑名單
+  // （`!== "production"` 就放行）。差別不是風格問題：黑名單是在窮舉「我想得到的壞情況」，
+  // 任何沒被想到的值都會預設放行。**這個選擇在 #225 當場就回本**——dev script 的
+  // `cross-env NODE_ENV=development pnpm run build && pnpm run start` 因為 `&&` 讓
+  // cross-env 的作用域只涵蓋 build，真正跑起來的 server 一直沒有 NODE_ENV。黑名單寫法
+  // 會判定「不是 production」而正常運作，把這個身分冒用後門默默帶進正式環境；白名單則是
+  // 直接失效、當場被測試抓到。
+  // 同一套慣例也用在 lib/db/src/seed-testdata.ts 的 assertSafeDatabaseHost（#339）。
   if (process.env.NODE_ENV !== "development") return null;
   const override = req.header(MOCK_USER_HEADER);
   return override || MOCK_USER_ID;
