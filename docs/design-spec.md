@@ -71,10 +71,19 @@ stdDeviation 1.5`），呼應整體發光語言，但**極克制**——不是�
 
 ## 3. 字體（Typography）
 
-- **主要字體（標題/內文）**：`Space Grotesk`（Google Fonts）—— 幾何感、粗體時很像參考圖裡
+- **主要字體（標題/內文）**：`Unbounded`（Google Fonts）—— 幾何感、粗體時很像參考圖裡
   "Dashboard" "224 Wins" 那種運動數據標題感。中文字則用 `Noto Sans TC`。
+  **2026-08-07 更新**：從 `Space Grotesk` 換成 `Unbounded`（`--font-dash`，`index.css`），
+  來源是 Claude Design 的 `tokens/typography.html`——角色不變（標題／儀表板數據標題／品牌），
+  只是換一款更符合「戰術版風格」的幾何字體，字距沿用 `-.02em`。`--font-score`（Anton）跟
+  `.tb-mark-hero`（Sixtyfour 背景字標）的 fallback 也跟著從 Space Grotesk 換成 Unbounded。
 - **等寬字體（比分、計時器、數據）**：`JetBrains Mono` —— 用在比分、球員背號、時間這類需要
   對齊、有「數據感」的地方（呼應運動投注圖裡的比分數字風格）。
+- **標籤字體（kicker/meta/chip）**：`Fragment Mono`（`--font-label`，2026-08-07 新增）——
+  跟上面 `JetBrains Mono`（`--font-numeric`）是不同語意：numeric 是表格/數據本身，
+  label 是描述那些數據的小標籤（例："Rotation R2 · Zone 4"）。字距收在 `.08–.14em`
+  （token 是 `--track-label`/`--track-label-tight`），10px 以下不使用。目前只加了 token，
+  哪些既有畫面要套用留給下一輪逐頁面套用時再決定。
 - **背景字標字體（Sixtyfour）**：`Sixtyfour`（Google Fonts，電路板/數位顯示風格）——2026-07-17
   戰術板材質強化（issue #134 Track B）新增，**只用在背景的置中大字標**（見第 5 節
   「背景字標」），不是內文/標題字體，不要拿去套一般文字。跟 Anton 的教訓相反：這款字體

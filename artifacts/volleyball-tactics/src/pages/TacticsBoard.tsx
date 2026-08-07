@@ -199,8 +199,9 @@ export default function TacticsBoard() {
       }
       tools={
         // mode C（session !== null）才會被實際渲染，理由跟上面 aside 的說明對稱。同樣包一層
-        // `relative z-10 h-full`（理由見上面第 2 點：backdrop 的 tb-beam/tb-mark 是
-        // z-index:1 的絕對定位層，右欄內容要自己拉進同一層 stacking 比較才會疊在它上面）。
+        // `relative z-10 h-full`（理由見上面第 2 點：這一頁雖然目前沒有再傳 backdrop，
+        // 但 z-index 機制是 AppShell 通用的，其他頁面的 .tb-beam 還是這一層 stacking，
+        // 保留這個 wrapper 不會有壞處，之後要重新掛背景層時也不用回頭補）。
         <div className="relative z-10 h-full">
           <TacticsEditToolRail
             matchId={id ?? ""}
@@ -212,36 +213,11 @@ export default function TacticsBoard() {
           />
         </div>
       }
-      backdrop={
-        // issue #134 Track B（材質強化）：置中放大的字標，破除原本「整片平」的單調感。
-        // VOLLEY / BOARD 是品牌名稱定案前的佔位字。
-        //
-        // 原本這裡還有一道 .tb-beam 斜向光影，2026-08-06 隨設計系統「戰術版風格」落地移除
-        // ——製圖紙背景（index.css `.app-canvas`）本身就含一道斜光束，而且是全站都有。
-        // 設計系統的慣例明講背景層只掛一次，兩道疊在一起會在交界處出現不自然的亮帶。
-        <>
-          <div className="tb-mark">
-            <div className="tb-mark-flourish">
-              <span></span>
-              <span></span>
-              <span></span>
-            </div>
-            <div className="tb-mark-hero">
-              <span className="layer layer-glow">
-                VOLLEY
-                <br />
-                BOARD
-              </span>
-              <span className="layer layer-core">
-                VOLLEY
-                <br />
-                BOARD
-              </span>
-            </div>
-            <div className="tb-mark-caption">Tactics Board · Est. 2026</div>
-          </div>
-        </>
-      }
+      // issue #134 Track B 加的置中背景大字標（原本先是 VOLLEY/BOARD 佔位字，
+      // 2026-08-07 一度換成 BrandLogo 的「VOL.02」正式文字標）已於同日拿掉——
+      // 那顆字標放大到背景尺寸後糊得很嚴重（Anton 字身的漸層/多層描邊在極大字級
+      // 下細節撐不住），tang 要求先移除。BrandLogo 本身沒有問題，繼續用在
+      // NavRail.tsx 的導覽軌字標（22px，小尺寸不會有這個問題）。
       className={APP_SHELL_CLASS}
       style={APP_BACKGROUND_STYLE}
     >

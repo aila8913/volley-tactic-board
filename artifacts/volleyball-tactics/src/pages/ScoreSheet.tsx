@@ -881,7 +881,7 @@ export default function ScoreSheet() {
                     PRIMARY（萊姆綠實心），讓記錄者一眼看到「可以收尾了」，但畫面不會被彈窗
                     打斷、也還能繼續記分——記錯一球被強制中斷，比忘記按更惱人。 */}
                   <button
-                    className={matchDecided ? PRIMARY_BUTTON_CLASS : GHOST_BUTTON_CLASS}
+                    className={`whitespace-nowrap ${matchDecided ? PRIMARY_BUTTON_CLASS : GHOST_BUTTON_CLASS}`}
                     onClick={() => setShowFinishConfirm(true)}
                   >
                     結束比賽

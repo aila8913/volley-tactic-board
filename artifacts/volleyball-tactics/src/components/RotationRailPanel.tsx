@@ -398,14 +398,21 @@ export default function RotationRailPanel({
       >
         {assignablePlayers.map((p) => {
           const currentZone = Object.entries(safeLineup).find(([, pid]) => pid === p.id)?.[0];
-          const rowClass =
-            "flex w-full items-center gap-2 rounded-lg border border-white/[0.12] bg-white/[0.03] px-2 py-1.5 text-left text-xs text-[#F5F5F0] transition";
+          // 已上場的人要在清單裡發光標出來，讓教練一眼看出誰還在板凳上（見上面 ③ 的
+          // 說明）——原本只有右側那個小小的號位數字當提示，太不明顯，補上跟這個檔案
+          // 其他地方同一套「已選中/命中目標」用的萊姆綠描邊+底色，再加一點光暈
+          // （box-shadow）呼應「發光」而不只是換色。
+          const rowClass = `flex w-full items-center gap-2 rounded-lg border px-2 py-1.5 text-left text-xs transition ${
+            currentZone
+              ? "border-[#C6F135]/60 bg-[#C6F135]/10 text-[#C6F135] shadow-[0_0_10px_rgba(198,241,53,0.25)]"
+              : "border-white/[0.12] bg-white/[0.03] text-[#F5F5F0]"
+          }`;
           const rowContent = (
             <>
               <span className="font-bold tabular-nums">{p.number}</span>
               <span className="truncate">{p.name}</span>
               {currentZone && (
-                <span className="ml-auto shrink-0 text-micro text-[#9AA08C]">{currentZone}</span>
+                <span className="ml-auto shrink-0 text-micro text-[#C6F135]/80">{currentZone}</span>
               )}
             </>
           );

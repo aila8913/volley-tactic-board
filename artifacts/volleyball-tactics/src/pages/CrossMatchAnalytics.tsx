@@ -146,7 +146,10 @@ export default function CrossMatchAnalytics() {
                       <td className="py-1.5 text-right font-numeric tabular-nums text-[#f5f5f0]">
                         {m.setsPlayed}
                       </td>
-                      <td className="py-1.5 text-right font-numeric tabular-nums text-[#f5f5f0]">
+                      {/* 得分:失分是真的比分比例（不是這張表其他欄位那種單純統計數字），
+                          2026-08-07 跟 MatchAnalytics.tsx 的局數比分一起從 font-numeric
+                          改用 font-score（Anton）。 */}
+                      <td className="py-1.5 text-right font-score tabular-nums text-[#f5f5f0]">
                         {m.ourPoints}:{m.opponentPoints}
                       </td>
                     </tr>

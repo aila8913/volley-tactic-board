@@ -3,10 +3,15 @@
    request，這個專案規模可以接受）。 */
 @import url("https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap");
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400..700&display=swap");
-@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400..700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Unbounded:wght@400..700&display=swap");
 @import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap");
-@import url("https://fonts.googleapis.com/css2?family=Sixtyfour&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Fragment+Mono&display=swap");
 @import url("https://fonts.googleapis.com/css2?family=Anton&display=swap");
+/* 品牌用中文字體（--font-brand-tc）。不是 Google Fonts，是 npm 套件 @vp-tw/taipei-sans-tc
+   封裝好的 WOFF2 子集（見下面 --font-brand-tc token 旁的說明），三個字重都拉進來備用。 */
+@import "@vp-tw/taipei-sans-tc/dist/Light/TaipeiSansTCBeta-Light.css";
+@import "@vp-tw/taipei-sans-tc/dist/Regular/TaipeiSansTCBeta-Regular.css";
+@import "@vp-tw/taipei-sans-tc/dist/Bold/TaipeiSansTCBeta-Bold.css";
 @import "tailwindcss";
 @import "tw-animate-css";
 @plugin "@tailwindcss/typography";
@@ -48,17 +53,41 @@
   /* 給「比賽列表」深色儀表板改版用的字體變數。--font-dash 是自訂名字，只在該頁面透過
      font-dash 這個 class 使用，不影響其他頁面仍在用的 --font-sans。
      見 docs/design-spec.md 第 3 節。
+     2026-08-07：跟著 Claude Design 的 tokens/typography.html 把 --font-dash 從 Space Grotesk
+     換成 Unbounded——這兩款字體在「標題/儀表板數據標題/品牌」這個角色上是同一個槽位，
+     單純換字重新聞（fallback 沿用 Noto Sans TC 接中文，邏輯不變）。
      注意：--font-numeric 特意不叫 --font-mono——後者是 Tailwind 內建的 theme key，蓋掉它會讓
      全 app 任何用到 font-mono class 的地方都變成 JetBrains Mono（PR #129 review 抓到的坑）。 */
-  --font-dash: "Space Grotesk", "Noto Sans TC", sans-serif;
+  --font-dash: "Unbounded", "Noto Sans TC", sans-serif;
   --font-numeric: "JetBrains Mono", ui-monospace, monospace;
+
+  /* --font-label（Fragment Mono）：kicker／meta／chip／註記這類「code 字」的角色，跟
+     --font-numeric（球員背號、比分表格數字）是不同語意——numeric 是表格裡的數據本身，
+     label 是描述那些數據的小標籤（例：「Rotation R2 · Zone 4」）。目前先加上這個 token，
+     哪些既有的大寫小標籤要換過去用 --font-label，留給下一輪逐頁面套用時再決定，這裡
+     只先讓 token 存在、不強迫改動任何既有畫面（no-op 新增）。
+     --track-label / --track-label-tight 是配套的字距——Fragment Mono 字腔本身寬，
+     tokens/typography.html 標明字距要收在 .08–.14em，10px 以下不使用。 */
+  --font-label: "Fragment Mono", ui-monospace, monospace;
+  --track-label: 0.12em;
+  --track-label-tight: 0.08em;
 
   /* Anton 在 design-spec.md 第 3 節被 PR #129 review 後判過死刑，但當時的場景是 17–18px
      的卡片標題（中英混排）——Anton 只有一個字重、中文完全不會 fallback。這裡是
      design-spec 明文留的例外：「真的需要大字展示、而且內容以英文/數字為主的場合」，
      計分頁的翻牌計分卡（大比分、局數框）純數字、大尺寸，正好是那個例外。只用在
-     font-score，不動 font-dash/font-sans，不會把 Anton 泄漏回中英混排的地方。 */
-  --font-score: "Anton", "Space Grotesk", sans-serif;
+     font-score，不動 font-dash/font-sans，不會把 Anton 泄漏回中英混排的地方。
+     fallback 跟著 --font-dash 一起從 Space Grotesk 換成 Unbounded，同一個理由。 */
+  --font-score: "Anton", "Unbounded", sans-serif;
+
+  /* --font-brand-tc（Taipei Sans TC Beta）：品牌／標誌用中文字體，只給 app 名稱這類
+     招牌文字用，不進一般介面內文（跟 .brand-logo 一樣是「大字展示」角色，不是給人
+     一個字一個字讀的內文字體）。字型檔本身透過 @vp-tw/taipei-sans-tc 這個 npm 套件
+     引入（見下面三行 @import）——它把官方 Taipei Sans TC Beta 的 ttf 拆成
+     unicode-range WOFF2 子集，瀏覽器只會下載畫面實際用到的字元子集，不像直接塞一份
+     20MB+ 的完整 ttf 進 repo。套件內部把 family 命名為 "Taipei Sans TC"（不帶
+     "Beta"），這裡沿用同一個名字。 */
+  --font-brand-tc: "Taipei Sans TC", "Noto Sans TC", sans-serif;
 
   /* 字級語意 token（issue #310，源自 #209 第 4 點）。目的是把「這段字有多大」換成
      「這段字是什麼語意」——Tailwind 4 的 `--text-<name>: <size>` 語法會自動產生對應的
@@ -300,68 +329,112 @@
     0 0 26px 6px rgba(198, 241, 53, 0.5);
 }
 
-/* 戰術板背景字標（issue #134 Track B：材質強化）——置中放大的品牌字標，用 plain CSS 寫
-   （同上面 .roster-row 的理由：避免 Tailwind 任意值解析多層 rgba 出錯）。
-   position: absolute，TacticsBoard.tsx 那邊要記得把 header／中間三欄那個外層 div 加上
-   relative，不然這層絕對定位的背景會蓋到前景 UI 上面（沒有明確 stacking context 時，
-   absolute 元素預設蓋在一般文件流的靜態元素上面）。
-   VOLLEY / BOARD 是品牌名稱定案前的佔位字，之後改文字就好，樣式不用動。
+/* 品牌文字標「VOL.02」（components/BrandLogo.tsx 共用，2026-08-07 對齊 Claude Design
+   的 tokens/logo.html，取代原本 TacticsBoard.tsx 背景那組 VOLLEY/BOARD 佔位字）：
+   Anton 全大寫，整體 skewX(-11deg)，字身在中央被一道斜切分成上下兩塊並錯開 .09em，
+   右端補一支 -26deg 的尾刀。這裡只放結構＋三種底色變體（mark／ink／flat），字級大小
+   一律由呼叫端用 style.fontSize 決定（DS 文件標明 22px 是漸層版可讀下限，14px 以下
+   要換 .flat 單色版）。 */
+.brand-logo {
+  position: relative;
+  display: inline-block;
+  font-family: "Anton", sans-serif;
+  font-weight: 400;
+  line-height: 0.86;
+  letter-spacing: 0.01em;
+  transform: skewX(-11deg);
+  white-space: nowrap;
+}
+.brand-logo .top {
+  display: block;
+  clip-path: polygon(0 0, 100% 0, 100% 40%, 0 54%);
+}
+.brand-logo .bot {
+  display: block;
+  clip-path: polygon(0 64%, 100% 50%, 100% 100%, 0 100%);
+  margin-top: -0.86em;
+  transform: translateX(0.09em);
+}
+.brand-logo .tail {
+  position: absolute;
+  right: -7%;
+  top: 44%;
+  width: 0.167em;
+  height: 1.25em;
+  transform: translateY(-52%) skewX(-26deg);
+  z-index: 2;
+}
+/* mark：深底主版（預設）——頂端近白、底部收深綠的漸層，外側兩層 .01em 深綠輪廓把
+   字緣從光暈裡切出來。 */
+.brand-logo.mark {
+  filter: drop-shadow(0 0 0.01em #0e1703) drop-shadow(0 0 0.01em #0e1703)
+    drop-shadow(0 0.012em 0 rgba(14, 23, 3, 0.95)) drop-shadow(0 0 0.05em rgba(246, 255, 190, 0.9))
+    drop-shadow(0 0 0.17em rgba(198, 241, 53, 0.42));
+}
+.brand-logo.mark .top,
+.brand-logo.mark .bot {
+  background: linear-gradient(
+    177deg,
+    #ffffff 0%,
+    #f6ffc6 6%,
+    #dffa60 26%,
+    #c6f135 44%,
+    #b2de26 45%,
+    #94c619 64%,
+    #5f8d0c 88%,
+    #3d5d08 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.brand-logo.mark .tail {
+  background: linear-gradient(177deg, #ffffff, #f6ffc6 8%, #c6f135 44%, #5f8d0c);
+  box-shadow: 0 0.014em 0 rgba(18, 30, 4, 0.9);
+}
+/* ink：淺底／萊姆底反轉版——字身壓成深橄欖到黑，光暈改成白色細緣。 */
+.brand-logo.ink {
+  filter: drop-shadow(0 0 0.01em rgba(255, 255, 255, 0.85))
+    drop-shadow(0 0 0.01em rgba(255, 255, 255, 0.6))
+    drop-shadow(0 0.012em 0 rgba(255, 255, 255, 0.55));
+}
+.brand-logo.ink .top,
+.brand-logo.ink .bot {
+  background: linear-gradient(177deg, #54661f 0%, #2b3610 34%, #101707 70%, #000 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.brand-logo.ink .tail {
+  background: linear-gradient(177deg, #54661f, #000);
+  box-shadow: 0 0.014em 0 rgba(255, 255, 255, 0.42);
+}
+/* flat：單色版（印刷／小尺寸），文字色吃 currentColor，呼叫端用 style.color 決定。 */
+.brand-logo.flat {
+  filter: none;
+}
+.brand-logo.flat .top,
+.brand-logo.flat .bot {
+  color: currentColor;
+  background: none;
+  -webkit-text-fill-color: currentColor;
+}
+.brand-logo.flat .tail {
+  background: currentColor;
+  box-shadow: none;
+}
+
+/* 戰術板背景字標（issue #134 Track B：材質強化）已於 2026-08-07 移除——先是 VOLLEY/
+   BOARD 佔位字，短暫換成 .brand-logo 的「VOL.02」正式文字標，但放大到背景尺寸後糊得
+   很嚴重（Anton 字身的漸層/多層描邊撐不住極大字級），tang 要求先拿掉，.tb-mark 系列
+   class（容器、三點綴飾、字標容器、下方小標籤）一併刪除，沒有其他地方在用。
+   .brand-logo 本身沒問題，繼續用在 NavRail.tsx 的導覽軌字標（22px，小尺寸不會糊）。
 
    原本這裡還有一個 .tb-beam（斜向光影），2026-08-06 隨設計系統「戰術版風格」落地刪除
    ——製圖紙背景 `.app-canvas` 已經含一道斜光束，而且是全站都有，不需要各頁再掛一次。 */
-.tb-mark {
-  position: absolute;
-  z-index: 1;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  width: clamp(420px, 55vw, 720px);
-  text-align: center;
-  pointer-events: none;
-}
-.tb-mark-flourish {
-  display: flex;
-  justify-content: center;
-  gap: 14px;
-  margin-bottom: 22px;
-}
-.tb-mark-flourish span {
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
-  background: rgba(198, 241, 53, 0.35);
-}
-.tb-mark-hero {
-  position: relative;
-  height: clamp(120px, 22vw, 220px);
-}
-.tb-mark-hero .layer {
-  position: absolute;
-  inset: 0;
-  font-family: "Sixtyfour", "Space Grotesk", monospace;
-  font-size: clamp(48px, 9vw, 92px);
-  font-weight: 400;
-  letter-spacing: 0.01em;
-  line-height: 1.02;
-}
-.tb-mark-hero .layer-glow {
-  color: rgba(245, 245, 240, 0.22);
-  filter: blur(16px);
-}
-.tb-mark-hero .layer-core {
-  color: rgba(245, 245, 240, 0.1);
-}
-.tb-mark-caption {
-  margin-top: 18px;
-  font-family: "JetBrains Mono", ui-monospace, monospace;
-  font-size: 13px;
-  letter-spacing: 0.16em;
-  color: rgba(198, 241, 53, 0.28);
-  text-transform: uppercase;
-}
 
 /* 球場毛玻璃地板（issue #134）：#court-wrapper 包住整個 SVG 球場，backdrop-filter
-   會模糊「這個 div 後面」的東西（製圖紙背景的網格與光暈、加上戰術板的 .tb-mark 字標），
+   會模糊「這個 div 後面」的東西（製圖紙背景的網格與光暈），
    球場本身（SVG 子元素）畫在上面維持清晰——這是 backdrop-filter 的特性：
    模糊背後、不模糊自己。球場的玻璃質感因此不是自己做出來的，是「模糊看穿它後面的
    環境光」做出來的，跟外層 panel 的玻璃是同一套視覺語言但更霧（見 design-spec.md

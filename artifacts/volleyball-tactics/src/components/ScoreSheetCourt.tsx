@@ -4,7 +4,7 @@ import { findNearestZone, getZoneLayout, isBackRowPosition } from "../lib/rotati
 import { Side, RegularSub } from "../types/scoresheet";
 import type { MatchPlayer } from "../types/match";
 import type { PlayerPosition } from "../types/rotationTable";
-import { CourtGradientDefs, CourtLines } from "../lib/courtTheme";
+import { CourtGradientDefs, CourtSurface, CourtBorder, CourtLines } from "../lib/courtTheme";
 import { toSvg, fromScreen, toScreen, rowOf } from "../lib/courtGeometry";
 import PlayerMarker from "./PlayerMarker";
 
@@ -482,12 +482,17 @@ export default function ScoreSheetCourt({
             onPointerUp={handlePointerUp}
             onPointerLeave={handlePointerLeave}
           >
-            {/* 底色漸層、線條顏色都從 lib/courtTheme 讀，跟戰術板同一個來源（改那邊兩邊動）。 */}
+            {/* 球場材質 v4（lib/courtTheme.tsx，2026-08-07 對齊 Claude Design 的
+              court-material-v4.html）：跟戰術板球場（Court.tsx）共用同一個來源，改那邊
+              兩邊一起動。球場本身沒有底色（CourtSurface 只是透明矩形），深色是透出頁面
+              底色，不是球場自己塗的——這點跟舊版（漸層 fill）不同，是 v4 的關鍵修正。 */}
             <CourtGradientDefs id="ss-court-gradient" />
-            <rect x="0" y="0" width="100" height="200" fill="url(#ss-court-gradient)" />
-            {/* 中線＋3 米攻擊線：跟戰術板球場（Court.tsx）共用同一份 <CourtLines/>
-              （lib/courtTheme.tsx，issue #227），改一邊兩邊一起變。 */}
-            <CourtLines />
+            <CourtSurface />
+            <CourtBorder />
+            {/* 攻擊線＋球網：跟戰術板球場（Court.tsx）共用同一份 <CourtLines/>
+              （lib/courtTheme.tsx，issue #227），改一邊兩邊一起變。id 要跟上面
+              <CourtGradientDefs/> 傳的 "ss-court-gradient" 一致。 */}
+            <CourtLines id="ss-court-gradient" />
 
             {/* 對手號位圈：跟我方球員圈共用 PlayerMarker（深色玻璃底＋實色邊框＋圈內數字），
               不再用虛線外框——使用者覺得虛線太醜、要求跟我方同款只是換色。對手沒有名單，
@@ -670,7 +675,9 @@ export default function ScoreSheetCourt({
             {liberoPlayer ? (
               <>
                 <span className="text-micro leading-none">L</span>
-                <span className="text-micro leading-none">#{liberoPlayer.number}</span>
+                {/* 背號不加 # 前綴，跟戰術板 Court.tsx 的「L 備位圓圈」統一（tang 2026-08-07
+                    要求「自由球員不要有 # 字號」）。 */}
+                <span className="text-micro leading-none">{liberoPlayer.number}</span>
               </>
             ) : (
               <span className="text-xs leading-none">L</span>
@@ -720,10 +727,6 @@ export default function ScoreSheetCourt({
         className="flex h-full flex-shrink-0 flex-col items-center gap-2 overflow-y-auto py-1"
         style={{ width: SIDELINE_W + 8 }}
       >
-        {regularSidelinePlayers.length === 0 && (
-          <p className="mt-4 text-center text-marker text-[#a9b096]">場邊</p>
-        )}
-
         {regularSidelinePlayers.map((player) => {
           const isSelected = player.id === selectedBenchPlayer;
           // 是否為「一般換人後被換下場的球員」，顯示「換」小標籤

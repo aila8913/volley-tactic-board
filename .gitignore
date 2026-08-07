@@ -55,3 +55,10 @@ Thumbs.db
 
 # Claude Code worktrees (local working copies, not repo content)
 .claude/worktrees/
+
+# design-sync (claude.ai/design) — staged scripts + generated output
+.ds-sync/
+ds-bundle/
+.design-sync/.cache/
+.design-sync/learnings/
+.design-sync/node_modules
