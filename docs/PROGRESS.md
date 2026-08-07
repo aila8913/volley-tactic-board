@@ -45,6 +45,10 @@
 `lib/__fixtures__/scoreSheet.ts` 的六顆 builder**，測試檔 922→755 行、淨刪 167 行純噪音。
 測試數（48）與斷言一條沒動，是純重構。\_
 
+\_Last updated: 2026-08-07 (aila) — **#339 交付：`pnpm run db:reset` ＋ seed 的 production 安全閘門**。
+動工前發現 `lib/db/src/seed-testdata.ts` 早就存在且做掉大半，issue body 已改寫成實際缺口（險些重造輪子）。
+同批新開 #336（示範資料 / Demo Mode），並記錄它跟本張**刻意不共用實作**的理由。\_
+
 ## Current state
 
 Where the project actually stands right now (durable "current" facts; per-session detail
@@ -75,6 +79,19 @@ lives in git log + the issues named).
   背景是 #64 PR1 把主鍵改成 uuid 時、光這一支測試檔就要手改 36 處；#292 補上了偵測（測試檔納入
   typecheck），這張補上的是修復成本。目前只導入 `scoreSheetMapping.test.ts`（收益最集中），
   其他測試檔要不要跟進另外判斷。
+- **手動測試有沙盒了（#339，08-07）。** `pnpm run db:reset`＝schema push ＋ 清空 ＋ 重灌
+  `lib/db/src/seed-testdata.ts` 的種子資料。用法是**另開一顆「試驗沙盒」資料庫**、`.env` 指過去，
+  隨手點畫面就不會把開發資料越測越亂。這次補上：**production 安全閘門**（`assertSafeDatabaseHost`）、
+  `lineups`／`tactics` 種子（原本被 TRUNCATE 卻從沒被 insert，所以先發／戰術板畫面一直是空的）、
+  npm script、以及 `.env.example`／README 的說明。
+  **安全閘門是白名單不是黑名單**——只放行 `localhost`／`127.0.0.1`／`::1`／`host.docker.internal`，
+  其餘一律拒絕，逃生門是必須完全等於 `"yes"` 的 `ALLOW_DESTRUCTIVE_SEED`。理由：黑名單
+  （`!== "production"`）是在窮舉「想得到的壞情況」，`prod-db.example.com` 這種沒被想到的名字會
+  直接放行。跟 `requireAuth` 的 `NODE_ENV === "development"` 是同一套慣例。
+  **刻意沒做假後端**——見 #339 body：手動測試的價值就在抓真實後端行為（ownership／Zod／冪等），
+  手寫的記憶體假後端必然跟 `routes/*.ts` 漂移，漂移之後測試會過、正式環境會壞。出貨給使用者的
+  示範資料（#336）才走前端攔截，兩張**刻意不共用實作**。
+  已知限制：4 場比賽只有 2 場附 lineups／tactics（另外 2 場的非自由球員湊不滿六個號位）。
 - **Backend match-recording API is fully implemented and live (dev DB).** matches / players /
   sets / rallies / events / substitutions / lineups / timeouts / tournaments / teams CRUD +
   tactics/health + `analysis` 唯讀報表路由，全部 ownership-scoped。前端計分表**已完全脫離
