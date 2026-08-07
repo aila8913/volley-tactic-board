@@ -14,6 +14,9 @@ import { requireAuth } from "../middleware/requireAuth";
 import { matchBelongsToUser, personBelongsToUser } from "../lib/ownership";
 import { handler } from "../lib/handler";
 import { GetMatchRotationStatsParams, GetPersonAnalysisParams } from "@workspace/api-zod";
+// #229：把「查詢跑完之後怎麼合併」搬進這支純函式檔（見該檔開頭註解說明為什麼要拆），
+// Drizzle 查詢本身留在這支路由檔不動。
+import { summariseMatches, summarisePerson } from "../lib/analysisSummary";
 
 // 分析頁（M2，#65）用的「報表型」路由：跟 matches/players/sets/rallies/events 那些
 // 「一資源一 CRUD」的路由不一樣，這裡的每一支都是跨資源、唯讀的聚合查詢（例如這支要把
@@ -163,7 +166,6 @@ router.get(
       .innerJoin(matchesTable, eq(setsTable.matchId, matchesTable.id))
       .where(eq(matchesTable.userId, req.userId))
       .groupBy(setsTable.matchId);
-    const matchesWithLineup = new Set(lineupMatchRows.map((r) => r.matchId));
 
     // 局數＝真正開過球的局（firstServer 不是 null）——按「下一局」當下就會先建一筆空 set
     // （firstServer 還是 null），使用者還沒選先發方，這種空局不該被算進「打了幾局」，跟
@@ -179,75 +181,11 @@ router.get(
       .where(eq(matchesTable.userId, req.userId))
       .groupBy(setsTable.matchId);
 
-    // 把逐局比分依 matchId 分組（setScoreRows 已照 matchId, setNumber 排好，所以每組內部
-    // 天然就是第 1 局、第 2 局…的順序）。等下對 matches 的每一場查表 O(1) 合併。
-    const setScoresByMatch = new Map<
-      number,
-      { ourScore: number; opponentScore: number; started: boolean }[]
-    >();
-    for (const row of setScoreRows) {
-      const list = setScoresByMatch.get(row.matchId);
-      // started＝這局有沒有真的開球（選過先發方）。只在下面砍尾巴時用，不會進回應。
-      const entry = {
-        ourScore: row.ourScore,
-        opponentScore: row.opponentScore,
-        started: row.firstServer !== null,
-      };
-      if (list) list.push(entry);
-      else setScoresByMatch.set(row.matchId, [entry]);
-    }
-    const setsByMatch = new Map(setRows.map((r) => [r.matchId, r]));
-
-    const summaries = matches.map((m) => {
-      const sets = setsByMatch.get(m.matchId);
-      // 這場所有局的比分（含進行中的最後一局），已依局序排好。
-      const allSetScores = setScoresByMatch.get(m.matchId) ?? [];
-      // setResults 只給「已結束局」，鏡射前端 splitCompletedAndCurrent 的慣例（見
-      // artifacts/volleyball-tactics/src/lib/volleyballRules.ts，那裡有完整的理由說明）。
-      // 這樣卡片用 setResults 算出來的局比數，會跟使用者點進計分頁後看到的完全一致。
-      //
-      // #218：這條慣例現在吃 matches.status——
-      //   - 進行中：排除最後一局（那是還在打的那局）。slice(0, -1) 對空陣列或單一元素都
-      //     安全（回空陣列），不用特判。
-      //   - 已完賽：每一局都是已結束局，不排除任何一局——但要先砍掉「開了卻從沒開球」的
-      //     尾巴局（使用者按了「下一局」才想起比賽已經結束、直接按「結束比賽」）。不砍的話
-      //     各局比分會多出一行 0:0。這段跟前端 reconstructRecording 的 effectiveSets 是
-      //     同一個處理，兩邊要一起改。
-      //   這正是 #218 修掉的病灶：以前「打完的最後一局」永遠被當成進行中而被丟掉，
-      //   比賽列表因此少算一局。
-      // 兩邊是各自實作、靠註解互相指過去（理由見前端那支函式的註解與 ADR-0003），改一邊
-      // 務必同時改另一邊。
-      let setResults: { ourScore: number; opponentScore: number }[];
-      if (m.status === "finished") {
-        let end = allSetScores.length;
-        while (end > 0 && !allSetScores[end - 1].started) end -= 1;
-        setResults = allSetScores.slice(0, end).map(({ ourScore, opponentScore }) => ({
-          ourScore,
-          opponentScore,
-        }));
-      } else {
-        setResults = allSetScores
-          .slice(0, -1)
-          .map(({ ourScore, opponentScore }) => ({ ourScore, opponentScore }));
-      }
-      // 整場總得失分＝把每一局的得分加起來（含進行中那局，跟舊 rallyRows 的整場 count 等價）。
-      const ourPoints = allSetScores.reduce((sum, s) => sum + s.ourScore, 0);
-      const opponentPoints = allSetScores.reduce((sum, s) => sum + s.opponentScore, 0);
-      return {
-        matchId: m.matchId,
-        opponent: m.opponent,
-        date: m.date,
-        teamId: m.teamId,
-        // 缺資料代表這場還沒有任何 set/rally（剛建立、還沒開始記錄），預設補 0/空——這樣
-        // 「建了但還沒記過任何東西」的比賽也會出現在列表裡，摘要是 0:0、局數 0，而不是整場
-        // 從結果裡消失（消失反而更讓人困惑：使用者明明建過這場比賽）。
-        setsPlayed: sets?.setsPlayed ?? 0,
-        ourPoints,
-        opponentPoints,
-        setResults,
-        hasLineup: matchesWithLineup.has(m.matchId),
-      };
-    });
+    // 這四支查詢分別是不同 grain（match / set / match-with-lineup / match），把它們合併成
+    // 「每場比賽一列摘要」的規則（哪一局算已結束、setsPlayed/ourPoints 怎麼加總……）搬去
+    // lib/analysisSummary.ts 的 summariseMatches 了（#229）——那是「合併規則」，跟這裡
+    // 「怎麼查」是兩件事，拆開後規則本身可以直接餵 literal rows 寫測試，不用真的連 DB。
+    const summaries = summariseMatches(matches, setScoreRows, lineupMatchRows, setRows);
 
     res.json(summaries);
   }),
@@ -301,36 +239,13 @@ router.get(
 
       const playerIds = appearanceRows.map((row) => row.playerId);
 
-      // 這個人跨了幾場比賽（去重，因為理論上一場比賽也可能不小心留下這個人兩筆名單列——
-      // 例如打錯字建了兩筆又都對到同一個 person，appearances 仍會照原樣兩筆都列出，但
-      // 「出賽場數」不該被這種邊角情況灌水）。
-      const matchesPlayed = new Set(appearanceRows.map((row) => row.matchId)).size;
-
-      // 按球隊分組算出賽場數（grain = match，但要先去重成「不重複的 matchId+teamId」再數，
-      // 理由跟上面 matchesPlayed 一樣：避免同場多筆名單列把場次算重複）。
-      const matchTeamPairs = new Map(appearanceRows.map((row) => [row.matchId, row.teamId]));
-      const teamMatchCounts = new Map<number | null, number>();
-      for (const teamId of matchTeamPairs.values()) {
-        teamMatchCounts.set(teamId, (teamMatchCounts.get(teamId) ?? 0) + 1);
-      }
-      const teamBreakdown = [...teamMatchCounts.entries()].map(([teamId, count]) => ({
-        teamId,
-        matchesPlayed: count,
-      }));
-
       // 沒有任何名單列對到這個人（人員剛建立、還沒被關聯到任何比賽的名單）——
       // 直接回全零/空陣列，不用再發下面那兩支查詢（inArray 對空陣列意義不明確，
-      // 提前擋掉比較乾淨，也剛好對應前端「這個人還沒出賽過」的空狀態）。
+      // 提前擋掉比較乾淨，也剛好對應前端「這個人還沒出賽過」的空狀態）。這仍然是
+      // 「要不要發查詢」的效能決策，留在這裡；summarisePerson 本身（#229 抽出去的合併
+      // 規則）餵空的 actionRows/setsStartedRow 進去，一樣能算出同一種全零/空陣列形狀。
       if (playerIds.length === 0) {
-        res.json({
-          personId,
-          name: person?.name ?? "",
-          matchesPlayed: 0,
-          setsStarted: 0,
-          teamBreakdown: [],
-          actionCounts: [],
-          appearances: [],
-        });
+        res.json(summarisePerson(personId, person, appearanceRows, [], undefined));
         return;
       }
 
@@ -370,15 +285,7 @@ router.get(
           ),
         );
 
-      res.json({
-        personId,
-        name: person?.name ?? "",
-        matchesPlayed,
-        setsStarted: setsStartedRow?.count ?? 0,
-        teamBreakdown,
-        actionCounts: actionRows,
-        appearances: appearanceRows,
-      });
+      res.json(summarisePerson(personId, person, appearanceRows, actionRows, setsStartedRow));
     },
   ),
 );
