@@ -68,6 +68,16 @@ COOKIE_SECRET=dev-only-not-a-real-secret
 `DATABASE_URL` 就好，`COOKIE_SECRET` 本機開發直接沿用範本裡的值即可。Google OAuth 相關的
 三個變數本機不設也沒關係，見 `.env.example` 裡的說明。）
 
+**手動點畫面測試時，建議另外開一顆「試驗沙盒」資料庫**（例如 `volleyboard_scratch`），
+`DATABASE_URL` 指過去，跟平常開發用的那顆分開——這樣隨手點來點去不會把自己的開發資料越
+測越亂。測到一團亂之後，`pnpm run db:reset` 可以把它一鍵重灌回「內容豐富、可預期」的
+種子資料（2 支球隊、4 場比賽，其中 2 場附先發站位與已存戰術），詳見
+[`lib/db/src/seed-testdata.ts`](lib/db/src/seed-testdata.ts) 檔頭的說明。
+
+⚠️ `db:reset` 會**整個清空** `DATABASE_URL` 當下指到的那顆資料庫——所以跑之前先確認
+`.env` 指的是試驗沙盒、不是你平常開發的那顆。腳本本身只准對著本機資料庫執行（非本機
+host 會直接拒絕），但它分不出本機的兩顆資料庫誰是誰，那條界線要你自己顧。
+
 想把它部署到雲端上讓別人試用，見 **[`docs/deploy.md`](docs/deploy.md)**。
 
 ## Repo 結構導覽

@@ -26,24 +26,8 @@
 同批把計分板改成一鍵記分。新開 #320（背景強度微調）／#322／#323／#324；#134 Track B 標記為已由設計
 系統接手，#21／#19 過時的 body 一併修正。\_
 
-\_Last updated: 2026-08-07 (aila) — **#231 四個 PR 均已合併（#312/#317/#314/#318），issue 已關**。手動 QA
-跑出一個比重構本身更大的洞：**使用者根本沒有任何入口能排自由球員先發**（L 的唯一設定入口在一個到不了
-的畫面上），因此 #14 的疊圈 bug 這次**驗證不了**。PO 同時定案自由球員規則＝「從後排轉出去就下場、留在
-場外，直到手動再換上場」，據此判定 `liberoZones[6]` 方向錯誤。新開 #326（L 模型改記「頂替誰」）→ #327
-（輪轉表 3×2＋1 自由格）→ #328（戰術板中央輪轉視圖退役），#324 補留言。**同日新開 #329**（比賽編輯
-從彈窗改成右欄就地編輯），連帶修正 #24 過期 body、#222／#209 補交界留言。\_
-
-\_Last updated: 2026-08-07 (aila) — **roadmap 重整：原 M5「體驗重整與雜項」拆成 M5 自由球員與計分正確性
-／M6 介面精簡與導覽重構／M7 打磨與雜項**（詳見 Current state 該條）。新開 #331（#209 第 2 點落地）、
-新建 `epic` 標籤、#40 掛上 #328 前置條件；`CONTRIBUTING.md` 的 `needs-plan` 定義修正。無程式碼變更。\_
-
-\_Last updated: 2026-08-07 (aila) — **#229 交付：`routes/analysis.ts` 的合併規則抽成
-`lib/analysisSummary.ts` 的兩支純函式＋14 條測試**。PO 拍板**只抽純函式、不做 query adapter／DI**
-（一個實作的 adapter ＝假 seam）。順手刪掉零 caller 的 `useMatchRotationStats.ts`。\_
-
-\_Last updated: 2026-08-07 (aila) — **#306 交付：`scoreSheetMapping.test.ts` 的假資料抽成
-`lib/__fixtures__/scoreSheet.ts` 的六顆 builder**，測試檔 922→755 行、淨刪 167 行純噪音。
-測試數（48）與斷言一條沒動，是純重構。\_
+\_Last updated: 2026-08-07 (aila) — M3.5 三張交付（#229 合併規則抽純函式／#306 測試 fixture builder／
+#339 `db:reset` 沙盒＋production 安全閘門）；roadmap 重整成 M5–M7；新開 #336 示範資料、#232 關閉。\_
 
 ## Current state
 
@@ -75,6 +59,19 @@ lives in git log + the issues named).
   背景是 #64 PR1 把主鍵改成 uuid 時、光這一支測試檔就要手改 36 處；#292 補上了偵測（測試檔納入
   typecheck），這張補上的是修復成本。目前只導入 `scoreSheetMapping.test.ts`（收益最集中），
   其他測試檔要不要跟進另外判斷。
+- **手動測試有沙盒了（#339，08-07）。** `pnpm run db:reset`＝schema push ＋ 清空 ＋ 重灌
+  `lib/db/src/seed-testdata.ts` 的種子資料。用法是**另開一顆「試驗沙盒」資料庫**、`.env` 指過去，
+  隨手點畫面就不會把開發資料越測越亂。這次補上：**production 安全閘門**（`assertSafeDatabaseHost`）、
+  `lineups`／`tactics` 種子（原本被 TRUNCATE 卻從沒被 insert，所以先發／戰術板畫面一直是空的）、
+  npm script、以及 `.env.example`／README 的說明。
+  **安全閘門是白名單不是黑名單**——只放行 `localhost`／`127.0.0.1`／`::1`／`host.docker.internal`，
+  其餘一律拒絕，逃生門是必須完全等於 `"yes"` 的 `ALLOW_DESTRUCTIVE_SEED`。理由：黑名單
+  （`!== "production"`）是在窮舉「想得到的壞情況」，`prod-db.example.com` 這種沒被想到的名字會
+  直接放行。跟 `requireAuth` 的 `NODE_ENV === "development"` 是同一套慣例。
+  **刻意沒做假後端**——見 #339 body：手動測試的價值就在抓真實後端行為（ownership／Zod／冪等），
+  手寫的記憶體假後端必然跟 `routes/*.ts` 漂移，漂移之後測試會過、正式環境會壞。出貨給使用者的
+  示範資料（#336）才走前端攔截，兩張**刻意不共用實作**。
+  已知限制：4 場比賽只有 2 場附 lineups／tactics（另外 2 場的非自由球員湊不滿六個號位）。
 - **Backend match-recording API is fully implemented and live (dev DB).** matches / players /
   sets / rallies / events / substitutions / lineups / timeouts / tournaments / teams CRUD +
   tactics/health + `analysis` 唯讀報表路由，全部 ownership-scoped。前端計分表**已完全脫離
@@ -143,31 +140,6 @@ lives in git log + the issues named).
   `docs/requirements-pattern-language.md`。**同判準於 07-28 再砍一份：`docs/match-recording-erd.html`
   （582 行手繪 ERD）只畫 6 張表，實際 schema 已有 13 張——它獨有的推論早就寫進
   `backend-architecture.md` 本文，刪掉不損失資訊。**
-- **版面規格立法：`docs/layout-spec.md`**（2048×1440 畫布換算表、三欄骨架、四種模式 A/B/C/D）。
-  **分工判準：版面聽 layout-spec.md、視覺聽 design-spec.md。** M1.5 拆成環 0–6（#172–#178）。
-  - **環 1（#172，已關）**：`components/AppShell.tsx` 成為三欄骨架的唯一擁有者，各頁只往插槽
-    （`nav`/`children`/`aside`/`tools`/`backdrop`）塞內容。**撿到的坑值得記**：flex column 子項
-    `min-height` 預設 `auto`，在 `h-screen + overflow-hidden` 骨架裡只寫 `overflow-y-auto` 是
-    **捲不動的**，要補 `min-h-0`——與中央欄的 `min-w-0` 是同一個坑的兩個方向。
-  - **環 2（#173，已關）**：`NavRail` 一顆取代 `MatchNavRail` ＋ `TacticsRailMenu`（收合軌 ↔ 展開
-    側欄、「戰」子清單、匯出入口「出」）。PO 依實機推翻兩條規格並回寫 layout-spec §2.2：展開寬度
-    370→176px；展開改**推開版面**而非浮層（浮層會遮住使用者正要點的中央內容）。**踩到的雷**：
-    Tailwind class 是建置時掃描原始碼字串產生的，`hover:${變數}` 拼出來的名字掃不到。
-  - **環 3（#174，已關）**：右欄 `RotationRailPanel` 有 `axis`（rotation/set）與 stepper，
-    **元件只回報方向**，「輪是環狀、局是線性有邊界」屬領域規則留在呼叫端；`MatchInfoRail` 三態
-    （空狀態／資料夾摘要／比賽輪轉表）由列表頁與資料夾內頁共用。實作前發現**規格與資料對不上**：
-    `CompletedSet` 沒存 lineup，已補 `CompletedSet.lineup` ＋共用的 `findLineupSnapshotForSet`。
-    選取語意一般化成 `selected { kind, id }`、**不自動選第一場**（使用者未表達意圖前不該讓站位進
-    可寫狀態）。跨欄拖曳已由 PR #189 完成；**Stage B（統計格）已由 PR #239 合併**（見下方 Recently
-    closed），#174 與 #120 一併關閉，**M1.5 milestone 已收掉**。
-  - **環 4（#175）／環 5（#176，**仍 open**：剩繪圖工具正式圖示 blocked @tangyi1025，07-28 已移入 M3）／
-    環 6（#177）** 皆已落地，見下方 Recently closed。**環 7（#178）需先補線框稿（在 M3）。**
-  - **戰術板頁遺留的 #174 遷移缺口已補上（#251，08-02，PR #274）。** 環 3 當時只把 `RotationRailPanel`
-    接上列表頁／資料夾內頁，戰術板頁被漏掉，`TacticsBoard.tsx` 一直是中央欄一份舊版 `RotationTable`
-    ＋右欄一份 `TacticsRosterPanel`，同一場的球員清單重複列了兩三次。現在兩個 mode（B／D）統一收進
-    右欄同一顆 `RotationRailPanel`：格子維持 ADR-0001 訂死的唯讀（不能寫回輪轉真相），新增獨立的
-    `benchDraggable` prop 讓球員清單本身仍可拖到球場——「格子能不能改」跟「清單能不能拖」是兩個互不
-    相干的開關。中央欄那份固定 260px 的輪轉表欄整個拿掉，面板固定活在 aside，不再依 mode 換位置。
 - **#120 計分頁右欄兩階段落地（已關，隨 PR #239 收尾）。** `CourtReadOnlyView` 常駐唯讀站位（**純展示、不訂閱
   任何 store**）＋`RotationRailPanel` 改為**受控元件**——改動直接進共用真相，草稿 state 與「確定」鈕
   整組移除，連帶消滅「排到一半被無關 re-render 洗掉」那類 bug。**`lib/rotationLogic.ts` 連續兩次 UI
@@ -209,43 +181,6 @@ lives in git log + the issues named).
   球線→#21、比率統計→**#235**、導覽→#214、人員合併/管理頁→#221/#224）。#235 是收傘時發現的孤兒
   （#65 body 列的「到位率」類比率統計原本沒人接）——重點是**資料已經夠了、不用改 schema**：
   發球方可由 `sets.firstServer` 當種子 ＋「第 n 分的發球方＝第 n-1 分的贏家」逐分推導出來。
-- **`lib/db/src/seed-testdata.ts` 是分析頁的驗證資料來源**（全部三戰兩勝、刻意留一場進行中；每分補一顆
-  決定球 event 讓球員矩陣有數字；`buildRallies` 保證「賽末點收在最後一球」，不再出現「我方達標後對手
-  還在加分」的不可能畫面）。
-- **架構決策紀錄上線＝`docs/adr/`（PR #233/#234，07-28）。** 判準是**「這個決定被推翻過、或未來的人
-  看到程式碼會很自然想改回去嗎？」**——不是設計文件也不是進度紀錄。首批三張都是既有決定，先前只活在
-  已關閉的 issue 留言裡：ADR-0001 戰術板嚴格單向＋快照 denormalize（#154，含中途 overlay→左欄工具頁
-  的方向修正——**UI 形式改了、不變式沒改**，只看 #154 開頭很容易誤判整張作廢）、ADR-0002 分析→戰術板
-  回跳閉環取消（#76）、ADR-0003 rally 輪次物化成欄位（#76 ①，**違反「衍生值別存」的一般預設**，故最
-  需要留理由）。每張末尾有「不要重新提議」小節，CLAUDE.md 已加規則指向這裡。**規矩：已 Accepted 的
-  不改不刪，被推翻時新增一張並把舊的標 `Superseded by ADR-NNNN`。**
-- **領域詞彙表上線＝根目錄 `CONTEXT.md`（07-28）＋ADR-0004。** 每個概念釘一個官方用詞＋`_Avoid_`
-  同義詞清單（記錄模式叫「簡易版」不叫「基礎版」；歧義的「陣容」一律拆成「先發」與「在場六人」；
-  「輪次」1–6，`rallies.homeRotation` 的 0-based 只是實作細節）。ADR-0004 把 `tournaments` 定義成
-  **資料夾**——不加賽期/主辦/賽制/名次欄位，表名也不改。CLAUDE.md／README.md／`docs/spec-index.md`
-  三個入口都已指向它。**判準值得記住：詞彙表管的是概念層，機制層的詞不能順手一起禁掉**——「時機」
-  （換人/暫停何時發生）與「比分快照」（它存成 homeScore/awayScore 而非 rallyId）是兩層，原本把後者
-  列入 `_Avoid_`，等於讓那個不可逆設計決策沒詞可講，已改成兩者並存。
-  同日順手清掉的過期物：`replit.md`（與 CLAUDE.md 重複且已開始說謊）、`index.html` 三處
-  `built on Replit` placeholder meta（`robots: index,follow`，會被搜尋引擎收錄）＋`lang="en"`。
-- **架構掃描（`improve-codebase-architecture`）產出 #225–#232，兩個新 milestone。** 掃描依 git log
-  熱點（計分／戰術板／輪轉、api-server routes、analysis）。**M2.5 收斂重複規則**（8/2）原三張 Strong：
-  #227 球場座標（`*100/*200` 內嵌 12 處、CTM 換算 5 份、前排門檻已分歧成 `<0.75` 與 `<=0.75` 只是還沒
-  現形）已關閉；**#228 route handler 儀式（404 樣板 ×33、ownership 守衛 ×25 全靠人記得寫）仍 open**，
-  `lib/handler.ts` 已落地、`tactics.ts` 是第一個遷移案例（PR #256），約 10 支 route 檔案待陸續遷移。
-  **#226（得分/輪轉規則四份實作）已於 07-30 全部收斂並關閉**——三份 PR：PR1 #242（side-out 輪轉／換人
-  淨額摺疊／「最後一局進行中」慣例 → `volleyballRules.ts`）、PR2 #245（局比數計算，原四份重複 →
-  `countSetWins`/`setWinner`）、PR3 #246（勝負反轉換算，原本沒測試、寫在 JSX 裡 → `resolveScoringSide`）。
-  輪次聚合／局比分 replay vs 後端 SQL 重複依 **ADR-0003** 判定不算重複規則（後端欄位是 replay 邏輯的
-  下游物化結果），維持現狀不處理。**PR1 過程中發現的連鎖換人摺疊（A→B→C）既有行為另開 #247 追蹤**，
-  刻意不在 #226 範圍內解決。**#225（tactics 路由缺 ownership）已於 07-30 修掉**——它是 **#127 那條判準
-  的復發**：外鍵保證 referential integrity，不保證 ownership，`tactics.ts` 是當初漏網的檔案，整份沒
-  import `ownership`。詳見下方 Recently closed。
-- **M3 的脊椎＝#77 →（#75 → #64）→ #26，其餘 6 張是搭便車的。** 這不是推測，是 issue 自述：#77 的
-  產出寫明「直接寫進 #26 的規格」，#75 body 寫明「**擋在 #26 前面**」。**#77 已關（08-02）**：v1 auth
-  ＝Google OAuth／每人一帳號，**理由是共用帳號會讓 #127/#225/#228 那整串 ownership 基礎建設沒有兌現
-  對象**——`handler()` 的 `owns` 必填、`lib/ownership.ts` 那些守衛都寫完了，缺的只是上面那顆真的
-  `userId`（現況 `mockAuth.ts:43` 無條件塞 `mock-user-001`）。
 - **離線可靠性契約定案（#75，08-02）＝按「資料能不能事後重建」切線。** 保證的四張表都是「比賽當下
   不記就永遠沒有」；先發（`lineups`）與戰術板/名單丟了要重做、但**重做得回來**，所以不保證。
   **判準值得記住：離線保證的邊界不是照技術難度切，是照可重建性切**——跟 #74 記錄成本預算的簡易/進階
@@ -302,57 +237,6 @@ lives in git log + the issues named).
   改狀態的普通物件，React 看不到。**已知缺口（不在 #64 範圍）**：開頁當下後端就連不上時，
   hydrate 的 query 全失敗 → 計分頁停在「載入計分記錄中…」，未同步徽章根本沒機會顯示；
   要修得先有「整場資料的本機快取」，那是離線讀取、不是離線寫入的題目。
-- **部署形態定案＝單一服務，前端不分開部署（#26 PR1）。** 手冊在 `docs/deploy.md`。
-  關鍵發現：`app.ts` 早就用 `express.static` ＋ SPA fallback 在吐前端 dist，所以 issue #26 body 裡
-  「前端上 Vercel／後端上 Render，`/api` 相對路徑失效，要選 rewrite 還是 CORS」**那題不用選——
-  不要拆**。同一個 origin 讓 `orval.config.ts` 的 `baseUrl: "/api"` 原封不動，也讓 PR2 的 session
-  cookie 完全避開跨站 cookie 那一串。DB 選 **Neon 而非 Supabase**：Supabase 免費專案 7 天無請求
-  會暫停且**要手動 restore**，而這個 app 的前提正是「不知道誰哪天會打開」；Neon 休眠是連線就自己醒。
-  落地的檔案：`render.yaml`（blueprint，把 build/start/健康檢查寫成 code 而非儀表板點選）、
-  `.node-version`＋`package.json` 的 `packageManager`/`engines`（雲端機器預設只有 npm，靠 corepack
-  裝對版本的 pnpm）、`.env.example`、`app.set("trust proxy", 1)`（代理後面 `req.ip`/`req.protocol`
-  才正確，PR2 的 `secure` cookie 少了這行會安靜地發不出去）。`buildCommand` 裡的 `--prod=false` 是
-  必要的：`NODE_ENV=production` 會讓 pnpm 跳過 devDependencies，而 vite/esbuild/tsc 全在那裡。
-  **本階段仍跑 mockAuth，網址先不公開**——刻意把「雲端環境跑不跑得起來」和「OAuth 寫對沒有」
-  分開 debug，一次只查一個變因。
-- **Google OAuth 接線＋mockAuth 退役（#26 PR2）。** `mockAuth.ts` 改名 `requireAuth.ts`：
-  session 走簽章 httpOnly cookie（`lib/session.ts`，`cookie-parser` 簽章，不是伺服器端
-  session store——單一行程、無擴充需求，換不到好處只多養一個 store）。`lib/googleAuth.ts`
-  用官方 `google-auth-library` 的 `OAuth2Client` 換 token／驗 id_token（不手刻 JWT 簽章驗證，
-  那是最容易埋身分冒用漏洞的地方）。新增 `/api/auth/google`（導向）、`/callback`（換身分、
-  CSRF state 比對）、`/me`、`/logout`（後兩者才進 `openapi.yaml`／走 codegen，前兩者是純瀏覽器
-  導覽、不是 JSON API）。`requireAuth` 跟 `GET /auth/me` 都保留「開發環境讀不到 session 就退回
-  `mock-user-001`」的 fallback（`resolveDevFallbackUserId`，兩處必須共用同一份判斷——
-  **上線前抓到一個真 bug**：一開始只在 `requireAuth` 加了 dev fallback、`/auth/me` 沒加，
-  會讓本機 `pnpm run dev` 整個打不開，因為前端的 `AuthGate` 靠 `/auth/me` 判斷登入狀態、
-  收到 401 就永遠卡在登入畫面，即使其他 API 底下其實都正常跑在 mock 帳號上——用瀏覽器實測
-  才抓到，純看程式碼／型別檢查看不出來）。收掉全開的 `app.use(cors())`（同源不需要，開著只是
-  多一個攻擊面）。前端新增 `AuthGate.tsx`（未登入時整站只看得到登入畫面，包在 `App.tsx` 最外層、
-  不侵入 `NavRail`/`AppShell` 的三欄骨架，那是 tangyi1025 的設計治理範圍）＋畫面右下角固定的
-  身分/登出小徽章。**既有 `mock-user-001` 測試資料 PO 決定直接清空、不遷移**——雲端 DB 本來就是
-  PR1 新 push 出來的空庫，本機的 mock 資料留給 dev fallback 繼續用。**本機 `.env` 需要新增一個
-  `COOKIE_SECRET`**（`.env.example` 已給可直接複製的開發用值）——這是這張 PR 對既有本機工作流程
-  唯一的 breaking change，`app.ts` 開機時強制要求這個值（cookie-parser 初始化需要），不看
-  `NODE_ENV`。Google Cloud Console 的 OAuth 用戶端申請步驟、`docs/deploy.md` 步驟 5–7。
-- **專案 roadmap 已上線。** 時間序住在 repo **Milestones M1–M5**（現為 M1–M5＋M1.5/M2.5/M3.5）（軟目標日
-  7/18→9/11，非死線），當下狀態住在 [GitHub Project #4](https://github.com/users/aila8913/projects/4)。
-  **M1／M2／M1.5 milestone 皆已關閉**（M1.5 由 PR #239 帶關 #174/#120 後收掉；#176 已移 M3，
-  它卡在 @tangyi1025 的圖示、不該讓一個純外部阻塞項把階段一直掛在逾期狀態）。**下一步直接看 Todo 欄，
-  不用再重推**（08-06 對過一輪：當時有 14 張 open issue 完全沒有 Status、#168 甚至不在板上，等於「看
-  Todo 欄」只看得到一張卡——沒有 Status 的卡是隱形的，新開 issue 記得順手歸位）。維護規則與 CLI id 在
-  `.claude/skills/wrap-up/SKILL.md` step 5＋`reference.md`。尚待 PO 在網頁完成：Workflows 自動化＋三個 view。
-- **記錄成本預算（#74，已關）＝`docs/recording-cost-budget.md`**：簡易/進階是懸崖式硬分界——簡易版
-  一分打完後在死球空檔記**恰好一筆決定球**＋排先發＋換人/暫停＋「沒看到」escape valve；任何 per-touch／
-  座標／到位分／子分類全歸進階版（賽後影片補填）。PO 拍板嚴守此界、不開 simple+。
-- **事件文法（#73，已關）＝統計權威依據**（`docs/event-grammar-spec.md`）：每個統計 = events/rallies/sets
-  欄位的純函數。剩餘缺口都是故意延到進階版的欄位（#51/#21）或教練待確認項（到位門檻 `quality>=2`、
-  嗆司定義，皆有預設在跑、且有外部標準出處：VIS 官方門檻／DataVolley 慣例，見該 spec〈外部標準對照〉）。
-- **兩人協作流程已上線並放寬**（PR #137 立、PR #141 放寬）：討論分流／關 issue 規則住 CONTRIBUTING.md
-  「協作與溝通」，Claude 要主動把關的版本住 CLAUDE.md「Team & collaboration rules」。跨領域 PR **不需要
-  對方 approve**、只要合併前 @ 知會一聲；「對方的 issue 不單方面關」仍在。改協作規範＝開 PR 動那些檔案。
-- **需求層 pattern-language 住 `docs/requirements-pattern-language.md`**（Alexander 式 P1–P7）：是
-  product-vision／recording-cost-budget／event-grammar-spec 三份 spec 的上位框架。「整體性評語」點名
-  P7 離線（假牆）與 P6 球線分布（wow 點的洞）是兩處待補的張力。
 
 ### 設計進度 (tang — 視覺 / UX / area:design)
 
@@ -661,49 +545,13 @@ serving≠null 但 record.lineup=null」那條路**，但真正的 reconcile 仍
   另開 **#257** 不混進 #238 這個 PR，隔天接著修：資料源換成 `useCrossMatchAnalysis` bulk API，並補上
   這頁原本沒有的「尚未排先發」黃標。兩頁的推導邏輯刻意不抽共用 hook——資料接線本來就不同，硬抽反而
   增加耦合。
-- **#228 啟動**（抽出 `lib/handler.ts` 收斂 route ownership 檢查，08-01，PR #256，**issue 仍 open**）—
+- **#228**（抽出 `lib/handler.ts` 收斂 route ownership 檢查，08-01，PR #256，issue 已於 08-01 關閉）—
   #225（tactics 路由漏 ownership 檢查）暴露的病根是「擁有權檢查靠人記得寫」，`owns` 在既有寫法裡是
   可選欄位，忘記加不會被 TypeScript 攔下來。新的 `handler(config, fn)` 把 `owns` 改成**必填欄位**
   （`"public" | OwnsCheck | OwnsSpec | Array<...>`），漏寫從「容易漏看的重複程式碼」變成編譯錯誤。
   `tactics.ts` 是第一個遷移案例，self-review 時順手發現 GET/PUT/DELETE 三處 `owns` closure 逐字重複，
   抽成 `lib/ownership.ts` 的 `tacticBelongsToUser` 一併收斂。其餘約 10 支 route 檔案還沒遷移，按
   一檔一 PR 的節奏陸續進行。
-- **#227**（抽出 `lib/courtGeometry.ts`，07-30，PR #250）— `toSvg`/`toNorm`（normalized↔SVG 換算）、
-  `fromScreen`/`toScreen`（`getScreenCTM` screen↔SVG 換算）、`rowOf`（前後排視覺門檻）三組純函式，
-  收斂 `Court.tsx`/`PlayerNode.tsx`/`ScoreSheetCourt.tsx`/`Markers.tsx`/`DefenseRange.tsx` 原本重複的
-  12+5+4 處實作；中線/三米攻擊線 SVG 抽成 `courtTheme.tsx` 的 `<CourtLines/>`。**`rowOf` 刻意不跟
-  `rotationLogic.ts` 的 `isBackRowPosition` 合併**——前者是純視覺判斷（圓圈該不該套前排配色），後者是
-  領域規則（自由球員站這裡合不合法），門檻數字現在一樣只是巧合，未來各自要調整互不影響。順手刪除
-  `CourtReadOnlyView.tsx`（零 production caller，只有自己的測試在用）。**範圍依 PO 確認收在核心四項**，
-  issue 原本提議但「還沒定案」的鏡射機制統一（`Court.tsx` 三種手寫鏡射並存）與 zone 座標搬家，
-  刻意不做、留在原地。
-- **#226**（得分/輪轉規則收斂成 deep module，07-30，三份 PR）— PR1 #242：side-out 輪轉、換人淨額摺疊、
-  「最後一局進行中」慣例收進 `volleyballRules.ts`，live 記分與 replay 重建共用同一份。PR2 #245：局比數
-  計算（原本四份手寫比較）收成 `countSetWins`/`setWinner`。PR3 #246：「得分/失分→誰拿到這一分」的換算
-  原本直接寫在 `ScoreSheet.tsx` 事件處理器裡、完全沒測試，抽成 `resolveScoringSide` 純函式後才測得到。
-  **輪次聚合、局比分 replay vs 後端 SQL 重複刻意不處理**——依 ADR-0003，後端欄位是 replay 邏輯的下游
-  物化結果，不是第二份規則實作。**PR1 過程中發現的既有 bug 另開 #247**：`applyRegularSub` 把換人紀錄
-  摺成淨額表示（append-only log → 目前誰在場上），連鎖換人 A→B 接著 B→C 時，中間人 A 曾是先發這件事
-  會從清單消失——`ScoreSheetCourt.tsx` 兩處用 `outPlayerId` 查代打的地方查不到最原始先發。確認是 live/
-  replay 合併前就存在的既有行為（非本次重構的回歸），修法方向留給 #247 討論再動手。
-- **#225**（tactics 路由的兩個 ownership 缺口，07-30）— `POST /tactics` 沒驗 `matchId` 屬於誰（**外鍵只
-  保證那筆 id 存在，不保證是你的**——#127 判準的復發），`DELETE` 直接回 204 不看實際刪掉幾列，刪不到
-  別人的戰術也回成功、等於對呼叫端說謊。修法照 `matches.ts` 既有樣式：`matchBelongsToUser` 守衛 ＋
-  Drizzle `.returning()` 判斷列數，兩者都回 **404 而非 403**（403 等於向攻擊者確認那筆資源存在）。
-  `PUT` 不需要改——`UpdateTacticBody` 根本沒有 `matchId` 欄位，改不到歸屬。
-  **同 PR 讓跨使用者情境變成「測得出來」**：mockAuth 支援 `X-Mock-User-Id` 假扮，seed 補一場掛在
-  `mock-user-002` 底下的空比賽（UI 永遠不會出現，唯一用途是當「別人的資料」）。**gate 用白名單
-  `NODE_ENV === "development"` 而非黑名單 `!== "production"`**——`pnpm run start` 不設 NODE_ENV，黑名單
-  寫法會判定「不是 production」而把身分冒用後門默默打開。**這個選擇當場就回本**：測試失敗才發現
-  dev script 的 `cross-env NODE_ENV=development pnpm run build && pnpm run start` 因 `&&` 中斷作用域，
-  **真正跑起來的 server 一直沒有 NODE_ENV**（已修）——黑名單寫法會「正常運作」並把同一個洞帶進正式環境。
-  **#232 保持 open**：只完成它三件事裡的 mockAuth 那件，`createDb` 注入未做。
-- **PR #242**（#226 PR1，07-29）— 見上方 M2.5 段落。
-- **PR #237**（計分頁球場視覺，07-28）— 對手號位圈改共用 `PlayerMarker`＋紅色邊框柔化到 70% 不透明；
-  `glowBlur` prop 讓紅色光暈收到 0.75px 而其餘顏色維持 3px（**不同顏色需要不同模糊半徑，不是一個數字
-  打天下**）；`courtTheme.tsx` 球場背景從三段深青漸層改單一平色 `#1B6E62`（戰術板與計分表同步變）；
-  「沒看到」從球場上兩個虛線框整併進比分卡動作選單，球場內只留「畫線連到明確目標」一種手勢。
-  **#220 保持 open**：單色版已上線，但「要不要回頭用漸層」還沒拍板，issue 是刻意留著的討論串。
 
 ### 設計 (tang)
 

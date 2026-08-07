@@ -1,15 +1,41 @@
-// 一次性測試資料種子腳本（非正式產出，用完即刪）。
-// 用途：清空整個資料庫，塞入 2 支球隊、3 場比賽、一位「跨兩隊」的球員，讓分析頁視圖②
+// 常駐維護的測試資料種子腳本（#339 之前的舊註解說「非正式產出、用完即刪」，那份已過時——
+// 這支腳本現在是「試驗沙盒資料庫」（scratch DB）工作流程的一部分，會被長期使用，不要刪掉）。
+//
+// 用途：清空整個資料庫，塞入 2 支球隊、4 場比賽、一位「跨兩隊」的球員，讓分析頁視圖②
 // （跨場彙總）跟球隊篩選有東西可看；每一局也灌入看起來寫實（有領先互換、連續得分）但
 // 100% 可重現的比分過程，並補上 events（每一分記一顆「決定球」），讓球員統計的
 // 「決定球矩陣」（artifacts/volleyball-tactics/src/lib/statsMapping.ts 的 buildPlayerMatrix）
-// 也有數字可看，不再是全空表格。
+// 也有數字可看；另外還補上 lineups（起始先發）與 tactics（已存戰術），讓輪轉表／戰術板／
+// 先發站位畫面重灌後也不是空的（#339）。
 //
-// 執行方式（從 repo 根目錄）：
-//   ./scripts/node_modules/.bin/tsx lib/db/src/seed-testdata.ts
-// dotenv/config 要在最前面 import，因為 ./index.ts 一被載入就會檢查 DATABASE_URL，
-// 必須在那之前先把 .env 讀進 process.env。
-import "dotenv/config";
+// 什麼時候該跑這支腳本：
+//   - 想要一個「內容豐富、可預期」的資料庫來手動測試前端（例如驗證一個新畫面在有資料時
+//     長什麼樣子），而且不想污染你平常開發用的那顆資料庫。
+//   - schema 改過，想確認新欄位/新表在「完整資料」情境下能不能正常運作。
+// 這是破壞性操作（會 TRUNCATE 整個資料庫再重灌）——DATABASE_URL 建議指向一顆專門的
+// 「試驗沙盒」本機資料庫，跟平常開發用的那顆分開，才不會每次手動測試都把自己的開發資料
+// 洗掉。詳見下方 assertSafeDatabaseHost 那段 production guard，以及 .env.example 裡
+// DATABASE_URL 那段的說明。
+//
+// 執行方式：
+//   pnpm run db:reset                    — 從 repo 根目錄跑，等同「schema push（含新表）
+//                                           ＋清空＋重灌」，對著全新（連 table 都還沒建）
+//                                           的資料庫也能一次跑完
+//   pnpm --filter @workspace/db run seed — 只重灌資料，假設 schema 已經是最新的
+//
+// dotenv 要在最前面載入，因為 ./index.ts 一被載入就會檢查 DATABASE_URL，必須在那之前
+// 先把 .env 讀進 process.env。不能用簡單的 `import "dotenv/config"`（它只會找
+// process.cwd() 底下的 .env）——這支腳本現在有兩種呼叫方式：`pnpm run db:reset`
+// 從 repo 根目錄跑（cwd＝根目錄，.env 剛好在那），但 `pnpm --filter @workspace/db run seed`
+// 執行時 pnpm 會把 cwd 切到 lib/db（沒有 .env），兩種情況都要能讀到同一份根目錄 .env，
+// 所以改成用這支檔案自己的路徑（import.meta.url）往上算出根目錄，明確指定 .env 位置。
+// 跟 drizzle.config.ts 讀 .env 的方式是同一個道理，只是那支檔案少一層目錄深度。
+import path from "path";
+import { fileURLToPath } from "url";
+import { config as loadDotenv } from "dotenv";
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+loadDotenv({ path: path.resolve(__dirname, "../../../.env") });
+
 import { sql } from "drizzle-orm";
 import {
   db,
@@ -21,6 +47,8 @@ import {
   setsTable,
   ralliesTable,
   eventsTable,
+  lineupsTable,
+  tacticsTable,
   type InsertRally,
   type InsertEvent,
 } from "./index";
@@ -75,7 +103,10 @@ function pickWeighted<T>(rng: () => number, items: Array<[T, number]>): T {
 
 // 名單角色（跟 schema/players.ts 的 playerRoleEnum 對齊）。
 type Role = "S" | "OH" | "MB" | "OPP" | "L";
-type RosterPlayerWithId = { id: string; number: number; role: Role };
+// name 是 #339 加的：原本這裡不含姓名（決定球 events 只需要 playerId），但 tactics 的
+// SnapshotPlayer（見 seedLineupsAndTactics）是反正規化快照、必須把姓名一起凍進去，所以
+// 這裡也要跟著帶上，不能再只挑 id/number/role 三個欄位。
+type RosterPlayerWithId = { id: string; name: string; number: number; role: Role };
 // 跟 schema/events.ts 的 eventActionEnum 對齊。
 type ActionName = "serve" | "receive" | "set" | "attack" | "block" | "dig";
 
@@ -336,12 +367,15 @@ function buildPartialRallies(
 // 插入「一局 + 它的所有 rally + 每一分的 event」。把這段抽成小工具，是因為
 // seedSets 下面「已打完的局」跟「進行中那一局」都要做同一件事，只差 rally 序列是用
 // buildRallies（完整局）還是 buildPartialRallies（半場）產生的。
+// 回傳這一局的 set.id（#339 加的）：seedSets 需要把它們往上交給 seedMatch，才能在
+// 「插完所有局之後」另外幫已打完的局補一筆 lineups（起始先發，見 main() 裡的
+// seedLineupsAndTactics）——那件事必須知道每一局真正的 uuid，不能只靠 setNumber 反查。
 async function insertSetWithRallies(
   matchId: number,
   setNumber: number,
   firstServer: "home" | "away",
   specs: { rally: InsertRally; eventSpec: EventSpec }[],
-) {
+): Promise<string> {
   const [set] = await db
     .insert(setsTable)
     .values({ matchId, setNumber, firstServer })
@@ -376,6 +410,7 @@ async function insertSetWithRallies(
   if (events.length > 0) {
     await db.insert(eventsTable).values(events);
   }
+  return set.id;
 }
 
 // 幫一場比賽建立各局 + 各局的 rally + 各局每一分的 event。
@@ -395,22 +430,27 @@ async function insertSetWithRallies(
 //   - 進行中：status 是 "in_progress"，最後那局半場的 set 自然當 currentSet，總覽顯示藍色。
 // 換句話說，seed 資料現在跟使用者真的打完一場比賽產生的資料**形狀完全一致**，不再有一筆
 // 只為了騙過重建規則而存在的幽靈空局。
+// 回傳「已打完那幾局」的 set.id 陣列（依局數順序，#339 加的）。刻意不含 inProgress 那局
+// ——lineups 只有意義用在「已經確定打完、先發已知」的局，進行中那局的 seed 資料沒有特別
+// 意義要補先發，見呼叫端 seedLineupsAndTactics 只吃 completedSetIds。
 async function seedSets(
   matchId: number,
   completedScores: [number, number][],
   ourRoster: RosterPlayerWithId[],
   rng: () => number,
   inProgress: [number, number] | null,
-) {
+): Promise<string[]> {
   // 兩隊輪流先發：第 1 局 home 先發、第 2 局 away、依此類推。
   const firstServerOf = (setIndex: number): "home" | "away" =>
     setIndex % 2 === 0 ? "home" : "away";
 
+  const completedSetIds: string[] = [];
   for (let i = 0; i < completedScores.length; i += 1) {
     const [home, away] = completedScores[i];
     // setId 先塞空字串（佔位），真正的 uuid 由 insertSetWithRallies 插入 set 後回填。
     const specs = buildRallies(rng, "", home, away, ourRoster);
-    await insertSetWithRallies(matchId, i + 1, firstServerOf(i), specs);
+    const setId = await insertSetWithRallies(matchId, i + 1, firstServerOf(i), specs);
+    completedSetIds.push(setId);
   }
 
   // 已打完的比賽在這裡什麼都不做（#218，見上方大段說明）；只有「進行中」的比賽要再多插
@@ -421,9 +461,220 @@ async function seedSets(
     const specs = buildPartialRallies(rng, "", home, away, ourRoster);
     await insertSetWithRallies(matchId, nextSetNumber, firstServerOf(nextSetNumber - 1), specs);
   }
+  return completedSetIds;
+}
+
+// 6 個球場格子的座標（0~1 normalized）。直接複製自
+// artifacts/volleyball-tactics/src/lib/rotationLogic.ts 的 zoneCoords，不是 import 過來
+// ——lib/ 是被 artifacts/ 匯入的下層，反過來讓 lib/ import artifacts/ 的程式碼會把相依
+// 方向倒過來（跟檔案開頭 OTHER_USER_ID 那段「刻意抄一份常數、不共用」的理由一樣）。
+// 如果前端那份 zoneCoords 改了球場座標系，這裡也要跟著手動改，否則 seed 出來的 tactics
+// 存檔在戰術板上會顯示錯位。
+const ZONE_COORDS: Record<1 | 2 | 3 | 4 | 5 | 6, { x: number; y: number }> = {
+  1: { x: 0.83, y: 0.85 }, // Right Back
+  2: { x: 0.83, y: 0.6 }, // Right Front
+  3: { x: 0.5, y: 0.6 }, // Middle Front
+  4: { x: 0.17, y: 0.6 }, // Left Front
+  5: { x: 0.17, y: 0.85 }, // Left Back
+  6: { x: 0.5, y: 0.85 }, // Middle Back
+};
+
+// #339：補上 lineups（起始先發）與 tactics（已存戰術），這兩張表在這支腳本改版之前
+// 只會被 TRUNCATE、從沒被灌過資料——灌完種子資料後，輪轉表／戰術板／先發站位這幾個畫面
+// 因此一直是空的，違背 seed 腳本原本要做到「一場比賽完整可看」的目的（見檔案開頭說明）。
+//
+// 只有「湊得出 6 位非自由球員」的比賽才補：lineups 的六個號位（zone1~zone6）依照
+// lib/db/src/schema/lineups.ts 的文件化規則，本來就不允許塞自由球員（L）——真實排球
+// 規則裡自由球員是「換人上場」而非先發站六個號位之一。這支腳本的名單設計（一隊基本班底
+// 6 人裡有 1 位自由球員）扣掉自由球員只剩 5 位非自由球員，湊不滿六個號位；只有比賽1／
+// 比賽3（多了跨隊的林小美，湊到 7 人、6 位非自由球員）恰好湊滿。與其硬塞自由球員進某個
+// 號位（那會違反上面文件化的業務規則，等於自己再製造一種「幽靈站位」），寧可讓另外兩場
+// 保持沒有 lineups——這是 seed 資料的已知限制，不是 bug（呼叫端 main() 只對 match1／
+// match3 呼叫這支函式，理由也寫在那裡）。
+//
+// 這支函式故意接收「共用的 rng」而不是自己另開一顆——沿用同一顆種子 PRNG，才能維持整支
+// 腳本「同一顆種子重灌出同一份資料」的可重現性（見檔案開頭 mulberry32 的說明）。呼叫時機
+// 也刻意放在 main() 裡所有 seedMatch 呼叫「都跑完之後」（附加，不插在中間）——插在中間會
+// 讓後面幾場比賽讀到的 rng() 序列整個往後平移，等於改寫了它們的比分/決定球內容。
+async function seedLineupsAndTactics(
+  match: { matchId: number; ourRoster: RosterPlayerWithId[]; completedSetIds: string[] },
+  rng: () => number,
+): Promise<void> {
+  const eligible = match.ourRoster.filter((p) => p.role !== "L");
+  if (eligible.length < 6) {
+    console.log(
+      `  （matchId=${match.matchId}：非自由球員只有 ${eligible.length} 位，湊不滿六個號位，跳過 lineups/tactics）`,
+    );
+    return;
+  }
+
+  // Fisher-Yates 洗牌：每一局都重新排一次「這 6 個人站哪個號位」，讓不同局的先發看起來
+  // 不是每次都一模一樣的排列（更接近真實情況——教練常常每局微調站位）。
+  function shuffledSix(): RosterPlayerWithId[] {
+    const pool = [...eligible];
+    for (let i = pool.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(rng() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    return pool.slice(0, 6);
+  }
+
+  // 記下第一局的先發，等一下拿來組 tactics 的球員站位（用同一份先發站位當作「已存戰術」
+  // 的內容，比憑空生一組座標更貼近真實使用情境：教練最常存的戰術之一就是「開局站位」）。
+  let firstSetLineup: RosterPlayerWithId[] | null = null;
+  for (const setId of match.completedSetIds) {
+    const six = shuffledSix();
+    if (firstSetLineup === null) firstSetLineup = six;
+    await db.insert(lineupsTable).values({
+      setId,
+      zone1PlayerId: six[0].id,
+      zone2PlayerId: six[1].id,
+      zone3PlayerId: six[2].id,
+      zone4PlayerId: six[3].id,
+      zone5PlayerId: six[4].id,
+      zone6PlayerId: six[5].id,
+    });
+  }
+
+  // 已存戰術（tactics）：拿第一局的先發站位（六個號位對應到球場座標，見上面 ZONE_COORDS），
+  // 存成一份 SavedTacticDataV2——前端
+  // artifacts/volleyball-tactics/src/types/courtSnapshot.ts 定義的存檔格式，也是
+  // artifacts/volleyball-tactics/src/hooks/useTacticsBoard.ts 的 loadProject／parseSavedTactic
+  // 實際會讀的形狀。反正規化：姓名/背號/位置在這裡就凍結成純值，不是存 playerId 回頭查
+  // roster（這是 #154 戰術板重構定案的格式，見 useTacticsBoard.ts 開頭「單向化」那段說明；
+  // 這裡沒有直接 import 那些前端型別/zod schema 來驗證，是因為 lib/ 不能 import artifacts/
+  // 的程式碼——跟上面 ZONE_COORDS 抄一份常數同一個理由，這裡改成手刻字面量，形狀對齊
+  // courtSnapshot.ts 的 savedTacticDataV2Schema 即可）。
+  if (firstSetLineup) {
+    const players = firstSetLineup.map((p, idx) => {
+      const zone = (idx + 1) as 1 | 2 | 3 | 4 | 5 | 6;
+      const coords = ZONE_COORDS[zone];
+      return {
+        sourcePlayerId: p.id,
+        name: p.name,
+        number: p.number,
+        role: p.role,
+        x: coords.x,
+        y: coords.y,
+        isLibero: false, // eligible 已經濾掉 L，這裡恆為 false
+      };
+    });
+    const data = {
+      version: 2 as const,
+      scenes: [
+        {
+          label: "先發站位",
+          snapshot: {
+            source: "rotation" as const,
+            // 前端 URL 上的 matchId 是字串（wouter 的 route param），courtSnapshot.ts 的
+            // matchId 欄位也是 z.string().nullable()——這裡跟前端存檔慣例一致，轉成字串。
+            matchId: String(match.matchId),
+            rotation: 0,
+            // 寫死一個固定時間，不用 `new Date()`——這支腳本整份資料的賣點就是「每次重灌
+            // 結果一模一樣」（見上面 BASE_SEED 那段），而牆上時鐘是唯一會讓輸出隨執行時刻
+            // 漂移的東西。這裡挑最後一場比賽日期的隔天，語意上像「賽後整理戰術時存的檔」。
+            capturedAt: "2026-07-11T10:00:00+08:00",
+            players,
+          },
+          markers: [] as unknown[],
+          defenseRanges: [] as unknown[],
+        },
+      ],
+    };
+    await db.insert(tacticsTable).values({
+      userId: USER_ID,
+      matchId: match.matchId,
+      name: "先發站位",
+      data,
+    });
+  }
+}
+
+// ── production 安全閘門（#339）──
+//
+// 這支腳本一開始就會 TRUNCATE 整個資料庫。如果哪天 .env 不小心指到正式環境的
+// DATABASE_URL（例如複製貼上時貼錯、或部署平台不小心把正式環境的連線字串塞進本機
+// shell），這支腳本會毫不猶豫地把正式資料全部洗掉——這個函式就是擋在 TRUNCATE 前面
+// 的最後一道防線。
+//
+// ── 為什麼要用「白名單」而不是「黑名單」──
+// 直覺上比較容易寫的版本是黑名單：`if (host !== "production") 才准跑`——但這種寫法的
+// 邏輯漏洞在於，它只擋得住「剛好長得跟你寫的字串一樣」的那一種危險情況，對於任何
+// 「沒被想到、但其實同樣危險」的值，一律預設放行。例如正式站的 host 其實叫
+// `prod-db.example.com`，黑名單只擋 `"production"` 這個字，`prod-db.example.com`
+// 完全不會被攔下來；又例如同事把測試站取名叫 `staging.example.com`，同樣會直接通過。
+// 黑名單本質上是在窮舉「我想得到的壞情況」，而攻擊面/意外的種類永遠比你想得到的多。
+//
+// 白名單反過來：只窮舉「我確定安全的情況」（本機常見的幾種 host 名稱），其餘一律
+// 當作不安全、擋下來，包含任何你根本沒想過的值。代價是「合法但沒被列進白名單」的情況
+// 也會被誤擋（例如有人真的想拿一顆遠端的 scratch DB 測試），但這正是下面
+// ALLOW_DESTRUCTIVE_SEED 逃生門存在的理由——安全機制寧可「預設拒絕、需要時手動放行」，
+// 也不要「預設放行、只擋想得到的名字」。這是這個 repo 既有的安全閘門慣例
+// （`=== "development"` 這種允許清單，而不是 `!== "production"` 這種拒絕清單）。
+function assertSafeDatabaseHost(): void {
+  // 逃生門：如果你的「試驗沙盒」資料庫本身就架在遠端（例如公司內網的一顆共用測試機），
+  // 白名單擋不住它，這裡給一個「你必須手動、明確」表態的辦法。刻意要求完全等於
+  // 字串 "yes"（不是任何 truthy 值，例如 "true"/"1" 都不算），是為了避免有人不小心把
+  // 這個環境變數設成別的用途的值（例如某支 CI script 順手把一堆環境變數設成 "1"），
+  // 意外繞過這道閘門。
+  if (process.env.ALLOW_DESTRUCTIVE_SEED === "yes") {
+    console.log(
+      "⚠️  ALLOW_DESTRUCTIVE_SEED=yes，略過 production 安全檢查，直接對 DATABASE_URL 指向的資料庫執行 TRUNCATE。",
+    );
+    return;
+  }
+
+  const databaseUrl = process.env.DATABASE_URL;
+  // DATABASE_URL 沒設的情況交給 lib/db/src/index.ts 的既有檢查去丟錯（它在這支腳本
+  // import { db } 的當下就會執行），這裡不用重複判斷、也不用在這裡就 process.exit。
+  if (!databaseUrl) return;
+
+  let host: string;
+  try {
+    // Node 內建的 URL 剖析器：postgres://user:pass@host:port/db 這種連線字串本來就是
+    // 合法的 URL 格式，直接借用瀏覽器/Node 都有的 URL API 解析，不用自己手刻正規表達式
+    // 去掰連線字串（連線字串裡帳號密碼含特殊字元時，手刻正規表達式很容易切錯）。
+    const parsed = new URL(databaseUrl);
+    // IPv6 的 host 在 URL 裡會被方括號包住（例如 "[::1]"），.hostname 讀出來也帶著
+    // 方括號，這裡去掉方括號，才能跟下面白名單裡單純的 "::1" 字串精準比對。
+    host = parsed.hostname.replace(/^\[|\]$/g, "");
+  } catch {
+    // 連線字串長得不像合法 URL（格式壞掉），沒辦法判斷它安不安全，一律當作不安全
+    // ——同樣是「白名單」精神：無法確認安全，就不准跑。
+    console.error(
+      `[seed-testdata] 無法解析 DATABASE_URL，判斷不了它指向哪個 host，拒絕執行。\n` +
+        `如果你確定這顆資料庫是安全的（例如你的試驗沙盒資料庫），可以設定\n` +
+        `ALLOW_DESTRUCTIVE_SEED=yes 略過這道檢查。`,
+    );
+    process.exit(1);
+  }
+
+  // 白名單：只允許「明顯是本機」的幾種寫法。localhost/127.0.0.1/::1 是最常見的三種
+  // 「這台機器自己」的寫法（分別是主機名稱、IPv4 loopback、IPv6 loopback）；
+  // host.docker.internal 是 Docker Desktop 提供的慣例名稱，讓容器內部連回宿主機
+  // （這個 repo 用 docker-compose 起本機 Postgres 時常見的連法）。
+  const ALLOWED_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "host.docker.internal"]);
+  if (ALLOWED_HOSTS.has(host)) return;
+
+  console.error(
+    `[seed-testdata] 拒絕執行：DATABASE_URL 指向的 host 是「${host}」，看起來不是本機資料庫。\n` +
+      `這支腳本會 TRUNCATE 整個資料庫，只允許對著本機（localhost / 127.0.0.1 / ::1 /\n` +
+      `host.docker.internal）執行，避免不小心洗掉正式環境的資料。\n\n` +
+      `如果你確定「${host}」是安全的（例如它是你自己的遠端試驗沙盒資料庫），\n` +
+      `可以設定環境變數 ALLOW_DESTRUCTIVE_SEED=yes 明確放行後再跑一次：\n` +
+      `  ALLOW_DESTRUCTIVE_SEED=yes pnpm --filter @workspace/db run seed`,
+  );
+  // 刻意不呼叫 pool.end()：程式跑到這裡為止，這支腳本還沒有對資料庫發出任何一次查詢
+  // （db.execute(sql\`TRUNCATE...\`) 是 main() 接下來才會做的第一件事），pg 的連線池
+  // 只有在真的送出查詢時才會真正打開 socket，所以這裡沒有連線可以「掛著」需要收尾。
+  // 直接結束行程即可。
+  process.exit(1);
 }
 
 async function main() {
+  // 0) production 安全閘門：確定 DATABASE_URL 指向的是本機資料庫，才繼續往下做任何事。
+  assertSafeDatabaseHost();
+
   // 1) 清空所有資料。RESTART IDENTITY 讓 serial id 從 1 重來，CASCADE 連同 FK 依賴的
   // 子表一起清（players/sets/rallies/events/lineups…）。TRUNCATE 一次列出所有表最省事。
   console.log("清空資料庫…");
@@ -538,14 +789,24 @@ async function main() {
           personId: personId(r.name),
         })),
       )
-      .returning({ id: playersTable.id, number: playersTable.number, role: playersTable.role });
+      .returning({
+        id: playersTable.id,
+        name: playersTable.name,
+        number: playersTable.number,
+        role: playersTable.role,
+      });
     const ourRoster: RosterPlayerWithId[] = insertedPlayers.map((p) => ({
       id: p.id,
+      name: p.name,
       number: p.number,
       role: p.role,
     }));
-    await seedSets(match.id, completedScores, ourRoster, rng, inProgress);
-    return match.id;
+    const completedSetIds = await seedSets(match.id, completedScores, ourRoster, rng, inProgress);
+    // #339：把這場比賽的 id、名單、已打完局的 set id 一起交回去，讓 main() 收尾時能另外
+    // 補 lineups／tactics（那兩張表刻意不放進 seedSets／seedMatch 內部一起做，見下面
+    // seedLineupsAndTactics 開頭的說明：要等「所有場比賽」都建完、既有的 rng 呼叫序列
+    // 都跑完之後才能動手，否則會把後面幾場比賽的隨機比分序列整個打亂）。
+    return { matchId: match.id, ourRoster, completedSetIds };
   }
 
   console.log("建立比賽 + 名單 + 局分 + 球員決定球數據…");
@@ -553,7 +814,10 @@ async function main() {
   // 第 4 場刻意留成「進行中」，讓分析頁能同時看到「已結束」與「未完成」兩種狀態。
   //
   // 比賽1：A 隊 vs 台大，含林小美（跨隊那人在 A 隊這邊）。2:1 勝（決勝局 15:11）。
-  await seedMatch(
+  // 這場名單是 7 人（aRoster 6 人 + 跨隊的林小美），扣掉自由球員（L）剛好剩 6 個非自由
+  // 球員角色——這是後面 seedLineupsAndTactics 唯一挑得出「六個號位都不是自由球員」
+  // 的兩場之一（另一場是比賽3），見那支函式開頭的說明。
+  const match1 = await seedMatch(
     teamA.id,
     "台大",
     "2026-05-10T19:00:00+08:00",
@@ -565,13 +829,15 @@ async function main() {
     ],
   );
   // 比賽2：A 隊 vs 政大，純 A 隊班底。2:0 輾壓勝，跟第 3 場的糾結局作對照。
+  // 純 aRoster 只有 6 人（含 1 位自由球員），扣掉自由球員只剩 5 個非自由球員——湊不滿
+  // 六個號位，這場不補 lineups（見 seedLineupsAndTactics 開頭的說明）。
   await seedMatch(teamA.id, "政大", "2026-06-15T19:00:00+08:00", aRoster, [
     [25, 19],
     [25, 17],
   ]);
   // 比賽3：B 隊 vs 師大，含林小美（同一人這次在 B 隊）。刻意設計成「糾結」局：第 2 局打進
   // deuce（24:26）、決勝局也咬到 13:15，最後 1:2 惜敗，讓分數成長圖看得到真正拉鋸的走勢。
-  await seedMatch(
+  const match3 = await seedMatch(
     teamB.id,
     "師大",
     "2026-07-01T19:00:00+08:00",
@@ -584,7 +850,18 @@ async function main() {
   );
   // 比賽4：A 隊 vs 交大，進行中（第 1 局已拿下 25:22，第 2 局打到 18:15 還沒結束）。
   // 傳 inProgress → seedSets 不補空 set，最後那局半場的 set 就會被分析頁當成 currentSet。
+  // 名單同比賽2（純 aRoster，只有 5 個非自由球員），一樣不補 lineups。
   await seedMatch(teamA.id, "交大", "2026-07-20T19:00:00+08:00", aRoster, [[25, 22]], [18, 15]);
+
+  // 6) 起始先發（lineups）與已存戰術（tactics）——#339 補的兩張表。刻意放在所有
+  // seedMatch 呼叫都結束「之後」才做（而不是塞進 seedMatch/seedSets 內部一起做）：
+  // 這支腳本的可重現性靠的是「rng() 被呼叫的順序完全固定」（見檔案開頭 mulberry32 那段
+  // 說明）。如果把新的 rng() 呼叫插進比賽 1～4 中間，會讓比賽 2、3、4 讀到的隨機數序列
+  // 整個往後平移，等於改寫了所有既有比賽的比分/決定球內容。附加在最後、只用
+  // match1／match3 已經插入完成的資料，就不會動到前面已經定案的序列。
+  console.log("建立先發（lineups）與已存戰術（tactics）…");
+  await seedLineupsAndTactics(match1, rng);
+  await seedLineupsAndTactics(match3, rng);
 
   // 5) 「別人的」比賽。刻意不走 seedMatch（它寫死 USER_ID，而且會連帶生名單/局/球，
   // 那些對這個用途完全用不到）——直接插一列最小的 match 就夠了，因為要驗的只有
@@ -611,6 +888,10 @@ async function main() {
   );
   console.log("  勝方賽末點一定收在最後一球（不再出現達標後對手還在加分的假象）；並補上 events，");
   console.log("  球員統計的「決定球矩陣」現在有數字可看。");
+  console.log("  比賽1、比賽3（湊得出 6 位非自由球員）各局都補了 lineups（起始先發），並各存一筆");
+  console.log(
+    "  tactics（先發站位快照）——輪轉表／戰術板／先發站位這幾個畫面重灌後不會是空的（#339）。",
+  );
   console.log(`\n  另外掛在 ${OTHER_USER_ID} 底下：matchId=${foreignMatch.id}（UI 不會出現）`);
   console.log("  驗證跨使用者擁有權（需 NODE_ENV=development）：");
   console.log(
