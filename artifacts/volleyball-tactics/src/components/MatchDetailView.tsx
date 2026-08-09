@@ -2,7 +2,12 @@ import { formatMatchDateTime } from "@/lib/matchSummary";
 import type { MatchFormat } from "@/lib/matchOutcome";
 import type { Match } from "@/types/match";
 
-// 右欄「比賽基本資料 ＋ 球員名單」的**唯讀**檢視（issue #329）。
+// 右欄「比賽基本資料」的**唯讀**檢視（issue #329）。
+//
+// 這裡原本還畫了一份球員名單，PO 2026-08-09 拿掉了：RotationRailPanel 底下本來就有一份
+// 球員清單（拖上場用的那份），同一份名單在同一欄裡畫兩次，右欄那點寬度根本吃不消。
+// 合併之後名單只剩下面那一份，它同時扮演「這場比賽有誰」跟「把誰拖上場」——不編輯時
+// 就是站位的來源清單，按了編輯才換成 MatchDetailForm 的可增刪版本。
 //
 // 這支元件刻意做成純呈現：不 import 任何 store、不呼叫任何 query，資料全由 props 決定。
 // 兩個理由：
@@ -54,31 +59,6 @@ export default function MatchDetailView({ match, teamName }: MatchDetailViewProp
             使用者才不用每次重新找「球隊那行跑哪去了」。 */}
         <InfoRow label="球隊" value={teamName ?? "未指定"} />
         <InfoRow label="賽制" value={MATCH_FORMAT_LABEL[match.format]} />
-      </section>
-
-      <section className="space-y-1.5">
-        <h2 className="text-sm font-bold text-[#F5F5F0]">球員名單（{match.players.length}）</h2>
-        {match.players.length === 0 ? (
-          <p className="text-xs text-[#9AA08C]">這場比賽還沒有球員名單</p>
-        ) : (
-          <ul className="space-y-1">
-            {match.players.map((p) => (
-              <li
-                key={p.id}
-                className="flex items-center gap-2 rounded-lg border border-white/[0.12]
-                  bg-white/[0.03] px-2 py-1.5 text-xs"
-              >
-                {/* tabular-nums：背號等寬對齊，一整排數字才不會因為 1 比 8 窄而歪掉。
-                    寫法跟 RotationRailPanel 球員清單那一列一致。 */}
-                <span className="w-6 shrink-0 text-right font-bold tabular-nums text-[#F5F5F0]">
-                  {p.number}
-                </span>
-                <span className="min-w-0 flex-1 truncate text-[#F5F5F0]">{p.name}</span>
-                <span className="shrink-0 text-micro text-[#9AA08C]">{p.role}</span>
-              </li>
-            ))}
-          </ul>
-        )}
       </section>
     </div>
   );
