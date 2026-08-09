@@ -25,16 +25,12 @@
 //
 // dotenv 要在最前面載入，因為 ./index.ts 一被載入就會檢查 DATABASE_URL，必須在那之前
 // 先把 .env 讀進 process.env。不能用簡單的 `import "dotenv/config"`（它只會找
-// process.cwd() 底下的 .env）——這支腳本現在有兩種呼叫方式：`pnpm run db:reset`
-// 從 repo 根目錄跑（cwd＝根目錄，.env 剛好在那），但 `pnpm --filter @workspace/db run seed`
-// 執行時 pnpm 會把 cwd 切到 lib/db（沒有 .env），兩種情況都要能讀到同一份根目錄 .env，
-// 所以改成用這支檔案自己的路徑（import.meta.url）往上算出根目錄，明確指定 .env 位置。
-// 跟 drizzle.config.ts 讀 .env 的方式是同一個道理，只是那支檔案少一層目錄深度。
-import path from "path";
-import { fileURLToPath } from "url";
-import { config as loadDotenv } from "dotenv";
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-loadDotenv({ path: path.resolve(__dirname, "../../../.env") });
+// process.cwd() 底下的 .env，而這支腳本的 cwd 會隨呼叫方式不同）。
+//
+// ⚠️ 這一行**必須是第一個 import**，而且不能改寫成「先呼叫某個函式再 import」——
+// ES module 的 import 會被提升，任何頂層程式碼都比所有 import 晚執行，那樣寫的話
+// 下面的 `./index` 會在 .env 被讀進來之前就載入並 throw。完整說明見 ./loadEnv.ts。
+import "./loadEnv";
 
 import { sql } from "drizzle-orm";
 import {
