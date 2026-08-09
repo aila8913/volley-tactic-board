@@ -14,6 +14,7 @@ import substitutionsRouter from "./substitutions";
 import timeoutsRouter from "./timeouts";
 import lineupsRouter from "./lineups";
 import analysisRouter from "./analysis";
+import demoDataRouter from "./demoData";
 
 const router: IRouter = Router();
 
@@ -37,5 +38,6 @@ router.use(substitutionsRouter);
 router.use(timeoutsRouter);
 router.use(lineupsRouter);
 router.use(analysisRouter);
+router.use(demoDataRouter);
 
 export default router;

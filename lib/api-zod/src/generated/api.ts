@@ -234,6 +234,15 @@ export const DeleteTeamParams = zod.object({
 
 
 /**
+ * @summary Check whether the current user has demo data loaded
+ */
+export const GetDemoDataStatusResponse = zod.object({
+  "present": zod.boolean(),
+  "matchIds": zod.array(zod.number())
+})
+
+
+/**
  * @summary List people (cross-match player identities), with match count and team names for telling same-named entries apart
  */
 export const ListPeopleResponseItem = zod.object({

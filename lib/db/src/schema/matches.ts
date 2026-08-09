@@ -1,4 +1,13 @@
-import { pgTable, serial, integer, text, timestamp, uuid, pgEnum } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  serial,
+  integer,
+  text,
+  timestamp,
+  uuid,
+  pgEnum,
+  boolean,
+} from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { teamsTable } from "./teams";
@@ -73,6 +82,16 @@ export const matchesTable = pgTable("matches", {
   // 不用另外寫遷移腳本逐筆回填；而預設「進行中」對舊資料也是安全的一邊（頂多是使用者
   // 要回去補按一次「結束比賽」，不會把還在打的比賽誤標成已完賽）。
   status: matchStatusEnum("status").notNull().default("in_progress"),
+  // #336：這場比賽是不是「載入示範資料」灌出來的（見 lib/db/src/demoData.ts）。
+  //
+  // ⚠️ 這個欄位只有 `/demo-data` 那支路由的刪除邏輯會讀（見
+  // artifacts/api-server/src/routes/demoData.ts 的 deleteDemoDataFor）——目的是讓「刪掉示範
+  // 資料」能精準只挑到示範資料，不會不小心刪到使用者自己建的比賽。其餘所有查詢（GET /matches、
+  // 分析頁…）完全不看這個欄位。示範資料在畫面上就是要跟使用者自己的資料一視同仁地出現——那正
+  // 是「示範資料」存在的目的：讓使用者一登入就有東西可以立刻上手體驗，不是空白畫面。**不要**
+  // 因為看到這個欄位就順手在別的查詢加 `where isDemo = false` 之類的過濾，那樣會讓示範資料
+  // 從畫面上憑空消失，變成一個難以察覺的 bug。
+  isDemo: boolean("is_demo").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 

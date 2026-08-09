@@ -8,6 +8,7 @@
 
 export * from './ballType';
 export * from './currentUser';
+export * from './demoDataStatus';
 export * from './eventAction';
 export * from './eventSide';
 export * from './eventSource';

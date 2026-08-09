@@ -21,6 +21,7 @@ import type {
 
 import type {
   CurrentUser,
+  DemoDataStatus,
   HealthStatus,
   Lineup,
   ListTacticsParams,
@@ -1326,6 +1327,223 @@ export const useDeleteTeam = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getDeleteTeamMutationOptions(options));
+    }
+
+export const getGetDemoDataStatusUrl = () => {
+
+
+
+
+  return `/api/demo-data`
+}
+
+/**
+ * @summary Check whether the current user has demo data loaded
+ */
+export const getDemoDataStatus = async ( options?: RequestInit): Promise<DemoDataStatus> => {
+
+  return customFetch<DemoDataStatus>(getGetDemoDataStatusUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetDemoDataStatusQueryKey = () => {
+    return [
+    `/api/demo-data`
+    ] as const;
+    }
+
+
+export const getGetDemoDataStatusQueryOptions = <TData = Awaited<ReturnType<typeof getDemoDataStatus>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDemoDataStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetDemoDataStatusQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getDemoDataStatus>>> = ({ signal }) => getDemoDataStatus({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getDemoDataStatus>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetDemoDataStatusQueryResult = NonNullable<Awaited<ReturnType<typeof getDemoDataStatus>>>
+export type GetDemoDataStatusQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Check whether the current user has demo data loaded
+ */
+
+export function useGetDemoDataStatus<TData = Awaited<ReturnType<typeof getDemoDataStatus>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDemoDataStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetDemoDataStatusQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getLoadDemoDataUrl = () => {
+
+
+
+
+  return `/api/demo-data`
+}
+
+/**
+ * @summary Load demo data into the current user's account. If demo data already exists it is deleted first and re-seeded from scratch (i.e. this endpoint doubles as "reset demo data") — it never results in two copies.
+ */
+export const loadDemoData = async ( options?: RequestInit): Promise<DemoDataStatus> => {
+
+  return customFetch<DemoDataStatus>(getLoadDemoDataUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getLoadDemoDataMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof loadDemoData>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof loadDemoData>>, TError,void, TContext> => {
+
+const mutationKey = ['loadDemoData'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof loadDemoData>>, void> = () => {
+
+
+          return  loadDemoData(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type LoadDemoDataMutationResult = NonNullable<Awaited<ReturnType<typeof loadDemoData>>>
+
+    export type LoadDemoDataMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Load demo data into the current user's account. If demo data already exists it is deleted first and re-seeded from scratch (i.e. this endpoint doubles as "reset demo data") — it never results in two copies.
+ */
+export const useLoadDemoData = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof loadDemoData>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof loadDemoData>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getLoadDemoDataMutationOptions(options));
+    }
+
+export const getDeleteDemoDataUrl = () => {
+
+
+
+
+  return `/api/demo-data`
+}
+
+/**
+ * @summary Delete the current user's demo data (matches/teams/people marked isDemo)
+ */
+export const deleteDemoData = async ( options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteDemoDataUrl(),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteDemoDataMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteDemoData>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteDemoData>>, TError,void, TContext> => {
+
+const mutationKey = ['deleteDemoData'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteDemoData>>, void> = () => {
+
+
+          return  deleteDemoData(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteDemoDataMutationResult = NonNullable<Awaited<ReturnType<typeof deleteDemoData>>>
+
+    export type DeleteDemoDataMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Delete the current user's demo data (matches/teams/people marked isDemo)
+ */
+export const useDeleteDemoData = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteDemoData>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteDemoData>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getDeleteDemoDataMutationOptions(options));
     }
 
 export const getListPeopleUrl = () => {

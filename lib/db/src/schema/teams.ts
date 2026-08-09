@@ -1,4 +1,4 @@
-import { pgTable, serial, text } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -12,6 +12,10 @@ export const teamsTable = pgTable("teams", {
   // 跟 matches / people 一樣，mock auth 階段固定存 "mock-user-001"，純文字、不是外鍵。
   userId: text("user_id").notNull(),
   name: text("name").notNull(),
+  // #336：跟 matches.isDemo 同一套設計，理由也寫在那邊（lib/db/src/schema/matches.ts）——
+  // 只有 `/demo-data` 路由的刪除邏輯會讀這個欄位，一般查詢完全不碰它，示範球隊在畫面上
+  // 就跟使用者自己建的球隊一視同仁地出現。
+  isDemo: boolean("is_demo").notNull().default(false),
 });
 
 export const insertTeamSchema = createInsertSchema(teamsTable).omit({ id: true });

@@ -1,4 +1,4 @@
-import { pgTable, serial, text } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -15,6 +15,10 @@ export const peopleTable = pgTable("people", {
   // 沒有 users 表，所以這裡也只是存純文字，不是外鍵。
   userId: text("user_id").notNull(),
   name: text("name").notNull(),
+  // #336：跟 matches.isDemo 同一套設計，理由也寫在那邊（lib/db/src/schema/matches.ts）——
+  // 只有 `/demo-data` 路由的刪除邏輯會讀這個欄位，一般查詢完全不碰它，示範人員在畫面上
+  // 就跟使用者自己建的人員一視同仁地出現。
+  isDemo: boolean("is_demo").notNull().default(false),
 });
 
 // createInsertSchema 依照上面資料表定義自動產生對應的 Zod 驗證規則；

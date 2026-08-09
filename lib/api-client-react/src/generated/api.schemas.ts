@@ -80,6 +80,11 @@ export interface UpdateTeam {
   name?: string;
 }
 
+export interface DemoDataStatus {
+  present: boolean;
+  matchIds: number[];
+}
+
 export interface Person {
   id: number;
   name: string;
