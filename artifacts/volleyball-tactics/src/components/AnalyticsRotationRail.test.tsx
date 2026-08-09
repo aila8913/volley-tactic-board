@@ -81,6 +81,26 @@ describe("AnalyticsRotationRail", () => {
     expect(html).not.toContain("—");
   });
 
+  it("已完賽但目前這局真的記過分：那一局仍然滑得到，不能被當成空佔位砍掉", () => {
+    // 三戰兩勝已經 2:0（第 1、2 局都我方贏），教練仍按了「下一局」而且第 3 局記了分。
+    // getMatchWinner 看已結束局判定「已完賽」，但第 3 局有真實資料，不是 #218 那種空佔位。
+    const sets = [1, 2, 3].map((n) => makeSet({ id: `set-${n}`, setNumber: n }));
+    const ralliesBySetIndex = [1, 2, 3].map((n) => [
+      makeRally({ id: `rally-${n}`, setId: `set-${n}`, winner: "home" }),
+    ]);
+    const lineups = [1, 2, 3].map((n) => makeLineup({ id: n, setId: `set-${n}` }));
+    // isFinished=false：matches.status 還是進行中（教練還沒按「結束比賽」），所以第 3 局
+    // 是「目前這局」而不是已結束局——這正是 hasCurrentSetData 要保住的那一格。
+    const record = reconstructRecording(sets, ralliesBySetIndex, [], [], lineups, [], false);
+
+    const html = renderToStaticMarkup(
+      <AnalyticsRotationRail record={record} roster={ROSTER} winsNeeded={2} />,
+    );
+
+    expect(html).toContain("第 3 局");
+    expect(html).not.toContain("第 4 局");
+  });
+
   it("進行中的比賽仍然為「目前這局」多留一格（未完賽時 totalSets 要 +1）", () => {
     // 兩局打完、比賽還沒分勝負（winsNeeded=3，五戰三勝），所以第 3 局是進行中的那一局。
     const sets = [1, 2, 3].map((n) => makeSet({ id: `set-${n}`, setNumber: n }));
