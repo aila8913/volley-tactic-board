@@ -68,15 +68,57 @@ COOKIE_SECRET=dev-only-not-a-real-secret
 `DATABASE_URL` 就好，`COOKIE_SECRET` 本機開發直接沿用範本裡的值即可。Google OAuth 相關的
 三個變數本機不設也沒關係，見 `.env.example` 裡的說明。）
 
-**手動點畫面測試時，建議另外開一顆「試驗沙盒」資料庫**（例如 `volleyboard_scratch`），
-`DATABASE_URL` 指過去，跟平常開發用的那顆分開——這樣隨手點來點去不會把自己的開發資料越
-測越亂。測到一團亂之後，`pnpm run db:reset` 可以把它一鍵重灌回「內容豐富、可預期」的
-種子資料（2 支球隊、4 場比賽，其中 2 場附先發站位與已存戰術），詳見
-[`lib/db/src/seed-testdata.ts`](lib/db/src/seed-testdata.ts) 檔頭的說明。
+### 試驗沙盒資料庫（手動點畫面測試用）
 
-⚠️ `db:reset` 會**整個清空** `DATABASE_URL` 當下指到的那顆資料庫——所以跑之前先確認
-`.env` 指的是試驗沙盒、不是你平常開發的那顆。腳本本身只准對著本機資料庫執行（非本機
-host 會直接拒絕），但它分不出本機的兩顆資料庫誰是誰，那條界線要你自己顧。
+手動測試（隨手記幾球、建一場比賽、亂點）會**真的寫進資料庫**，久了自己的開發資料就被
+測試垃圾淹沒，也不敢放手亂測。解法是**另外開一顆「試驗沙盒」資料庫**專門拿來亂測，
+跟平常開發用的那顆分開，測髒了就一鍵重灌。
+
+**第一步（只要做一次）：建一顆空的沙盒資料庫。**
+
+```bash
+createdb volleyboard_scratch
+```
+
+Windows 的 PostgreSQL 安裝不會把 `createdb` 加進 PATH，要用完整路徑呼叫
+（版本號換成你裝的那版）：
+
+```powershell
+$env:PGPASSWORD = "<你的 postgres 密碼>"
+& "C:\Program Files\PostgreSQL\18\bin\createdb.exe" -U postgres volleyboard_scratch
+```
+
+**第二步：`.env` 指過去。** 把 `DATABASE_URL` 結尾的資料庫名換成沙盒那顆。建議兩行都
+留著、註解掉沒在用的那行，之後切換就只是移動一個 `#`：
+
+```bash
+# 平常開發
+# DATABASE_URL=postgres://postgres:<pw>@localhost:5432/volleyboard
+# 亂測用
+DATABASE_URL=postgres://postgres:<pw>@localhost:5432/volleyboard_scratch
+```
+
+**第三步：灌種子資料。**
+
+```bash
+pnpm run db:reset
+```
+
+第一次跑會先 `drizzle-kit push` 幫這顆空資料庫建好所有表，再清空重灌；之後每次跑就是
+「回到乾淨的起點」。然後照常 `pnpm --filter ... run dev` 開發即可，測到一團亂就再跑一次。
+
+用完要切回平常的開發資料庫，把 `.env` 改回去就好，沙盒那顆留著不用刪。
+
+**你會拿到什麼**：2 支球隊、13 位人員（含一位跨兩隊的球員，讓跨隊分析有東西看）、4 場比賽
+（3 場已完賽、1 場進行中）、每一分都有決定球 event 所以球員統計表有數字，比賽 1 和 3 另附
+逐局先發站位與一份已存戰術。比分是用固定種子的 PRNG 產生的，**每次重灌結果一模一樣**，
+可以拿來對答案、穩定截圖。另有一場掛在別的使用者底下（UI 永遠看不到），用途是驗證
+ownership 擋不擋得住跨使用者存取——腳本跑完會印出可直接複製的 `curl` 指令。細節見
+[`lib/db/src/seed-testdata.ts`](lib/db/src/seed-testdata.ts) 檔頭。
+
+> ⚠️ **`db:reset` 會整個清空 `DATABASE_URL` 當下指到的那顆資料庫。**
+> 腳本有安全閘門，但它只擋得住「非本機」的資料庫（例如正式站）——**本機的兩顆它分不出誰是誰**。
+> 所以跑之前唯一的保險，是你自己確認 `.env` 指的是沙盒那顆。
 
 想把它部署到雲端上讓別人試用，見 **[`docs/deploy.md`](docs/deploy.md)**。
 
