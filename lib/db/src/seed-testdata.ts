@@ -1,12 +1,12 @@
 // 常駐維護的測試資料種子腳本（#339 之前的舊註解說「非正式產出、用完即刪」，那份已過時——
 // 這支腳本現在是「試驗沙盒資料庫」（scratch DB）工作流程的一部分，會被長期使用，不要刪掉）。
 //
-// 用途：清空整個資料庫，塞入 2 支球隊、4 場比賽、一位「跨兩隊」的球員，讓分析頁視圖②
-// （跨場彙總）跟球隊篩選有東西可看；每一局也灌入看起來寫實（有領先互換、連續得分）但
-// 100% 可重現的比分過程，並補上 events（每一分記一顆「決定球」），讓球員統計的
+// 用途：清空整個資料庫，塞入一份「一場比賽的完整呈現」示範資料（#347）——一支球隊、
+// 12 人名單、一場三局的比賽，含 PO 指定的比分曲線（開局連拿、20 分換人等定點）、
+// 一般換人、暫停、自由球員上下場，並補上 events（每一分記一顆「決定球」），讓球員統計的
 // 「決定球矩陣」（artifacts/volleyball-tactics/src/lib/statsMapping.ts 的 buildPlayerMatrix）
 // 也有數字可看；另外還補上 lineups（起始先發）與 tactics（已存戰術），讓輪轉表／戰術板／
-// 先發站位畫面重灌後也不是空的（#339）。
+// 先發站位畫面重灌後也不是空的（#339）。實際內容見 ./demoData.ts 檔頭的說明。
 //
 // #336：「建構這份示範資料」的實際邏輯（球隊/人員/比賽/局分/lineups/tactics 怎麼灌）已經
 // 抽到 ./demoData.ts 的 seedDemoData()——這支腳本現在只負責「本機沙盒」專屬的部分：safety
@@ -176,22 +176,19 @@ async function main() {
     .returning({ id: matchesTable.id });
 
   console.log("\n完成！塞入內容：");
-  console.log(`  球隊：${summary.teams.map((t) => `${t.name}(id=${t.id})`).join("、")}`);
-  console.log(
-    `  人員：${summary.peopleCount} 位（林小美 personId=${summary.crossTeamPersonId} 跨兩隊）`,
-  );
-  console.log("  比賽：4 場、全部三戰兩勝制");
-  console.log("    1) A隊 vs 台大 2:1（決勝 15:11）  2) A隊 vs 政大 2:0 輾壓");
-  console.log("    3) B隊 vs 師大 1:2 糾結（含 deuce 24:26、決勝 13:15）  4) A隊 vs 交大 進行中");
-  console.log(
-    "  每局比分過程用種子 PRNG（mulberry32，固定種子＝每次重灌結果相同）＋平衡配額＋連續得分動能，",
-  );
-  console.log("  勝方賽末點一定收在最後一球（不再出現達標後對手還在加分的假象）；並補上 events，");
-  console.log("  球員統計的「決定球矩陣」現在有數字可看。");
-  console.log("  比賽1、比賽3（湊得出 6 位非自由球員）各局都補了 lineups（起始先發），並各存一筆");
-  console.log(
-    "  tactics（先發站位快照）——輪轉表／戰術板／先發站位這幾個畫面重灌後不會是空的（#339）。",
-  );
+  console.log(`  球隊：${summary.team.name}(id=${summary.team.id})`);
+  console.log(`  人員：${summary.peopleCount} 位（取自排球少年・烏野高校排球部）`);
+  console.log(`  比賽：1 場（matchId=${summary.matchIds[0]}），三戰兩勝制，一場打滿三局`);
+  console.log("    第 1 局 25:22 勝（開局連拿 5 分、6:1 對手叫暫停、20:18 一般換人）");
+  console.log("    第 2 局 23:25 敗（拉鋸戰，多次平手）");
+  console.log("    第 3 局 15:12 勝（決勝局）");
+  console.log("  三局比分照 PO 指定的序列寫死（不是隨機生成），每一分的決定球仍用種子 PRNG");
+  console.log("  （mulberry32，固定種子＝每次重灌結果相同）隨機分派給名單裡符合角色的球員。");
+  console.log("  輪轉照真正的排球規則算（只有接發球方贏球才輪轉，不是每一分固定 +1）——");
+  console.log("  另補上一般換人 1 筆、暫停 1 筆、自由球員上下場依輪轉精確推導（3 局共 25 筆）——");
+  console.log("  換人/暫停存的是比分快照，不是 rallyId（見 schema/substitutions.ts 的說明）。");
+  console.log("  三局都補了 lineups（起始先發，Z1~Z6 固定不洗牌）並存一筆 tactics（先發站位快照）");
+  console.log("  ——輪轉表／戰術板／先發站位這幾個畫面重灌後不會是空的（#339）。");
   console.log(`\n  另外掛在 ${OTHER_USER_ID} 底下：matchId=${foreignMatch.id}（UI 不會出現）`);
   console.log("  驗證跨使用者擁有權（需 NODE_ENV=development）：");
   console.log(
