@@ -54,7 +54,13 @@ export default function AnalyticsRotationRail({
 
   const completedSets = record?.completedSets ?? [];
   const isMatchFinished = getMatchWinner(completedSets, winsNeeded) !== null;
-  const totalSets = completedSets.length + 1;
+  // 選擇器一共有幾格可以走。未完賽時是「已結束的局 + 進行中的那一局」，所以 +1；
+  // 已完賽時**沒有進行中的那一局**（#218 之後，已完賽比賽重建出來的 currentSet 只是一個
+  // serving=null 的佔位，不是真的一局），那個 +1 會多開一格空格子——三局的比賽會預設停在
+  // 標著「第 4 局」的空盤子上（#349 Bug A）。
+  // Math.max(..., 1)：完賽但一局都沒有（資料異常，或整場記錄被刪光）時仍要留一格，否則
+  // totalSets = 0 會讓下面的 clamp 算出 -1 這種不存在的索引。
+  const totalSets = isMatchFinished ? Math.max(completedSets.length, 1) : completedSets.length + 1;
   const clampedIndex = Math.min(Math.max(manualSetIndex ?? totalSets - 1, 0), totalSets - 1);
 
   let lineup: LineupSnapshot | null;
@@ -70,7 +76,9 @@ export default function AnalyticsRotationRail({
       opponent: completedSets[clampedIndex].opponentScore,
     };
   } else if (isMatchFinished) {
-    // 整場已經打完：不管目前這局有沒有資料一律算歷史。
+    // 整場已經打完、但上面那格取不到已結束局＝completedSets 是空的（見 totalSets 的
+    // Math.max(..., 1)）。正常的完賽比賽走不到這裡，每一格都會落在上面的 historical 分支。
+    // 不管目前這局有沒有資料一律算歷史。
     lineup = record?.lineup ?? null;
     setStatus = "historical";
     score =
