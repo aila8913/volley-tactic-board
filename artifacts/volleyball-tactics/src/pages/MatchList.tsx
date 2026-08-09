@@ -4,6 +4,7 @@ import { Plus, SlidersHorizontal } from "lucide-react";
 import { useMatchList, useDeleteMatch } from "@/hooks/useMatches";
 import { useTournamentList, useDeleteTournament } from "@/hooks/useTournaments";
 import { useCrossMatchAnalysis } from "@/hooks/useCrossMatchAnalysis";
+import { useDemoData } from "@/hooks/useDemoData";
 import MatchFormDialog from "@/components/MatchFormDialog";
 import TournamentFormDialog from "@/components/TournamentFormDialog";
 import ListItemCard from "@/components/ListItemCard";
@@ -34,6 +35,15 @@ export default function MatchList() {
   // 資料夾現在也來自 API（#117），不再是本機 localStorage store。
   const { tournaments } = useTournamentList();
   const deleteTournament = useDeleteTournament();
+  // 示範資料入口（issue #336 PR3）：present 決定要不要顯示上方的狀態列（見下方渲染區塊），
+  // loadOrReset/remove 直接對映到空狀態的「載入示範比賽」鈕、狀態列的「重設」「刪除示範資料」鈕。
+  const {
+    present: demoDataPresent,
+    matchIds: demoMatchIds,
+    loadOrReset,
+    remove,
+    isMutating,
+  } = useDemoData();
 
   const [matchDialogOpen, setMatchDialogOpen] = useState(false);
   const [editingMatch, setEditingMatch] = useState<Match | null>(null);
@@ -116,6 +126,14 @@ export default function MatchList() {
     if (window.confirm("確定要刪除這場比賽嗎？")) {
       // id 是 domain 的字串 id（＝後端 serial 整數的字串形式），送 API 前轉回數字。
       void deleteMatch(Number(id));
+    }
+  };
+
+  // 刪示範資料的確認框：跟 handleDeleteMatch/handleDeleteTournament 同一套 window.confirm
+  // 慣例（這個 repo 目前沒有 AlertDialog 元件，見 PeopleManagement.tsx 同樣的說明）。
+  const handleDeleteDemoData = () => {
+    if (window.confirm("確定要刪除示範資料嗎？這會連同示範的比賽、比分與戰術一起清空。")) {
+      void remove();
     }
   };
 
@@ -221,6 +239,40 @@ export default function MatchList() {
             </div>
           </div>
 
+          {/* 示範資料狀態列（issue #336 PR3）：present 才渲染，理由見 useDemoData 的說明——
+              「重設」「刪除示範資料」都是整帳號級的操作，所以刻意跟主要列表的操作列分開放
+              一條窄的資訊條，不跟「新增比賽」搶視覺重量。 */}
+          {demoDataPresent && (
+            <div
+              className="mb-5 flex items-center justify-between gap-4 rounded-2xl border
+              border-white/[0.12] bg-white/[0.07] px-5 py-3 text-sm backdrop-blur-md"
+            >
+              <p className="text-[#a9b096]">
+                目前顯示的 {demoMatchIds.length} 場是示範資料，可以任意修改試用。
+              </p>
+              <div className="flex shrink-0 gap-4">
+                <button
+                  type="button"
+                  disabled={isMutating}
+                  onClick={() => void loadOrReset()}
+                  className="font-semibold text-[#f5f5f0] transition hover:text-[#c6f135]
+                  disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {isMutating ? "處理中…" : "重設"}
+                </button>
+                <button
+                  type="button"
+                  disabled={isMutating}
+                  onClick={handleDeleteDemoData}
+                  className="font-semibold text-[#a9b096] transition hover:text-[#c6f135]
+                  disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  刪除示範資料
+                </button>
+              </div>
+            </div>
+          )}
+
           {isLoading ? (
             <div className="rounded-2xl border border-white/[0.12] bg-white/[0.07] py-12 text-center text-[#a9b096] backdrop-blur-md">
               載入中…
@@ -236,6 +288,25 @@ export default function MatchList() {
               >
                 新增第一場比賽
               </button>
+              {/* 「載入示範比賽」是次要視覺重量（外框鈕，不是實心亮色）——刻意的：
+                  主要行動仍然是「新增第一場比賽」，示範資料只是幫新使用者快速逛一圈的
+                  輔助入口，不是我們希望使用者停留的終點。isMutating 時 disabled 並改字，
+                  因為種一份示範資料要插入近千列，不是瞬間完成，沒有回饋使用者會以為
+                  沒反應而連點。 */}
+              <button
+                type="button"
+                disabled={isMutating}
+                onClick={() => void loadOrReset()}
+                className="inline-flex h-10 items-center gap-1.5 rounded-full border
+                border-white/[0.26] px-5 text-action font-semibold text-[#f5f5f0] transition
+                hover:border-[#c6f135] hover:text-[#c6f135] disabled:cursor-not-allowed
+                disabled:opacity-40"
+              >
+                {isMutating ? "載入中…" : "載入示範比賽"}
+              </button>
+              <p className="max-w-md text-xs text-[#a9b096]">
+                4 場完整比賽、含比分/先發/戰術與分析數據，可以隨意修改，之後隨時能一鍵刪除。
+              </p>
             </div>
           ) : (
             <ListScrollArea>
