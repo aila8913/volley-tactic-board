@@ -25,9 +25,8 @@
 //
 // 為什麼「固定種子的 PRNG」對示範資料比對測試資料更重要：測試資料只有開發者自己會看到，
 // 內容長怎樣通常不太要緊；但示範資料是每一個新使用者第一次打開這個產品看到的畫面——如果
-// 每次載入的內容都不一樣，寫使用手冊、拍教學截圖、跟夥伴討論「你看那個 A 隊 vs 台大那場」
-// 時就會兜不起來（因為別人載入的示範資料跟你截圖當下的不是同一份）。固定種子確保「不管
-// 誰、什麼時候按下載入示範資料，內容都完全一樣」，示範資料才真的能拿來當共同語言。
+// 每次載入的內容都不一樣，寫使用手冊、拍教學截圖、跟夥伴討論時就會兜不起來。固定種子確保
+// 「不管誰、什麼時候按下載入示範資料，內容都完全一樣」，示範資料才真的能拿來當共同語言。
 //
 // ⚠️ 這支檔案裡不准出現 console.log：#336 PR2 會在處理 HTTP request 的過程中呼叫
 // seedDemoData，往伺服器的 stdout 噴中文進度訊息（「建立球隊…」之類）在那個情境下是錯的
@@ -62,6 +61,8 @@ import {
   eventsTable,
   lineupsTable,
   tacticsTable,
+  substitutionsTable,
+  timeoutsTable,
   type InsertRally,
   type InsertEvent,
 } from "./schema";
@@ -77,11 +78,17 @@ export type DbOrTx = typeof db | Parameters<Parameters<typeof db.transaction>[0]
 // ── 種子隨機數（seeded PRNG）──
 // 為什麼要「隨機但可重現」：這是給開發/展示用的測試資料，之後可能會被清掉重灌很多次
 // （改 schema、清 DB 重跑這支腳本）。如果比分過程真的用 Math.random()，每次重灌出來的
-// 比分走勢、球員數字都不一樣，沒辦法拿來穩定截圖/寫文件/對答案。但如果完全不隨機
-// （像原本的 n % 3 節奏），比分會整齊到一眼看穿是假資料。「種子隨機數」就是兩者都要：
-// 用同一個固定種子重新啟動產生器，每次呼叫 rng() 吐出的數字序列會一模一樣（因為它其實
-// 是一個確定性的數學公式，不是真的隨機），但那串數字本身看起來雜亂無章，拿來決定
-// 「這分誰贏」「這球是誰做的」就能生出貌似真實的比賽節奏。
+// 比分走勢、球員數字都不一樣，沒辦法拿來穩定截圖/寫文件/對答案。但如果完全不隨機，
+// 比分會整齊到一眼看穿是假資料。「種子隨機數」就是兩者都要：用同一個固定種子重新啟動
+// 產生器，每次呼叫 rng() 吐出的數字序列會一模一樣（因為它其實是一個確定性的數學公式，
+// 不是真的隨機），但那串數字本身看起來雜亂無章。
+//
+// #347 之後，這顆 rng 不再負責「這一分是誰贏的」——那件事現在改成 PO 指定的寫死序列
+// （見下方 SET1_GROUPS 等常數的說明）。rng 仍然留著，因為「比分走勢」跟「這一分是哪個
+// 球員做的決定球」是兩件獨立的事：PO 只在意比分曲線長怎樣（開局連拿幾分、幾比幾換人），
+// 不會去指定「第 7 分是誰扣殺得分」這種細節——那件事還是要隨機分派給名單裡的球員，
+// 才不用逐分手刻 36 名球員 122 顆球的歸屬。rng 只是換了工作內容（決定球歸屬），
+// 「可重現」這個理由完全沒變：同一顆種子重灌，決定球歸屬也要每次都一樣。
 // mulberry32 是一顆常見、程式碼很短的種子 PRNG（來源：public domain，社群廣泛沿用），
 // 這裡整支種子腳本只需要「看起來夠亂」，不需要密碼學等級的隨機品質，用它足夠。
 function mulberry32(seed: number): () => number {
@@ -114,9 +121,8 @@ function pickWeighted<T>(rng: () => number, items: Array<[T, number]>): T {
 
 // 名單角色（跟 schema/players.ts 的 playerRoleEnum 對齊）。
 type Role = "S" | "OH" | "MB" | "OPP" | "L";
-// name 是 #339 加的：原本這裡不含姓名（決定球 events 只需要 playerId），但 tactics 的
-// SnapshotPlayer（見 seedLineupsAndTactics）是反正規化快照、必須把姓名一起凍進去，所以
-// 這裡也要跟著帶上，不能再只挑 id/number/role 三個欄位。
+// name：tactics 的 SnapshotPlayer（見 seedLineupsAndTactics）是反正規化快照、必須把姓名
+// 一起凍進去，所以名單型別也要跟著帶上，不能只挑 id/number/role 三個欄位。
 type RosterPlayerWithId = { id: string; name: string; number: number; role: Role };
 // 跟 schema/events.ts 的 eventActionEnum 對齊。
 type ActionName = "serve" | "receive" | "set" | "attack" | "block" | "dig";
@@ -215,172 +221,204 @@ function buildEventSpec(
   return { side: "home", playerId: player?.id ?? null, action };
 }
 
-// 依「這一局最終比分」生出一串合法的 rally 序列，順便一起決定每一分的決定球（event）。
-// 兩件事在同一個迴圈裡一起做，是因為兩者都要吃同一個 rng 序列——只要呼叫順序固定，
-// 重新執行整支腳本就會抽出一模一樣的數字，資料就是可重現的（見上面 mulberry32 註解）。
+// ── #347：比分過程從「隨機生成」改成「PO 寫死的序列」──
+// 在這之前，每局比分是用一套「平衡配額＋連續得分動能」的機率模型隨機亂數生出來的（見
+// git 歷史的 buildRallies 函式）。#347 把示範資料收斂成「一場球完整看下去」的單一比賽，
+// PO 因此對比分曲線有具體要求：第 1 局要在 2 分打到 6 分之間連拿 5 分（讓「暫停」這個
+// 事件有自然的發生時機）、第 1 局 20:18 要有一次換人、每局要有幾個平手點撐出拉鋸感。
+// 這些都是「這一分是誰贏的」這個層級的要求，隨機模型天生做不到「我要在這裡放一個平手」
+// ——機率模型只能調整「平手發生的機率」，沒辦法精準點名「第幾分」。與其在機率模型上
+// 疊一層又一層的特例判斷（那樣程式碼會變得比直接寫死更難懂、更難驗證是否符合 PO 的要求），
+// 不如直接把 PO 給的序列打成字面量常數：這樣「這份資料長什麼樣子」跟「PO 的原始需求」
+// 之間可以逐行對照，日後 PO 要改比分曲線，也是直接改這幾個常數，不用理解機率模型的內部
+// 參數（MOMENTUM、配額平衡……）才能改出想要的結果。
 //
-// baseTarget＝這一局「正常情況先得幾分就贏」：一般局 25、決勝局 15。真正的最終比分
-// （homeTarget/awayTarget）可能比 baseTarget 高（deuce：24:24 之後要淨勝 2 分，例如
-// 26:24），所以 baseTarget 只拿來做「這局是不是早該結束了」的防呆判斷（見下方 guard）。
-// 這裡直接從比分推回 baseTarget：勝方拿到 15~17 分收下的局＝決勝局（15 分制），拿到
-// 25 分以上的＝一般局（25 分制），不用另外把「這是第幾局」傳進來。
+// 序列格式：每個字母代表一分的贏家，H = 我方（home）、A = 對手（away）。分組（每行一組）
+// 只是方便跟 PO 給的原始資料逐行核對，不影響程式邏輯——parseWinners 會把所有分組接起來、
+// 拆成一串扁平的 winner 陣列。
+function parseWinners(groups: string[]): ("home" | "away")[] {
+  return groups
+    .join(" ")
+    .split(/\s+/)
+    .filter((token) => token.length > 0)
+    .map((token) => {
+      if (token === "H") return "home";
+      if (token === "A") return "away";
+      throw new Error(`[demoData] winner 序列出現不合法字元「${token}」，只能是 H 或 A`);
+    });
+}
+
+// 手寫序列很容易漏抄或多抄一個字母，而且錯一個字母不會讓程式炸掉（陣列長度、字元都合法），
+// 只會讓最終比分悄悄跟預期不一樣，肉眼很難從 47 個字母裡挑出這種錯誤。這支函式在插入資料庫
+// 之前先把「序列裡 H 的個數」「A 的個數」跟 PO 給的最終比分核對一次，兜不起來就直接丟錯、
+// 讓 `pnpm run db:reset` 當場失敗，而不是默默灌一份分數對不上的示範資料進資料庫。
+function assertSequenceMatchesScore(
+  label: string,
+  winners: ("home" | "away")[],
+  expectedHome: number,
+  expectedAway: number,
+): void {
+  const home = winners.filter((w) => w === "home").length;
+  const away = winners.length - home;
+  if (home !== expectedHome || away !== expectedAway) {
+    throw new Error(
+      `[demoData] ${label} 的比分序列核對失敗：算出 ${home}:${away}，` +
+        `但預期是 ${expectedHome}:${expectedAway}（序列共 ${winners.length} 分）。` +
+        `請檢查 H/A 字母有沒有漏抄或多抄。`,
+    );
+  }
+}
+
+// 第 1 局（25:22 勝，47 球）。開局連拿 5 分（2:1 打到 6:1，第 1 局 6:1 時對手叫暫停）；
+// 20:18 是換人點；沿路有多次平手（見行末註解），讓比分曲線看起來有拉鋸感而不是一路平推。
+const SET1_GROUPS = [
+  "H A", // 1:1
+  "H H H H H", // 6:1 ← 開局連拿 5 分（PO 指定），對手在這裡叫暫停
+  "A A A", // 6:4
+  "H", // 7:4
+  "A A", // 7:6
+  "H H", // 9:6
+  "A A A", // 9:9 ← 平手
+  "H", // 10:9
+  "A", // 10:10 ← 平手
+  "H H", // 12:10
+  "A A", // 12:12 ← 平手
+  "H", // 13:12
+  "A", // 13:13 ← 平手
+  "H H", // 15:13
+  "A A", // 15:15 ← 平手
+  "H H H", // 18:15
+  "A A", // 18:17
+  "H H", // 20:17
+  "A", // 20:18 ← 換人點
+  "H", // 21:18
+  "A A", // 21:20
+  "H H", // 23:20
+  "A A", // 23:22
+  "H H", // 25:22
+];
+
+// 第 2 局（23:25 敗，48 球）。
+const SET2_GROUPS = [
+  "H A H A", // 2:2 ← 平手
+  "H H", // 4:2
+  "A A A", // 4:5
+  "H H", // 6:5
+  "A", // 6:6 ← 平手
+  "H H H", // 9:6
+  "A A A A", // 9:10
+  "H H", // 11:10
+  "A A", // 11:12
+  "H H H", // 14:12
+  "A A A", // 14:15
+  "H H", // 16:15
+  "A A", // 16:17
+  "H H H", // 19:17
+  "A A A", // 19:20
+  "H H", // 21:20
+  "A A", // 21:22
+  "H H", // 23:22
+  "A A A", // 23:25
+];
+
+// 第 3 局（15:12 勝，27 球，決勝局）。
+const SET3_GROUPS = [
+  "H A", // 1:1 ← 平手
+  "H A", // 2:2 ← 平手
+  "H H A A", // 4:4 ← 平手
+  "A", // 4:5
+  "H H", // 6:5
+  "A", // 6:6 ← 平手
+  "H H H", // 9:6
+  "A A", // 9:8
+  "H H", // 11:8
+  "A A", // 11:10
+  "H H", // 13:10
+  "A A", // 13:12
+  "H H", // 15:12
+];
+
+const SET1_WINNERS = parseWinners(SET1_GROUPS);
+const SET2_WINNERS = parseWinners(SET2_GROUPS);
+const SET3_WINNERS = parseWinners(SET3_GROUPS);
+// 在模組載入的當下（還沒連資料庫）就先核對，寫錯字母會讓 `import` 這支模組的任何程式
+// （seed-testdata.ts、#336 PR2 的 HTTP handler）立刻炸掉，比等到插入到一半才發現快很多。
+assertSequenceMatchesScore("第 1 局", SET1_WINNERS, 25, 22);
+assertSequenceMatchesScore("第 2 局", SET2_WINNERS, 23, 25);
+assertSequenceMatchesScore("第 3 局", SET3_WINNERS, 15, 12);
+
+// ── #347 修正：輪轉要照真正的排球規則（side-out）算，不能「每一分固定 +1」──
+// 上一版這裡寫的是 `rot = (n - 1) % 6`：不管誰贏球，輪次每一分都往前推一格。這是
+// **錯的排球規則**，不是可以接受的簡化——排球輪轉的規則是「只有接發球方贏得這一分，
+// 才輪轉一格」（side-out：奪回發球權的同時輪轉）；發球方自己連續得分不輪轉。兩隊的輪次
+// 也是分開各自累計的，不是「對方 = 我方 + 3」這種固定偏移（上一版的 `awayRotation:
+// (rot + 3) % 6` 也是錯的，同一批修掉）。
 //
-// ── 這支函式最重要的一條規則：勝方的「賽末點」一定要落在最後一個 rally ──
-// 之前的版本有個 bug：它先讓比分自由亂走，一旦某一方先達標，就把「剩下的分」全部硬塞給
-// 另一方。結果畫出來的分數成長圖會出現「我方已經 25 分了，對手卻還在一直加分」這種現實中
-// 不可能發生的畫面（排球一方達標且淨勝 2 分的當下，這局就結束了，不會再打）。
-// 正確的模型是：勝方在「倒數第二分」之前最多只能累積到 winnerTarget−1 分（保留最後那一分），
-// 敗方最多累積到 loserTarget 分；最後一個 rally 才由勝方拿下賽末點收尾。這樣還原出來的
-// 比分走勢，勝方是「打到最後一球才到頂」，對手不可能在那之後還得分（根本沒有下一球了）。
-function buildRallies(
+// 為什麼這件事非修不可：artifacts/api-server/src/routes/analysis.ts 的
+// GET /analysis/matches/:matchId/rotations 是拿 rallies.homeRotation 做 groupBy，算「我方
+// 各輪次的得失分」。如果輪次是每一分固定 +1 產生的，六個輪次會被雨露均霑地各分到差不多
+// 筆數的 rally——那張表照樣會畫得出來、格式完全正常，數字卻毫無意義（不是「這個輪次比較
+// 會得分」，只是「這個輪次剛好被算到比較多顆球」）。這是「不會壞、只會錯」的資料，比明顯
+// 噴錯誤的 bug 更危險——而這份示範資料的用途正是要展示產品給真人看，畫面好看但數字是假的
+// 反而更容易誤導人。
+function buildRalliesFromSequence(
   rng: () => number,
   // setId 是「還沒有真正 id」的佔位值（呼叫端傳空字串），insertSetWithRallies 插入 set
   // 拿到 DB 配的 uuid 之後會整批覆蓋回去，見那支函式裡的 `{ ...s.rally, setId: set.id }`。
-  // 型別跟著 sets.id 從 number 改成 string（#64 PR1）。
   setId: string,
-  homeTarget: number,
-  awayTarget: number,
-  ourRoster: RosterPlayerWithId[],
+  winners: ("home" | "away")[],
+  firstServer: "home" | "away",
+  // 「這一分開始前，場上有哪些我方球員」——決定球只能歸屬給**此刻真的在場上的人**，
+  // 所以這裡收的是一支依比分回答的函式，而不是一份固定名單。為什麼不能直接傳整份名單：
+  // 這場登錄 12 人、實際只有 7 人上場（六位先發＋自由球員），從整份名單抽的話，
+  // 從頭到尾沒上場的替補也會拿到攻擊、攔網等決定球——曾經真的發生過（替補的縁下力
+  // 攻擊 8 次、是全隊最高，但他一球都沒打），球員統計整個是假的。
+  // 舊版看不出來是因為那時名單只有 6~7 人、等於全部都在場上，這個 bug 一直被藏著。
+  onCourtFor: (homeScore: number, awayScore: number) => RosterPlayerWithId[],
 ): { rally: InsertRally; eventSpec: EventSpec }[] {
   const specs: { rally: InsertRally; eventSpec: EventSpec }[] = [];
-  // 先把「home/away」翻譯成「勝方/敗方」，用勝敗視角推演比較好寫規則，最後再翻回 home/away。
-  const winnerSide: "home" | "away" = homeTarget > awayTarget ? "home" : "away";
-  const winnerTarget = Math.max(homeTarget, awayTarget);
-  const loserTarget = Math.min(homeTarget, awayTarget);
-  // 從勝方分數推回「這局是幾分制」：≤20 分收下＝決勝局（15 分制），否則一般局（25 分制）。
-  const baseTarget = winnerTarget <= 20 ? 15 : 25;
-  const total = homeTarget + awayTarget; // rally 總數＝雙方得分和（每個 rally 剛好產生 1 分）
-
   let home = 0;
   let away = 0;
-  let winnerScore = 0;
-  let loserScore = 0;
-  // 追蹤「上一分是勝方還敗方拿的」，讓比分走勢帶一點「動能」（連續得分手感、發球輪優勢），
-  // 而不是每一分都獨立丟硬幣——真實排球常常一方連得好幾分。
-  let prevPoint: "winner" | "loser" | null = null;
-  const MOMENTUM = 0.35; // 往「上一分贏家」偏移的幅度；純憑感覺調，只要走勢看起來會拉鋸即可。
-
-  for (let n = 1; n <= total; n++) {
-    const rot = (n - 1) % 6; // 輪次 0–5 循環，純粹讓分佈不集中在單一輪
-    const isLast = n === total;
-
-    let pointToWinner: boolean;
-    if (isLast) {
-      pointToWinner = true; // 收尾這一分＝勝方的賽末點，一定歸勝方（見函式開頭的規則說明）
-    } else {
-      // body（倒數第二分之前）：勝方最多再拿 winnerTarget−1 分（保留最後一分），敗方最多
-      // loserTarget 分。用「各自還差幾分」當機率基準，讓兩邊大約同時把配額用完——分數會一路
-      // 糾纏到終盤才分曉，不會像舊版那樣一邊早早見頂、另一邊被硬塞一長串。
-      const winnerBodyRemaining = winnerTarget - 1 - winnerScore;
-      const loserRemaining = loserTarget - loserScore;
-      if (winnerBodyRemaining <= 0) {
-        pointToWinner = false; // 勝方 body 配額用完，剩下的（除了最後一分）都給敗方
-      } else if (loserRemaining <= 0) {
-        pointToWinner = true; // 敗方配額用完，剩下的都給勝方
-      } else {
-        // 平衡基準機率：還剩越多分的一方越可能得這一分，兩邊配額因此大約同步耗盡。
-        let p = winnerBodyRemaining / (winnerBodyRemaining + loserRemaining);
-        // 動能：把機率往上一分的贏家那邊推 MOMENTUM，製造連續得分的手感。
-        if (prevPoint === "winner") p = p * (1 - MOMENTUM) + MOMENTUM;
-        else if (prevPoint === "loser") p = p * (1 - MOMENTUM);
-        pointToWinner = rng() < p;
-        // deuce 防呆：勝方不能在終盤前就「以淨勝 ≥2 分達到 baseTarget（例如 25）」——那個
-        // 狀態代表這局其實早該結束了。若這一分會讓勝方進入這種「早該封局」的狀態，強制改由
-        // 敗方得分（此分支保證 loserRemaining>0，翻給敗方不會超過它的配額）。一般局勝方 body
-        // 上限本來就 <baseTarget，這條只有 deuce 局（winnerTarget>baseTarget）才會真的觸發。
-        if (pointToWinner) {
-          const w = winnerScore + 1;
-          if (w >= baseTarget && w - loserScore >= 2) pointToWinner = false;
-        }
-      }
-    }
-
-    const winner: "home" | "away" = pointToWinner
-      ? winnerSide
-      : winnerSide === "home"
-        ? "away"
-        : "home";
-    const eventSpec = buildEventSpec(rng, winner, ourRoster);
+  // serving：目前是哪一方在發球；homeRot/awayRot：兩隊各自的輪次快照，各自獨立累計
+  // （不是彼此的固定偏移）。
+  let serving: "home" | "away" = firstServer;
+  let homeRot = 0;
+  let awayRot = 0;
+  for (let i = 0; i < winners.length; i += 1) {
+    const n = i + 1;
+    const winner = winners[i];
+    const eventSpec = buildEventSpec(rng, winner, onCourtFor(home, away));
     specs.push({
       rally: {
         setId,
         rallyNumber: n,
-        homeScore: home, // 存的是「這分開始前」的比分（後端設計），所以先 push 再加分
+        homeScore: home, // 存的是「這分開始前」的比分，所以先 push 再加分
         awayScore: away,
-        homeRotation: rot,
-        awayRotation: (rot + 3) % 6,
+        // homeRotation/awayRotation 同理：存的是「這分開始前」的輪次快照，所以也是先
+        // push 目前的 homeRot/awayRot，這一分打完之後才視情況更新（見下面 side-out 判斷）。
+        homeRotation: homeRot,
+        awayRotation: awayRot,
         winner,
       },
       eventSpec,
     });
     if (winner === "home") home += 1;
     else away += 1;
-    if (pointToWinner) winnerScore += 1;
-    else loserScore += 1;
-    prevPoint = pointToWinner ? "winner" : "loser";
-  }
-  return specs;
-}
-
-// 「進行中、還沒打完」那一局的 rally 序列：跟 buildRallies 不同，這裡沒有勝負可言（比分停在
-// 半路，例如 18:15），所以沒有「賽末點收在最後一球」「deuce 防呆」那些規則，就是單純用同一套
-// 平衡配額＋連續得分動能，把比分一路走到指定的當下比分（homeNow:awayNow）為止。給那唯一一場
-// 「未完成」的 mock 比賽用（見下方 seedMatch 的 inProgress 參數）。
-function buildPartialRallies(
-  rng: () => number,
-  // 同 buildRallies 的 setId 註解：佔位值，稍後會被真正的 set.id 覆蓋。
-  setId: string,
-  homeNow: number,
-  awayNow: number,
-  ourRoster: RosterPlayerWithId[],
-): { rally: InsertRally; eventSpec: EventSpec }[] {
-  const specs: { rally: InsertRally; eventSpec: EventSpec }[] = [];
-  const total = homeNow + awayNow;
-  let home = 0;
-  let away = 0;
-  let prevWinner: "home" | "away" | null = null;
-  const MOMENTUM = 0.35;
-  for (let n = 1; n <= total; n++) {
-    const rot = (n - 1) % 6;
-    const homeRemaining = homeNow - home;
-    const awayRemaining = awayNow - away;
-    let winner: "home" | "away";
-    if (homeRemaining <= 0) {
-      winner = "away";
-    } else if (awayRemaining <= 0) {
-      winner = "home";
-    } else {
-      let p = homeRemaining / (homeRemaining + awayRemaining);
-      if (prevWinner === "home") p = p * (1 - MOMENTUM) + MOMENTUM;
-      else if (prevWinner === "away") p = p * (1 - MOMENTUM);
-      winner = rng() < p ? "home" : "away";
+    // side-out 判斷：這一分的贏家如果不是原本在發球的那一方，代表發球權易主，贏的那一方
+    // 要輪轉一格、並接手發球；如果贏家就是原本在發球的那一方，代表發球方連續得分，
+    // 兩邊都不輪轉。
+    if (winner !== serving) {
+      if (winner === "home") homeRot = (homeRot + 1) % 6;
+      else awayRot = (awayRot + 1) % 6;
+      serving = winner;
     }
-    const eventSpec = buildEventSpec(rng, winner, ourRoster);
-    specs.push({
-      rally: {
-        setId,
-        rallyNumber: n,
-        homeScore: home,
-        awayScore: away,
-        homeRotation: rot,
-        awayRotation: (rot + 3) % 6,
-        winner,
-      },
-      eventSpec,
-    });
-    if (winner === "home") home += 1;
-    else away += 1;
-    prevWinner = winner;
   }
   return specs;
 }
 
-// 插入「一局 + 它的所有 rally + 每一分的 event」。把這段抽成小工具，是因為
-// seedSets 下面「已打完的局」跟「進行中那一局」都要做同一件事，只差 rally 序列是用
-// buildRallies（完整局）還是 buildPartialRallies（半場）產生的。
-// 回傳這一局的 set.id（#339 加的）：seedSets 需要把它們往上交給 seedMatch，才能在
-// 「插完所有局之後」另外幫已打完的局補一筆 lineups（起始先發，見 main() 裡的
-// seedLineupsAndTactics）——那件事必須知道每一局真正的 uuid，不能只靠 setNumber 反查。
+// 插入「一局 + 它的所有 rally + 每一分的 event」。
+// 回傳這一局的 set.id：呼叫端需要把它們交給 seedLineupsAndTactics（補先發）、以及換人／
+// 暫停的插入邏輯（它們都要 setId 外鍵，但要等 set 真的 insert 完才拿得到 uuid）。
 async function insertSetWithRallies(
   exec: DbOrTx,
   matchId: number,
@@ -425,69 +463,268 @@ async function insertSetWithRallies(
   return set.id;
 }
 
-// 幫一場比賽建立各局 + 各局的 rally + 各局每一分的 event。
-//   completedScores：已經打完的各局比分 [ourScore, opponentScore][]（三戰兩勝，最多 3 局）。
-//   inProgress：非 null 時代表「這場還沒打完」——會在打完的局之後，多插一局「進行中、比分停在
-//     半路」的局（例如 18:15），當作分析頁的 currentSet。
-//
-// ── #218 之後：已打完的比賽不再需要「補一局空 set」──
-// 這裡以前有一段補丁：已打完的比賽要在最後多插一筆 firstServer=null 的空 set。原因是重建
-// 慣例「最後一局永遠是進行中的 currentSet」——不補的話，決勝局本身會被誤標成「進行中」。
-// 那個補丁其實是在用假資料遷就一條算錯的規則（#218 的病灶）。
-//
-// 現在 matches.status 明確記錄「這場結束了沒」，重建規則會照它切分（見前端
-// lib/volleyballRules.ts 的 splitCompletedAndCurrent），所以：
-//   - 已打完（inProgress = null）：seedMatch 會把 status 設成 "finished"，這裡什麼都不用補，
-//     真正打過的每一局都會落進 completedSets。
-//   - 進行中：status 是 "in_progress"，最後那局半場的 set 自然當 currentSet，總覽顯示藍色。
-// 換句話說，seed 資料現在跟使用者真的打完一場比賽產生的資料**形狀完全一致**，不再有一筆
-// 只為了騙過重建規則而存在的幽靈空局。
-// 回傳「已打完那幾局」的 set.id 陣列（依局數順序，#339 加的）。刻意不含 inProgress 那局
-// ——lineups 只有意義用在「已經確定打完、先發已知」的局，進行中那局的 seed 資料沒有特別
-// 意義要補先發，見呼叫端 seedLineupsAndTactics 只吃 completedSetIds。
+// 幫這場（唯一的）比賽建立三局 + 各局的 rally + 每一分的 event。三局的 winner 序列是
+// 上面 SET1_WINNERS/SET2_WINNERS/SET3_WINNERS 這三個寫死的常數，不再是隨機生成
+// （見 buildRalliesFromSequence 上面那段大註解），這裡只負責照順序把它們插進去、
+// 並把三局的 set.id 收集起來回傳給呼叫端。
 async function seedSets(
   exec: DbOrTx,
   matchId: number,
-  completedScores: [number, number][],
+  // 六位先發（依 Z1~Z6 順序）與完整名單分開收：決定球的候選池只能是「在場上的人」，
+  // 而那是先發六人＋自由球員，不是登錄的 12 人（見 buildRalliesFromSequence 的 onCourtFor）。
+  starters: RosterPlayerWithId[],
   ourRoster: RosterPlayerWithId[],
   rng: () => number,
-  inProgress: [number, number] | null,
 ): Promise<string[]> {
-  // 兩隊輪流先發：第 1 局 home 先發、第 2 局 away、依此類推。
-  const firstServerOf = (setIndex: number): "home" | "away" =>
-    setIndex % 2 === 0 ? "home" : "away";
+  const sequences: { winners: ("home" | "away")[]; firstServer: "home" | "away" }[] = [
+    { winners: SET1_WINNERS, firstServer: "home" }, // 第 1、3 局我方先發球
+    { winners: SET2_WINNERS, firstServer: "away" }, // 第 2 局對手先發球
+    { winners: SET3_WINNERS, firstServer: "home" },
+  ];
 
-  const completedSetIds: string[] = [];
-  for (let i = 0; i < completedScores.length; i += 1) {
-    const [home, away] = completedScores[i];
+  // 場上的 7 個人：六位先發 ＋ 自由球員。自由球員雖然隨輪轉上上下下（見
+  // computeLiberoSubstitutions），但他整局都在板凳與場上之間來回、隨時可能是防守/接發的
+  // 決定球執行者，所以一律留在候選池裡。他不會被抽去發球或攻擊——角色白名單
+  // （SERVE_ROLES/ATTACK_ROLES 都沒有列 L）已經擋住了，不需要在這裡再擋一次。
+  const libero = ourRoster.find((p) => p.role === "L");
+  const basePool = libero ? [...starters, libero] : [...starters];
+
+  // 那筆一般換人（山口忠 #12 上、月島蛍 #11 下）之後的場上名單。
+  const subIn = ourRoster.find((p) => p.name === REGULAR_SUBSTITUTION.playerInName);
+  const subOut = ourRoster.find((p) => p.name === REGULAR_SUBSTITUTION.playerOutName);
+  const afterSubPool =
+    subIn && subOut ? basePool.map((p) => (p.name === subOut.name ? subIn : p)) : basePool;
+
+  const setIds: string[] = [];
+  for (let i = 0; i < sequences.length; i += 1) {
+    const { winners, firstServer } = sequences[i];
+    // 這一局在某個比分時，場上是誰。
+    //
+    // 為什麼只有換人發生的那一局要換池子：一般換人的效力**只到當局結束**，下一局雙方都
+    // 回到各自的先發陣容重新開始（排球規則）。所以第 2、3 局一律用 basePool。
+    //
+    // 為什麼用「總分」比大小而不是分別比 home/away：一局內每一分只會有一邊 +1，所以
+    // (homeScore, awayScore) 沿著一條單調遞增的路徑走，每一個「總分」值在這條路徑上
+    // 只會對應到唯一一個比分點。換人記在 (20,18)＝總分 38，因此「總分 ≥ 38」剛好等於
+    // 「這一分在換人之後（含當下那一分）」，不用另外處理 (21,17) 這種同樣總分但不同
+    // 比分的情況——那個點根本不在這條路徑上。
+    const subTotal = REGULAR_SUBSTITUTION.homeScore + REGULAR_SUBSTITUTION.awayScore;
+    const onCourtFor = (homeScore: number, awayScore: number): RosterPlayerWithId[] =>
+      i === REGULAR_SUBSTITUTION.setIndex && homeScore + awayScore >= subTotal
+        ? afterSubPool
+        : basePool;
+
     // setId 先塞空字串（佔位），真正的 uuid 由 insertSetWithRallies 插入 set 後回填。
-    const specs = buildRallies(rng, "", home, away, ourRoster);
-    const setId = await insertSetWithRallies(exec, matchId, i + 1, firstServerOf(i), specs);
-    completedSetIds.push(setId);
+    const specs = buildRalliesFromSequence(rng, "", winners, firstServer, onCourtFor);
+    const setId = await insertSetWithRallies(exec, matchId, i + 1, firstServer, specs);
+    setIds.push(setId);
+  }
+  return setIds;
+}
+
+// ── 號位輪轉小工具（給下面 computeLiberoSubstitutions 用）──
+// 直接複製自 artifacts/volleyball-tactics/src/lib/rotationLogic.ts 的 shiftSequence／
+// rotateZone／BACK_ROW_ZONES，不是 import 過來——lib/ 是被 artifacts/ 匯入的下層，反過來
+// import 會把相依方向倒過來，跟上面 ZONE_COORDS 抄一份常數同一個理由。如果前端那份輪轉
+// 公式改了，這裡要跟著手動改，否則這裡推導出來的「誰在後排」會跟前端畫面顯示的對不上。
+const SHIFT_SEQUENCE = [1, 6, 5, 4, 3, 2] as const;
+const BACK_ROW_ZONES = new Set([1, 5, 6]);
+
+// 給定「起始號位」跟「輪轉了幾格」，回傳現在實際落在哪個號位。跟前端 rotateZone() 完全
+// 同一條公式：先找起始號位在 shiftSequence 裡的 index，加上輪轉格數後取 mod 6。
+function rotateZone(startZone: number, rotation: number): number {
+  const currentIndex = SHIFT_SEQUENCE.indexOf(startZone as (typeof SHIFT_SEQUENCE)[number]);
+  const newIndex = (((currentIndex + rotation) % 6) + 6) % 6;
+  return SHIFT_SEQUENCE[newIndex];
+}
+function isBackRowZone(zone: number): boolean {
+  return BACK_ROW_ZONES.has(zone);
+}
+
+// ── #347 修正：自由球員上下場改成「從輪轉推導」，不再手挑比分點 ──
+// 有了正確的 side-out 輪轉模型（見 buildRalliesFromSequence），這件事就變成可以精確推導的
+// 資訊，不用再靠人工挑幾個「聽起來合理」的比分點頂著。規則：自由球員只能站後排，所以他
+// 換的是「輪到後排的那位副攻」——日向翔陽起始站 Z2、月島蛍起始站 Z5，這兩個號位相差
+// 3 格，在排球的六人輪轉規則下永遠一前一後（見 rotateZone 的公式：任兩個相差 3 格的號位，
+// 一個落在前排範圍 {2,3,4} 時，另一個必定落在後排範圍 {1,5,6}），所以任何時刻場上永遠
+// 剛好有一位副攻在後排，需要自由球員頂著。
+//
+// 推導規則：
+//   1. 開賽（0:0）：先檢查兩位副攻誰站後排，一開賽自由球員就要換上場頂那個位置。
+//   2. 之後每次我方輪轉（homeRot 改變）時，比對變化前後兩位副攻的前/後排狀態：
+//      - 某位副攻從「後排轉到前排」→ 他要回到場上正常輪轉，記一筆
+//        playerInId = 該副攻、playerOutId = 自由球員。
+//      - 某位副攻從「前排轉到後排」→ 他要下場換自由球員，記一筆
+//        playerInId = 自由球員、playerOutId = 該副攻。
+//      兩者可能同時發生（因為兩位副攻永遠一前一後，一個轉進後排的同時另一個一定轉出後排），
+//      這種情況記兩筆、用同一組比分快照。
+//   3. 整局都要記到最後一分，不能中途停下——只記前面幾筆的話，自由球員會在比賽中段憑空
+//      消失，懂排球的人（PO 設定的目標使用者是系隊夥伴跟球經）一眼就看得出來不對。
+function computeLiberoSubstitutions(
+  winners: ("home" | "away")[],
+  firstServer: "home" | "away",
+): { homeScore: number; awayScore: number; direction: "in" | "out"; mbName: string }[] {
+  const MB_STARTERS: { name: string; zone: number }[] = [
+    { name: "日向翔陽", zone: 2 },
+    { name: "月島蛍", zone: 5 },
+  ];
+  const events: {
+    homeScore: number;
+    awayScore: number;
+    direction: "in" | "out";
+    mbName: string;
+  }[] = [];
+
+  let serving: "home" | "away" = firstServer;
+  let homeRot = 0;
+  let home = 0;
+  let away = 0;
+
+  // 開賽當下（0:0，還沒打任何一分）：兩位副攻裡站後排的那位直接換自由球員上場。
+  for (const mb of MB_STARTERS) {
+    if (isBackRowZone(rotateZone(mb.zone, homeRot))) {
+      events.push({ homeScore: 0, awayScore: 0, direction: "in", mbName: mb.name });
+    }
   }
 
-  // 已打完的比賽在這裡什麼都不做（#218，見上方大段說明）；只有「進行中」的比賽要再多插
-  // 一局半場的 set 當 currentSet。
-  if (inProgress) {
-    const nextSetNumber = completedScores.length + 1;
-    const [home, away] = inProgress;
-    const specs = buildPartialRallies(rng, "", home, away, ourRoster);
-    await insertSetWithRallies(
-      exec,
-      matchId,
-      nextSetNumber,
-      firstServerOf(nextSetNumber - 1),
-      specs,
+  for (let i = 0; i < winners.length; i += 1) {
+    const winner = winners[i];
+    const prevHomeRot = homeRot;
+    if (winner === "home") home += 1;
+    else away += 1;
+    if (winner !== serving) {
+      if (winner === "home") homeRot = (homeRot + 1) % 6;
+      serving = winner;
+    }
+    if (homeRot === prevHomeRot) continue; // 這一分沒有讓我方輪轉，副攻站位不變，不用檢查
+
+    // 我方剛剛輪轉了一格：比對兩位副攻在輪轉前後的前/後排狀態有沒有變化。這裡用的比分
+    // 快照是「這一分打完之後」的比分（home/away 已經在上面加過了）——換人發生在這一分
+    // 結束、下一分開始之前，語意跟 TIMEOUTS/REGULAR_SUBSTITUTION 的比分快照一致。
+    for (const mb of MB_STARTERS) {
+      const wasBack = isBackRowZone(rotateZone(mb.zone, prevHomeRot));
+      const isBack = isBackRowZone(rotateZone(mb.zone, homeRot));
+      if (wasBack && !isBack) {
+        events.push({ homeScore: home, awayScore: away, direction: "out", mbName: mb.name });
+      } else if (!wasBack && isBack) {
+        events.push({ homeScore: home, awayScore: away, direction: "in", mbName: mb.name });
+      }
+    }
+  }
+  return events;
+}
+
+// 把「算出來的自由球員上下場筆數」跟已知答案核對一次——這份推導完全是決定性的（給定同一組
+// winner 序列跟 firstServer，答案永遠一樣），如果哪天不小心改動了 STARTERS 的站位或這支
+// 函式的邏輯，筆數兜不起來就代表推導壞了，直接在模組載入時炸出來，比事後肉眼比對 25 筆
+// 換人紀錄快得多。
+function assertLiberoSubstitutionCount(label: string, events: unknown[], expected: number): void {
+  if (events.length !== expected) {
+    throw new Error(
+      `[demoData] ${label} 的自由球員上下場筆數核對失敗：算出 ${events.length} 筆，` +
+        `但預期是 ${expected} 筆。請檢查輪轉推導邏輯有沒有跑錯。`,
     );
   }
-  return completedSetIds;
+}
+
+const SET1_LIBERO_SUBSTITUTIONS = computeLiberoSubstitutions(SET1_WINNERS, "home");
+const SET2_LIBERO_SUBSTITUTIONS = computeLiberoSubstitutions(SET2_WINNERS, "away");
+const SET3_LIBERO_SUBSTITUTIONS = computeLiberoSubstitutions(SET3_WINNERS, "home");
+assertLiberoSubstitutionCount("第 1 局", SET1_LIBERO_SUBSTITUTIONS, 9);
+assertLiberoSubstitutionCount("第 2 局", SET2_LIBERO_SUBSTITUTIONS, 9);
+assertLiberoSubstitutionCount("第 3 局", SET3_LIBERO_SUBSTITUTIONS, 7);
+
+// ── #347：換人／暫停的時機為什麼存比分快照，不是存 rallyId ──
+// 見 schema/substitutions.ts、schema/timeouts.ts 檔頭的完整說明（docs/event-grammar-spec.md
+// 那節分析過的定案），這裡摘要一次：換人／暫停都發生在「死球期間」——上一分已經結束、
+// 下一分的 rally 還沒開始，那個當下下一個 rally 的 id 根本不存在。存比分快照
+// (homeScore, awayScore) 可行，是因為一局內的比分組合唯一且嚴格遞增，光靠這兩個數字
+// 就能精準標定「第幾分開球前發生的事」，不需要依賴任何其他 row 先存在。
+
+// 一場比賽（唯一的一場）裡固定會有的暫停紀錄：第 1 局比分 6:1 時，對手被連拿 5 分，
+// 順理成章地叫了一次暫停（見 SET1_GROUPS 的 "6:1 ← 開局連拿 5 分" 註解）。
+const TIMEOUTS: {
+  setIndex: 0 | 1 | 2;
+  homeScore: number;
+  awayScore: number;
+  side: "home" | "away";
+}[] = [{ setIndex: 0, homeScore: 6, awayScore: 1, side: "away" }];
+
+// ── 一般換人 ──
+// 第 1 局比分 20:18 時，山口忠 #12 上、月島蛍 #11 下（兩人同為副攻，位置一致，山口在原作
+// 就是替補發球員）。
+//
+// ⚠️ 一般換人**不限前後排**——「換人時要在後排」只有自由球員的替換才是規則（見
+// schema/substitutions.ts 的 kind 註解），一般換人隨時都能換。所以這裡不需要像
+// computeLiberoSubstitutions 那樣檢查月島當時站前排還後排（用正確的 side-out 輪轉模型
+// 算過，這個時間點 homeRot=3、月島站在 Z2，剛好是前排，但這完全不影響這筆換人的合法性）。
+const REGULAR_SUBSTITUTION = {
+  setIndex: 0 as const,
+  homeScore: 20,
+  awayScore: 18,
+  playerInName: "山口忠",
+  playerOutName: "月島蛍",
+};
+
+// 把上面幾個常數（TIMEOUTS／REGULAR_SUBSTITUTION／SET1~3_LIBERO_SUBSTITUTIONS）灌進資料庫。
+// 抽成一支獨立函式，是因為這件事要等「三局都已經插入完成、拿到真正的 set.id」之後才能做
+// ——換人／暫停的 setId 外鍵指向真正的 uuid，不是像 rally 那樣可以先塞空字串佔位。
+async function seedGameEvents(
+  exec: DbOrTx,
+  setIds: string[], // 依局數順序：[第1局, 第2局, 第3局]
+  playerIdByName: Map<string, string>,
+): Promise<void> {
+  const playerId = (name: string): string => {
+    const id = playerIdByName.get(name);
+    if (id === undefined) throw new Error(`[demoData] 找不到球員「${name}」，名單可能打錯字`);
+    return id;
+  };
+
+  await exec.insert(timeoutsTable).values(
+    TIMEOUTS.map((t) => ({
+      setId: setIds[t.setIndex],
+      homeScore: t.homeScore,
+      awayScore: t.awayScore,
+      side: t.side,
+    })),
+  );
+
+  // 自由球員上下場：schema/substitutions.ts 的規則是「L 上場時 playerIn 是 L、L 下場時
+  // playerOut 是 L」，這裡把 computeLiberoSubstitutions 算出來的 direction 翻譯成對應的
+  // playerInId/playerOutId。三局各自的清單（見上面的 assertLiberoSubstitutionCount 呼叫）
+  // 分別對應 setIds[0]/[1]/[2]，明寫三段而不是用陣列+flatMap 迴圈，是為了讓 TypeScript
+  // 能保留每個清單的具體型別，不用為了湊統一的迴圈型別而加上不安全的 cast。
+  const liberoSubstitutionRows = [
+    ...SET1_LIBERO_SUBSTITUTIONS.map((sub) => ({ setIndex: 0 as const, ...sub })),
+    ...SET2_LIBERO_SUBSTITUTIONS.map((sub) => ({ setIndex: 1 as const, ...sub })),
+    ...SET3_LIBERO_SUBSTITUTIONS.map((sub) => ({ setIndex: 2 as const, ...sub })),
+  ].map((sub) => ({
+    setId: setIds[sub.setIndex],
+    homeScore: sub.homeScore,
+    awayScore: sub.awayScore,
+    playerInId: playerId(sub.direction === "in" ? "西谷夕" : sub.mbName),
+    playerOutId: playerId(sub.direction === "in" ? sub.mbName : "西谷夕"),
+    kind: "libero" as const,
+  }));
+
+  const substitutionRows = [
+    {
+      setId: setIds[REGULAR_SUBSTITUTION.setIndex],
+      homeScore: REGULAR_SUBSTITUTION.homeScore,
+      awayScore: REGULAR_SUBSTITUTION.awayScore,
+      playerInId: playerId(REGULAR_SUBSTITUTION.playerInName),
+      playerOutId: playerId(REGULAR_SUBSTITUTION.playerOutName),
+      kind: "regular" as const,
+    },
+    ...liberoSubstitutionRows,
+  ];
+  await exec.insert(substitutionsTable).values(substitutionRows);
 }
 
 // 6 個球場格子的座標（0~1 normalized）。直接複製自
 // artifacts/volleyball-tactics/src/lib/rotationLogic.ts 的 zoneCoords，不是 import 過來
 // ——lib/ 是被 artifacts/ 匯入的下層，反過來讓 lib/ import artifacts/ 的程式碼會把相依
-// 方向倒過來（跟 seed-testdata.ts 裡 OTHER_USER_ID 那段「刻意抄一份常數、不共用」的理由
-// 一樣）。如果前端那份 zoneCoords 改了球場座標系，這裡也要跟著手動改，否則 seed 出來的
+// 方向倒過來。如果前端那份 zoneCoords 改了球場座標系，這裡也要跟著手動改，否則 seed 出來的
 // tactics 存檔在戰術板上會顯示錯位。
 const ZONE_COORDS: Record<1 | 2 | 3 | 4 | 5 | 6, { x: number; y: number }> = {
   1: { x: 0.83, y: 0.85 }, // Right Back
@@ -498,334 +735,249 @@ const ZONE_COORDS: Record<1 | 2 | 3 | 4 | 5 | 6, { x: number; y: number }> = {
   6: { x: 0.5, y: 0.85 }, // Middle Back
 };
 
-// #339：補上 lineups（起始先發）與 tactics（已存戰術），這兩張表在這支腳本改版之前
-// 只會被 TRUNCATE、從沒被灌過資料——灌完種子資料後，輪轉表／戰術板／先發站位這幾個畫面
-// 因此一直是空的，違背 seed 腳本原本要做到「一場比賽完整可看」的目的（見 seed-testdata.ts
-// 檔案開頭說明）。
+// 補上 lineups（起始先發）與 tactics（已存戰術），讓輪轉表／戰術板／先發站位這幾個畫面
+// 灌完種子資料後不是空的。
 //
-// 只有「湊得出 6 位非自由球員」的比賽才補：lineups 的六個號位（zone1~zone6）依照
-// lib/db/src/schema/lineups.ts 的文件化規則，本來就不允許塞自由球員（L）——真實排球
-// 規則裡自由球員是「換人上場」而非先發站六個號位之一。這支腳本的名單設計（一隊基本班底
-// 6 人裡有 1 位自由球員）扣掉自由球員只剩 5 位非自由球員，湊不滿六個號位；只有比賽1／
-// 比賽3（多了跨隊的林小美，湊到 7 人、6 位非自由球員）恰好湊滿。與其硬塞自由球員進某個
-// 號位（那會違反上面文件化的業務規則，等於自己再製造一種「幽靈站位」），寧可讓另外兩場
-// 保持沒有 lineups——這是 seed 資料的已知限制，不是 bug（呼叫端 seedDemoData 只對 match1／
-// match3 呼叫這支函式，理由也寫在那裡）。這裡「湊不滿六個號位就跳過」的情況不印
-// console.log（#336：這支檔案不准有 console.log，見檔頭說明）——那句旁白只是給種子腳本
-// 看熱鬧用，不影響資料本身，直接省略即可。
-//
-// 這支函式故意接收「共用的 rng」而不是自己另開一顆——沿用同一顆種子 PRNG，才能維持整份
-// 示範資料「同一顆種子重灌出同一份資料」的可重現性（見檔案開頭 mulberry32 的說明）。呼叫
-// 時機也刻意放在呼叫端所有 seedMatch 呼叫「都跑完之後」（附加，不插在中間）——插在中間會
-// 讓後面幾場比賽讀到的 rng() 序列整個往後平移，等於改寫了它們的比分/決定球內容。
+// #347 之前這裡會對名單做 Fisher-Yates 洗牌，每一局重排一次「誰站哪個號位」。這次改成
+// 固定用同一組先發站位（starters 參數，已經照 Z1~Z6 的順序排好），三局都一樣、完全不洗牌
+// ——因為這次的六人先發站位是刻意設計過的合法對位（Z1↔Z4 舉球對對角、Z2↔Z5 兩位副攻、
+// Z3↔Z6 兩位主攻，見 seedDemoData 裡 STARTERS 常數上方的說明），洗牌會把這個對位打散、
+// 湊出不合規則的輪轉（例如兩個舉球員同時在場）。真實比賽裡球隊也通常整場比賽維持同一套
+// 先發輪轉順位，不會每局重新排列，固定不洗牌反而更貼近真實情況。
 async function seedLineupsAndTactics(
   exec: DbOrTx,
   userId: string,
-  match: { matchId: number; ourRoster: RosterPlayerWithId[]; completedSetIds: string[] },
-  rng: () => number,
+  match: { matchId: number; starters: RosterPlayerWithId[]; completedSetIds: string[] },
 ): Promise<void> {
-  const eligible = match.ourRoster.filter((p) => p.role !== "L");
-  if (eligible.length < 6) {
-    return;
-  }
+  const [z1, z2, z3, z4, z5, z6] = match.starters;
 
-  // Fisher-Yates 洗牌：每一局都重新排一次「這 6 個人站哪個號位」，讓不同局的先發看起來
-  // 不是每次都一模一樣的排列（更接近真實情況——教練常常每局微調站位）。
-  function shuffledSix(): RosterPlayerWithId[] {
-    const pool = [...eligible];
-    for (let i = pool.length - 1; i > 0; i -= 1) {
-      const j = Math.floor(rng() * (i + 1));
-      [pool[i], pool[j]] = [pool[j], pool[i]];
-    }
-    return pool.slice(0, 6);
-  }
-
-  // 記下第一局的先發，等一下拿來組 tactics 的球員站位（用同一份先發站位當作「已存戰術」
-  // 的內容，比憑空生一組座標更貼近真實使用情境：教練最常存的戰術之一就是「開局站位」）。
-  let firstSetLineup: RosterPlayerWithId[] | null = null;
   for (const setId of match.completedSetIds) {
-    const six = shuffledSix();
-    if (firstSetLineup === null) firstSetLineup = six;
     await exec.insert(lineupsTable).values({
       setId,
-      zone1PlayerId: six[0].id,
-      zone2PlayerId: six[1].id,
-      zone3PlayerId: six[2].id,
-      zone4PlayerId: six[3].id,
-      zone5PlayerId: six[4].id,
-      zone6PlayerId: six[5].id,
+      zone1PlayerId: z1.id,
+      zone2PlayerId: z2.id,
+      zone3PlayerId: z3.id,
+      zone4PlayerId: z4.id,
+      zone5PlayerId: z5.id,
+      zone6PlayerId: z6.id,
     });
   }
 
-  // 已存戰術（tactics）：拿第一局的先發站位（六個號位對應到球場座標，見上面 ZONE_COORDS），
-  // 存成一份 SavedTacticDataV2——前端
-  // artifacts/volleyball-tactics/src/types/courtSnapshot.ts 定義的存檔格式，也是
-  // artifacts/volleyball-tactics/src/hooks/useTacticsBoard.ts 的 loadProject／parseSavedTactic
-  // 實際會讀的形狀。反正規化：姓名/背號/位置在這裡就凍結成純值，不是存 playerId 回頭查
-  // roster（這是 #154 戰術板重構定案的格式，見 useTacticsBoard.ts 開頭「單向化」那段說明；
-  // 這裡沒有直接 import 那些前端型別/zod schema 來驗證，是因為 lib/ 不能 import artifacts/
-  // 的程式碼——跟上面 ZONE_COORDS 抄一份常數同一個理由，這裡改成手刻字面量，形狀對齊
-  // courtSnapshot.ts 的 savedTacticDataV2Schema 即可）。
-  if (firstSetLineup) {
-    const players = firstSetLineup.map((p, idx) => {
-      const zone = (idx + 1) as 1 | 2 | 3 | 4 | 5 | 6;
-      const coords = ZONE_COORDS[zone];
-      return {
-        sourcePlayerId: p.id,
-        name: p.name,
-        number: p.number,
-        role: p.role,
-        x: coords.x,
-        y: coords.y,
-        isLibero: false, // eligible 已經濾掉 L，這裡恆為 false
-      };
-    });
-    const data = {
-      version: 2 as const,
-      scenes: [
-        {
-          label: "先發站位",
-          snapshot: {
-            source: "rotation" as const,
-            // 前端 URL 上的 matchId 是字串（wouter 的 route param），courtSnapshot.ts 的
-            // matchId 欄位也是 z.string().nullable()——這裡跟前端存檔慣例一致，轉成字串。
-            matchId: String(match.matchId),
-            rotation: 0,
-            // 寫死一個固定時間，不用 `new Date()`——這份示範資料的賣點就是「每次重灌
-            // 結果一模一樣」（見上面 BASE_SEED 那段），而牆上時鐘是唯一會讓輸出隨執行時刻
-            // 漂移的東西。這裡挑最後一場比賽日期的隔天，語意上像「賽後整理戰術時存的檔」。
-            capturedAt: "2026-07-11T10:00:00+08:00",
-            players,
-          },
-          markers: [] as unknown[],
-          defenseRanges: [] as unknown[],
-        },
-      ],
+  // 已存戰術（tactics）：拿先發站位（六個號位對應到球場座標，見上面 ZONE_COORDS），存成一份
+  // SavedTacticDataV2——前端 artifacts/volleyball-tactics/src/types/courtSnapshot.ts 定義的
+  // 存檔格式，也是 artifacts/volleyball-tactics/src/hooks/useTacticsBoard.ts 的
+  // loadProject／parseSavedTactic 實際會讀的形狀。反正規化：姓名/背號/位置在這裡就凍結成
+  // 純值，不是存 playerId 回頭查 roster（這是 #154 戰術板重構定案的格式）。這裡沒有直接
+  // import 那些前端型別/zod schema 來驗證，是因為 lib/ 不能 import artifacts/ 的程式碼
+  // ——跟上面 ZONE_COORDS 抄一份常數同一個理由，這裡改成手刻字面量，形狀對齊
+  // courtSnapshot.ts 的 savedTacticDataV2Schema 即可。
+  const players = match.starters.map((p, idx) => {
+    const zone = (idx + 1) as 1 | 2 | 3 | 4 | 5 | 6;
+    const coords = ZONE_COORDS[zone];
+    return {
+      sourcePlayerId: p.id,
+      name: p.name,
+      number: p.number,
+      role: p.role,
+      x: coords.x,
+      y: coords.y,
+      isLibero: false, // starters 不含自由球員，這裡恆為 false
     };
-    await exec.insert(tacticsTable).values({
-      userId,
-      matchId: match.matchId,
-      name: "先發站位",
-      data,
-    });
-  }
+  });
+  const data = {
+    version: 2 as const,
+    scenes: [
+      {
+        label: "先發站位",
+        snapshot: {
+          source: "rotation" as const,
+          // 前端 URL 上的 matchId 是字串（wouter 的 route param），courtSnapshot.ts 的
+          // matchId 欄位也是 z.string().nullable()——這裡跟前端存檔慣例一致，轉成字串。
+          matchId: String(match.matchId),
+          rotation: 0,
+          // 寫死一個固定時間，不用 `new Date()`——這份示範資料的賣點就是「每次重灌
+          // 結果一模一樣」（見上面 BASE_SEED 那段），而牆上時鐘是唯一會讓輸出隨執行時刻
+          // 漂移的東西。這裡挑比賽日期的隔天，語意上像「賽後整理戰術時存的檔」。
+          capturedAt: "2026-07-21T10:00:00+08:00",
+          players,
+        },
+        markers: [] as unknown[],
+        defenseRanges: [] as unknown[],
+      },
+    ],
+  };
+  await exec.insert(tacticsTable).values({
+    userId,
+    matchId: match.matchId,
+    name: "先發站位",
+    data,
+  });
 }
 
-// seedDemoData 完成後回傳的摘要，讓呼叫端（例如 seed-testdata.ts 收尾印訊息，或未來
-// #336 PR2 的 HTTP handler 回應）能取得剛剛灌了什麼，不用另外重新查一次 DB。
+// seedDemoData 完成後回傳的摘要，讓呼叫端（例如 seed-testdata.ts 收尾印訊息，或 #336 PR2
+// 的 HTTP handler 回應）能取得剛剛灌了什麼，不用另外重新查一次 DB。
+//
+// matchIds 保留「陣列」型別（即使現在永遠只有一個元素）：#336 PR2 的 HTTP handler
+// （artifacts/api-server/src/routes/demoData.ts）已經對外回應 `{ matchIds: number[] }`
+// 這個形狀（openapi.yaml 的 DemoDataStatus schema），改成單一 matchId 會牽動那支路由
+// 跟前端契約，超出這次「換示範資料內容」的範圍，所以刻意維持陣列形狀不變。
 export type DemoDataSummary = {
-  teams: Array<{ id: number; name: string }>;
+  team: { id: number; name: string };
   peopleCount: number;
-  crossTeamPersonId: number; // 林小美：刻意設計「跨兩隊」的球員，靠這個 id 串起 A 隊/B 隊的名單
-  matchIds: number[]; // 依插入順序：[台大, 政大, 師大, 交大]
+  matchIds: number[];
 };
 
-// 對指定的 userId 灌一份完整的示範資料：2 支球隊、13 位人員（含 1 位跨隊球員）、
-// 4 場比賽（含各局比分/rally/決定球 events，2 場補 lineups/tactics）。
+// 對指定的 userId 灌一份完整的示範資料：#347 之後改成「一場比賽的完整呈現」——
+// 一支球隊、12 人名單、一場三局的比賽（含比分/先發/換人/暫停/自由球員上下場/決定球
+// events），比較貼近使用者真正會怎麼用這個 app 記一場球，也比舊版「4 場比賽、13 位泛用
+// 人名」更容易在截圖/文件裡指認「這是哪個球員」。
 //
-// seed 是可覆寫的種子（預設 BASE_SEED）：讓呼叫端有需要時可以指定別的種子（例如以後想
-// 讓每個使用者拿到「內容架構相同但細節不同」的示範資料），但兩個消費者目前都用預設值，
-// 確保「同一顆種子重灌出同一份資料」。
+// seed 是可覆寫的種子（預設 BASE_SEED）：讓呼叫端有需要時可以指定別的種子，但兩個消費者
+// 目前都用預設值，確保「同一顆種子重灌出同一份資料」。
 export async function seedDemoData(
   exec: DbOrTx,
   userId: string,
   seed: number = BASE_SEED,
 ): Promise<DemoDataSummary> {
-  // 整份示範資料共用同一顆種子 PRNG：只要下面呼叫 seedMatch/seedSets/buildRallies 的順序
-  // 不變（這支函式本來就是照固定順序寫死呼叫三場比賽），rng() 被呼叫的次數與時機就完全
-  // 固定，吐出來的數字序列也就固定——這就是整份示範資料「每次重灌都一樣」的關鍵。
+  // 整份示範資料共用同一顆種子 PRNG：只要下面呼叫 rng() 的順序不變，重新執行就會產生
+  // 一模一樣的資料（見檔案開頭 mulberry32 的說明）。
   const rng = mulberry32(seed);
 
-  // 兩支球隊。
-  const [teamA, teamB] = await exec
+  // 唯一一支球隊。
+  const [team] = await exec
     .insert(teamsTable)
-    .values([
-      { userId, name: "資管系 A 隊", isDemo: true },
-      { userId, name: "資管系 B 隊", isDemo: true },
-    ])
+    .values({ userId, name: "範例球隊", isDemo: true })
     .returning({ id: teamsTable.id, name: teamsTable.name });
 
-  // 人。林小美是刻意設計的「跨兩隊」球員：等一下她同時出現在 A 隊跟 B 隊的名單裡，
-  // 靠同一個 personId 串起來（這正是 people 表存在的意義，見 schema/people.ts）。
-  const peopleNames = [
-    "王小明",
-    "陳志豪",
-    "林大目",
-    "黃建宏",
-    "吳俊傑",
-    "蔡明翰", // 以上 A 隊班底
-    "周立群",
-    "鄭雅文",
-    "謝宗翰",
-    "郭子軒",
-    "何品妍",
-    "曾偉倫", // 以上 B 隊班底
-    "林小美", // 跨兩隊
+  // 12 人名單，取自排球少年・烏野高校排球部。
+  //
+  // ── 為什麼是 12 人，不是更常見的名單大小 ──
+  // 烏野在原作只登錄了 12 個背號，而且只有一位自由球員（西谷夕）——這份示範資料如實照抄
+  // 這個結構，所以是 12 人、替補名單裡沒有第二位自由球員。這不是筆誤，是刻意貼著原作設定。
+  //
+  // ── 為什麼東峰旭被標成「對角」(OPP) ──
+  // 烏野原作的先發完全沒有嚴格意義的「對角」——先發六人裡澤村大地／東峰旭／田中龍之介
+  // 三個人在原作設定裡都是「主攻」(Wing Spiker)。但這個 app 的名單角色只分 S/OH/MB/OPP/L
+  // 五類（見 schema/players.ts 的 playerRoleEnum），示範資料又想湊出「2 主攻＋1 對角」這種
+  // 排球隊最常見、規則書會拿來當範例的標準先發組成，才能讓輪轉表／戰術板的站位對位看起來
+  // 是「教科書等級」的合法排列。權衡之下，把東峰旭（隊上王牌、主要得分點，攻擊火力最貼近
+  // 「對角」在戰術上的定位）對應成這個 app 定義下的對角——這是**這個專案自己的對應**，
+  // 不是原作的官方設定，未來如果有讀者拿這份名單去對照原作漫畫/動畫的守備位置標註，會對
+  // 不起來，是刻意的取捨，不是抄錯。
+  const S = "S" as const,
+    OH = "OH" as const,
+    MB = "MB" as const,
+    OPP = "OPP" as const,
+    L = "L" as const;
+  type RosterEntry = {
+    name: string;
+    number: number;
+    role: typeof S | typeof OH | typeof MB | typeof OPP | typeof L;
+  };
+
+  // ── 先發六人，順序就是 Z1~Z6（陣列 index 直接對應號位）──
+  // ⚠️ 不要調換這個陣列的順序：這六人的站位是刻意排過的合法對位——
+  //   Z1(影山,S) ↔ Z4(東峰,OPP)：舉球員跟對角在排球規則裡永遠同時在場上對角線兩端
+  //   （同時前排/同時後排），這是「舉球對對角」最基本的站位邏輯，兩人角色也對得起來。
+  //   Z2(日向,MB) ↔ Z5(月島,MB)：兩位副攻分站對角，副攻通常需要兩位輪流守中間攔網。
+  //   Z3(澤村,OH) ↔ Z6(田中,OH)：兩位主攻分站對角，同理。
+  // 排球規則裡「相差 3 個號位」的兩個位置（1↔4、2↔5、3↔6）永遠同時前排或同時後排
+  // （見 artifacts/volleyball-tactics/src/lib/rotationLogic.ts 的 shiftSequence 輪轉公式），
+  // 隨手調換這個陣列的順序（例如把 Z2、Z5 的人對調成跟 Z3、Z6 配對）會做出不合規則的
+  // 站位（例如兩個副攻同時站在會同時前排的位置，前排永遠缺一個攻擊點）。這份先發名單
+  // 三局都固定不變（見 seedLineupsAndTactics 的說明），所以這個順序影響的不只是第 1 局，
+  // 是整場比賽的站位正確性。
+  const STARTERS: RosterEntry[] = [
+    { name: "影山飛雄", number: 9, role: S }, // Z1
+    { name: "日向翔陽", number: 10, role: MB }, // Z2
+    { name: "澤村大地", number: 1, role: OH }, // Z3
+    { name: "東峰旭", number: 3, role: OPP }, // Z4
+    { name: "月島蛍", number: 11, role: MB }, // Z5
+    { name: "田中龍之介", number: 5, role: OH }, // Z6
   ];
+  const LIBERO: RosterEntry = { name: "西谷夕", number: 4, role: L };
+  const BENCH: RosterEntry[] = [
+    { name: "菅原孝支", number: 2, role: S },
+    { name: "縁下力", number: 6, role: OH },
+    { name: "木下久志", number: 7, role: OH },
+    { name: "成田一仁", number: 8, role: MB },
+    { name: "山口忠", number: 12, role: MB },
+  ];
+  const ROSTER: RosterEntry[] = [...STARTERS, LIBERO, ...BENCH];
+
+  // 人（people 表）：跨比賽/跨球隊追蹤「這是同一個人」用的身分表。這次只有一場比賽，
+  // 用不到「同一個人跨場」這件事，但 players.personId 這個外鍵仍然是設計上該填的——
+  // 每個球員名單列本來就該指回一個 people 身分（見 schema/players.ts 的 personId 註解）。
   const people = await exec
     .insert(peopleTable)
-    .values(peopleNames.map((name) => ({ userId, name, isDemo: true })))
+    .values(ROSTER.map((r) => ({ userId, name: r.name, isDemo: true })))
     .returning({ id: peopleTable.id, name: peopleTable.name });
   const personId = (name: string) => people.find((p) => p.name === name)!.id;
 
-  // 一份名單列 = 某場比賽裡「某個人穿幾號、打什麼位置」。number/role 可跨場不同，
-  // 但 personId 綁定的是同一個人。
-  type RosterEntry = { name: string; number: number; role: Role };
-  const aRoster: RosterEntry[] = [
-    { name: "王小明", number: 1, role: "S" },
-    { name: "陳志豪", number: 7, role: "OH" },
-    { name: "林大目", number: 12, role: "MB" },
-    { name: "黃建宏", number: 9, role: "OPP" },
-    { name: "吳俊傑", number: 5, role: "L" },
-    { name: "蔡明翰", number: 3, role: "OH" },
-  ];
-  const bRoster: RosterEntry[] = [
-    { name: "周立群", number: 2, role: "S" },
-    { name: "鄭雅文", number: 8, role: "OH" },
-    { name: "謝宗翰", number: 11, role: "MB" },
-    { name: "郭子軒", number: 6, role: "OPP" },
-    { name: "何品妍", number: 4, role: "L" },
-    { name: "曾偉倫", number: 10, role: "OH" },
-  ];
-  // 林小美在 A 隊穿 15、在 B 隊穿 13——同一個人、不同場不同背號，但 personId 相同。
-  const linInA: RosterEntry = { name: "林小美", number: 15, role: "OH" };
-  const linInB: RosterEntry = { name: "林小美", number: 13, role: "OH" };
+  // 比賽：唯一一場，掛在上面那支球隊底下。
+  const [match] = await exec
+    .insert(matchesTable)
+    .values({
+      userId,
+      name: null,
+      opponent: "範例對手",
+      date: new Date("2026-07-20T19:00:00+08:00"),
+      teamId: team.id,
+      format: "best_of_3",
+      status: "finished",
+      isDemo: true,
+    })
+    .returning({ id: matchesTable.id });
 
-  async function seedMatch(
-    teamId: number,
-    opponent: string,
-    dateIso: string,
-    roster: RosterEntry[],
-    completedScores: [number, number][],
-    // null＝這場已打完（會標成 status:"finished"）；給比分＝這場還沒打完，最後多一局
-    // 進行中、比分停在這裡的局（見 seedSets 的 inProgress 說明）。
-    inProgress: [number, number] | null = null,
-  ) {
-    const [match] = await exec
-      .insert(matchesTable)
-      .values({
-        userId,
-        name: null,
-        opponent,
-        date: new Date(dateIso),
-        teamId,
-        // #215：這批 mock 資料本來就是三戰兩勝的比賽——這正是 issue #215 被發現的方式
-        // （寫死五戰三勝的舊邏輯，把這些 seed 出來的三戰兩勝比賽誤標成「進行中」）。明確帶
-        // format，不靠 DB default 悄悄補上，讓 seed 資料的賽制在這裡看得到、之後改起來也
-        // 有跡可循。
-        format: "best_of_3",
-        // #218：完賽狀態明確存進資料，不再靠「補一局空 set」讓重建規則猜對（見 seedSets
-        // 上方的說明）。已打完的三場標 finished，唯一那場進行中的標 in_progress。
-        status: inProgress ? "in_progress" : "finished",
-        // #336：標記這場比賽是示範資料，讓 /demo-data 路由的刪除邏輯能精準只挑到示範資料
-        // （見 lib/db/src/schema/matches.ts 的 isDemo 欄位註解）。
-        isDemo: true,
-      })
-      .returning({ id: matchesTable.id });
-    // 要 .returning id：event 需要指向這場比賽裡「哪一個球員」做了決定球，那個外鍵存的是
-    // players.id（uuid，DB 插入時才真正決定，即使有 defaultRandom() 前端沒傳也一樣），
-    // 沒有這份回傳資料就沒有 id 可以塞進後面的 events。
-    const insertedPlayers = await exec
-      .insert(playersTable)
-      .values(
-        roster.map((r) => ({
-          matchId: match.id,
-          name: r.name,
-          number: r.number,
-          role: r.role,
-          personId: personId(r.name),
-        })),
-      )
-      .returning({
-        id: playersTable.id,
-        name: playersTable.name,
-        number: playersTable.number,
-        role: playersTable.role,
-      });
-    const ourRoster: RosterPlayerWithId[] = insertedPlayers.map((p) => ({
-      id: p.id,
-      name: p.name,
-      number: p.number,
-      role: p.role,
-    }));
-    const completedSetIds = await seedSets(
-      exec,
-      match.id,
-      completedScores,
-      ourRoster,
-      rng,
-      inProgress,
-    );
-    // #339：把這場比賽的 id、名單、已打完局的 set id 一起交回去，讓呼叫端收尾時能另外
-    // 補 lineups／tactics（那兩張表刻意不放進 seedSets／seedMatch 內部一起做，見下面
-    // seedLineupsAndTactics 開頭的說明：要等「所有場比賽」都建完、既有的 rng 呼叫序列
-    // 都跑完之後才能動手，否則會把後面幾場比賽的隨機比分序列整個打亂）。
-    return { matchId: match.id, ourRoster, completedSetIds };
-  }
+  // 這場比賽的名單（players 表，一列＝這場比賽裡「某人穿幾號、打什麼位置」）。
+  const insertedPlayers = await exec
+    .insert(playersTable)
+    .values(
+      ROSTER.map((r) => ({
+        matchId: match.id,
+        name: r.name,
+        number: r.number,
+        role: r.role,
+        personId: personId(r.name),
+      })),
+    )
+    .returning({
+      id: playersTable.id,
+      name: playersTable.name,
+      number: playersTable.number,
+      role: playersTable.role,
+    });
+  const playerIdByName = new Map(insertedPlayers.map((p) => [p.name, p.id]));
+  const ourRoster: RosterPlayerWithId[] = insertedPlayers.map((p) => ({
+    id: p.id,
+    name: p.name,
+    number: p.number,
+    role: p.role,
+  }));
+  // 先發六人（依 Z1~Z6 順序），從剛插入的 ourRoster 裡按名字撈回來——用 insert 完之後的
+  // id（DB 配的 uuid），不是先前 STARTERS 陣列裡那份還沒有 id 的資料。
+  const starters: RosterPlayerWithId[] = STARTERS.map((s) => {
+    const found = ourRoster.find((p) => p.name === s.name);
+    if (!found) throw new Error(`[demoData] 先發名單「${s.name}」沒有出現在插入結果裡`);
+    return found;
+  });
 
-  // 全部改成三戰兩勝（先拿 2 局者勝，最多 3 局；決勝第 3 局打到 15）。前三場都已打完，
-  // 第 4 場刻意留成「進行中」，讓分析頁能同時看到「已結束」與「未完成」兩種狀態。
-  //
-  // 比賽1：A 隊 vs 台大，含林小美（跨隊那人在 A 隊這邊）。2:1 勝（決勝局 15:11）。
-  // 這場名單是 7 人（aRoster 6 人 + 跨隊的林小美），扣掉自由球員（L）剛好剩 6 個非自由
-  // 球員角色——這是後面 seedLineupsAndTactics 唯一挑得出「六個號位都不是自由球員」
-  // 的兩場之一（另一場是比賽3），見那支函式開頭的說明。
-  const match1 = await seedMatch(
-    teamA.id,
-    "台大",
-    "2026-05-10T19:00:00+08:00",
-    [...aRoster, linInA],
-    [
-      [25, 20],
-      [23, 25],
-      [15, 11],
-    ],
-  );
-  // 比賽2：A 隊 vs 政大，純 A 隊班底。2:0 輾壓勝，跟第 3 場的糾結局作對照。
-  // 純 aRoster 只有 6 人（含 1 位自由球員），扣掉自由球員只剩 5 個非自由球員——湊不滿
-  // 六個號位，這場不補 lineups（見 seedLineupsAndTactics 開頭的說明）。
-  const match2 = await seedMatch(teamA.id, "政大", "2026-06-15T19:00:00+08:00", aRoster, [
-    [25, 19],
-    [25, 17],
-  ]);
-  // 比賽3：B 隊 vs 師大，含林小美（同一人這次在 B 隊）。刻意設計成「糾結」局：第 2 局打進
-  // deuce（24:26）、決勝局也咬到 13:15，最後 1:2 惜敗，讓分數成長圖看得到真正拉鋸的走勢。
-  const match3 = await seedMatch(
-    teamB.id,
-    "師大",
-    "2026-07-01T19:00:00+08:00",
-    [...bRoster, linInB],
-    [
-      [25, 23],
-      [24, 26],
-      [13, 15],
-    ],
-  );
-  // 比賽4：A 隊 vs 交大，進行中（第 1 局已拿下 25:22，第 2 局打到 18:15 還沒結束）。
-  // 傳 inProgress → seedSets 不補空 set，最後那局半場的 set 就會被分析頁當成 currentSet。
-  // 名單同比賽2（純 aRoster，只有 5 個非自由球員），一樣不補 lineups。
-  const match4 = await seedMatch(
-    teamA.id,
-    "交大",
-    "2026-07-20T19:00:00+08:00",
-    aRoster,
-    [[25, 22]],
-    [18, 15],
-  );
+  // 三局比分/rally/決定球 events。
+  const completedSetIds = await seedSets(exec, match.id, starters, ourRoster, rng);
 
-  // 起始先發（lineups）與已存戰術（tactics）——#339 補的兩張表。刻意放在所有
-  // seedMatch 呼叫都結束「之後」才做（而不是塞進 seedMatch/seedSets 內部一起做）：
-  // 這份示範資料的可重現性靠的是「rng() 被呼叫的順序完全固定」（見檔案開頭 mulberry32 那段
-  // 說明）。如果把新的 rng() 呼叫插進比賽 1～4 中間，會讓比賽 2、3、4 讀到的隨機數序列
-  // 整個往後平移，等於改寫了所有既有比賽的比分/決定球內容。附加在最後、只用
-  // match1／match3 已經插入完成的資料，就不會動到前面已經定案的序列。
-  await seedLineupsAndTactics(exec, userId, match1, rng);
-  await seedLineupsAndTactics(exec, userId, match3, rng);
+  // 換人／暫停／自由球員上下場。
+  await seedGameEvents(exec, completedSetIds, playerIdByName);
+
+  // 起始先發（lineups）與已存戰術（tactics）。
+  await seedLineupsAndTactics(exec, userId, {
+    matchId: match.id,
+    starters,
+    completedSetIds,
+  });
 
   return {
-    teams: [teamA, teamB],
+    team,
     peopleCount: people.length,
-    crossTeamPersonId: personId("林小美"),
-    matchIds: [match1.matchId, match2.matchId, match3.matchId, match4.matchId],
+    matchIds: [match.id],
   };
 }

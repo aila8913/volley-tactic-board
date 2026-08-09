@@ -305,7 +305,7 @@ export default function MatchList() {
                 {isMutating ? "載入中…" : "載入示範比賽"}
               </button>
               <p className="max-w-md text-xs text-[#a9b096]">
-                4 場完整比賽、含比分/先發/戰術與分析數據，可以隨意修改，之後隨時能一鍵刪除。
+                一場三局的完整比賽，含比分/先發/戰術/換人/暫停/自由球員上下場與球員數據，可以隨意修改，之後隨時能一鍵刪除。
               </p>
             </div>
           ) : (
