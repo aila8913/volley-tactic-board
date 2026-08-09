@@ -44,8 +44,9 @@ export default function TournamentFormDialog({
     defaultValues: emptyDefaults,
   });
 
-  // 跟 MatchFormDialog 一樣：這個 dialog 在新增/編輯之間共用、不會重新 mount，
-  // 所以每次打開時要自己 reset 表單。
+  // 這個 dialog 在新增/編輯之間共用、不會重新 mount，所以每次打開時要自己 reset 表單。
+  //（比賽那邊原本也是這樣寫的，但 #329 已經把比賽表單搬進右欄、改成「進編輯模式才掛載」，
+  // 那種寫法就不需要 reset 了；資料夾這一輪還是彈窗，維持原樣。）
   useEffect(() => {
     if (open) {
       form.reset(tournament ? { name: tournament.name } : emptyDefaults);

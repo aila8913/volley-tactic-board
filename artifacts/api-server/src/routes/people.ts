@@ -110,7 +110,7 @@ router.get(
 );
 
 // POST /people — 新增一個「人」。通常發生在球員名單去重 UX 裡：使用者打了一個沒對應到
-// 既有身分的姓名，前端就會用這支 API 幫他建一個新身分再綁上去（見 MatchFormDialog.tsx）。
+// 既有身分的姓名，前端就會用這支 API 幫他建一個新身分再綁上去（見 MatchDetailForm.tsx）。
 // owns: "public" ——這裡是建立一筆全新的資源、掛在 req.userId 底下，沒有既有資料要驗
 // 擁有權，所以跟 GET 一樣明講 "public"，而不是留白讓人誤以為漏寫。
 router.post(

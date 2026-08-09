@@ -3,7 +3,7 @@
 // 讀（useTeamList）＋寫（useCreateTeam）介面。
 //
 // 目前只需要「列出」＋「新增」：新增比賽的表單要能挑既有球隊、也要能臨時建一支新的
-// （見 MatchFormDialog）。改名／刪除的管理 UI 這一輪還沒做，所以先不包這兩支 hook——
+// （見 MatchDetailForm）。改名／刪除的管理 UI 這一輪還沒做，所以先不包這兩支 hook——
 // 後端的 PATCH/DELETE /teams 已經在了，之後要做球隊管理頁再補對應 hook 即可。
 import { useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";

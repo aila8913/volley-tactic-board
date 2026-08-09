@@ -5,14 +5,14 @@ import { useMatchList, useDeleteMatch } from "@/hooks/useMatches";
 import { useTournamentList, useDeleteTournament } from "@/hooks/useTournaments";
 import { useCrossMatchAnalysis } from "@/hooks/useCrossMatchAnalysis";
 import { useDemoData } from "@/hooks/useDemoData";
-import MatchFormDialog from "@/components/MatchFormDialog";
 import TournamentFormDialog from "@/components/TournamentFormDialog";
 import ListItemCard from "@/components/ListItemCard";
 import ListScrollArea from "@/components/ListScrollArea";
 import MatchEntryLinks from "@/components/MatchEntryLinks";
 import AppShell from "@/components/AppShell";
 import ListNavRail from "@/components/ListNavRail";
-import MatchInfoRail, { MatchListSelection } from "@/components/MatchInfoRail";
+import MatchInfoRail from "@/components/MatchInfoRail";
+import { useMatchRailSelection } from "@/hooks/useMatchRailSelection";
 import { APP_BACKGROUND_STYLE, APP_SHELL_CLASS } from "@/lib/appChromeStyles";
 import { formatMatchDateTime, formatMatchResult } from "@/lib/matchSummary";
 import {
@@ -45,8 +45,6 @@ export default function MatchList() {
     isMutating,
   } = useDemoData();
 
-  const [matchDialogOpen, setMatchDialogOpen] = useState(false);
-  const [editingMatch, setEditingMatch] = useState<Match | null>(null);
   const [tournamentDialogOpen, setTournamentDialogOpen] = useState(false);
   const [editingTournament, setEditingTournament] = useState<Tournament | null>(null);
   // 跟作業系統的資料夾一致：單擊只是選取（用來標示「目前點到哪個」），雙擊才真的進去——
@@ -56,7 +54,11 @@ export default function MatchList() {
   // 會依照選中的是哪一種顯示不同內容（見 MatchInfoRail.tsx）。刻意不預設選中第一項——
   // 進頁面時右欄是空狀態，理由見 MatchInfoRail 空狀態分支的註解：使用者還沒表達意圖前，
   // 不該把任何一場比賽的站位放進「可編輯」狀態。
-  const [selected, setSelected] = useState<MatchListSelection>(null);
+  //
+  // issue #329：選取 + 編輯模式 + 未存檔攔截收進共用 hook，資料夾內頁用的是同一支
+  // （傳的參數不同：這裡新增的比賽放最上層，所以是 null）。理由見該檔案開頭。
+  const { selected, editing, select, startCreate, startEdit, leaveEdit, finishCreate, setDirty } =
+    useMatchRailSelection(null);
   // 卡片右端「3:0 勝」那格、跟「尚未排先發」黃標的來源，都改讀後端的跨場彙總
   // （GET /analysis/matches，#65 視圖②那支），不再讀本機 zustand store。
   //
@@ -111,16 +113,6 @@ export default function MatchList() {
     ...tournaments.map((t): RootItem => ({ kind: "tournament", data: t })),
     ...topLevelMatches.map((m): RootItem => ({ kind: "match", data: m })),
   ].sort((a, b) => a.data.createdAt.localeCompare(b.data.createdAt));
-
-  const openCreateMatchDialog = () => {
-    setEditingMatch(null);
-    setMatchDialogOpen(true);
-  };
-
-  const openEditMatchDialog = (match: Match) => {
-    setEditingMatch(match);
-    setMatchDialogOpen(true);
-  };
 
   const handleDeleteMatch = (id: string) => {
     if (window.confirm("確定要刪除這場比賽嗎？")) {
@@ -183,7 +175,17 @@ export default function MatchList() {
       }
       aside={
         <div className="relative z-10 h-full">
-          <MatchInfoRail selected={selected} />
+          {/* issue #329：右欄現在既是「看」也是「改」比賽的地方，所以除了 selected 之外
+              還要把編輯模式的開關與四個回呼接過去（狀態住在頁面層的理由見
+              hooks/useMatchRailSelection.ts）。 */}
+          <MatchInfoRail
+            selected={selected}
+            editing={editing}
+            onCancelEdit={leaveEdit}
+            onSaved={leaveEdit}
+            onCreated={finishCreate}
+            onDirtyChange={setDirty}
+          />
         </div>
       }
       className={APP_SHELL_CLASS}
@@ -229,7 +231,7 @@ export default function MatchList() {
               </button>
               <button
                 type="button"
-                onClick={openCreateMatchDialog}
+                onClick={startCreate}
                 className="inline-flex h-11 items-center gap-1.5 rounded-2xl bg-[#c6f135] px-5 text-action
                 font-semibold text-[#0a0b07] transition hover:brightness-110"
               >
@@ -282,7 +284,7 @@ export default function MatchList() {
               <p className="text-[#a9b096]">尚未建立任何比賽或資料夾</p>
               <button
                 type="button"
-                onClick={openCreateMatchDialog}
+                onClick={startCreate}
                 className="inline-flex h-10 items-center gap-1.5 rounded-full bg-[#c6f135] px-5 text-action
                 font-semibold text-[#0a0b07] transition hover:brightness-110"
               >
@@ -321,7 +323,7 @@ export default function MatchList() {
                       title={item.data.name}
                       secondaryText={`${matches.filter((m) => m.tournamentId === item.data.id).length} 場比賽`}
                       selected={selected?.kind === "tournament" && selected.id === item.data.id}
-                      onSelect={() => setSelected({ kind: "tournament", id: item.data.id })}
+                      onSelect={() => select({ kind: "tournament", id: item.data.id })}
                       onOpen={() => navigate(`/tournaments/${item.data.id}`)}
                       onEdit={() => openEditTournamentDialog(item.data)}
                       onDelete={() => handleDeleteTournament(item.data)}
@@ -339,7 +341,7 @@ export default function MatchList() {
                         matchNeedsLineup(item.data.id, item.data.format) ? "尚未排先發" : undefined
                       }
                       selected={selected?.kind === "match" && selected.id === item.data.id}
-                      onSelect={() => setSelected({ kind: "match", id: item.data.id })}
+                      onSelect={() => select({ kind: "match", id: item.data.id })}
                       // 比賽卡片沒有 onOpen（不跳頁）：三個入口改成選中後在卡片裡就地展開，
                       // 見 MatchEntryLinks 開頭記的那段演進。
                       expandedContent={
@@ -348,7 +350,7 @@ export default function MatchList() {
                           needsLineup={matchNeedsLineup(item.data.id, item.data.format)}
                         />
                       }
-                      onEdit={() => openEditMatchDialog(item.data)}
+                      onEdit={() => startEdit(item.data.id)}
                       onDelete={() => handleDeleteMatch(item.data.id)}
                     />
                   ),
@@ -359,12 +361,8 @@ export default function MatchList() {
         </div>
       </div>
 
-      <MatchFormDialog
-        open={matchDialogOpen}
-        onOpenChange={setMatchDialogOpen}
-        match={editingMatch}
-        tournamentId={null}
-      />
+      {/* issue #329：比賽的編輯彈窗已刪除（改在右欄就地編輯）。資料夾的編輯這一輪不動，
+          仍然是彈窗。 */}
       <TournamentFormDialog
         open={tournamentDialogOpen}
         onOpenChange={setTournamentDialogOpen}

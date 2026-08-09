@@ -38,7 +38,7 @@ export function useRosterEditor(matchId: string | undefined) {
   // 為什麼要 async/await 而不是原本的 void saveRoster(...)：
   // 原本不等待背景回寫的結果，寫入失敗（網路斷線、後端驗證錯誤等）會被無聲吞掉——
   // setRoster 已經讓畫面看起來「存好了」，但球員其實沒進資料庫，使用者完全不會發現。
-  // 這裡改成 await，抓到錯誤時用 toast 提醒使用者，跟 MatchFormDialog.tsx 儲存失敗
+  // 這裡改成 await，抓到錯誤時用 toast 提醒使用者，跟 MatchDetailForm.tsx 儲存失敗
   // 用的是同一套 useToast + destructive 樣式，不重複造一套新的錯誤提示模式。
   const handleSave = async (players: MatchPlayer[]) => {
     if (!matchId) return;

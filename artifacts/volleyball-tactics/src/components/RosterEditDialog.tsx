@@ -70,7 +70,7 @@ export default function RosterEditDialog({
       number: p.number,
       role: p.role,
       // 這個彈窗目前只編輯姓名/背號/位置，不碰名單去重（personId 的對應/解除是
-      // MatchFormDialog 裡才有的 UX，見 #213），所以原封不動地把表單帶著的 personId
+      // MatchDetailForm 裡才有的 UX，見 #213），所以原封不動地把表單帶著的 personId
       // 傳回去——沒有 personId 的表單值（p.personId 為 undefined，理論上不會發生，
       // 因為 zod schema 有 default(null)）就保底成 null。
       personId: p.personId ?? null,
