@@ -280,6 +280,44 @@ paths:
         "204":
           description: Deleted
 
+  # #336：試用者一登入就能按一顆「載入示範資料」，把一整份示範比賽（球隊/人員/比賽/局分/
+  # 戰術）灌進自己的帳號，不用面對空白畫面。GET 查目前有沒有；POST 兼做「載入」跟「重設」
+  # 兩種語意——不管示範資料存不存在，POST 一律先清掉舊的再重種一份乾淨的（見
+  # artifacts/api-server/src/routes/demoData.ts 的實作說明）；DELETE 單純清掉。
+  /demo-data:
+    get:
+      operationId: getDemoDataStatus
+      tags: [demoData]
+      summary: Check whether the current user has demo data loaded
+      responses:
+        "200":
+          description: Current demo data status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DemoDataStatus"
+    post:
+      operationId: loadDemoData
+      tags: [demoData]
+      summary: >-
+        Load demo data into the current user's account. If demo data already exists it is
+        deleted first and re-seeded from scratch (i.e. this endpoint doubles as "reset demo
+        data") — it never results in two copies.
+      responses:
+        "201":
+          description: Demo data loaded (freshly seeded)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DemoDataStatus"
+    delete:
+      operationId: deleteDemoData
+      tags: [demoData]
+      summary: Delete the current user's demo data (matches/teams/people marked isDemo)
+      responses:
+        "204":
+          description: Deleted
+
   /people:
     get:
       operationId: listPeople
@@ -1171,6 +1209,20 @@ components:
       properties:
         name:
           type: string
+
+    # GET/POST /demo-data 的回應（#336）。matchIds 依日期排序，方便前端直接用來組
+    # 「去看看這些比賽」的連結；present 是為了讓前端不用另外靠 `matchIds.length === 0`
+    # 推斷，語意更直白。
+    DemoDataStatus:
+      type: object
+      properties:
+        present:
+          type: boolean
+        matchIds:
+          type: array
+          items:
+            type: integer
+      required: [present, matchIds]
 
     # person＝跨比賽的「真實身分」（見 lib/db/src/schema/people.ts），用來讓同一個人在不同場次的
     # 名單列（players）能被認出是同一人，之後才能做跨場統計。形狀跟 Team 一樣精簡：只有 id/name，

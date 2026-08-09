@@ -35,8 +35,24 @@
 // 進度訊息全部留在呼叫端（seed-testdata.ts）自己印；這支檔案改成用回傳值
 // （DemoDataSummary）把「灌了什麼」表達出來，讓呼叫端自己決定要不要印、要怎麼印。
 
+// ⚠️ 這兩行 import 的來源刻意分開，而且 db 刻意用 `import type`——這裡有一個循環相依：
+// index.ts 末尾有 `export * from "./demoData"`（讓 api-server 跨套件 import 得到
+// seedDemoData），而這支檔案又需要 index.ts 的東西，兩邊互指。
+//
+// ESM 的 import/export 宣告會被提升（跟 #343 那個 dotenv 太晚跑的 bug 同一個機制），
+// 所以 index.ts 一開始執行就會先把這支檔案整個載入完，那時 index.ts 的
+// `export const db = drizzle(...)` 那一行**還沒跑到**，db 處於 TDZ（暫時死區）。只要這支
+// 檔案在「模組頂層」用到 db，就會炸 "Cannot access 'db' before initialization"——而且錯誤
+// 訊息完全看不出跟循環 import 有關，很難查。
+//
+// 解法是讓這個循環在**執行期根本不存在**：
+//   1. 資料表（teamsTable 等）改從 ./schema 直接拿，不繞經 index.ts。
+//   2. db 只有 DbOrTx 這個型別會用到（`typeof db`），所以用 `import type` 匯入——
+//      TypeScript 編譯後這行會整個消失，執行期沒有這個 import，循環自然斷開。
+// 換句話說：不要把這裡改成一般的 `import { db }`，那樣它就會變回一個真的循環，
+// 而且只要有人日後在頂層寫一行用到 db 的程式碼就會壞掉。
+import type { db } from "./index";
 import {
-  db,
   teamsTable,
   peopleTable,
   matchesTable,
@@ -48,7 +64,7 @@ import {
   tacticsTable,
   type InsertRally,
   type InsertEvent,
-} from "./index";
+} from "./schema";
 
 // drizzle 的 transaction callback 參數（tx）型別沒有直接匯出，這裡用 TypeScript 的
 // `Parameters` 工具型別，從 `db.transaction` 這支函式本身的型別簽章反推回去：
@@ -624,8 +640,8 @@ export async function seedDemoData(
   const [teamA, teamB] = await exec
     .insert(teamsTable)
     .values([
-      { userId, name: "資管系 A 隊" },
-      { userId, name: "資管系 B 隊" },
+      { userId, name: "資管系 A 隊", isDemo: true },
+      { userId, name: "資管系 B 隊", isDemo: true },
     ])
     .returning({ id: teamsTable.id, name: teamsTable.name });
 
@@ -648,7 +664,7 @@ export async function seedDemoData(
   ];
   const people = await exec
     .insert(peopleTable)
-    .values(peopleNames.map((name) => ({ userId, name })))
+    .values(peopleNames.map((name) => ({ userId, name, isDemo: true })))
     .returning({ id: peopleTable.id, name: peopleTable.name });
   const personId = (name: string) => people.find((p) => p.name === name)!.id;
 
@@ -701,6 +717,9 @@ export async function seedDemoData(
         // #218：完賽狀態明確存進資料，不再靠「補一局空 set」讓重建規則猜對（見 seedSets
         // 上方的說明）。已打完的三場標 finished，唯一那場進行中的標 in_progress。
         status: inProgress ? "in_progress" : "finished",
+        // #336：標記這場比賽是示範資料，讓 /demo-data 路由的刪除邏輯能精準只挑到示範資料
+        // （見 lib/db/src/schema/matches.ts 的 isDemo 欄位註解）。
+        isDemo: true,
       })
       .returning({ id: matchesTable.id });
     // 要 .returning id：event 需要指向這場比賽裡「哪一個球員」做了決定球，那個外鍵存的是
