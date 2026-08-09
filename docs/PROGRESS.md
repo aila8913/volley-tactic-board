@@ -26,8 +26,9 @@
 同批把計分板改成一鍵記分。新開 #320（背景強度微調）／#322／#323／#324；#134 Track B 標記為已由設計
 系統接手，#21／#19 過時的 body 一併修正。\_
 
-\_Last updated: 2026-08-07 (aila) — M3.5 三張交付（#229 合併規則抽純函式／#306 測試 fixture builder／
-#339 `db:reset` 沙盒＋production 安全閘門）；roadmap 重整成 M5–M7；新開 #336 示範資料、#232 關閉。\_
+\_Last updated: 2026-08-09 (aila) — 示範資料整條打通（#344/#345/#346/#348，改成 1 場完整比賽）；
+正式站 schema push 漏做導致 500，已修；#349「第 4 局」修兩次才修完（PR #350→#351），收斂工作開 #352；
+合併關卡從 ship skill 搬進 `CLAUDE.md`。\_
 
 ## Current state
 
@@ -36,6 +37,30 @@ lives in git log + the issues named).
 
 ### 開發進度 (aila — backend / frontend / db / infra)
 
+- **示範資料整條打通了（#344／#345／#346／#348，08-08～09）。** `lib/db/src/demoData.ts` 的
+  `seedDemoData(exec, userId, seed)` 是**唯一一份**示範資料建構器，兩個消費者共用：`db:reset` 的
+  種子腳本、以及 `POST/DELETE /demo-data`（灌進使用者自己的帳號、刪除時用
+  `and(eq(userId), eq(isDemo, true))` 白名單只砍示範資料）。前端空狀態多了「載入示範比賽」按鈕。
+  **#348 把 4 場零碎比賽改成 1 場完整的**（範例球隊 vs 範例對手、烏野 12 人名單、三局 2:1、
+  含換人／暫停／自由球員上下場），因為 4 場之中有 2 場湊不滿六個非自由球員、seed 不出 lineups，
+  新使用者第一次點進去看到的反而是空盤子——**示範資料的價值在「完整走完一場」，不在場數**。
+- **正式站踩到的坑：merge 不會幫你 push schema（08-08）。** `render.yaml` 的 `buildCommand`
+  **刻意沒有** `drizzle-kit push`——雲端 schema 變更必須是明確的人為動作，不能是合併的副作用。
+  代價是合併了動 `lib/db/src/schema/` 的 PR 卻忘了 push，正式站的新程式就會查一個不存在的欄位、
+  當場 500，而**四道 CI 全綠**（CI 跑的是本機／CI 資料庫，看不到雲端的 schema 漂移）。
+  另外兩件當場學到的：Neon 要用 **Direct** 連線字串（pooled 會靜靜卡在「Pulling schema…」）；
+  dotenv **不覆蓋**已存在的 `process.env`，所以在 shell 裡設 `DATABASE_URL` 會蓋過 repo 的 `.env`。
+- **#349「第 4 局」修了兩次才修完（08-09）。** 已完賽的比賽在右欄「場上站位」預設停在一格不存在的
+  空局。病根是 #218 之後已完賽**沒有進行中的那一局**，但 UI 仍無條件 `completedSets.length + 1`。
+  PR #350 只修了分析頁，PR #351 才補上**第二份拷貝** `MatchInfoRail.tsx`（比賽列表右欄，也就是
+  範例比賽最先被看到的地方）。順帶把判準從「已完賽就不 +1」改成**看那一格裡有沒有資料**
+  （`currentSet.serving !== null`）——前者會讓「2:0 已分勝負但教練仍按下一局並繼續記分」那局滑不到。
+  收斂成一支共用函式的工作開在 **#352**（M3.5）；`MatchInfoRail` 目前零測試，卡 #168。
+- **合併關卡改寫進 `CLAUDE.md`（08-09）。** 原本「push 前確認、merge 前確認」只寫在
+  `.claude/skills/ship/SKILL.md` 裡，而 skill **靠觸發詞才載入**——任務式的講法（「解決 #349」）
+  不會載入它，那三道關卡就一次都沒生效，PR #350 因此在 CI 綠、但只修一半的狀態下被合併。
+  現在的規則：**commit／push／開 PR 不用問，`gh pr merge` 一定停下來等使用者驗過**。
+  這條跟「不用等 tangyi1025 approve」是兩件事，不衝突。
 - **Roadmap 結構改了（08-07）：原 M5「體驗重整與雜項」拆成三包**——**M5 自由球員與計分正確性**
   （記出來的數據會不會錯）／**M6 介面精簡與導覽重構**（源自 #209、票之間互相牽動）／**M7 打磨與雜項**
   （只收獨立、小、隨時可插隊的）。拆的原因值得記住，因為會復發：**名字裡有「雜項」的 milestone 會變成
@@ -71,7 +96,7 @@ lives in git log + the issues named).
   **刻意沒做假後端**——見 #339 body：手動測試的價值就在抓真實後端行為（ownership／Zod／冪等），
   手寫的記憶體假後端必然跟 `routes/*.ts` 漂移，漂移之後測試會過、正式環境會壞。出貨給使用者的
   示範資料（#336）才走前端攔截，兩張**刻意不共用實作**。
-  已知限制：4 場比賽只有 2 場附 lineups／tactics（另外 2 場的非自由球員湊不滿六個號位）。
+  剩下的已知限制見 #341（schema 刪欄位時 `drizzle-kit push` 會跳 y/n，而 `db:reset` 沒東西餵它）。
 - **Backend match-recording API is fully implemented and live (dev DB).** matches / players /
   sets / rallies / events / substitutions / lineups / timeouts / tournaments / teams CRUD +
   tactics/health + `analysis` 唯讀報表路由，全部 ownership-scoped。前端計分表**已完全脫離

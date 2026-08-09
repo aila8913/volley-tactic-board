@@ -128,6 +128,19 @@ Two-person team: `aila8913` (owner, full-stack — backend/db/infra/product) and
 conventions live in CONTRIBUTING.md's「協作與溝通」section; the rules Claude must actively
 enforce are:
 
+- **Claude stops before `gh pr merge` and waits for the user.** commit / push / `gh pr create`
+  need no confirmation — a PR can always be closed. Merging into `main` is the irreversible
+  step, so open the PR, wait for CI, then **stop**: tell the user how to verify (which page,
+  what they should see) and merge only once they say so. A user who says「merge」/「合併」
+  has already confirmed — don't ask twice. This is orthogonal to the no-approval-gate rule
+  below: that one says don't wait on `tangyi1025`; this one says do wait on the user.
+  Mutating `gh issue create/close/edit` needs the same confirmation (the `wrap-up` skill's
+  Close/Update/Create proposal step).
+  Why this lives here and not only in `.claude/skills/ship/SKILL.md`: skills load on trigger
+  phrases («ship», «送 PR»). Task-shaped requests («解決 #349») never load them, so the gates
+  written there silently did nothing — that is how PR #350 got merged CI-green but only
+  half-fixed, with the missed copy living in a file no test can reach (#168). CI green ≠
+  behaviour verified. A gate that only works when someone says the magic word is not a gate.
 - **No approval gate — self-merge freely, just leave the partner a heads-up.** Anyone can
   merge their own PR without waiting on the other person, including PRs that touch the other
   member's area or a shared-convention file (`CLAUDE.md`, `CONTRIBUTING.md`,
