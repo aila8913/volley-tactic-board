@@ -61,6 +61,21 @@ interface RotationRailPanelProps {
   // 頁面各自想加在三個區塊下面的額外內容（戰術板放球員設定/輪次選擇/提示；
   // 計分頁目前用不到，留空）。
   footer?: ReactNode;
+  // ③ 球員清單這一塊要怎麼呈現（PO 2026-08-09：右欄的兩份名單合併成一份）。
+  //   "compact"（預設＝既有行為）：釘在區塊底部、max-h-28 自己捲。計分頁/戰術板/分析頁
+  //     底下還有別的東西要顯示，這份清單不能無限長。
+  //   "fill"：不設高度上限，改成吃掉容器剩下的高度。比賽列表右欄用這個——那裡這份清單
+  //     已經是**整欄唯一的名單**（唯讀檢視不再自己畫一份），把它壓在 112px 高只露兩列
+  //     正是 #331 記的那個「塞不下」訊號。
+  //   "hidden"：整塊不渲染（連上面那行操作提示也不渲染——提示教人「拖清單裡的球員」，
+  //     清單都不在了還留著只會誤導）。比賽列表右欄進入編輯模式時用這個：那時名單由
+  //     MatchDetailForm 的可編輯版本接手，同一份東西不能同時畫兩次。
+  rosterList?: "compact" | "fill" | "hidden";
+  // 要不要把自由球員（role "L"）也列進清單。預設 false＝既有行為（清單只列排得進六個
+  // 號位的人）。比賽列表右欄傳 true：那份清單合併後要同時扮演「這場比賽的完整名單」，
+  // 少了自由球員就等於名單看起來少一個人。列出來的 L 是純資訊列（不可點、不可拖）——
+  // 「L 要怎麼排先發」是 #326/#327 的題目，這一輪不在這裡偷跑。
+  includeLibero?: boolean;
 
   // ── 以下兩個 prop 只有 axis==="set" 時才有意義（issue #191/#192）──
   //
@@ -134,6 +149,8 @@ export default function RotationRailPanel({
   title = "場上站位",
   benchDraggable = false,
   footer,
+  rosterList = "compact",
+  includeLibero = false,
   setStatus,
   score,
 }: RotationRailPanelProps) {
@@ -159,6 +176,9 @@ export default function RotationRailPanel({
   // 自由球員（role "L"）不列進這六個號位——LineupSnapshot 定義上就只記非自由球員，
   // 自由球員是從場邊靠換人上場的（見 types/scoresheet.ts）。
   const assignablePlayers = roster.filter((p) => p.role !== "L");
+  // 清單要列誰，跟「誰排得進六個號位」是兩件事：includeLibero 只影響前者（見 prop 註解），
+  // 後者（assignablePlayers）永遠不含 L，drop 的白名單也繼續用它把關。
+  const listedPlayers = includeLibero ? roster : assignablePlayers;
 
   // 點球員＝把他指派到目前選中的號位。真正的指派/互換規則放在 lib/rotationLogic.ts 的
   // assignPlayerToZone：那是領域規則（六人佈陣怎麼調整才合法），不是這個元件的 UI 細節，
@@ -219,10 +239,15 @@ export default function RotationRailPanel({
     <section
       // opacity-90：「對照用的參考物、不是可以動手的編輯器」的視覺提示（issue #160
       // 對戰術頁右欄輪轉表訂的規格延伸過來）——讓使用者一眼分辨這裡「看得到、動不了」。
-      className={`shrink-0 border-b border-white/[0.10] px-3 py-3 ${readOnly ? "opacity-90" : ""}`}
+      // rosterList="fill" 時這一區塊改成「吃掉容器剩餘高度的 flex 容器」，底下的球員清單才有
+      // 空間可以撐開（見該 prop 的說明）；其餘兩種模式維持原本的 shrink-0，計分頁/戰術板
+      // 的版面完全不受影響。
+      className={`border-b border-white/[0.10] px-3 py-3 ${
+        rosterList === "fill" ? "flex min-h-0 flex-1 flex-col" : "shrink-0"
+      } ${readOnly ? "opacity-90" : ""}`}
       data-testid="rotation-rail-panel"
     >
-      <div className="mb-2 flex items-center justify-between gap-2">
+      <div className="mb-2 flex shrink-0 items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-1.5">
           <h2 className="truncate text-sm font-bold text-[#F5F5F0]">{title}</h2>
           {/* 狀態小藥丸（#191）：只有 axis="set" 的呼叫端會傳 setStatus，rotation 軸
@@ -257,7 +282,7 @@ export default function RotationRailPanel({
         （例如「未開賽」那一局根本沒有分可看）時也不渲染——不是每個 setStatus 都一定有比分，
         「不渲染」比「硬顯示 0:0」更誠實，教練不會誤以為這局已經開球。 */}
       {score && (
-        <div className="mb-2 text-xs tabular-nums text-[#9AA08C]">
+        <div className="mb-2 shrink-0 text-xs tabular-nums text-[#9AA08C]">
           我{" "}
           <span
             className={`font-bold ${score.our > score.opponent ? "text-[#C6F135]" : "text-[#F5F5F0]"}`}
@@ -276,7 +301,7 @@ export default function RotationRailPanel({
 
       {/* ① 輪轉表（layout-spec §4.1）：六宮格本身就是站位表。可編輯時點格子選號位；
         唯讀時純粹渲染成看不能點的資訊卡片。 */}
-      <div className="grid grid-cols-3 gap-1">
+      <div className="grid shrink-0 grid-cols-3 gap-1">
         {GRID_ZONES.map((zone) => {
           const playerId = safeLineup[zone];
           const player = playerId ? roster.find((p) => p.id === playerId) : undefined;
@@ -313,6 +338,10 @@ export default function RotationRailPanel({
           ) : (
             <button
               key={zone}
+              // type="button" 不是可有可無的：#329 之後這個面板會被塞進 MatchDetailForm 的
+              // <form> 裡（編輯模式的版面順序要跟唯讀模式一致），而 <button> 在 form 內的
+              // 預設 type 是 "submit"——少了這行，點一下號位格子就會直接送出整張表單。
+              type="button"
               onClick={() => setSelectedZone(isSelected ? null : zone)}
               // 格子上有人才可以被拖走（空格子沒東西可拖）。playerId 在這個分支一定存在
               // 才會進到 draggable，所以下面的 startDrag 不用再判一次。
@@ -348,8 +377,9 @@ export default function RotationRailPanel({
         列表、戰術板的兩個 mode）用的是同一份 stepper UI，不再是「這裡文字顯示、戰術板
         另外自己畫一顆」的兩套。 */}
       {onStep && (
-        <div className="mt-2 flex items-center gap-1.5">
+        <div className="mt-2 flex shrink-0 items-center gap-1.5">
           <button
+            type="button"
             onClick={() => onStep(-1)}
             disabled={!canStepPrev}
             className="flex-1 rounded-lg border border-white/[0.12] bg-white/[0.04] py-1.5 text-xs font-bold text-[#F5F5F0] transition hover:border-white/[0.30] disabled:cursor-not-allowed disabled:opacity-40"
@@ -361,6 +391,7 @@ export default function RotationRailPanel({
             第 {rotation + 1} {unitLabel}
           </span>
           <button
+            type="button"
             onClick={() => onStep(1)}
             disabled={!canStepNext}
             className="flex-1 rounded-lg border border-white/[0.12] bg-white/[0.04] py-1.5 text-xs font-bold text-[#F5F5F0] transition hover:border-white/[0.30] disabled:cursor-not-allowed disabled:opacity-40"
@@ -371,8 +402,10 @@ export default function RotationRailPanel({
         </div>
       )}
 
-      {!readOnly && (
-        <p className="mt-2 text-caption leading-snug text-[#9AA08C]">
+      {/* 操作提示跟著清單走：rosterList="hidden" 時清單不在，提示裡的「點下面的球員」
+        就沒有指涉對象了，一起不渲染。 */}
+      {!readOnly && rosterList !== "hidden" && (
+        <p className="mt-2 shrink-0 text-caption leading-snug text-[#9AA08C]">
           {selectedZone !== null
             ? `已選 ${selectedZone} 號位，點下面的球員指派過去（他原本在別的號位就互換）`
             : "把球員拖進號位即可上場，拖回清單則下場；也可以先點號位再點球員"}
@@ -380,74 +413,98 @@ export default function RotationRailPanel({
       )}
 
       {/* ③ 球員清單（layout-spec §4.3）：已經在場上的人標出目前號位，讓教練一眼看出
-        誰還在板凳上。清單可能比六個號位長不少，給它自己的捲動範圍，才不會把下面的
-        區塊推出視野外（右欄是 flex-column，這個 section 是 shrink-0）。
-        max-h 從 40（160px）收到 28（112px）：右欄疊了這個面板＋比賽統計，原本的高度會逼
-        整個右欄要滾輪才看得到比賽統計，縮小上限讓這裡自己捲、不再把下面擠出視野
-        （跟 #209 在追蹤的「資訊密度」同一類問題，這裡先做立即可行的收斂）。 */}
+        誰還在板凳上。
+        高度策略見 rosterList 這個 prop 的說明——"compact"（計分頁/戰術板/分析頁）維持
+        max-h-28 的既有行為，"fill"（比賽列表右欄）改成吃掉剩餘高度。這一版之所以要多出
+        "fill"，是因為右欄原本畫了兩份名單（唯讀檢視一份、這裡一份），合併成一份之後
+        它就是那一欄唯一的名單，再壓在 112px 只露兩列就說不過去了（#331）。 */}
       {/* 放置目標是「整個清單容器」而不是個別球員列：拖回板凳的語意是「離開場上」，
         丟在誰身上都一樣，硬要求對準某一列只是在為難使用者（而且列高只有 ~28px）。 */}
-      <div
-        onDragOver={allowDrop}
-        onDragEnter={() => canDrag && setDragOverBench(true)}
-        onDragLeave={() => setDragOverBench(false)}
-        onDrop={handleDropOnBench}
-        className={`mt-2 max-h-28 space-y-1 overflow-y-auto rounded-lg border pr-0.5 transition ${
-          dragOverBench ? "border-[#C6F135]/60 bg-[#C6F135]/[0.06]" : "border-transparent"
-        }`}
-      >
-        {assignablePlayers.map((p) => {
-          const currentZone = Object.entries(safeLineup).find(([, pid]) => pid === p.id)?.[0];
-          // 已上場的人要在清單裡發光標出來，讓教練一眼看出誰還在板凳上（見上面 ③ 的
-          // 說明）——原本只有右側那個小小的號位數字當提示，太不明顯，補上跟這個檔案
-          // 其他地方同一套「已選中/命中目標」用的萊姆綠描邊+底色，再加一點光暈
-          // （box-shadow）呼應「發光」而不只是換色。
-          const rowClass = `flex w-full items-center gap-2 rounded-lg border px-2 py-1.5 text-left text-xs transition ${
-            currentZone
-              ? "border-[#C6F135]/60 bg-[#C6F135]/10 text-[#C6F135] shadow-[0_0_10px_rgba(198,241,53,0.25)]"
-              : "border-white/[0.12] bg-white/[0.03] text-[#F5F5F0]"
-          }`;
-          const rowContent = (
-            <>
-              <span className="font-bold tabular-nums">{p.number}</span>
-              <span className="truncate">{p.name}</span>
-              {currentZone && (
-                <span className="ml-auto shrink-0 text-micro text-[#C6F135]/80">{currentZone}</span>
-              )}
-            </>
-          );
+      {rosterList !== "hidden" && (
+        <div
+          onDragOver={allowDrop}
+          onDragEnter={() => canDrag && setDragOverBench(true)}
+          onDragLeave={() => setDragOverBench(false)}
+          onDrop={handleDropOnBench}
+          className={`mt-2 space-y-1 overflow-y-auto rounded-lg border pr-0.5 transition ${
+            rosterList === "fill" ? "min-h-0 flex-1" : "max-h-28"
+          } ${dragOverBench ? "border-[#C6F135]/60 bg-[#C6F135]/[0.06]" : "border-transparent"}`}
+        >
+          {listedPlayers.length === 0 && (
+            <p className="px-1 py-1 text-caption text-[#9AA08C]">這場比賽還沒有球員名單</p>
+          )}
+          {listedPlayers.map((p) => {
+            // 自由球員只有在 includeLibero 時才會出現在這個迴圈裡，而且不參與六個號位——
+            // 所以不查 currentZone（查也永遠查不到），也不給任何互動。
+            const isLibero = p.role === "L";
+            const currentZone = isLibero
+              ? undefined
+              : Object.entries(safeLineup).find(([, pid]) => pid === p.id)?.[0];
+            // 已上場的人要在清單裡發光標出來，讓教練一眼看出誰還在板凳上（見上面 ③ 的
+            // 說明）——原本只有右側那個小小的號位數字當提示，太不明顯，補上跟這個檔案
+            // 其他地方同一套「已選中/命中目標」用的萊姆綠描邊+底色，再加一點光暈
+            // （box-shadow）呼應「發光」而不只是換色。
+            const rowClass = `flex w-full items-center gap-2 rounded-lg border px-2 py-1.5 text-left text-xs transition ${
+              currentZone
+                ? "border-[#C6F135]/60 bg-[#C6F135]/10 text-[#C6F135] shadow-[0_0_10px_rgba(198,241,53,0.25)]"
+                : "border-white/[0.12] bg-white/[0.03] text-[#F5F5F0]"
+            }`;
+            const rowContent = (
+              <>
+                <span className="shrink-0 font-bold tabular-nums">{p.number}</span>
+                <span className="min-w-0 flex-1 truncate">{p.name}</span>
+                {/* 位置（S/OH/MB/OP/L）：合併之後這份清單同時是「這場比賽的名單」，
+                    位置是名單本來就該有的欄位。三個呼叫端一起顯示是刻意的——教練在計分頁
+                    /戰術板同樣想知道要點的這個人是舉球還是自由，沒有理由只給其中一頁看。 */}
+                <span className="shrink-0 text-micro text-[#9AA08C]">{p.role}</span>
+                {currentZone && (
+                  <span className="shrink-0 text-micro text-[#C6F135]/80">{currentZone}</span>
+                )}
+              </>
+            );
 
-          return readOnly ? (
-            // benchDraggable 時仍然是 div（不是 button）：click-to-assign 在唯讀模式下
-            // 本來就不該存在，這裡只加拖曳屬性，不升級成可點擊的互動元件。
-            <div
-              key={p.id}
-              draggable={benchDraggable}
-              onDragStart={benchDraggable ? (e) => startDrag(e, p.id) : undefined}
-              className={`${rowClass} ${benchDraggable ? "cursor-grab hover:border-[#C6F135] hover:text-[#C6F135] active:cursor-grabbing" : ""}`}
-            >
-              {rowContent}
-            </div>
-          ) : (
-            <button
-              key={p.id}
-              onClick={() => assignToSelectedZone(p.id)}
-              // 這裡刻意**不用** disabled：瀏覽器的 disabled button 完全不收指標事件，
-              // 連帶把 draggable 也一起廢掉——沒選號位時整排球員就拖不動了，而「直接拖上場」
-              // 正是不需要先選號位的那條路。改用 aria-disabled ＋ 樣式表達「點了沒用」，
-              // 實際的防呆本來就在 assignToSelectedZone 開頭那個 early return。
-              // 也不再把「沒選號位」的列變半透明：拖曳這條路隨時都能用，把它畫成
-              // 灰掉的樣子等於騙使用者說這裡現在動不了。
-              aria-disabled={selectedZone === null}
-              draggable={canDrag}
-              onDragStart={(e) => startDrag(e, p.id)}
-              className={`${rowClass} cursor-grab hover:border-[#C6F135] hover:text-[#C6F135] active:cursor-grabbing`}
-            >
-              {rowContent}
-            </button>
-          );
-        })}
-      </div>
+            // 自由球員：純資訊列，不可點也不可拖（理由見 includeLibero 的註解）。
+            if (isLibero) {
+              return (
+                <div key={p.id} className={`${rowClass} opacity-70`}>
+                  {rowContent}
+                </div>
+              );
+            }
+
+            return readOnly ? (
+              // benchDraggable 時仍然是 div（不是 button）：click-to-assign 在唯讀模式下
+              // 本來就不該存在，這裡只加拖曳屬性，不升級成可點擊的互動元件。
+              <div
+                key={p.id}
+                draggable={benchDraggable}
+                onDragStart={benchDraggable ? (e) => startDrag(e, p.id) : undefined}
+                className={`${rowClass} ${benchDraggable ? "cursor-grab hover:border-[#C6F135] hover:text-[#C6F135] active:cursor-grabbing" : ""}`}
+              >
+                {rowContent}
+              </div>
+            ) : (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => assignToSelectedZone(p.id)}
+                // 這裡刻意**不用** disabled：瀏覽器的 disabled button 完全不收指標事件，
+                // 連帶把 draggable 也一起廢掉——沒選號位時整排球員就拖不動了，而「直接拖上場」
+                // 正是不需要先選號位的那條路。改用 aria-disabled ＋ 樣式表達「點了沒用」，
+                // 實際的防呆本來就在 assignToSelectedZone 開頭那個 early return。
+                // 也不再把「沒選號位」的列變半透明：拖曳這條路隨時都能用，把它畫成
+                // 灰掉的樣子等於騙使用者說這裡現在動不了。
+                aria-disabled={selectedZone === null}
+                draggable={canDrag}
+                onDragStart={(e) => startDrag(e, p.id)}
+                className={`${rowClass} cursor-grab hover:border-[#C6F135] hover:text-[#C6F135] active:cursor-grabbing`}
+              >
+                {rowContent}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {footer}
     </section>

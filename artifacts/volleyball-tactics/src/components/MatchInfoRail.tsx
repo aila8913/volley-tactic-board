@@ -301,6 +301,33 @@ function MatchDetailSection({
     score = null; // 還沒開賽，沒有分可看。
   }
 
+  // 站位面板在唯讀/編輯兩種模式下是**同一組 props**，只有球員清單的呈現方式不同
+  // （唯讀時它就是那份合併後的名單；編輯時名單由表單接手，這裡整塊不畫）。抽成一個小
+  // 函式而不是在兩個分支各寫一次 JSX：那十個 prop 抄兩份，之後改其中一個就會漏改另一份
+  // ——這個 repo 已經因為「同一段邏輯兩份拷貝」吃過 #349/#351 那次虧。
+  const renderRotationPanel = (rosterList: "fill" | "hidden") => (
+    <RotationRailPanel
+      lineup={lineup}
+      roster={match?.players ?? []}
+      rotation={clampedIndex}
+      axis="set"
+      readOnly={readOnly}
+      onLineupChange={onLineupChange}
+      onStep={(delta) =>
+        setManualSetIndex(Math.min(Math.max(clampedIndex + delta, 0), totalSets - 1))
+      }
+      canStepPrev={clampedIndex > 0}
+      canStepNext={clampedIndex < totalSets - 1}
+      title={isHydrating ? "場上站位（載入中…）" : "場上站位"}
+      setStatus={setStatus}
+      score={score}
+      rosterList={rosterList}
+      // 這份清單合併後要當「這場比賽的完整名單」用，自由球員也得列出來（唯讀資訊列）——
+      // 不然名單看起來會少人。怎麼排 L 的先發是 #326/#327 的題目。
+      includeLibero
+    />
+  );
+
   return (
     <>
       {/* issue #174 Stage B「統計格」：逐局藥丸，放在最上面。刻意只讀 completedSets
@@ -341,13 +368,18 @@ function MatchDetailSection({
         </section>
       )}
 
-      {/* ── 比賽資訊 ＋ 球員名單（issue #329）──
-        捲動邊界：這一塊是整欄唯一會長到放不下的部分（名單可以很多人），所以只有它
-        `min-h-0 flex-1 overflow-y-auto`，上面的各局比分跟下面的場上站位都是 shrink-0
-        釘住。這樣不論名單多長，「這場打幾比幾」跟「誰站哪」永遠留在視野裡——這正是
-        #329 要解決的問題（舊的編輯彈窗一開就把站位整個蓋掉）。
-        沿用的是 TournamentStatsSection 已經在用的「摘要固定、清單自己捲」同一套做法。
-        編輯模式時換成表單，表單自己內部就是同一套 flex 版面（見 MatchDetailForm）。 */}
+      {/* ── 模組順序（PO 2026-08-09 定案）──
+        比賽資訊 → 場上站位 → 第幾局 → 球員名單，**唯讀跟編輯兩種模式完全相同**。
+        「第幾局」的 stepper 跟球員清單都長在 RotationRailPanel 內部（那份清單原本只是
+        「拖誰上場」的來源），所以這裡看起來只有兩塊。
+
+        關鍵的一刀：右欄以前畫了兩份同樣的球員名單——MatchDetailView 一份唯讀的、
+        RotationRailPanel 底下一份可拖曳的。合併成一份之後，那份清單同時是「這場比賽
+        有誰」跟「把誰拖上號位」；按了編輯才換成 MatchDetailForm 裡可增刪的版本
+        （所以那時面板傳 rosterList="hidden"，同一份東西不會同時畫兩次）。
+
+        編輯模式下站位面板是**塞進表單裡面**的（lineupSlot），不是接在表單下方——
+        理由見 MatchDetailForm 那個 prop 的註解：就地編輯的重點就是模組不會換位置。 */}
       {editing ? (
         // match 還沒載回來就先不渲染表單：defaultValues 只會被讀一次（見 MatchDetailForm
         // 的說明），拿一份還是 undefined 的資料去初始化，表單會停在空白且再也不會補上。
@@ -364,34 +396,23 @@ function MatchDetailSection({
             // 忘記傳也不會被型別擋下來。
             onCreated={() => {}}
             onDirtyChange={onDirtyChange}
+            lineupSlot={renderRotationPanel("hidden")}
           />
         )
       ) : (
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          {match === undefined ? (
-            <p className="px-3 py-3 text-xs text-[#9AA08C]">載入比賽資料…</p>
-          ) : (
-            <MatchDetailView match={match} teamName={teamName} />
-          )}
-        </div>
+        <>
+          <div className="shrink-0">
+            {match === undefined ? (
+              <p className="px-3 py-3 text-xs text-[#9AA08C]">載入比賽資料…</p>
+            ) : (
+              <MatchDetailView match={match} teamName={teamName} />
+            )}
+          </div>
+          {/* 唯讀模式：站位面板是整欄最後一塊，讓它的球員清單吃掉剩下的高度
+              （rosterList="fill"），名單長一點也不必擠在 112px 的小框裡捲。 */}
+          {renderRotationPanel("fill")}
+        </>
       )}
-
-      <RotationRailPanel
-        lineup={lineup}
-        roster={match?.players ?? []}
-        rotation={clampedIndex}
-        axis="set"
-        readOnly={readOnly}
-        onLineupChange={onLineupChange}
-        onStep={(delta) =>
-          setManualSetIndex(Math.min(Math.max(clampedIndex + delta, 0), totalSets - 1))
-        }
-        canStepPrev={clampedIndex > 0}
-        canStepNext={clampedIndex < totalSets - 1}
-        title={isHydrating ? "場上站位（載入中…）" : "場上站位"}
-        setStatus={setStatus}
-        score={score}
-      />
     </>
   );
 }

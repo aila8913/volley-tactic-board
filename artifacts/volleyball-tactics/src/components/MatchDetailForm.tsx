@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { useForm, useFieldArray, useWatch, type UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Trash2, X } from "lucide-react";
@@ -223,6 +223,16 @@ interface MatchDetailFormProps {
   // 表單有沒有被改過，往上報給頁面——「未存檔就切走要不要攔」需要這個值，
   // 見 hooks/useMatchRailSelection.ts。
   onDirtyChange: (dirty: boolean) => void;
+  // 夾在「比賽資訊」跟「球員名單」中間的東西——實務上就是場上站位面板（RotationRailPanel）。
+  //
+  // 為什麼要讓表單長出一個插槽，而不是把站位面板留在表單外面接在下方：PO 定的模組順序是
+  // 比賽資訊 → 場上站位 → 第幾局 → 球員名單，而「就地編輯」的重點就是**按下編輯前後，
+  // 這一欄的東西不會換位置**，只是欄位從鎖住變成可以打字。站位面板放在表單外，編輯模式
+  // 就只能被擠到名單下面，切進切出編輯模式時整欄的模組順序會跳一次，那就不叫就地編輯了。
+  //
+  // 型別是 ReactNode（不是元件或一堆 props）：這支表單不需要知道插進來的是什麼，
+  // 也不該知道——站位的資料與領域規則全在 MatchInfoRail 那邊算好。
+  lineupSlot?: ReactNode;
 }
 
 export default function MatchDetailForm({
@@ -232,6 +242,7 @@ export default function MatchDetailForm({
   onSaved,
   onCreated,
   onDirtyChange,
+  lineupSlot,
 }: MatchDetailFormProps) {
   const isEditing = match !== null;
   const { toast } = useToast();
@@ -336,9 +347,10 @@ export default function MatchDetailForm({
 
   return (
     <Form {...form}>
-      {/* 版面：標題列固定在頂端，欄位區自己捲。右欄很窄又要同時容納「比賽資訊＋名單＋場上站位」，
-          不給欄位區自己的捲動範圍，名單一長就會把下面釘著的站位面板整個推出視野
-          （這是 #329 明確要避免的：改名單的時候仍然要看得到站位）。 */}
+      {/* 版面：標題列（取消/儲存）固定在頂端，其餘內容一起捲。
+          站位面板改成跟著內容一起捲、不再釘在欄底（PO 2026-08-09 的模組順序定案）——
+          兩份球員名單合併成一份之後，右欄的內容總高度降下來了，原本「名單一長就把站位
+          擠出視野」的問題不再靠釘住解決，而是靠不再畫兩份名單解決。 */}
       <form
         onSubmit={form.handleSubmit(onSubmit)}
         style={DARK_FORM_TOKENS}
@@ -368,192 +380,205 @@ export default function MatchDetailForm({
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-3 py-3">
-          <FormField
-            control={form.control}
-            name="opponent"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel className="text-xs text-[#9AA08C]">對手</FormLabel>
-                <FormControl>
-                  <Input placeholder="對手隊名" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+        {/* 捲動範圍是「整個內容區」，但內距（px-3 py-3）改由裡面的兩塊各自負責——
+            中間插進來的站位面板自己就帶滿版的 px-3/border-b，跟外層再套一次 px-3 會變成
+            雙重縮排，跟唯讀模式的同一個面板對不齊。 */}
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="space-y-4 px-3 py-3">
+            <FormField
+              control={form.control}
+              name="opponent"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-xs text-[#9AA08C]">對手</FormLabel>
+                  <FormControl>
+                    <Input placeholder="對手隊名" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-          <FormField
-            control={form.control}
-            name="dateTime"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel className="text-xs text-[#9AA08C]">日期時間</FormLabel>
-                <FormControl>
-                  {/* [color-scheme:dark]：讓瀏覽器原生的日期選擇器圖示/面板用深色版本，
+            <FormField
+              control={form.control}
+              name="dateTime"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-xs text-[#9AA08C]">日期時間</FormLabel>
+                  <FormControl>
+                    {/* [color-scheme:dark]：讓瀏覽器原生的日期選擇器圖示/面板用深色版本，
                       不然 Chrome 會在深色輸入框上畫一個黑色的小日曆圖示，幾乎看不見。 */}
-                  <Input type="datetime-local" className="[color-scheme:dark]" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+                    <Input type="datetime-local" className="[color-scheme:dark]" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-          {/* 賽制（#215）：跟 opponent/dateTime 一樣是普通的 react-hook-form 受控欄位
+            {/* 賽制（#215）：跟 opponent/dateTime 一樣是普通的 react-hook-form 受控欄位
               （見 types/match.ts matchFormSchema 的註解：這欄沒有「還沒建立好」的中間狀態，
               不像 teamId 需要獨立本地 state），所以直接走 FormField，用法跟下面球員名單裡
               的角色下拉一致。 */}
-          <FormField
-            control={form.control}
-            name="format"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel className="text-xs text-[#9AA08C]">賽制</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {/* 文案跟唯讀檢視共用同一份對照表，不在兩邊各寫一次字串。 */}
-                    <SelectItem value="best_of_3">{MATCH_FORMAT_LABEL.best_of_3}</SelectItem>
-                    <SelectItem value="best_of_5">{MATCH_FORMAT_LABEL.best_of_5}</SelectItem>
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+            <FormField
+              control={form.control}
+              name="format"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-xs text-[#9AA08C]">賽制</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {/* 文案跟唯讀檢視共用同一份對照表，不在兩邊各寫一次字串。 */}
+                      <SelectItem value="best_of_3">{MATCH_FORMAT_LABEL.best_of_3}</SelectItem>
+                      <SelectItem value="best_of_5">{MATCH_FORMAT_LABEL.best_of_5}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-          {/* 球隊標籤（可選）。不是 react-hook-form 欄位，所以直接用 Label + Select 手接
+            {/* 球隊標籤（可選）。不是 react-hook-form 欄位，所以直接用 Label + Select 手接
               本地 state，不走 FormField。選「建立新球隊」時才展開一格名稱輸入。 */}
-          <div className="space-y-2">
-            <Label className="text-xs text-[#9AA08C]">球隊（可選）</Label>
-            <Select
-              value={teamSelection}
-              onValueChange={(v) => {
-                setTeamSelection(v);
-                setTeamDirty(true);
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={TEAM_NONE}>未指定</SelectItem>
-                {teams.map((team) => (
-                  <SelectItem key={team.id} value={String(team.id)}>
-                    {team.name}
-                  </SelectItem>
-                ))}
-                <SelectItem value={TEAM_NEW}>＋ 建立新球隊…</SelectItem>
-              </SelectContent>
-            </Select>
-            {teamSelection === TEAM_NEW && (
-              <Input
-                placeholder="新球隊名稱"
-                value={newTeamName}
-                onChange={(e) => {
-                  setNewTeamName(e.target.value);
+            <div className="space-y-2">
+              <Label className="text-xs text-[#9AA08C]">球隊（可選）</Label>
+              <Select
+                value={teamSelection}
+                onValueChange={(v) => {
+                  setTeamSelection(v);
                   setTeamDirty(true);
                 }}
-              />
-            )}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={TEAM_NONE}>未指定</SelectItem>
+                  {teams.map((team) => (
+                    <SelectItem key={team.id} value={String(team.id)}>
+                      {team.name}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value={TEAM_NEW}>＋ 建立新球隊…</SelectItem>
+                </SelectContent>
+              </Select>
+              {teamSelection === TEAM_NEW && (
+                <Input
+                  placeholder="新球隊名稱"
+                  value={newTeamName}
+                  onChange={(e) => {
+                    setNewTeamName(e.target.value);
+                    setTeamDirty(true);
+                  }}
+                />
+              )}
+            </div>
           </div>
 
-          {/* #287：這支球隊之前登錄過的人，勾了才加進名單——見 RosterSuggestions 上方註解。
-              編輯模式一樣顯示（回鍋球員一樣好用），不特別擋。 */}
-          <RosterSuggestions
-            form={form}
-            selectedTeamId={selectedTeamId}
-            append={append}
-            update={update}
-          />
+          {/* 場上站位（＋第幾局的 stepper）。見 lineupSlot 的說明：擺在這裡是為了讓
+              「比賽資訊 → 場上站位 → 第幾局 → 球員名單」這個順序在唯讀/編輯兩種模式下
+              一模一樣。編輯模式底下這個面板不畫自己的球員清單（rosterList="hidden"），
+              名單由下面那份可增刪的表單版本接手。 */}
+          {lineupSlot}
 
-          <div className="space-y-2">
-            <Label className="text-xs text-[#9AA08C]">球員名單</Label>
-            {fields.map((field, index) => (
-              <div key={field.id} className="space-y-1">
-                {/* 右欄比彈窗窄得多（約 270px），姓名/背號/位置/刪除四個東西並排會把姓名
+          <div className="space-y-4 px-3 py-3">
+            {/* #287：這支球隊之前登錄過的人，勾了才加進名單——見 RosterSuggestions 上方註解。
+              編輯模式一樣顯示（回鍋球員一樣好用），不特別擋。 */}
+            <RosterSuggestions
+              form={form}
+              selectedTeamId={selectedTeamId}
+              append={append}
+              update={update}
+            />
+
+            <div className="space-y-2">
+              <Label className="text-xs text-[#9AA08C]">球員名單</Label>
+              {fields.map((field, index) => (
+                <div key={field.id} className="space-y-1">
+                  {/* 右欄比彈窗窄得多（約 270px），姓名/背號/位置/刪除四個東西並排會把姓名
                     擠到只剩「球員姓」三個字看得見、背號只露出半個數字——實測就是這樣。
                     所以拆成兩行：姓名獨佔一行，背號＋位置＋刪除鈕排第二行。 */}
-                <FormField
-                  control={form.control}
-                  name={`players.${index}.name`}
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormControl>
-                        <Input placeholder="球員姓名" className="h-8" {...field} />
-                      </FormControl>
-                      <FormMessage className="text-micro" />
-                    </FormItem>
-                  )}
-                />
-                <div className="flex items-start gap-1.5">
                   <FormField
                     control={form.control}
-                    name={`players.${index}.number`}
+                    name={`players.${index}.name`}
                     render={({ field }) => (
-                      <FormItem className="w-16">
+                      <FormItem>
                         <FormControl>
-                          <Input type="number" placeholder="背號" className="h-8" {...field} />
+                          <Input placeholder="球員姓名" className="h-8" {...field} />
                         </FormControl>
                         <FormMessage className="text-micro" />
                       </FormItem>
                     )}
                   />
-                  <FormField
-                    control={form.control}
-                    name={`players.${index}.role`}
-                    render={({ field }) => (
-                      <FormItem className="w-20">
-                        <Select onValueChange={field.onChange} value={field.value}>
+                  <div className="flex items-start gap-1.5">
+                    <FormField
+                      control={form.control}
+                      name={`players.${index}.number`}
+                      render={({ field }) => (
+                        <FormItem className="w-16">
                           <FormControl>
-                            <SelectTrigger className="h-8">
-                              <SelectValue />
-                            </SelectTrigger>
+                            <Input type="number" placeholder="背號" className="h-8" {...field} />
                           </FormControl>
-                          <SelectContent>
-                            {PLAYER_ROLES.map((role) => (
-                              <SelectItem key={role} value={role}>
-                                {role}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage className="text-micro" />
-                      </FormItem>
-                    )}
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 shrink-0 text-[#9AA08C] hover:text-[#ef4444]"
-                    disabled={fields.length <= 1}
-                    onClick={() => remove(index)}
-                    aria-label="刪除這位球員"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                          <FormMessage className="text-micro" />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name={`players.${index}.role`}
+                      render={({ field }) => (
+                        <FormItem className="w-20">
+                          <Select onValueChange={field.onChange} value={field.value}>
+                            <FormControl>
+                              <SelectTrigger className="h-8">
+                                <SelectValue />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {PLAYER_ROLES.map((role) => (
+                                <SelectItem key={role} value={role}>
+                                  {role}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage className="text-micro" />
+                        </FormItem>
+                      )}
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 shrink-0 text-[#9AA08C] hover:text-[#ef4444]"
+                      disabled={fields.length <= 1}
+                      onClick={() => remove(index)}
+                      aria-label="刪除這位球員"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  {/* 這一列的同名對應提示／已對應狀態，見 PlayerRosterMatchHint 上方註解。 */}
+                  <PlayerRosterMatchHint form={form} index={index} people={people} />
                 </div>
-                {/* 這一列的同名對應提示／已對應狀態，見 PlayerRosterMatchHint 上方註解。 */}
-                <PlayerRosterMatchHint form={form} index={index} people={people} />
-              </div>
-            ))}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              // outline variant 的框線色來自 --button-outline，這個專案沒有定義它，
-              // 在深色底上會變成看不見的框——直接指定右欄既有的那組描邊色。
-              className="w-full border-white/[0.26] text-[#F5F5F0] hover:border-[#C6F135]
+              ))}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                // outline variant 的框線色來自 --button-outline，這個專案沒有定義它，
+                // 在深色底上會變成看不見的框——直接指定右欄既有的那組描邊色。
+                className="w-full border-white/[0.26] text-[#F5F5F0] hover:border-[#C6F135]
                 hover:text-[#C6F135]"
-              onClick={() => append({ name: "", number: 0, role: "S", personId: null })}
-            >
-              新增球員
-            </Button>
+                onClick={() => append({ name: "", number: 0, role: "S", personId: null })}
+              >
+                新增球員
+              </Button>
+            </div>
           </div>
         </div>
       </form>
