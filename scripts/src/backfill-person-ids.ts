@@ -3,11 +3,11 @@
 // 背景：people 表（lib/db/src/schema/people.ts）是「人」的跨場唯一身分，players.personId
 // 指回它，讓同一個人跨比賽/跨球隊的紀錄可以串起來（球員生涯分析的基礎）。#213 把 people
 // 接上前端之後，只有「之後新送出」的名單會自動建 person 並綁上 personId
-// （見 artifacts/volleyball-tactics/src/components/MatchFormDialog.tsx）；#213 之前
+// （見 artifacts/volleyball-tactics/src/components/MatchDetailForm.tsx）；#213 之前
 // 建立的 players 列 personId 還是 null，永遠不會出現在跨場分析裡——這支腳本就是在補這個洞。
 //
 // 為什麼是一次性腳本、不是後端 endpoint：
-//   這是「資料遷移」而不是「產品功能」。MatchFormDialog 現在建立名單的當下就會自動建 person，
+//   這是「資料遷移」而不是「產品功能」。MatchDetailForm 現在建立名單的當下就會自動建 person，
 //   代表從 #213 上線之後就不會再產生新的 null-personId 名單列——每個環境（本機、雲端 DB）只需要
 //   跑這支腳本一次就能把歷史資料補齊，之後不會再需要跑第二次（除非又手動塞資料進 DB）。
 //   如果把這個邏輯做成一個永久掛著的 API endpoint，它平常什麼用都沒有，卻多一個要維護、

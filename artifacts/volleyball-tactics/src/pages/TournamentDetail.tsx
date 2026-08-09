@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useParams, Link } from "wouter";
 import { ArrowLeft, Plus, SlidersHorizontal } from "lucide-react";
 import BackToMatchListButton from "@/components/BackToMatchListButton";
@@ -6,7 +5,6 @@ import { useMatchList, useDeleteMatch } from "@/hooks/useMatches";
 import { useTournamentList } from "@/hooks/useTournaments";
 import { useCrossMatchAnalysis } from "@/hooks/useCrossMatchAnalysis";
 import { APP_BACKGROUND_STYLE, APP_SHELL_CLASS } from "@/lib/appChromeStyles";
-import MatchFormDialog from "@/components/MatchFormDialog";
 import ListItemCard from "@/components/ListItemCard";
 import ListScrollArea from "@/components/ListScrollArea";
 import MatchEntryLinks from "@/components/MatchEntryLinks";
@@ -19,8 +17,8 @@ import {
 } from "@/lib/matchOutcome";
 import AppShell from "@/components/AppShell";
 import ListNavRail from "@/components/ListNavRail";
-import MatchInfoRail, { MatchListSelection } from "@/components/MatchInfoRail";
-import { Match } from "@/types/match";
+import MatchInfoRail from "@/components/MatchInfoRail";
+import { useMatchRailSelection } from "@/hooks/useMatchRailSelection";
 
 // 跟 ScoreSheet.tsx/MatchAnalytics.tsx 同名常數同一套語言（不透過 shadcn Button，理由見
 // 那邊的註解）。SECONDARY 目前只有「找不到資料夾」那個早期 return 在用——主要 render 路徑的
@@ -49,13 +47,17 @@ export default function TournamentDetail() {
   const matches = allMatches.filter((m) => m.tournamentId === id);
   const deleteMatch = useDeleteMatch();
 
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingMatch, setEditingMatch] = useState<Match | null>(null);
   // issue #174：跟 MatchList.tsx 一樣的右欄選取狀態，只是這裡的選取語意永遠只會是
-  // kind: "match"——資料夾內頁裡不會再出現子資料夾可以選。共用同一個 MatchListSelection
-  // 型別（而不是另外定義一個只收 string 的窄型別），是因為 MatchInfoRail 的 props 契約本來
-  // 就是吃這個型別，兩邊維持同一份型別，日後兩個頁面的行為要保持一致時才不會各自飄掉。
-  const [selected, setSelected] = useState<MatchListSelection>(null);
+  // kind: "match"／"new-match"——資料夾內頁裡不會再出現子資料夾可以選。共用同一個
+  // MatchListSelection 型別（而不是另外定義一個只收 string 的窄型別），是因為 MatchInfoRail
+  // 的 props 契約本來就是吃這個型別，兩邊維持同一份型別，日後兩個頁面的行為要保持一致時
+  // 才不會各自飄掉。
+  //
+  // issue #329：連編輯模式一起收進共用 hook。這裡傳的是路由上的資料夾 id（不是下面算出來的
+  // `tournament.id`）——兩者是同一個值，但 hook 必須無條件呼叫，不能等到「找不到資料夾」那
+  // 幾個早期 return 之後才叫。這個值決定「在這一頁按新增比賽，建好的比賽歸到哪個資料夾」。
+  const { selected, editing, select, startCreate, startEdit, leaveEdit, finishCreate, setDirty } =
+    useMatchRailSelection(id);
   // 卡片右端「3:0 勝」那格、跟「尚未排先發」黃標的來源，改讀後端的跨場彙總
   // （GET /analysis/matches，#65 視圖②那支），不再讀本機 zustand store。
   //
@@ -94,16 +96,6 @@ export default function TournamentDetail() {
   const matchNeedsLineup = (matchId: string, format: MatchFormat): boolean => {
     if (isSummaryLoading) return false;
     return matchStatus(matchId, format) === "lineup_only";
-  };
-
-  const openCreateDialog = () => {
-    setEditingMatch(null);
-    setDialogOpen(true);
-  };
-
-  const openEditDialog = (match: Match) => {
-    setEditingMatch(match);
-    setDialogOpen(true);
   };
 
   const handleDelete = (matchId: string) => {
@@ -153,7 +145,15 @@ export default function TournamentDetail() {
       }
       aside={
         <div className="relative z-10 h-full">
-          <MatchInfoRail selected={selected} />
+          {/* issue #329：跟 MatchList.tsx 完全一樣的接線（右欄同時是看跟改的地方）。 */}
+          <MatchInfoRail
+            selected={selected}
+            editing={editing}
+            onCancelEdit={leaveEdit}
+            onSaved={leaveEdit}
+            onCreated={finishCreate}
+            onDirtyChange={setDirty}
+          />
         </div>
       }
       // issue #131：這頁的中央區原本還是 shadcn 預設的白底（`bg-white` ＋ Card/Button），
@@ -186,7 +186,7 @@ export default function TournamentDetail() {
                   所以操作列只留篩選＋新增比賽。 */}
               <button
                 type="button"
-                onClick={openCreateDialog}
+                onClick={startCreate}
                 className="inline-flex h-11 items-center gap-1.5 rounded-2xl bg-[#c6f135] px-5 text-action
                 font-semibold text-[#0a0b07] transition hover:brightness-110"
               >
@@ -199,7 +199,7 @@ export default function TournamentDetail() {
           {matches.length === 0 ? (
             <div className="flex flex-col items-center gap-4 rounded-2xl border border-white/[0.12] bg-white/[0.07] py-12 text-center backdrop-blur-md">
               <p className="text-[#a9b096]">這個資料夾裡還沒有比賽</p>
-              <button type="button" onClick={openCreateDialog} className={PRIMARY_BUTTON_CLASS}>
+              <button type="button" onClick={startCreate} className={PRIMARY_BUTTON_CLASS}>
                 新增第一場比賽
               </button>
             </div>
@@ -216,7 +216,7 @@ export default function TournamentDetail() {
                     secondaryText={matchResultText(match.id, match.format)}
                     statusHint={matchNeedsLineup(match.id, match.format) ? "尚未排先發" : undefined}
                     selected={selected?.kind === "match" && selected.id === match.id}
-                    onSelect={() => setSelected({ kind: "match", id: match.id })}
+                    onSelect={() => select({ kind: "match", id: match.id })}
                     // 跟 MatchList.tsx 同一套：選中就地展開三個入口，不跳頁也不疊層。
                     expandedContent={
                       <MatchEntryLinks
@@ -224,7 +224,7 @@ export default function TournamentDetail() {
                         needsLineup={matchNeedsLineup(match.id, match.format)}
                       />
                     }
-                    onEdit={() => openEditDialog(match)}
+                    onEdit={() => startEdit(match.id)}
                     onDelete={() => handleDelete(match.id)}
                   />
                 ))}
@@ -233,13 +233,7 @@ export default function TournamentDetail() {
           )}
         </div>
       </div>
-
-      <MatchFormDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        match={editingMatch}
-        tournamentId={tournament.id}
-      />
+      {/* issue #329：比賽的編輯彈窗已刪除，新增/編輯都在右欄就地進行。 */}
     </AppShell>
   );
 }

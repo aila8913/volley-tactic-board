@@ -105,7 +105,7 @@ describe("diffRoster", () => {
   it("flags a player with no matching id as create", () => {
     const diff = diffRoster(existing, [
       ...existing,
-      { name: "C", number: 3, role: "MB", personId: null }, // 沒 id（MatchFormDialog 新增列）→ 新增，不帶 id 欄位，交給 DB 生
+      { name: "C", number: 3, role: "MB", personId: null }, // 沒 id（MatchDetailForm 新增列）→ 新增，不帶 id 欄位，交給 DB 生
     ]);
     expect(diff.toCreate).toEqual([{ name: "C", number: 3, role: "MB", personId: null }]);
     expect(diff.toUpdate).toEqual([]);

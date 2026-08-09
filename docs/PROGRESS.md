@@ -148,16 +148,23 @@ lives in git log + the issues named).
   `useRotationStepper.ts:33` 的副作用，畫面上也沒有任何地方指出現在是哪一種。PO 實測時明確表示看不懂
   這個概念，而 `CONTEXT.md`／`docs/layout-spec.md` 兩份都沒有它的名字——**它是 #174/#251 把輪轉表搬進
   右欄之後剩下來的遺留畫面，不是被設計出來的**，唯一還獨有的東西就是那顆 L 備位圓圈。
-- **比賽編輯要從彈窗搬進右欄就地編輯（#329，08-07 PO 定案，尚未動工）。** 現在「這場比賽是什麼」被切
-  成兩半：右欄 `MatchInfoRail` 看比分／站位，改時間／對手／球隊／賽制／名單卻要開 `MatchFormDialog`
-  （492 行），而彈窗一開就把右欄整個蓋掉。目標形態是**右欄＝比賽的唯一編輯面板**：選中→唯讀、按編輯→
-  就地可改、新增比賽→直接開在編輯模式，`MatchFormDialog` 整支刪掉。PO 已定案**球員名單一起搬**
-  （右欄一次到位，不留「基本欄位在右欄、名單還在彈窗」的半套）。
-  - **實作時最容易做錯的一點：站位的唯讀規則不能被這個新的「編輯模式」開關覆蓋。** 站位可不可以改是
-    領域規則（歷史局／局中凍結一律唯讀，只有未開賽的局能排先發，見 `MatchInfoRail.tsx` 那串 if/else），
-    跟「比賽資訊在不在編輯狀態」是**兩個不同層次的可寫性**，一按編輯就全部解鎖會讓已開賽的局的先發被改掉。
-  - 順序上要等 **#327**（`RotationRailPanel` 加自由球員格）先落地——右欄內嵌的正是那顆元件。相關的
-    #222／#24／#209 已補上交界留言與 body 修正。
+- **比賽編輯已從彈窗搬進右欄就地編輯（#329，08-09 交付）。** 原本「這場比賽是什麼」被切成兩半：右欄
+  `MatchInfoRail` 看比分／站位，改時間／對手／球隊／賽制／名單卻要開 `MatchFormDialog`（492 行），
+  而彈窗一開就把右欄整個蓋掉。現在**右欄＝比賽的唯一編輯面板**：選中→唯讀（`MatchDetailView`）、
+  按左欄卡片的「編輯」→ 同一欄就地變表單（`MatchDetailForm`，底色提亮＋萊姆綠 ring 當提示）、
+  新增比賽→右欄直接開在空白編輯模式（`selected.kind === "new-match"`）。`MatchFormDialog` 已刪除。
+  - **站位的唯讀規則沒有被這個新開關碰到**（這是實作時最容易做錯的一點）：站位可不可以改是領域規則
+    （歷史局／局中凍結一律唯讀，只有未開賽的局能排先發，見 `MatchInfoRail.tsx` 那串 if/else），跟
+    「比賽資訊在不在編輯狀態」是**兩個不同層次的可寫性**。`editing` 刻意完全不參與那段計算，也沒有接進
+    `RotationRailPanel` 的 `readOnly`——檔案裡有一段 ⚠️ 註解把這條紅線寫死，別把它們接在一起。
+  - 選取＋編輯模式＋未存檔攔截收在 `hooks/useMatchRailSelection.ts`，比賽列表與資料夾內頁共用一份
+    （狀態放頁面層而非右欄內部，因為「編輯」鈕長在左欄卡片上）。未存檔切走沿用既有的
+    `window.confirm` 慣例，只有真的改過（`formState.isDirty` ＋球隊選擇器的獨立 dirty 旗標）才問。
+  - **順序決策（08-09 PO 拍板）：沒有等 #327。** issue body 原本寫「#327 先做」，理由是「免得平行開工
+    在同一個檔案打架」；實際是單線作業，而且兩張改的是不同檔案（#327 改 `RotationRailPanel` 內部
+    六格→七格，#329 改的是它的容器）。#327／#326 仍然 open，自由球員先發沒有入口這個 bug 還在。
+  - 相依：#222 的修法本來指向已刪除的 `MatchFormDialog`，現在該重新確認要抽在哪裡；#24（複製比賽）
+    body 的「展開編輯彈窗」已改寫成「右欄開在編輯模式」。
 - **衍生文件不維護（07-21 PO 決定，`docs/flow-diagrams.html` 已刪）。判準值得記住：決策文件
   （`docs/*-spec.md`、issue 留言）值得維護，「描述程式碼現在怎麼跑」的衍生文件不值得**——它註定
   落後，而落後時**主動誤導**（#163 整張 issue 就在處理這件事：它描述的 API 不是「舊」而是已被刪除，
@@ -525,7 +532,7 @@ serving≠null 但 record.lineup=null」那條路**，但真正的 reconcile 仍
   撈出「這支球隊登錄過的人」，**不建 `team_members`、完全不動 schema**。**走後端 endpoint 而非前端
   拼**：前端拼會變成「撈全部比賽→過濾 teamId→逐場再打一次 `/matches/{id}/players`」的 N+1 請求。
   回傳的 `name`/`number`/`role` 取**最近一場**那一列（`players` 而非 `people.name`，跟 number/role
-  同一列來源才一致）——背號/位置會換季換人變，最近一次最可能還是對的。UI 是 `MatchFormDialog` 選了
+  同一列來源才一致）——背號/位置會換季換人變，最近一次最可能還是對的。UI 是 `MatchDetailForm` 選了
   既有球隊後出現的一排 chip，**點一顆才加一個人、不自動整批帶入**：自動填會覆蓋使用者已經打好的列，
   是會產生錯誤答案的方向（同 #213/#215 那條「能不能給預設，取決於預設的方向會不會產生錯誤答案」）。
   已在表單裡的 `personId` 會從建議清單濾掉；名單只剩一列空白佔位列時第一次點是**取代**而非 append
@@ -533,12 +540,12 @@ serving≠null 但 record.lineup=null」那條路**，但真正的 reconcile 仍
   「這隊打過的人」，打字比對接住清單裡沒有的人（臨時上場、別隊老面孔）。**實機驗過**：種子資料裡
   林小美同時出現在 A 隊（#15）與 B 隊（#13），正是「一人跨多隊」情境下背號各自不同的預期行為。
 - **#221 ＋ #224**（人員合併機制與管理頁，08-05，PR #293/#295）— #213 留下的缺口：`people` 只在
-  MatchFormDialog 送出名單時被動建立，同名重複沒地方合併、打錯字沒地方改。#221（後端）：新增
+  MatchDetailForm 送出名單時被動建立，同名重複沒地方合併、打錯字沒地方改。#221（後端）：新增
   `person_merges` append-only 稽核表（一次合併寫 N 列，記 target／來源名字快照／被改指的
   `players.id` 清單——合併不可逆，這張表是誤併後人工拆得回來的保險）；`POST /people/:id/merge`
   在單一 transaction 裡「改指向→寫日誌→刪來源」，body 帶進來的 `sourceIds` 額外手動驗擁有權
   （`owns` closure 只驗得到 path param，驗不到 body 陣列，漏掉就是 #225 那類 IDOR）；候選偵測
-  `normalizePersonName` 刻意比 MatchFormDialog 的去重判準寬（NFKC＋拿掉所有空白含全形空白），
+  `normalizePersonName` 刻意比 MatchDetailForm 的去重判準寬（NFKC＋拿掉所有空白含全形空白），
   因為這裡只是列出來給人勾選確認、猜寬了成本趨近於零，猜漏了才是問題。#224（前端）：
   `GET /people` 順手補上 `matchCount`/`teamNames`（新 `PersonSummary` schema，`Person` 本身
   不動，因為 POST/PATCH 那幾支回應算不出這兩個欄位）；新增 `PeopleManagement.tsx`

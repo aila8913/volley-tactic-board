@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
 import { Folder } from "lucide-react";
 import RotationRailPanel from "@/components/RotationRailPanel";
+import MatchDetailView from "@/components/MatchDetailView";
+import MatchDetailForm from "@/components/MatchDetailForm";
 import { useMatchList, useMatchWithRoster } from "@/hooks/useMatches";
 import { useTournamentList } from "@/hooks/useTournaments";
+import { useTeamList } from "@/hooks/useTeams";
 import { useRotationTable } from "@/hooks/useRotationTable";
 import { useScoreSheet, useScoreSheetController } from "@/hooks/useScoreSheet";
 import { useCrossMatchAnalysis } from "@/hooks/useCrossMatchAnalysis";
@@ -17,10 +20,26 @@ import type { Match } from "@/types/match";
 // 這兩個頁面的右欄內容完全一樣（同一個元件），差別只在資料夾內頁不會出現 kind:"tournament"
 //（資料夾裡不會再有子資料夾）——型別不需要為此再拆一份，讓兩邊呼叫端各自決定要不要用到
 // "tournament" 這個分支就好。
-export type MatchListSelection = { kind: "tournament" | "match"; id: string } | null;
+//
+// issue #329 加上 "new-match"：「新增比賽」不再開彈窗，而是把右欄直接開在一張空白編輯表單。
+// 它得是選取的一種狀態（而不是另一個獨立的布林），因為它跟 "match"/"tournament" 是互斥的
+// ——右欄同一時間只可能是其中一種樣子。tournamentId 帶在這裡，是為了讓「資料夾內頁按新增，
+// 建好的比賽要歸進那個資料夾」這條規則跟著選取狀態走，不用再多接一條 prop。
+export type MatchListSelection =
+  | { kind: "tournament"; id: string }
+  | { kind: "match"; id: string }
+  | { kind: "new-match"; tournamentId: string | null }
+  | null;
 
 interface MatchInfoRailProps {
   selected: MatchListSelection;
+  // 目前是不是編輯模式（issue #329）。狀態放在頁面層、不是這個元件內部，理由見
+  // hooks/useMatchRailSelection.ts：「編輯」鈕長在左欄卡片上，跟右欄不在同一棵子樹。
+  editing: boolean;
+  onCancelEdit: () => void;
+  onSaved: () => void;
+  onCreated: (matchId: string) => void;
+  onDirtyChange: (dirty: boolean) => void;
 }
 
 // 右欄外層樣式改從 lib/appChromeStyles 讀（原本這裡自己寫一份、跟另外兩個右欄字面相同）——
@@ -29,7 +48,20 @@ interface MatchInfoRailProps {
 // 「這一欄裡面長什麼樣」，多寫一次寬度只會製造「兩個地方各管一份數字」的老問題重演。
 const RAIL_BASE_CLASS = INFO_RAIL_BASE_CLASS;
 
-export default function MatchInfoRail({ selected }: MatchInfoRailProps) {
+// 編輯模式時疊在外殼上的視覺提示（PO 指定：「底色變亮引起使用者注意，顯示在這邊編輯」）。
+// 底色提亮一階 + 一圈內描邊的萊姆綠——#C6F135 是全站既有的主色（選中的號位、主要 CTA 都用它），
+// 不為了這個狀態再發明一種新顏色。ring-inset 而不是 border：border 會改變盒模型讓內容位移
+// 1px，切進編輯模式時整欄跳動一下很廉價；ring 畫在框內、不佔空間。
+const EDITING_RAIL_CLASS = "bg-[#1A1C15]/85 ring-1 ring-inset ring-[#C6F135]/40";
+
+export default function MatchInfoRail({
+  selected,
+  editing,
+  onCancelEdit,
+  onSaved,
+  onCreated,
+  onDirtyChange,
+}: MatchInfoRailProps) {
   // 這兩個 query 在 MatchList.tsx / TournamentDetail.tsx 本來就會呼叫一次——這裡再呼叫一次
   // 不會多打一次網路請求，React Query 用同一個 queryKey 直接共用快取，只是多訂閱一份而已。
   const { tournaments } = useTournamentList();
@@ -42,10 +74,27 @@ export default function MatchInfoRail({ selected }: MatchInfoRailProps) {
   if (selected === null) {
     return (
       <div className={`${RAIL_BASE_CLASS} items-center justify-center gap-1 px-4 text-center`}>
-        <p className="text-sm text-[#9AA08C]">選一場比賽來排先發</p>
+        <p className="text-sm text-[#9AA08C]">選一場比賽</p>
         <p className="text-xs text-[#9AA08C]/70">
-          點一下左邊的卡片，這裡會出現可以直接排的場上站位
+          點一下左邊的卡片，這裡會出現這場比賽的資料、名單與場上站位
         </p>
+      </div>
+    );
+  }
+
+  // issue #329：新增比賽——右欄直接開在一張空白表單，不需要先選中任何東西。
+  // 這一支沒有比分、沒有站位可畫（比賽都還不存在），所以整欄就是表單本身。
+  if (selected.kind === "new-match") {
+    return (
+      <div className={`${RAIL_BASE_CLASS} ${EDITING_RAIL_CLASS}`}>
+        <MatchDetailForm
+          match={null}
+          tournamentId={selected.tournamentId}
+          onCancel={onCancelEdit}
+          onSaved={onSaved}
+          onCreated={onCreated}
+          onDirtyChange={onDirtyChange}
+        />
       </div>
     );
   }
@@ -66,7 +115,7 @@ export default function MatchInfoRail({ selected }: MatchInfoRailProps) {
         </div>
         {/* issue #174 Stage B：資料夾層級的跨場戰績。拆成獨立元件（而不是直接在這裡算）
           是為了讓 useCrossMatchAnalysis 只在真的需要（選到資料夾時）才掛，跟 kind==="match"
-          分支拆出 MatchRotationSection 的理由一樣。 */}
+          分支拆出 MatchDetailSection 的理由一樣。 */}
         <TournamentStatsSection matches={matchesInFolder} />
       </div>
     );
@@ -78,8 +127,15 @@ export default function MatchInfoRail({ selected }: MatchInfoRailProps) {
   // useEffect(() => setXxx(初始值), [matchId]) 來手動同步——少一個「忘記把某個 state 也
   // 放進重置清單」的地雷。
   return (
-    <div className={RAIL_BASE_CLASS}>
-      <MatchRotationSection key={selected.id} matchId={selected.id} />
+    <div className={`${RAIL_BASE_CLASS} ${editing ? EDITING_RAIL_CLASS : ""}`}>
+      <MatchDetailSection
+        key={selected.id}
+        matchId={selected.id}
+        editing={editing}
+        onCancelEdit={onCancelEdit}
+        onSaved={onSaved}
+        onDirtyChange={onDirtyChange}
+      />
     </div>
   );
 }
@@ -91,8 +147,27 @@ export default function MatchInfoRail({ selected }: MatchInfoRailProps) {
 // 額外處理「enabled: false」——每個 hook 呼叫都要記得加這個旗標，忘記一個就會在空狀態時
 // 對不存在的比賽發出多餘的請求。拆成子元件之後，這個元件只在 kind === "match" 時才會被
 // 掛載，元件存在期間 matchId 保證有值，內部完全不用處理「沒有選中比賽」這個分支。
-function MatchRotationSection({ matchId }: { matchId: string }) {
+//
+// issue #329 之後它同時扛「比賽資訊＋名單」跟「場上站位」兩件事（原本只有站位，資訊在彈窗），
+// 所以從 MatchRotationSection 改名成 MatchDetailSection。
+function MatchDetailSection({
+  matchId,
+  editing,
+  onCancelEdit,
+  onSaved,
+  onDirtyChange,
+}: {
+  matchId: string;
+  editing: boolean;
+  onCancelEdit: () => void;
+  onSaved: () => void;
+  onDirtyChange: (dirty: boolean) => void;
+}) {
   const { match } = useMatchWithRoster(Number(matchId));
+  // 唯讀檢視要顯示球隊名字，但 Match 上存的只有 teamId。在這裡查好再傳下去，讓
+  // MatchDetailView 維持純元件（見該檔案開頭的說明）。
+  const { teams } = useTeamList();
+  const teamName = teams.find((t) => t.id === match?.teamId)?.name ?? null;
 
   const setRoster = useRotationTable((state) => state.setRoster);
   const storedLineup = useRotationTable((state) => state.dataByMatch[matchId]?.lineup);
@@ -168,6 +243,11 @@ function MatchRotationSection({ matchId }: { matchId: string }) {
   let setStatus: "historical" | "live" | "upcoming";
   let score: { our: number; opponent: number } | null;
 
+  // ⚠️ issue #329 的紅線：下面這串 if/else 是**站位**的領域規則（歷史局／局中凍結一律唯讀，
+  // 只有還沒開賽的局才排得了先發），跟新的「編輯模式」是兩回事。`editing` 刻意完全不參與
+  // 這段計算，也絕對不能接進 RotationRailPanel 的 readOnly——「按了編輯」管的是比賽資訊
+  // 與球員名單，不是「讓已經打完的第 1 局可以重排先發」。這兩件事一旦混在一起，教練改個
+  // 對手名字就能把打完的局的站位改掉，而且改了也不會反映在已經記錄的比分上。
   if (clampedIndex < completedSets.length) {
     // 滑到「已經打完的某一局」：讀那一局封存當下的先發快照，純粹看歷史、不能改
     // （改了也沒意義——那一局早就打完了，改站位不會讓已經發生的比賽重新來過）。
@@ -223,10 +303,10 @@ function MatchRotationSection({ matchId }: { matchId: string }) {
 
   return (
     <>
-      {/* issue #174 Stage B「統計格」：逐局藥丸，放在場上站位面板上方。刻意只讀
-        completedSets（這個元件已經透過上面的 useScoreSheetController 重建過整場資料），
-        不為此另外打一次 API——這正是拆出 MatchRotationSection 的理由之一（見上方
-        MatchInfoRail 的說明），這裡本來就手上有整場已完成局的資料。
+      {/* issue #174 Stage B「統計格」：逐局藥丸，放在最上面。刻意只讀 completedSets
+        （這個元件已經透過上面的 useScoreSheetController 重建過整場資料），不為此另外打一次
+        API——這正是拆出 MatchDetailSection 的理由之一（見上方 MatchInfoRail 的說明），
+        這裡本來就手上有整場已完成局的資料。
         completedSets 是空陣列時（連一局都還沒打完）整格不渲染：比賽都還沒開始，沒有
         局比分可以看，硬要畫一排空藥丸只是雜訊。比賽進行中也會顯示到這裡（只是少幾顆），
         這是刻意的——中途把已經打完的局藏起來反而奇怪，教練這時候更需要回顧前面幾局。 */}
@@ -260,6 +340,42 @@ function MatchRotationSection({ matchId }: { matchId: string }) {
           </div>
         </section>
       )}
+
+      {/* ── 比賽資訊 ＋ 球員名單（issue #329）──
+        捲動邊界：這一塊是整欄唯一會長到放不下的部分（名單可以很多人），所以只有它
+        `min-h-0 flex-1 overflow-y-auto`，上面的各局比分跟下面的場上站位都是 shrink-0
+        釘住。這樣不論名單多長，「這場打幾比幾」跟「誰站哪」永遠留在視野裡——這正是
+        #329 要解決的問題（舊的編輯彈窗一開就把站位整個蓋掉）。
+        沿用的是 TournamentStatsSection 已經在用的「摘要固定、清單自己捲」同一套做法。
+        編輯模式時換成表單，表單自己內部就是同一套 flex 版面（見 MatchDetailForm）。 */}
+      {editing ? (
+        // match 還沒載回來就先不渲染表單：defaultValues 只會被讀一次（見 MatchDetailForm
+        // 的說明），拿一份還是 undefined 的資料去初始化，表單會停在空白且再也不會補上。
+        match === undefined ? (
+          <div className="min-h-0 flex-1 px-3 py-3 text-xs text-[#9AA08C]">載入比賽資料…</div>
+        ) : (
+          <MatchDetailForm
+            match={match}
+            tournamentId={match.tournamentId}
+            onCancel={onCancelEdit}
+            onSaved={onSaved}
+            // 編輯既有比賽不會走到「新增成功」這條路，但 prop 是必填——給一個什麼都不做的
+            // 函式，比把 prop 改成 optional 好：optional 會讓新增模式那個真正需要它的呼叫端
+            // 忘記傳也不會被型別擋下來。
+            onCreated={() => {}}
+            onDirtyChange={onDirtyChange}
+          />
+        )
+      ) : (
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {match === undefined ? (
+            <p className="px-3 py-3 text-xs text-[#9AA08C]">載入比賽資料…</p>
+          ) : (
+            <MatchDetailView match={match} teamName={teamName} />
+          )}
+        </div>
+      )}
+
       <RotationRailPanel
         lineup={lineup}
         roster={match?.players ?? []}
@@ -282,7 +398,7 @@ function MatchRotationSection({ matchId }: { matchId: string }) {
 
 // ── 資料夾層級的統計格（issue #174 Stage B）──
 //
-// 拆成獨立元件的理由跟 MatchRotationSection 一樣：useCrossMatchAnalysis 這個 hook 只有
+// 拆成獨立元件的理由跟 MatchDetailSection 一樣：useCrossMatchAnalysis 這個 hook 只有
 // selected.kind === "tournament" 時才需要掛，拆出來才不用在 MatchInfoRail 本體就無條件呼叫它。
 function TournamentStatsSection({ matches }: { matches: Match[] }) {
   const { summaries } = useCrossMatchAnalysis();

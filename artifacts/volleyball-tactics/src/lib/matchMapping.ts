@@ -55,7 +55,7 @@ export function serverMatchToDomain(m: ApiMatch, players: ApiPlayer[] = []): Mat
 // 用 granular 而非「刪光重建」是為了保住 player id 穩定（未來 events→playerId 才對得上）。
 //
 // 判斷「是不是既有球員」看的是 id 能不能對到 existing 裡的某個 id：
-//   - RosterEditDialog 給新球員補的是 uuid、MatchFormDialog 新列則根本沒 id，
+//   - RosterEditDialog 給新球員補的是 uuid、MatchDetailForm 新列則根本沒 id，
 //     兩者都對不到 existing → 視為新增。
 //   - 既有球員帶的是 String(serverId)，對得到 → 視情況更新或不動。
 //
@@ -64,7 +64,7 @@ export function serverMatchToDomain(m: ApiMatch, players: ApiPlayer[] = []): Mat
 // 改用 DB 的 defaultRandom() 另生一個 id，同一個人就會有兩套 id——前端站位認得的
 // id 在後端找不到，幽靈清理會把剛排好的站位當成無主資料掃掉。送出前端鑄的 id，
 // 才能保住「一個實體只鑄造一次 id」這個不變量（即使後端也有能力生 id，也不能自己
-// 另生一份跟前端不同的）。MatchFormDialog 新增列沒有 id（p.id 為 undefined）則維持
+// 另生一份跟前端不同的）。MatchDetailForm 新增列沒有 id（p.id 為 undefined）則維持
 // 原行為，不送 id、交給 DB 生。
 export interface RosterDiff {
   toCreate: NewPlayer[];

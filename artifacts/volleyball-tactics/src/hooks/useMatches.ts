@@ -61,11 +61,16 @@ export function useMatchWithRoster(matchId: number, enabled = true) {
     query: { enabled, queryKey: getListPlayersQueryKey(matchId) },
   });
   // 為什麼要 useMemo：serverMatchToDomain 每次呼叫都會 new 一個新的 domain 物件，
-  // 即使底層資料沒變，參照也是全新的。編輯彈窗（MatchFormDialog）的 useEffect 把這個
-  // match 放進依賴陣列，effect 內又呼叫 form.reset() 觸發重繪；若每次 render 都給新參照，
-  // 就會「render → 新 match → effect 重跑 → reset → 再 render」無限迴圈
+  // 即使底層資料沒變，參照也是全新的。已刪除的編輯彈窗曾經把這個 match 放進 useEffect 的
+  // 依賴陣列、effect 內又呼叫 form.reset() 觸發重繪；若每次 render 都給新參照，就會
+  // 「render → 新 match → effect 重跑 → reset → 再 render」無限迴圈
   // （Maximum update depth exceeded）。用 useMemo 綁在兩個 query 的 data 參照上，
   // 只有資料真的變（React Query 換了新的 data 物件）時才重算，參照才穩定。
+  //
+  // #329 之後那個 reset effect 已經不存在（表單改成進編輯模式才掛載，defaultValues 只讀一次，
+  // 見 MatchDetailForm 的說明），但這個 useMemo 仍然要留：MatchInfoRail 的
+  // MatchDetailSection 用同一個 match 當「把名單種進 useRotationTable」那個 effect 的依賴，
+  // 參照一不穩就會踩到同一種迴圈（見該處註解與專案 memory 的 zustand ref-stable 那條）。
   const match = useMemo(
     () =>
       matchQuery.data !== undefined
@@ -104,7 +109,7 @@ export function useCreateMatch() {
           // 前端用 opponent 當標題，沒有獨立比賽名稱，name 一律留空。
           name: null,
           tournamentId,
-          // 球隊標籤（null＝未分類）。由表單的球隊選擇器決定，見 MatchFormDialog。
+          // 球隊標籤（null＝未分類）。由表單的球隊選擇器決定，見 MatchDetailForm。
           teamId,
           // 賽制（#215）：由表單的下拉欄位決定，直接送出，不用 ?? 兜底——表單 schema 已經
           // 要求 format 必填（見 types/match.ts matchFormSchema），這裡一定有值。
