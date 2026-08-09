@@ -16,6 +16,7 @@ import {
   useListSets,
   useListMatchEvents,
   useListMatchSubstitutions,
+  useListMatchLineups,
   listRallies,
   getListRalliesQueryKey,
 } from "@workspace/api-client-react";
@@ -54,12 +55,20 @@ export function useMatchRecording(
   });
   const eventsQuery = useListMatchEvents(numericMatchId);
   const subsQuery = useListMatchSubstitutions(numericMatchId);
+  // 各局的先發快照（#349 Bug B）。這支 hook 原本不抓它，因為分析頁剛做出來時確實用不到；
+  // 但 #193 之後分析頁右欄長出了「場上站位」，而那個面板讀的正是這裡重建出來的 record，
+  // 沒抓就等於每一局的 lineup 永遠是 null——面板從加上去那天起就是空的，而且不會噴錯，
+  // 因為 reconstructRecording 的 lineups 參數有預設值 []。
+  const lineupsQuery = useListMatchLineups(numericMatchId);
 
   const setsReady = setsQuery.isSuccess;
   const ralliesReady = ralliesQueries.every((q) => q.isSuccess);
   const eventsReady = eventsQuery.isSuccess;
   const subsReady = subsQuery.isSuccess;
-  const isLoading = !setsReady || !eventsReady || !subsReady || (sets.length > 0 && !ralliesReady);
+  // lineups 也要進閘門：少了它就會先用「每局都沒先發」重建一次，畫面閃一下空球場再補上。
+  const lineupsReady = lineupsQuery.isSuccess;
+  const isLoading =
+    !setsReady || !eventsReady || !subsReady || !lineupsReady || (sets.length > 0 && !ralliesReady);
 
   // 資料還沒到位時回傳 undefined，讓頁面顯示載入狀態，避免用半份資料重建出誤導性的統計。
   if (isLoading) {
@@ -77,9 +86,12 @@ export function useMatchRecording(
     ralliesBySetIndex,
     eventsQuery.data ?? [],
     subsQuery.data ?? [],
-    // lineups / timeouts 這支唯讀 hook 不抓（分析頁用不到先發快照與暫停清單），沿用預設的
-    // 空陣列；isFinished 是第 7 個參數，所以這兩個位置要明確補上 []。
-    [],
+    lineupsQuery.data ?? [],
+    // timeouts 這支唯讀 hook 仍然不抓：分析頁目前沒有任何地方顯示暫停（「暫停統計」是可以
+    // 做的東西，但那是另一件事，要做的時候再照 lineups 這樣補一支 query）。沿用預設的空陣列，
+    // 但因為 isFinished 是第 7 個參數，這個位置要明確寫出來。
+    // 這裡刻意不順手把 timeouts 也抓進來——多一支 query 就是分析頁每次進頁都多打一次 API，
+    // 為了一個沒人在看的欄位付這個成本不划算。
     [],
     isFinished,
   );

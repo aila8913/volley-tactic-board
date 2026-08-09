@@ -379,8 +379,12 @@ export function reconstructRecording(
   events: MatchEvent[],
   subs: Substitution[],
   // 整場所有局的先發（GET /matches/:id/lineups）。issue #115：reload 後把計分表的先發快照
-  // 讀回來，才不會又退回去讀（可能被污染的）全域 store。選填、預設空陣列——分析頁
-  // （useMatchRecording）跟舊測試不帶它也能用，只是重建出來的 lineup 會是 null。
+  // 讀回來，才不會又退回去讀（可能被污染的）全域 store。選填、預設空陣列，讓舊測試不帶它
+  // 也能用，只是重建出來的每一局 lineup 都會是 null。
+  //
+  // ⚠️ 這個預設值咬過人一次（#349 Bug B）：分析頁的 useMatchRecording 原本沒傳 lineups，
+  // 於是它右欄的「場上站位」永遠是空的，而且**完全不會報錯**——沒傳跟「這場真的沒排先發」
+  // 在型別上長得一模一樣。新增呼叫端時，先確認畫面用不用得到先發快照，別靠預設值。
   lineups: Lineup[] = [],
   // 整場所有暫停紀錄（GET /matches/:id/timeouts，issue #44）。同樣選填、預設空陣列，讓
   // 分析頁與舊測試不帶它也能用（重建出來的 timeouts / timeoutCountsHistory 會是空的）。
