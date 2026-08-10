@@ -10,15 +10,12 @@ import {
 import type { MatchPlayer } from "../types/match";
 import type { LineupSnapshot } from "../types/scoresheet";
 
-// 「六輪都沒派自由球員」的空白值。模組層常數＋每次要改時複製一份，理由跟 emptyPerMatch 一樣。
-const NO_LIBERO_ZONES: (number | null)[] = [null, null, null, null, null, null];
-
 // 一場比賽剛開始（還沒任何站位）的空白狀態。dataByMatch 裡某個 matchId 還不存在時，
 // 各 action 先用這個當基底再套上這次的改動——跟 useScoreSheet 的 getOrInitRecord 同一招。
 const emptyPerMatch = (): PerMatchRotationState => ({
   roster: [],
   lineup: {},
-  liberoZones: NO_LIBERO_ZONES,
+  liberoReplacesPlayerId: null,
   currentRotation: 0,
   startingLiberoId: null,
 });
@@ -56,7 +53,8 @@ interface RotationTableStore {
     referenceRotation?: number,
   ) => void;
   // 把球員從場上移除（右鍵刪除、3×2 格子的「×」按鈕用這個）。一般球員拿掉就是六輪都拿掉
-  // （先發只有一份）；自由球員只拿掉目前這一輪，其他輪次各自獨立。
+  // （先發只有一份）；自由球員拿掉就是「不頂替任何人」＝整場下場（#326：L 沒有各輪獨立的
+  // 站位可以只清一輪）。
   removePlayerFromCourt: (matchId: string, playerId: string) => void;
   // 清空這場的站位（RotationTable「重置站位」按鈕）。
   //
@@ -72,7 +70,7 @@ interface RotationTableStore {
   //
   // #231 PR3 之後這個 action 幾乎變成一行賦值：以前它要把一份號位快照「展開」成六輪座標
   // （兩種表示法之間的翻譯），現在 store 存的本來就是同一種 LineupSnapshot，不用翻譯了。
-  // liberoZones 一律清空：LineupSnapshot 本來就不記自由球員（見 types/scoresheet.ts），
+  // 自由球員的頂替狀態一律清空：LineupSnapshot 本來就不記自由球員（見 types/scoresheet.ts），
   // 這裡等於是「先發只排六個非自由球員」，L 上場另外走 placePlayerOnCourt。
   setLineupFromSnapshot: (matchId: string, lineup: LineupSnapshot) => void;
 
@@ -133,16 +131,21 @@ export const useRotationTable = create<RotationTableStore>()(
             //（Maximum update depth exceeded）。（見 memory：zustand stable ref in effect actions）
             const lineup = filterLineupToRoster(m.lineup, roster);
 
-            // 先發 L 被移出名單時，他在各輪的站位也要跟著撤掉（否則會留下一個指向不存在
-            // 球員的 zone，畫面上是空的、但那格判定成有人）。同樣遵守「沒清到就不換參照」。
-            const liberoGone = !currentStillExists && m.liberoZones.some((z) => z !== null);
-            const liberoZones = liberoGone ? NO_LIBERO_ZONES : m.liberoZones;
+            // 頂替狀態也要跟著名單清乾淨，兩種情況都算「這次替換不再成立」：
+            //   (a) 先發 L 被移出名單——場上那位 L 不存在了
+            //   (b) **被頂替的那個人**被移出名單——沒有人被頂替，L 也就沒有位置可站
+            // (b) 是換表示法之後才需要顧的：舊模型記的是號位，人被刪掉頂多讓那格空著；新
+            // 模型記的是人，指向已刪除球員的 id 會讓 deriveRotation 每次都算出「L 不在場上」，
+            // 畫面雖然沒錯，但 store 裡留著一個永遠不會成真的殘留值。
+            const replacedStillExists = roster.some((p) => p.id === m.liberoReplacesPlayerId);
+            const liberoReplacesPlayerId =
+              currentStillExists && replacedStillExists ? m.liberoReplacesPlayerId : null;
 
             return {
               ...m,
               roster,
               lineup,
-              liberoZones,
+              liberoReplacesPlayerId,
               startingLiberoId: currentStillExists ? m.startingLiberoId : (liberos[0]?.id ?? null),
             };
           }),
@@ -155,20 +158,27 @@ export const useRotationTable = create<RotationTableStore>()(
             const isLibero = player?.role === "L";
 
             // ── 自由球員邏輯 ──────────────────────────────────────────────────────
-            // 自由球員不輪轉（每個輪次的位置是獨立記錄的），
-            // 只能站後排（1/5/6 號位），一次只能有一個 L 在場上。
+            // 自由球員不輪轉、只能站後排（1/5/6 號位），一次只能有一個 L 在場上。
+            //
+            // #326 之後，「把 L 拖到某一格」記下來的不是那一格，而是**那一格當下站著誰**：
+            // 拖曳這個動作的真實語意是「讓 L 頂替這個人」，格子只是使用者指到那個人的方式。
             if (isLibero) {
               if (!BACK_ROW_ZONES.has(zone)) return m; // 前排拒絕放置
 
-              const r = m.currentRotation;
-              const liberoZones = [...m.liberoZones];
-              liberoZones[r] = zone;
+              // zone 是「使用者在目前這一輪看到的號位」，lineup 的 key 是起始號位，
+              // 所以要先換算回去才問得出「這一格站的是誰」（跟下面一般球員那段同一條換算）。
+              const startZone = toStartZone(zone, m.currentRotation);
+              const target = m.lineup[startZone];
+              // 那格還沒人＝沒有可頂替的對象，這次拖曳無法表示成任何狀態，直接忽略。
+              // 這跟上面「前排拒絕放置」是同一類把關：新模型只認得「L 頂替某個人」，
+              // 「L 站在一個空格上」在規則上本來就不存在（他是替換上場的，不佔輪轉序）。
+              if (target === undefined) return m;
+              if (m.liberoReplacesPlayerId === target && m.startingLiberoId === playerId) return m;
+
               // 不管這個 L 是從備位區拖上場、還是直接從名單拖上場，
               // 都要同步把它設成 startingLiberoId——這樣每場只會追蹤一個「先發」L，
               // 備位區才不會跟場上狀態脫節（這正是 issue #14 bug 1 的根本原因）。
-              // 新表示法下這條同步不只是「順手維護」：liberoZones 只記格子不記人，
-              // 「場上那位 L 是誰」的答案從此只有 startingLiberoId 一個來源。
-              return { ...m, liberoZones, startingLiberoId: playerId };
+              return { ...m, liberoReplacesPlayerId: target, startingLiberoId: playerId };
             }
 
             // ── 一般球員邏輯 ──────────────────────────────────────────────────────
@@ -188,24 +198,39 @@ export const useRotationTable = create<RotationTableStore>()(
             // lineup 裡本來就沒有 L。舊版那個 filter 正是「一般球員可以跟 L 疊在同一格」
             // 這個 bug 的成因（L 站的格子在濾掉之後看起來是空的，不觸發互換也不觸發擠位）。
             // 新表示法下「那格有沒有人」只有一個答案，bug 自然消失。
-            return { ...m, lineup: assignPlayerToZone(m.lineup, startZone, playerId) };
+            const lineup = assignPlayerToZone(m.lineup, startZone, playerId);
+
+            // 擠位有可能把「正被 L 頂替的那個人」整個擠出先發（assignPlayerToZone 的語意：
+            // 板凳球員佔了誰的格子，誰就直接離場）。人都不在場上了，那次頂替自然不成立——
+            // 清成 null 而不是改成「頂替新來的那個人」，是 #326 那條規則的直接後果：系統不
+            // 替教練猜下一個頂替對象，寧可讓 L 回到場外等他自己再派一次。
+            const replacedStillOnCourt = Object.values(lineup).includes(
+              m.liberoReplacesPlayerId ?? "",
+            );
+            return {
+              ...m,
+              lineup,
+              liberoReplacesPlayerId: replacedStillOnCourt ? m.liberoReplacesPlayerId : null,
+            };
           }),
         ),
 
       // 右鍵刪除球員：
-      // - 自由球員（L）：只移除目前輪次。被他替換下場的人會自動回到場上——那個人本來就
-      //   一直在 lineup 裡，只是渲染時被 L 蓋住，蓋子拿掉就露出來了（舊版要靠
-      //   liberoReplacement 手動還原，那份副本現在不存在了）。
-      // - 一般球員：從 lineup 移除，等於六輪一起消失（先發只有一份）。
+      // - 自由球員（L）：解除頂替＝L 下場。被他替換下場的人會自動回到場上——那個人本來就
+      //   一直在 lineup 裡，只是渲染時被 L 蓋住，蓋子拿掉就露出來了。
+      //   ⚠️ 行為變更（#326）：舊版是「只清目前這一輪」，那件事在新表示法下不再可表示——
+      //   L 沒有各輪獨立的站位可以分開清。而且舊行為本來就跟規則對不上：教練把 L 換下場是
+      //   一個當下的動作，不是「只有第 3 輪他不上場」。
+      // - 一般球員：從 lineup 移除，等於六輪一起消失（先發只有一份）。順手檢查他是不是正
+      //   被 L 頂替著——是的話那次頂替也不成立了（人都不在場上了，沒有誰可以頂替）。
       removePlayerFromCourt: (matchId, playerId) =>
         set((state) =>
           updateMatch(state, matchId, (m) => {
             const player = m.roster.find((p) => p.id === playerId);
 
             if (player?.role === "L") {
-              const liberoZones = [...m.liberoZones];
-              liberoZones[m.currentRotation] = null;
-              return { ...m, liberoZones };
+              if (m.liberoReplacesPlayerId === null) return m;
+              return { ...m, liberoReplacesPlayerId: null };
             }
 
             const lineup = Object.fromEntries(
@@ -213,7 +238,12 @@ export const useRotationTable = create<RotationTableStore>()(
                 .filter(([, pid]) => pid !== playerId)
                 .map(([zoneStr, pid]) => [Number(zoneStr), pid]),
             );
-            return { ...m, lineup };
+            return {
+              ...m,
+              lineup,
+              liberoReplacesPlayerId:
+                m.liberoReplacesPlayerId === playerId ? null : m.liberoReplacesPlayerId,
+            };
           }),
         ),
 
@@ -222,7 +252,7 @@ export const useRotationTable = create<RotationTableStore>()(
           updateMatch(state, matchId, (m) => ({
             ...m,
             lineup: {},
-            liberoZones: NO_LIBERO_ZONES,
+            liberoReplacesPlayerId: null,
           })),
         ),
 
@@ -233,7 +263,7 @@ export const useRotationTable = create<RotationTableStore>()(
           updateMatch(state, matchId, (m) => ({
             ...m,
             lineup,
-            liberoZones: NO_LIBERO_ZONES,
+            liberoReplacesPlayerId: null,
           })),
         ),
     }),

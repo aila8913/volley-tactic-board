@@ -134,7 +134,7 @@ export function useTacticsBoardController(matchId: string | undefined) {
     const r = rt?.currentRotation ?? 0;
     // 這一輪的座標改用 deriveRotation 現算（#231 PR3：store 不再存六輪座標）。
     const positions = rt
-      ? deriveRotation(rt.lineup, rt.startingLiberoId, rt.liberoZones[r] ?? null, r).positions
+      ? deriveRotation(rt.lineup, rt.startingLiberoId, rt.liberoReplacesPlayerId, r).positions
       : [];
     const roster = rt?.roster ?? [];
     return captureFromRotation(positions, roster, { matchId: matchId ?? "", rotation: r });

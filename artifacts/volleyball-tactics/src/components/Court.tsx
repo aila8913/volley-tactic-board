@@ -15,7 +15,6 @@ import { COURT_W, COURT_H, fromScreen, toNorm, rowOf } from "../lib/courtGeometr
 // 這一場還沒有分片資料時用的空白預設值（模組層、參照穩定，避免每 render 換新陣列造成重繪）。
 const EMPTY_ROSTER: MatchPlayer[] = [];
 const EMPTY_LINEUP: LineupSnapshot = {};
-const EMPTY_LIBERO_ZONES: (number | null)[] = [null, null, null, null, null, null];
 
 // 球場「真正比賽用」的座標範圍，永遠固定 0~100 / 0~200——格子吸附、界外判斷、
 // 6 個站位格全部都認這組數字，不會因為旁邊要多留 L 備位空間就跟著變動。
@@ -74,7 +73,7 @@ export default function Court() {
   const { id: matchId } = useParams<{ id: string }>();
   const rotationData = useRotationTable((s) => (matchId ? s.dataByMatch[matchId] : undefined));
   const lineup = rotationData?.lineup ?? EMPTY_LINEUP;
-  const liberoZones = rotationData?.liberoZones ?? EMPTY_LIBERO_ZONES;
+  const liberoReplacesPlayerId = rotationData?.liberoReplacesPlayerId ?? null;
   const currentRotation = rotationData?.currentRotation ?? 0;
   const roster = rotationData?.roster ?? EMPTY_ROSTER;
   const startingLiberoId = rotationData?.startingLiberoId ?? null;
@@ -140,19 +139,13 @@ export default function Court() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [matchId, undo, redo]);
 
-  // 這一輪誰站哪：#231 PR3 之後不再從 store 撈現成的座標陣列，而是從「一份先發 + L 站哪格」
+  // 這一輪誰站哪：#231 PR3 之後不再從 store 撈現成的座標陣列，而是從「一份先發 + L 頂替誰」
   // 現算（deriveRotation）。用 useMemo 包起來是因為下面 map 出來的 PlayerNode 會吃這些物件，
   // 每次 render 重算會產生一批新物件、讓整排球員白白重繪；依賴項都是 store 裡參照穩定的
   // slice，只有真的改了站位才會重算。
   const rotationPositions = useMemo(
-    () =>
-      deriveRotation(
-        lineup,
-        startingLiberoId,
-        liberoZones[currentRotation] ?? null,
-        currentRotation,
-      ),
-    [lineup, startingLiberoId, liberoZones, currentRotation],
+    () => deriveRotation(lineup, startingLiberoId, liberoReplacesPlayerId, currentRotation),
+    [lineup, startingLiberoId, liberoReplacesPlayerId, currentRotation],
   );
 
   // 螢幕座標→SVG 座標的換算（issue #227 收斂到 lib/courtGeometry.ts 的 fromScreen，

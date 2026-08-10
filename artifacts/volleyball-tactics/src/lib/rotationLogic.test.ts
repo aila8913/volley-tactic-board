@@ -176,7 +176,7 @@ describe("removePlayerFromZone", () => {
   });
 });
 
-describe("deriveRotation（#231 PR3a：從一份先發現算某一輪的站位）", () => {
+describe("deriveRotation（#231 PR3a 建立；#326 第三個參數改成「L 頂替誰」）", () => {
   const LINEUP: LineupSnapshot = { 1: "p1", 2: "p2", 3: "p3", 4: "p4", 5: "p5", 6: "p6" };
 
   it("沒派 L 時＝lineupToPositions 的結果，liberoReplacement 為 null", () => {
@@ -185,14 +185,14 @@ describe("deriveRotation（#231 PR3a：從一份先發現算某一輪的站位�
     expect(rot.liberoReplacement).toBeNull();
   });
 
-  it("指定了 L 但 liberoZone 是 null（L 這一輪沒上場）→ 一樣不套替換", () => {
+  it("指定了 L 但沒有頂替對象（L 沒上場）→ 一樣不套替換", () => {
     const rot = deriveRotation(LINEUP, "l1", null, 0);
     expect(rot.positions.map((p) => p.playerId)).not.toContain("l1");
     expect(rot.liberoReplacement).toBeNull();
   });
 
-  it("L 站的那格：原本的人被替下，L 站上去，場上仍是 6 人", () => {
-    const rot = deriveRotation(LINEUP, "l1", 1, 0);
+  it("被頂替者在後排：他被替下，L 站上他的格子，場上仍是 6 人", () => {
+    const rot = deriveRotation(LINEUP, "l1", "p1", 0);
     const ids = rot.positions.map((p) => p.playerId);
     expect(rot.positions).toHaveLength(6);
     expect(ids).toContain("l1");
@@ -203,30 +203,34 @@ describe("deriveRotation（#231 PR3a：從一份先發現算某一輪的站位�
     });
   });
 
-  it("liberoZone 是「當下那一輪的號位」，不跟著輪轉換算——被替下的人隨輪次不同", () => {
-    // 第 0 輪站 1 號位的是 p1；轉一輪之後，落在 1 號位的是原本站 2 號位的 p2
-    //（shiftSequence 1→6→5→4→3→2，2 號位的人轉一格會到 1 號位）。
-    // L 兩輪都站 1 號位（他不輪轉），所以被他蓋住的人跟著換——這正是「被替換者可推導、
-    // 不需要另外存一份」的具體表現。
-    expect(deriveRotation(LINEUP, "l1", 1, 0).liberoReplacement?.replacedPosition.playerId).toBe(
-      "p1",
-    );
-    expect(deriveRotation(LINEUP, "l1", 1, 1).liberoReplacement?.replacedPosition.playerId).toBe(
-      "p2",
-    );
-    // 兩輪 L 本人的座標都固定在 1 號位。
-    for (const r of [0, 1]) {
-      const rot = deriveRotation(LINEUP, "l1", 1, r);
-      expect(rot.positions.find((p) => p.playerId === "l1")).toEqual({
-        playerId: "l1",
-        ...getZoneCoords(1),
-      });
-    }
+  it("L 的號位是推導出來的：頂替對象不變，L 跟著他一起換格子", () => {
+    // p1 第 0 輪站 1 號位，轉一輪後走到 6 號位（shiftSequence 1→6→5→4→3→2）。
+    // 頂替關係沒變，所以 L 也從 1 號位跟到 6 號位——這正是 #326 的重點：使用者只決定
+    // 「頂替誰」一件事，「站哪格」是每一輪各自算出來的。
+    expect(deriveRotation(LINEUP, "l1", "p1", 0).positions).toContainEqual({
+      playerId: "l1",
+      ...getZoneCoords(1),
+    });
+    expect(deriveRotation(LINEUP, "l1", "p1", 1).positions).toContainEqual({
+      playerId: "l1",
+      ...getZoneCoords(6),
+    });
   });
 
-  it("L 站的那格本來沒人（先發還沒排滿）→ 直接站上去，liberoReplacement 為 null", () => {
-    const rot = deriveRotation({ 2: "p2" }, "l1", 1, 0);
-    expect(rot.positions.map((p) => p.playerId).sort()).toEqual(["l1", "p2"]);
+  it("⚠️ 被頂替者輪到前排 → L 不在場上，被頂替者自己站回去（#326 的核心規則）", () => {
+    // 轉 5 輪之後 p1 落在 2 號位（前排）：1 →6 →5 →4 →3 →2。L 不能跟著輪到前排，所以
+    // 他下場、留在場外——而且系統不會自動改去頂替後排的別人（那條啟發式已被推翻）。
+    const rot = deriveRotation(LINEUP, "l1", "p1", 5);
+    const ids = rot.positions.map((p) => p.playerId);
+    expect(ids).not.toContain("l1");
+    expect(ids).toContain("p1"); // 被頂替的人回到場上
+    expect(rot.positions).toHaveLength(6);
+    expect(rot.liberoReplacement).toBeNull();
+  });
+
+  it("頂替對象根本不在先發裡（名單被改過的殘留）→ 當作沒派 L，六人照站", () => {
+    const rot = deriveRotation({ 2: "p2" }, "l1", "ghost", 0);
+    expect(rot.positions.map((p) => p.playerId)).toEqual(["p2"]);
     expect(rot.liberoReplacement).toBeNull();
   });
 });
