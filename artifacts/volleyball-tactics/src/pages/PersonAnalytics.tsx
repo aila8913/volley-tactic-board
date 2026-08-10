@@ -124,10 +124,10 @@ export default function PersonAnalytics() {
               以為「怎麼沒有得失分」是系統壞掉。 */}
           {personId !== undefined && (
             <p className="rounded-xl border border-white/[0.1] bg-white/[0.03] px-3 py-2 text-xs text-[#a9b096]">
-              逐球得失分統計（例如這個人得了幾分、失了幾分）需要等
+              逐球得失分統計（例如這個人得了幾分、失了幾分）需要
               <code className="mx-1 rounded bg-white/[0.08] px-1 py-0.5">events.outcome</code>
-              補齊（#51）之後才能提供，目前記錄流程還沒有寫入這個欄位，所以這裡只呈現出賽場數、
-              背號/位置歷程、觸球動作次數、先發局數——都是目前資料真的算得出來的部分。
+              這個欄位。記錄流程現在已經會寫入它（#51），但這頁的呈現還沒接上，所以這裡目前
+              只呈現出賽場數、背號/位置歷程、觸球動作次數、先發局數——都是目前資料真的算得出來的部分。
             </p>
           )}
 

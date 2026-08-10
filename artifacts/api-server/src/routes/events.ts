@@ -110,6 +110,12 @@ router.post(
           note: body.note ?? null,
           videoTimestamp: body.videoTimestamp ?? null,
           source: body.source,
+          // 這球怎麼終結（#51 第一塊）。跟上面那些欄位一樣是 nullable + `?? null`，但漏寫的
+          // 後果比較陰險：前端已經在 body 裡送 outcome 了，這裡少列一欄不會有任何型別錯誤，
+          // event 照樣寫得進去，只是 outcome 永遠是 null——也就是「四道 CI 全綠但功能沒生效」。
+          // 這種逐欄列舉的寫法（而不是 `...body`）是刻意的：body 是使用者送來的資料，全部展開
+          // 會讓「路徑決定的欄位」（rallyId）有被 body 蓋掉的風險。代價就是新增欄位時兩邊都要記得改。
+          outcome: body.outcome ?? null,
         },
         eq(eventsTable.rallyId, params.rallyId),
       );
@@ -151,6 +157,8 @@ router.patch(
           ...(body.tags !== undefined && { tags: body.tags }),
           ...(body.note !== undefined && { note: body.note }),
           ...(body.videoTimestamp !== undefined && { videoTimestamp: body.videoTimestamp }),
+          // 進階版賽後補填時會用這支把 outcome 從 null 改成實際結果（#51 第一塊）。
+          ...(body.outcome !== undefined && { outcome: body.outcome }),
         })
         .where(eq(eventsTable.id, params.eventId))
         .returning();

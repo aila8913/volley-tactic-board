@@ -117,6 +117,18 @@ export function pointRecordToRally(
 // playerId 只有我方球員對得到；對手(全體)沒有球員 → null。前後端球員 id 現在都是字串 uuid
 // （見 lib/db/src/schema/players.ts 的改動），不用再轉型別，undefined 轉成 null 即可。
 // ballType/quality/座標都是進階版（賽後精確記）才填，簡易版一律留空。
+//
+// outcome（#51 第一塊、docs/event-grammar-spec.md 決策 7）：以「執行這球的一方」為基準，不是
+// 以我方為基準——point.touchedBy.side 是誰做了這顆決定球，point.side 是這分誰贏。兩者相同代表
+// 「動作方自己贏了這分」→ point；不同代表「動作方輸了這分」（可能是被得分、也可能是自己失誤）
+// → loss。這跟上面的 resolveScoringSide()（從「動作方＋win/lose」反推「這分算誰的」）互為反函式：
+// resolveScoringSide 是 UI 收得分/失分選擇時「往前」推出 rally.winner，這裡是「往後」用已知的
+// touchedBy.side/point.side 重新比對出 outcome，兩者的比較邏輯一體兩面。
+function resolveOutcome(point: PointRecord): "point" | "loss" | null {
+  if (!point.touchedBy) return null;
+  return point.touchedBy.side === point.side ? "point" : "loss";
+}
+
 export function pointRecordToEvent(point: PointRecord, sequence: number): NewEvent | null {
   if (!point.action || !point.touchedBy) return null;
   return {
@@ -125,6 +137,7 @@ export function pointRecordToEvent(point: PointRecord, sequence: number): NewEve
     playerId: point.touchedBy.playerId ?? null,
     action: point.action,
     source: "live",
+    outcome: resolveOutcome(point),
   };
 }
 

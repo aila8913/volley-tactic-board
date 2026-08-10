@@ -909,8 +909,10 @@ paths:
   # M2 分析頁「各輪次得失分」（#65）。跟上面 /matches/{matchId}/* 那些「一資源一 CRUD」的路徑
   # 不同，這支是純讀的報表型聚合：把一場比賽底下所有 rally 依 homeRotation 分組算得失分，
   # 不對應單一資料表，所以獨立掛在 /analysis 底下、用專屬的 analysis tag，不硬塞進 matches。
-  # 只用 rallies.winner/homeRotation 算，不碰 events——events.outcome 目前恆為 null
-  # （live 記錄路徑 pointRecordToEvent 沒有寫這欄），攻擊細分統計留待之後。
+  # 只用 rallies.winner/homeRotation 算，不碰 events——events.outcome 的寫入路徑已補上
+  # （#51 第一塊，pointRecordToEvent 已填這欄），舊資料要各環境各跑一次
+  # `scripts/src/backfill-event-outcomes.ts` 才會有值；分析端的呈現尚未接上，
+  # 攻擊細分統計留待之後。
   /analysis/matches/{matchId}/rotations:
     parameters:
       - $ref: "#/components/parameters/MatchId"
@@ -954,9 +956,10 @@ paths:
   # 各場背號/位置、觸球動作分布、先發局數全部彙整成一份，讓 people 這層「跨場身分」真的有地方
   # 被用到（否則 #212 建的 people CRUD 只是白建一張表）。
   #
-  # 刻意「資料真的支援的才做」：events.outcome（得分/失分）目前恆為 null（見上面 /rotations
-  # 的長註解，#51 待補），所以這裡不提供「這個人得幾分/失幾分」這種戰績類統計，只回傳
-  # action 次數分布這種真正有資料撐得住的欄位——不要用近似值假裝出精細數據。
+  # 刻意「資料真的支援的才做」：events.outcome（得分/失分）的寫入路徑已補上（#51 第一塊，
+  # 見上面 /rotations 的長註解），但舊資料要跑回填腳本才有值、分析端的呈現也還沒接上，
+  # 所以這裡暫時還不提供「這個人得幾分/失幾分」這種戰績類統計，只回傳 action 次數分布
+  # 這種真正有資料撐得住的欄位——不要用近似值假裝出精細數據。
   /analysis/people/{personId}:
     parameters:
       - $ref: "#/components/parameters/PersonId"
@@ -1645,8 +1648,9 @@ components:
 
     # GET /analysis/people/{personId} 的一列：這個人各種觸球動作（發/接/舉/攻/攔/防）的次數，
     # 跨所有場次加總。grain 是 event（見後端路由註解），純粹數 events.action 的分布，
-    # 不含品質/得失分——那些欄位要嘛沒資料（outcome 恆 null）、要嘛跟這頁「一覽全貌」的
-    # 定位不符，留給單場分析頁（MatchAnalytics.tsx）做更細的攻防解讀。
+    # 不含品質/得失分——outcome 的寫入路徑已補上（#51 第一塊），但舊資料要跑回填腳本才有值、
+    # 分析端呈現也還沒接上，且這類欄位跟這頁「一覽全貌」的定位不符，留給單場分析頁
+    # （MatchAnalytics.tsx）做更細的攻防解讀。
     PersonActionCount:
       type: object
       properties:
@@ -1912,6 +1916,15 @@ components:
       type: string
       enum: [home, away]
 
+    # 這一球「怎麼終結」，以執行這球的一方（EventSide）為基準去看，不是以我方為基準：
+    #   outcome = (event.side === rally.winner) ? "point" : "loss"
+    # 例：我方扣球被攔死 → side=home、winner=away → loss；對手攔網得分 → side=away、winner=away
+    # → point。in_play（球續）只會出現在進階版逐球記錄；簡易版一 rally 只記一顆決定球，
+    # 所以簡易版的 outcome 永遠是 point 或 loss。見 docs/event-grammar-spec.md 決策 7。
+    EventOutcome:
+      type: string
+      enum: [point, loss, in_play]
+
     MatchEvent:
       type: object
       properties:
@@ -1967,6 +1980,10 @@ components:
           nullable: true
         source:
           $ref: "#/components/schemas/EventSource"
+        # 這球怎麼終結，見 EventOutcome。nullable：舊資料與「沒看到」路徑可能沒有值。
+        outcome:
+          $ref: "#/components/schemas/EventOutcome"
+          nullable: true
       required: [id, rallyId, sequence, side, action, tags, source]
 
     NewEvent:
@@ -2015,6 +2032,9 @@ components:
           nullable: true
         source:
           $ref: "#/components/schemas/EventSource"
+        outcome:
+          $ref: "#/components/schemas/EventOutcome"
+          nullable: true
       required: [sequence, side, action, source]
 
     Tactic:
@@ -2095,4 +2115,8 @@ components:
           nullable: true
         videoTimestamp:
           type: integer
+          nullable: true
+        # 進階版賽後補填時，會用這支把 outcome 從 null 改成實際結果（#51 第一塊）。
+        outcome:
+          $ref: "#/components/schemas/EventOutcome"
           nullable: true

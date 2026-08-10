@@ -467,7 +467,8 @@ export const ListMatchEventsResponseItem = zod.object({
   "tags": zod.array(zod.string()),
   "note": zod.string().nullish(),
   "videoTimestamp": zod.number().nullish(),
-  "source": zod.enum(['live', 'review'])
+  "source": zod.enum(['live', 'review']),
+  "outcome": zod.enum(['point', 'loss', 'in_play']).nullish()
 })
 export const ListMatchEventsResponse = zod.array(ListMatchEventsResponseItem)
 
@@ -533,7 +534,8 @@ export const ListEventsResponseItem = zod.object({
   "tags": zod.array(zod.string()),
   "note": zod.string().nullish(),
   "videoTimestamp": zod.number().nullish(),
-  "source": zod.enum(['live', 'review'])
+  "source": zod.enum(['live', 'review']),
+  "outcome": zod.enum(['point', 'loss', 'in_play']).nullish()
 })
 export const ListEventsResponse = zod.array(ListEventsResponseItem)
 
@@ -560,7 +562,8 @@ export const CreateEventBody = zod.object({
   "tags": zod.array(zod.string()).optional(),
   "note": zod.string().nullish(),
   "videoTimestamp": zod.number().nullish(),
-  "source": zod.enum(['live', 'review'])
+  "source": zod.enum(['live', 'review']),
+  "outcome": zod.enum(['point', 'loss', 'in_play']).nullish()
 })
 
 
@@ -799,7 +802,8 @@ export const UpdateEventBody = zod.object({
   "toY": zod.number().optional(),
   "tags": zod.array(zod.string()).optional(),
   "note": zod.string().nullish(),
-  "videoTimestamp": zod.number().nullish()
+  "videoTimestamp": zod.number().nullish(),
+  "outcome": zod.enum(['point', 'loss', 'in_play']).nullish()
 })
 
 export const UpdateEventResponse = zod.object({
@@ -818,7 +822,8 @@ export const UpdateEventResponse = zod.object({
   "tags": zod.array(zod.string()),
   "note": zod.string().nullish(),
   "videoTimestamp": zod.number().nullish(),
-  "source": zod.enum(['live', 'review'])
+  "source": zod.enum(['live', 'review']),
+  "outcome": zod.enum(['point', 'loss', 'in_play']).nullish()
 })
 
 

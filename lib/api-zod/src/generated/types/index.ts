@@ -10,6 +10,7 @@ export * from './ballType';
 export * from './currentUser';
 export * from './demoDataStatus';
 export * from './eventAction';
+export * from './eventOutcome';
 export * from './eventSide';
 export * from './eventSource';
 export * from './healthStatus';

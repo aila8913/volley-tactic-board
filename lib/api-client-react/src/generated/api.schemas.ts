@@ -428,6 +428,15 @@ export const EventSide = {
   away: 'away',
 } as const;
 
+export type EventOutcome = typeof EventOutcome[keyof typeof EventOutcome];
+
+
+export const EventOutcome = {
+  point: 'point',
+  loss: 'loss',
+  in_play: 'in_play',
+} as const;
+
 export interface MatchEvent {
   id: string;
   rallyId: string;
@@ -445,6 +454,7 @@ export interface MatchEvent {
   note?: string | null;
   videoTimestamp?: number | null;
   source: EventSource;
+  outcome?: EventOutcome | null;
 }
 
 export interface NewEvent {
@@ -463,6 +473,7 @@ export interface NewEvent {
   note?: string | null;
   videoTimestamp?: number | null;
   source: EventSource;
+  outcome?: EventOutcome | null;
 }
 
 export type TacticData = { [key: string]: unknown };
@@ -503,6 +514,7 @@ export interface UpdateEvent {
   tags?: string[];
   note?: string | null;
   videoTimestamp?: number | null;
+  outcome?: EventOutcome | null;
 }
 
 export type ListTacticsParams = {

@@ -454,6 +454,11 @@ async function insertSetWithRallies(
         playerId: s.eventSpec.playerId,
         action: s.eventSpec.action,
         source: "live" as const,
+        // outcome（#51 第一塊）：跟 pointRecordToEvent 同一條推導式，以執行方為基準。
+        // 示範資料是新使用者第一次看到這個 app 的樣子——如果只有「之後自己記的球」有
+        // outcome、示範比賽卻沒有，使用者一載入示範資料，分析頁的統計看起來仍然是空的，
+        // 等於示範資料在展示一個「壞掉」的產品。所以這裡也要照同一條規則補上。
+        outcome: s.eventSpec.side === s.rally.winner ? ("point" as const) : ("loss" as const),
       },
     ];
   });
