@@ -26,9 +26,9 @@
 同批把計分板改成一鍵記分。新開 #320（背景強度微調）／#322／#323／#324；#134 Track B 標記為已由設計
 系統接手，#21／#19 過時的 body 一併修正。\_
 
-\_Last updated: 2026-08-10 (aila) — **M3.5 收完關閉**（#304／#361 歷史政策收斂＋四個 undo bug、
-#352 `visibleSetCount`），接著 **#168 第一批：前端互動行為終於測得到**（PR #366，該張仍 open，
-剩 `didMove` 手勢與 `Court` 座標兩塊）。下一階段 M4，#21/#51/#99 在 Project 的 Todo。\_
+\_Last updated: 2026-08-10 (aila) — **M3.5 收完關閉**（#304／#361、#352），**#168 第一批**
+（PR #366），並開始 **M4：`events.outcome` 從「有欄位沒人寫」變成真的有值**（PR #365，#51 第一塊，
+本機與正式站都已回填）。#21/#51/#99 在 Project 的 Todo。\_
 
 ## Current state
 
@@ -86,6 +86,32 @@ lives in git log + the issues named).
   - **還在盲區的兩塊**（#168 留著就是為了它們，範圍已寫進該張留言）：`Markers.tsx`／`DefenseRange.tsx`
     的 `didMove` 手勢守衛、`Court.tsx`／`ScoreSheetCourt.tsx` 的座標數學與拖曳。兩塊都是指標事件
     密集區，八成會再撞上上面那個 jsdom 坑。
+- **`events.outcome` 從「有欄位沒人寫」變成真的有值（#51 第一塊，08-10 交付 PR #365；M4 的第一步）。**
+  這欄位早在 #102 就建好了（`pgEnum("event_outcome", ["point","loss","in_play"])`），但兩年來
+  沒有任何寫入路徑填它——即時記錄與示範資料都留 null。這張把地基補起來，**刻意不做「呈現」**。
+  - **語意釐清（本次真正的智力工作）**：schema 的舊註解寫「point ＝ **我方**因這球得分」，跟
+    `docs/event-grammar-spec.md` 決策 7 的「可由 `rallies.winner` ＋ `events.side` 推導」互相矛盾
+    ——若真是我方為基準，`winner` 一個欄位就夠了，`side` 根本不必存在。正解是**以執行這球的一方
+    為基準**：`outcome = (events.side === rallies.winner) ? "point" : "loss"`。我方扣球被攔死＝
+    `side=home, winner=away → loss`。簡易版一個 rally 只記一顆決定球，所以永遠不會產生 `in_play`。
+    schema 註解已改正。三處落點共用同一條推導式：`scoreSheetMapping.ts` 的 `resolveOutcome()`、
+    `demoData.ts`、回填腳本。
+  - ⚠️ **踩到一個型別與 CI 都擋不住的洞**：`routes/events.ts` 的 POST/PATCH 是**逐欄列舉**
+    （刻意的——`...body` 會讓路徑決定的 `rallyId` 有被蓋掉的風險），而漏列一個 nullable 欄位
+    **不是型別錯誤**。前端已經在送 `outcome`、後端沒列它，結果是 event 照樣寫得進去、值永遠是
+    null——**四道 CI 全綠、功能沒生效**。是靠人工讀 route 抓到的，跟 #350 是同一類（CI 綠 ≠ 行為
+    驗證）。**結構缺口本身已開成 #368**（M7），三個候選修法寫在票裡；逐欄列舉本身是刻意的
+    （防 `...body` 蓋掉 `rallyId`），別為了解那張票把它改成展開。
+  - **驗收走的是使用者實際那條路**（#359 記的判準）：建比賽 → 排 6 人先發 → 球場上畫線到 A6 →
+    選攻擊 → 選失分，然後查 DB 得到 `side=home | winner=away | outcome=loss`。沒有用 curl 造
+    剛好合用的資料。測試數 48 → 53（四種 side×winner 組合 ＋「沒看到」回 null）。
+  - **一次性回填腳本 `scripts/src/backfill-event-outcomes.ts`**（比照 `backfill-person-ids.ts`）：
+    預設 dry-run、`--apply` 才寫、白名單條件 `isNull(outcome)`、包 transaction、天然冪等。
+    **本機（122 筆：99 point／23 loss）與正式站都已跑完**，兩邊歷史資料不再有 null outcome。
+    正式站要用 Neon 的 **Direct** 連線字串（pooled 會靜靜卡在「Pulling schema…」）；這次不需要
+    `drizzle-kit push`（schema 沒動）。腳本留著是為了下一個環境，不是還有事沒做完。
+  - **「呈現」刻意留著**：`PersonAnalytics` 與單場分析頁還沒長出得/失分結構，那需要後端聚合
+    endpoint ＋ 前端 UI。要單獨排一張、還是併進 #21/#51 的進階版介面設計，是 PO 的排期決定。
 - **戰術板場景編輯的歷史政策收斂成一支 helper，順手修掉四個 undo bug（#304／#361，08-10 交付 PR #362）。**
   #304 開票時的說法是「35 個成員裡有三組平行的 add/update/remove 三連，大介面、薄實作」，並問了三個
   問題。查證後的答案值得記，因為結論跟票面直覺相反：
@@ -500,7 +526,9 @@ gh issue list --state open   # 全部
 
 **M4 的三張刻意一起設計、不單張開工**（#51 動作子分類決定 #21 記得出什麼、#21 的球線分布是產品定位
 裡的 wow 點、#99 站位快照同屬 advanced tier），#21／#51 都掛 `needs-plan`。三張已於 08-10 放進
-Project #4 的 Todo 欄。
+Project #4 的 Todo 欄。**08-10 已先切出一塊地基動工**：PO 選了「先落 outcome 地基，再開設計」——
+`events.outcome` 的寫入路徑已補（PR #365，見 Current state），因為它同時是簡易版就需要的東西、
+範圍小且驗得起來，不必等三張的設計會。**設計那一步還沒開始。**
 
 **M1／M2／M1.5／M2.5／M3／M3.5 milestone 皆已關閉。**
 **M3.5「架構深化：可測性與資料流」（軟目標日 8/15）於 08-10 提前收完**：#229 後端合併規則抽純函式、
@@ -549,14 +577,15 @@ M2 雖已收 milestone，衍生待辦仍在各自 issue：**#214**（分析頁�
 不會被封存**（`completedSets` 只在按「下一局」時累積），是資料缺口不只是 UX 缺口。
 
 其餘 open 的技術債與待辦（**#292／#294 已於 08-06 交付並關閉**，見下方 Recently closed）：
-**#168（引入 `@testing-library/react`）** ——現行 `renderToStaticMarkup` 慣例無法觸發事件、讀不到 Radix
-Portal，飛出選單與帶 mutation 副作用的 controller 全在自動測試盲區（#201 的計分頁死結修復就落在這裡，
-僅手動驗證）。**架構掃描把這個盲區量化了，它是 M2.5/M3.5 的實質前置**：每一支刻意抽到 `lib/` 的純函式
-都有測試，每一個握著座標數學、指標事件、輪轉/自由球員規則的元件都沒有（`Court.tsx`、
-`ScoreSheetCourt.tsx`、`useRotationTable.ts` 364 行全部零測試，座標數學部分已隨 #227 抽成
-`lib/courtGeometry.ts` 並補測試，元件本體互動邏輯仍是零測試）。**測試覆蓋的是安全的部分，
-沒覆蓋的是危險的部分。**（**`useRotationTable.ts` 的部分已於 #231 PR1 補上 21 條特徵化測試**，
-`Court.tsx`／`ScoreSheetCourt.tsx` 仍是零測試，等 #168 引入 `@testing-library/react`。）
+**#168（引入 `@testing-library/react`）已於 08-10 交付第一批**（PR #366，見 Current state）——
+`renderToStaticMarkup` 發不出事件、讀不到 Radix Portal 那個限制已經解除，基礎設施在
+`src/test/`。**留下來的判準值得記住：測試覆蓋的是安全的部分，沒覆蓋的是危險的部分**——每一支
+刻意抽到 `lib/` 的純函式都有測試，每一個握著座標數學、指標事件、輪轉/自由球員規則的元件都沒有，
+而那正是 #120／#172／#349 三次 bug 的落點。**仍在盲區的兩塊**：`Markers.tsx`／`DefenseRange.tsx`
+的 `didMove` 手勢守衛、`Court.tsx`／`ScoreSheetCourt.tsx` 的座標數學與拖曳（座標數學已隨 #227 抽成
+`lib/courtGeometry.ts` 並有測試，元件本體的互動仍是零）。**另一塊盲區已開成 #368**（M7）：後端
+route 的逐欄列舉寫入，漏一個 nullable 欄位既不是型別錯誤、也沒有測試會紅（PR #365 實例，見
+Current state）。
 **#231 已於 08-06 全數合併、08-07 關閉**，依賴它的幾條現況：
 **#309**（計分頁站位單一真相）設計面與程式面都不再卡著；
 **#14**（自由球員邏輯 ＋ 先發 UX 統一）**早在 07-02 就已關閉**，08-06 有一則留言補記根因：那個
