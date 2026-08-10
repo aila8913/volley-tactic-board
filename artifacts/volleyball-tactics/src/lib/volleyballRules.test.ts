@@ -3,6 +3,7 @@ import {
   applyRally,
   applyRegularSub,
   splitCompletedAndCurrent,
+  visibleSetCount,
   type RuleState,
 } from "./volleyballRules";
 import { reconstructSetFromRallies, countRegularSubs } from "./scoreSheetMapping";
@@ -103,6 +104,47 @@ describe("splitCompletedAndCurrent", () => {
 
   it("預設值是「進行中」——沒帶第二個參數時行為跟 #218 之前完全一樣", () => {
     expect(splitCompletedAndCurrent([1, 2, 3])).toEqual(splitCompletedAndCurrent([1, 2, 3], false));
+  });
+});
+
+describe("visibleSetCount", () => {
+  // #352：這支函式取代的是兩顆右欄元件各自手寫的同一段算式。#349 那個「已完賽的比賽預設
+  // 停在不存在的第 4 局」之所以要修兩次，就是因為 PR #350 只改了其中一份拷貝——這裡把
+  // 三種情形逐條釘住，之後規則要改只會有一個地方要改、也只有這裡會變紅。
+  it("未完賽：永遠是已結束局數 + 1（那一格是「目前這局」，可能還沒開賽正等著排先發）", () => {
+    expect(
+      visibleSetCount({ completedSetCount: 2, hasCurrentSetData: true, isMatchFinished: false }),
+    ).toBe(3);
+    // 還沒開賽（currentSet 沒資料）也一樣要留那一格——它正是 MatchInfoRail 唯一可編輯的格子。
+    expect(
+      visibleSetCount({ completedSetCount: 2, hasCurrentSetData: false, isMatchFinished: false }),
+    ).toBe(3);
+    // 一局都還沒打完：仍然有一格可看。
+    expect(
+      visibleSetCount({ completedSetCount: 0, hasCurrentSetData: false, isMatchFinished: false }),
+    ).toBe(1);
+  });
+
+  it("已完賽的一般情形：不多開那一格空盤子（#349 的症狀）", () => {
+    // 三局打完 → 三格，不是四格。舊算式在這裡會回 4，而且預設就停在標著「第 4 局」的空格上。
+    expect(
+      visibleSetCount({ completedSetCount: 3, hasCurrentSetData: false, isMatchFinished: true }),
+    ).toBe(3);
+  });
+
+  it("已完賽但目前這局真的記過分：那一格要留（PR #351 修正的判準）", () => {
+    // 三戰兩勝已經 2:0 判定完賽，教練仍按了「下一局」並繼續記分——那局有真實資料，
+    // 不能因為比賽被判定完賽就讓使用者滑不到。
+    expect(
+      visibleSetCount({ completedSetCount: 2, hasCurrentSetData: true, isMatchFinished: true }),
+    ).toBe(3);
+  });
+
+  it("已完賽卻一局都沒有（資料異常）：保底留一格，不能回 0", () => {
+    // 回 0 的話呼叫端的 clamp 會算出 totalSets - 1 = -1 這種不存在的索引。
+    expect(
+      visibleSetCount({ completedSetCount: 0, hasCurrentSetData: false, isMatchFinished: true }),
+    ).toBe(1);
   });
 });
 

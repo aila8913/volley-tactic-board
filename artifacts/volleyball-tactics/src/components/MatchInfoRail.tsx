@@ -11,6 +11,7 @@ import { useScoreSheet, useScoreSheetController } from "@/hooks/useScoreSheet";
 import { useCrossMatchAnalysis } from "@/hooks/useCrossMatchAnalysis";
 import { filterLineupToRoster } from "@/lib/rotationLogic";
 import { getMatchWinner, setWinner, winsNeededFor, type MatchStatus } from "@/lib/matchOutcome";
+import { visibleSetCount } from "@/lib/volleyballRules";
 import { INFO_RAIL_BASE_CLASS } from "@/lib/appChromeStyles";
 import { computeTournamentStats, type TournamentMatchResult } from "@/lib/tournamentSummary";
 import type { LineupSnapshot } from "@/types/scoresheet";
@@ -224,21 +225,18 @@ function MatchDetailSection({
   // 有處理 match 未定義時的 fallback（例如 match?.players ?? []）。
   const isMatchFinished =
     match !== undefined && getMatchWinner(completedSets, winsNeededFor(match.format)) !== null;
-  // 使用者能滑到幾格。未完賽時是「已完成局數 + 1」——那個 +1 是目前這一局（可能還在打，
-  // 也可能還沒開賽而正等著在這裡排先發，見下面第四個分支），一定要留。
-  //
-  // 已完賽時就不一定了（#349，跟 AnalyticsRotationRail 是同一個 bug 的兩份拷貝）：#218 之後
-  // 已完賽的比賽沒有「進行中的那一局」，重建出來的 currentSet 只是個 serving=null 的佔位。
-  // 無條件 +1 會多開一格永遠是空的格子，而且**預設就停在那一格**——三局的比賽打開右欄看到的
-  // 是「第 4 局」加六格空白。
-  //
-  // 例外是「已完賽、但目前這局真的記過分」（serving !== null）：例如三戰兩勝已經 2:0，教練
-  // 仍按了「下一局」並繼續記——那一局有真實資料，不能因為比賽判定已完賽就讓它滑不到。
-  // 所以判準不是「完賽與否」，是**那一格裡到底有沒有東西**。
+  // 使用者能滑到幾格。規則本身（未完賽為什麼一定要 +1、已完賽為什麼不能無條件 +1、什麼時候
+  // 例外要補回那一格）收在 lib/volleyballRules.ts 的 visibleSetCount()，分析頁右欄
+  //（AnalyticsRotationRail）呼叫的是同一支（#352）。這裡以前跟那邊各自手寫一份相同的算式，
+  // #349 修了那邊、漏了這裡，比賽列表右欄照樣顯示不存在的「第 4 局」。
+  // 未完賽的那個 +1 是目前這一局：可能還在打，也可能還沒開賽而正等著在這裡排先發
+  //（見下面第四個分支，那格是本頁唯一可編輯的格子）。
   const hasCurrentSetData = record?.currentSet != null && record.currentSet.serving !== null;
-  const totalSets = isMatchFinished
-    ? Math.max(completedSets.length + (hasCurrentSetData ? 1 : 0), 1)
-    : completedSets.length + 1;
+  const totalSets = visibleSetCount({
+    completedSetCount: completedSets.length,
+    hasCurrentSetData,
+    isMatchFinished,
+  });
   // 局是線性有邊界的（跟輪轉的「輪」是環狀不同）：夾在 [0, totalSets-1] 之間，manualSetIndex
   // 是 null 時預設看最新一局。
   const clampedIndex = Math.min(Math.max(manualSetIndex ?? totalSets - 1, 0), totalSets - 1);
@@ -271,7 +269,7 @@ function MatchDetailSection({
     };
   } else if (isMatchFinished) {
     // 整場已經打完，而且滑到的是「目前這局」。正常情況下只有那局真的記過分才滑得到這裡
-    //（見上面 totalSets 的 hasCurrentSetData）；例外是完賽卻連一局都沒有的資料異常，那時
+    //（見 visibleSetCount() 的 hasCurrentSetData 例外）；例外是完賽卻連一局都沒有的資料異常，那時
     // 這格是唯一的一格。一律唯讀：比賽結束了，不該再從這裡改任何站位。
     lineup = record?.lineup ?? null;
     readOnly = true;
