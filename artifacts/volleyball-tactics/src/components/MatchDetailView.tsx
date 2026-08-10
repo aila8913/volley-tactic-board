@@ -14,12 +14,11 @@ import type { Match } from "@/types/match";
 //
 // 1. 跟 RotationRailPanel 同一條規矩（見該檔案開頭「刻意不 import 任何 store」那段）——右欄
 //    的每一塊都只負責畫，資料從哪來是容器的事。
-// 2. **這是右欄裡唯一測得動的部分**。這個專案還沒裝 @testing-library/react（issue #168），
-//    元件測試只能用 renderToStaticMarkup 驗「一次性的初始渲染」（見
-//    AnalyticsRotationRail.test.tsx 開頭的說明）。純元件才餵得進假資料直接渲染；一旦它自己
-//    去 useTeamList()/useMatchWithRoster()，就得先架 QueryClientProvider 跟假 server，那種
-//    測試在這個專案目前是做不出來的。所以「唯讀怎麼畫」這件事拆出來、測起來，編輯表單那半
-//    （hook 很重）走手動驗收。
+// 2. **純元件最好測**。純元件餵得進假資料就直接渲染（MatchDetailView.test.tsx 用
+//    renderToStaticMarkup 就寫得完）；一旦它自己去 useTeamList()/useMatchWithRoster()，
+//    測試就得先架 QueryClientProvider、再把那些 hook 一支支 mock 掉——#168 之後這件事做得到了
+//    （見 MatchInfoRail.test.tsx），但成本仍然明顯高一截，而且 mock 越多、測到的真東西越少。
+//    所以「唯讀怎麼畫」這件事拆出來、測起來，編輯表單那半（hook 很重）走手動驗收。
 //
 // teamName 由容器查好再傳進來（而不是這裡自己 useTeamList）：同上，為的就是保持純元件。
 // null 代表這場比賽沒有標球隊。

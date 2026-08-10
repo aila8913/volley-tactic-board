@@ -17,6 +17,10 @@ export default defineConfig({
     // 用 jsdom 模擬瀏覽器環境，讓需要 DOM/瀏覽器全域物件的測試（React 元件、還在用
     // localStorage 的 store 如 useScoreSheet）能跑。純函式測試不依賴它，但統一用 jsdom 最省事。
     environment: "jsdom",
+    // issue #168：每個測試檔跑之前先執行的共用前置（jest-dom 斷言 + 每個測試後清掉 DOM）。
+    // 細節寫在那個檔案裡——放在 setupFiles 而不是各測試檔自己 import，是因為「清 DOM」
+    // 這件事漏掉一個檔案就會出現只在「跟別的測試一起跑」時才失敗的鬼故事。
+    setupFiles: ["./src/test/setup.ts"],
   },
   resolve: {
     alias: {
