@@ -122,12 +122,18 @@ describe("undo/redo 一次只走一步（issue #147）", () => {
     );
     const ms = markers();
     const id = ms[ms.length - 1].id;
-    tb().updateMarker(id, {
-      points: [
-        { x: from[0], y: from[1] },
-        { x: to[0], y: to[1] },
-      ],
-    });
+    // updateMarker 現在預設會記歷史（#361-2），這裡要跟 Court.tsx 的 handlePointerMove 一樣
+    // 傳 skipHistory，才符合「畫線期間每個 frame 都在改終點，放開才記一次」的行為。
+    tb().updateMarker(
+      id,
+      {
+        points: [
+          { x: from[0], y: from[1] },
+          { x: to[0], y: to[1] },
+        ],
+      },
+      { skipHistory: true },
+    );
     tb().pushHistory(); // pointerUp
   };
 
@@ -148,6 +154,104 @@ describe("undo/redo 一次只走一步（issue #147）", () => {
 
     tb().undo();
     expect(markers()).toHaveLength(0); // 再退一步回到空白起點
+  });
+});
+
+// issue #361：#304 把九支場景編輯動作收斂進 editSession() 之後修掉的四個 undo bug。
+// 每個 it 對應 issue 留言列出的其中一個 bug，名字刻意寫成「bug 是什麼」，方便回頭對照。
+describe("#361 四個 undo bug 的回歸測試", () => {
+  it("bug 1：拖曳既有標記（skipHistory→pushHistory）只記一步，undo 能還原到拖曳前的座標", () => {
+    tb().startSession(snapshot([]));
+    tb().addMarker({ type: "volleyball", x: 10, y: 10 });
+    const id = tb().session!.markers[0].id;
+    const historyLenAfterAdd = tb().session!.history.length;
+
+    // 模擬 Markers.tsx 的拖曳：pointerMove 期間都傳 skipHistory，放開時才 pushHistory 一次。
+    tb().updateMarker(id, { x: 20, y: 20 }, { skipHistory: true });
+    tb().updateMarker(id, { x: 30, y: 30 }, { skipHistory: true });
+    tb().pushHistory(); // pointerUp
+
+    expect(tb().session?.markers[0]).toMatchObject({ x: 30, y: 30 });
+    expect(tb().session?.history.length).toBe(historyLenAfterAdd + 1); // 整趟拖曳只記一步
+
+    tb().undo();
+    expect(tb().session?.markers[0]).toMatchObject({ x: 10, y: 10 }); // 退回拖曳前的座標
+  });
+
+  it("bug 2：updateMarker(id, { text }) 不傳 options 時預設就會記歷史，undo 能還原舊文字", () => {
+    tb().startSession(snapshot([]));
+    tb().addMarker({ type: "text", x: 5, y: 5, text: "舊文字" });
+    const id = tb().session!.markers[0].id;
+    const historyLenBefore = tb().session!.history.length;
+
+    tb().updateMarker(id, { text: "新文字" }); // 沒傳 skipHistory：模擬 Markers.tsx 的 handleTextBlur
+    expect(tb().session?.markers[0].text).toBe("新文字");
+    expect(tb().session?.history.length).toBe(historyLenBefore + 1);
+
+    tb().undo();
+    expect(tb().session?.markers[0].text).toBe("舊文字");
+  });
+
+  it("bug 3：連續多次 updateDefenseRange(skipHistory) 後只補一次 pushHistory，只增加一格歷史", () => {
+    tb().startSession(snapshot([]));
+    tb().addDefenseRange({
+      playerId: "",
+      type: "circle",
+      x: 0,
+      y: 0,
+      radius: 15,
+      color: "#CCFF00",
+      opacity: 0.3,
+      visible: true,
+    });
+    const id = tb().session!.defenseRanges[0].id;
+    const historyLenAfterAdd = tb().session!.history.length;
+
+    // 模擬 DefenseRange.tsx 拖曳：每個 pointerMove frame 都呼叫一次 skipHistory 更新。
+    for (let i = 0; i < 10; i++) {
+      tb().updateDefenseRange(id, { x: i, y: i }, { skipHistory: true });
+    }
+    tb().pushHistory(); // pointerUp 才補記一次
+
+    // 就算拖了 10 個 frame，歷史也只多一格——不會被灌爆（30 格上限一下就滿）。
+    expect(tb().session?.history.length).toBe(historyLenAfterAdd + 1);
+  });
+
+  it("bug 4：removeSceneObject 刪掉一個 marker 只記一次歷史；id 對不上任何物件時不動陣列也不記歷史", () => {
+    tb().startSession(snapshot([]));
+    tb().addMarker({ type: "volleyball", x: 1, y: 1 });
+    const id = tb().session!.markers[0].id;
+    const historyLenAfterAdd = tb().session!.history.length;
+
+    tb().removeSceneObject(id);
+    expect(tb().session?.markers).toHaveLength(0);
+    expect(tb().session?.history.length).toBe(historyLenAfterAdd + 1); // 只記一步，不是兩步
+
+    const historyLenAfterRemove = tb().session!.history.length;
+    const markersBefore = tb().session?.markers;
+    const rangesBefore = tb().session?.defenseRanges;
+    tb().removeSceneObject("不存在的id");
+    expect(tb().session?.markers).toBe(markersBefore); // 陣列參照沒變，真的沒動過
+    expect(tb().session?.defenseRanges).toBe(rangesBefore);
+    expect(tb().session?.history.length).toBe(historyLenAfterRemove); // 沒有多記一格
+  });
+
+  it("removeSceneObject 也能刪防守範圍（合併後的路徑對兩種物件都要涵蓋）", () => {
+    tb().startSession(snapshot([]));
+    tb().addDefenseRange({
+      playerId: "",
+      type: "circle",
+      x: 0,
+      y: 0,
+      radius: 15,
+      color: "#CCFF00",
+      opacity: 0.3,
+      visible: true,
+    });
+    const id = tb().session!.defenseRanges[0].id;
+
+    tb().removeSceneObject(id);
+    expect(tb().session?.defenseRanges).toHaveLength(0);
   });
 });
 

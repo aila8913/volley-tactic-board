@@ -6,7 +6,7 @@ import { fromScreen } from "../lib/courtGeometry";
 
 export default function Markers({ marker }: { marker: MarkerType }) {
   const { id: matchId } = useParams<{ id: string }>();
-  const { selectedObjectId, setSelectedObjectId, activeTool, updateMarker, session } =
+  const { selectedObjectId, setSelectedObjectId, activeTool, updateMarker, pushHistory, session } =
     useTacticsBoard();
   // 有 session＝正在即時布置、可拖曳編輯（取代舊的 isLayoutMode，issue #154 PR C）。
   const isLayoutMode = session !== null;
@@ -19,6 +19,13 @@ export default function Markers({ marker }: { marker: MarkerType }) {
   const isDragging = useRef(false);
   const dragStart = useRef({ x: 0, y: 0 });
   const dragOrigin = useRef<{ points?: { x: number; y: number }[]; x?: number; y?: number }>({});
+  // 「這次按下去之後，到底有沒有真的移動過？」isDragging 在 pointerDown 就會被設成 true
+  //（因為那時還不知道使用者接下來是要拖還是只是點一下選取），所以它**不能**拿來判斷該不該
+  // 記歷史——單純點一下選取也會走完 down→up。少了這個旗標，點一下就會記進一格「跟現在
+  // 一模一樣」的歷史，症狀就是 #361-4 那種「第一次 Ctrl+Z 按了沒反應」，而且會讓
+  // isSessionDirty 變成 true，什麼都沒改卻被問「未儲存的內容要捨棄嗎」。
+  // 只有 pointerMove 真的改過座標時才會被設成 true。
+  const didMove = useRef(false);
 
   const isSelected = selectedObjectId === marker.id;
 
@@ -33,6 +40,7 @@ export default function Markers({ marker }: { marker: MarkerType }) {
     const svg = target.closest("svg");
     if (!svg) return;
     isDragging.current = true;
+    didMove.current = false;
     target.setPointerCapture(e.pointerId);
     dragStart.current = getSvgPoint(e, svg);
     dragOrigin.current = marker.points
@@ -49,15 +57,19 @@ export default function Markers({ marker }: { marker: MarkerType }) {
     const dx = current.x - dragStart.current.x;
     const dy = current.y - dragStart.current.y;
 
+    didMove.current = true;
     if (dragOrigin.current.points) {
-      updateMarker(marker.id, {
-        points: dragOrigin.current.points.map((p) => ({ x: p.x + dx, y: p.y + dy })),
-      });
+      updateMarker(
+        marker.id,
+        { points: dragOrigin.current.points.map((p) => ({ x: p.x + dx, y: p.y + dy })) },
+        { skipHistory: true },
+      );
     } else if (dragOrigin.current.x !== undefined && dragOrigin.current.y !== undefined) {
-      updateMarker(marker.id, {
-        x: dragOrigin.current.x + dx,
-        y: dragOrigin.current.y + dy,
-      });
+      updateMarker(
+        marker.id,
+        { x: dragOrigin.current.x + dx, y: dragOrigin.current.y + dy },
+        { skipHistory: true },
+      );
     }
   };
 
@@ -65,6 +77,14 @@ export default function Markers({ marker }: { marker: MarkerType }) {
     if (!isDragging.current) return;
     isDragging.current = false;
     (e.target as Element).releasePointerCapture(e.pointerId);
+    // #361-1：拖曳中的每個 pointerMove 都傳 skipHistory 跳過歷史，放開才在這裡補記一次——
+    // 這樣一整次拖曳（起點到終點）算「一步」，跟畫線工具（arrow/dashed/attack）在
+    // Court.tsx 的「拖曳中不記、放開才記」是同一套模式（#147）。
+    // 要用 didMove 而不是 isDragging 當條件，理由見上面 didMove 宣告處的說明。
+    if (didMove.current) {
+      didMove.current = false;
+      pushHistory();
+    }
   };
 
   const handleDoubleClick = (e: React.MouseEvent) => {
@@ -81,6 +101,8 @@ export default function Markers({ marker }: { marker: MarkerType }) {
   const handleTextBlur = () => {
     setIsEditingText(false);
     if (matchId && tempText.trim() !== marker.text) {
+      // updateMarker 現在預設就會記歷史（#361-2 的修法），這裡不用再額外做什麼——
+      // 改文字本來就該是一步可 undo 的動作，只是舊版漏記了。
       updateMarker(marker.id, { text: tempText });
     }
   };

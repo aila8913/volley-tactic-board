@@ -228,9 +228,14 @@ export default function Court() {
       if (markers.length > 0) {
         const lastMarker = markers[markers.length - 1];
         if (lastMarker.points && lastMarker.points.length === 2) {
-          updateMarker(lastMarker.id, {
-            points: [lastMarker.points[0], { x: pt.x, y: pt.y }],
-          });
+          // updateMarker 現在預設會記歷史（#361-2），這裡一定要傳 skipHistory：這個 branch
+          // 每個滑鼠移動 frame 都會跑一次，沒有這個選項就會把畫一條線的過程全部記進歷史。
+          // 真正記一次歷史的時機在下面 handlePointerUp（畫完、放開滑鼠才算一步，#147）。
+          updateMarker(
+            lastMarker.id,
+            { points: [lastMarker.points[0], { x: pt.x, y: pt.y }] },
+            { skipHistory: true },
+          );
         }
       }
     }

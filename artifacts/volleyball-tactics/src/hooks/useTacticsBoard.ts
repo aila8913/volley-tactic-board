@@ -48,6 +48,13 @@ interface SceneContent {
   defenseRanges: DefenseRange[];
 }
 
+// 一次場景編輯要不要進 undo 歷史。刻意做成必填的字面量聯集而不是選填 boolean：
+// #361 那四個 undo bug 的成因就是「何時記歷史」散在九支動作裡各自硬寫、然後各自漂走，
+// 所以這裡讓型別強迫每個動作明講自己的政策，漏寫會編譯錯誤。
+//   "record" ＝ 動作完成即記一格
+//   "defer"  ＝ 這次先不記，由呼叫端在手勢結束（pointerUp）時自己補一次 pushHistory()
+type HistoryPolicy = "record" | "defer";
+
 // 正在編輯的白板 session。單景（PO 拍板）：只持有一張 snapshot，不做 scenes[] + 輪次切換。
 export interface WhiteboardSession {
   // 反正規化的當前畫面。snapshot.players 的座標會隨拖曳更新，但每個 player 的身分
@@ -154,6 +161,10 @@ interface TacticsBoardStore {
   // ── session 內的編輯動作（都作用在當前 session；沒有 session 時是 no-op）──
   // 球員以 sourcePlayerId 當 key：可編輯 session 的球員都來自 roster 擷取，sourcePlayerId 必為
   // 非 null，拿來當穩定識別安全（null 只會出現在唯讀檢視的舊快照，那條路不會呼叫這些動作）。
+  //
+  // #304/#361：以下九支動作全部透過 store 內部的 editSession() 走同一套「何時記 undo 歷史」的
+  // 規則（見實作處註解），不再各自硬寫。凡是「一次手勢會連續觸發很多次」的動作（拖曳、畫線）
+  // 都改用 options.skipHistory 選擇性跳過，交由呼叫端在手勢結束（pointerUp）時補記一次。
   moveSessionPlayer: (sourcePlayerId: string, x: number, y: number) => void;
   removeSessionPlayer: (sourcePlayerId: string) => void;
   placeSessionPlayer: (player: SnapshotPlayer) => void; // upsert（從名單拖入新球員用）
@@ -162,12 +173,26 @@ interface TacticsBoardStore {
   // 更新終點、pointerUp 才記一次完整的線。pointerDown 時傳 skipHistory 避免把「起點＝終點」的
   // 殘缺線記進歷史（#147 殘留的病灶）；點擊型標記（text/volleyball）不傳，維持「新增即記歷史」。
   addMarker: (marker: Omit<Marker, "id">, options?: { skipHistory?: boolean }) => void;
-  updateMarker: (id: string, updates: Partial<Marker>) => void;
-  removeMarker: (id: string) => void;
+  // #361-1/#361-2 修法：updateMarker 預設「改一次記一格」——文字改標籤、或呼叫端沒特別說要跳過
+  // 的更新，都該進歷史。真正「一次手勢會連打很多次」的呼叫端（拖曳中的 Markers.tsx、畫線中的
+  // Court.tsx）自己傳 skipHistory:true 跳過，並在手勢結束時補一次 pushHistory()。
+  updateMarker: (id: string, updates: Partial<Marker>, options?: { skipHistory?: boolean }) => void;
+  // addDefenseRange：一律記歷史（新增防守範圍是單一動作，沒有拖曳中間態）。
   addDefenseRange: (range: Omit<DefenseRange, "id">) => void;
-  updateDefenseRange: (id: string, updates: Partial<DefenseRange>) => void;
-  removeDefenseRange: (id: string) => void;
+  // #361-3 修法：updateDefenseRange 預設也是「改一次記一格」，但它的唯一呼叫端
+  // （DefenseRange.tsx 拖曳）每個 pointerMove frame 都會呼叫一次，所以必須明確傳
+  // skipHistory:true，否則拖一下就會把 30 格的歷史上限灌爆、undo 變成只能退半步。
+  updateDefenseRange: (
+    id: string,
+    updates: Partial<DefenseRange>,
+    options?: { skipHistory?: boolean },
+  ) => void;
+  // #304 開放性問題 2 的答案：add/update 這兩組不合併——見 removeSceneObject 的註解說明
+  // 「為什麼刪除可以合併、新增/更新不合併」。
   clearDrawings: () => void; // 清掉所有畫筆＋防守範圍（保留球員站位）
+  // #361-4 修法：刪掉場上一個「畫出來的物件」——畫筆標記或防守範圍。取代舊的
+  // removeMarker + removeDefenseRange 兩支各自 pushHistory 的動作（見實作處註解說明為何合併）。
+  removeSceneObject: (id: string) => void;
 
   pushHistory: () => void;
   undo: () => void;
@@ -200,321 +225,355 @@ export function isSessionDirty(session: WhiteboardSession | null): boolean {
 // 文案（或反之）。
 export const DISCARD_MSG = "未儲存的戰術內容將會捨棄，確定嗎？";
 
-export const useTacticsBoard = create<TacticsBoardStore>()((set, get) => ({
-  session: null,
-  viewingScene: null,
-  viewingTacticId: null,
-  viewingTacticName: "",
-
-  activeTool: "select",
-  selectedObjectId: null,
-  courtView: "rotation",
-  newTacticOpen: false,
-
-  openNewTactic: () => set({ newTacticOpen: true }),
-  closeNewTactic: () => set({ newTacticOpen: false }),
-
-  setActiveTool: (tool) => set({ activeTool: tool, selectedObjectId: null }),
-  setSelectedObjectId: (id) => set({ selectedObjectId: id }),
-  // 翻回輪轉視圖＝離開「看已存戰術」，順手清掉檢視狀態，避免下次進戰術視圖殘留上一張照片。
-  //（切到 tactics 不清，因為即時 session 也用 tactics 視圖。）
-  setCourtView: (v) =>
-    set(
-      v === "rotation"
-        ? { courtView: v, viewingScene: null, viewingTacticId: null, viewingTacticName: "" }
-        : { courtView: v },
-    ),
-  // #119 加這道 reset 是為了防「跨場殘留」：全域共用的 undo 歷史/session 如果不歸零，
-  // 從 A 場帶著歷史切到 B 場，再按 Ctrl+Z 會把 A 的快照還原進 B。但病根是「跨場」，不是
-  // 「進頁面就該清空」——原本的寫法沒有分辨這兩種情況，所以連「同一場，但由計分頁先
-  // startSession() 再導航過來」這種正常的交棒，也會被無條件清光（issue #160 C3 踩到）。
-  //
-  // 改法：多收一個 matchId 參數，跟目前 session 的 snapshot.matchId 比對。相符（且不是
-  // null/undefined，代表雙方都明確知道自己是哪一場）就判定為「同一場」，只保留 session、
-  // 其他暫時性畫面狀態（viewingScene、選取物件、工具、視圖）照樣重置成剛進頁面的預設值；
-  // 不符就退回舊行為，session 也一起清掉。嚴格來說這比原本的寫法更正確：舊寫法連「同一場
-  // 重新整理頁面」都會把使用者交棒進來、還沒存檔的東西清掉。
-  resetBoardView: (matchId) =>
+export const useTacticsBoard = create<TacticsBoardStore>()((set, get) => {
+  // #304/#361：九支場景編輯動作（add/update/remove × marker/defenseRange/sessionPlayer）過去
+  // 各自把「這個動作完不完要不要 pushHistory()」寫成一行 if，久了規則就在九個地方各自漂走——
+  // #361 回報的四個 undo bug，追到根都是某一支動作漏記或搶記歷史。這支私有 helper 把規則收攏
+  // 成一個地方：呼叫端只需要描述「怎麼改」跟「這次算不算一步」，其餘（要不要 set、有沒有真的
+  // 動到、什麼時候記歷史）全部由這裡決定，新增第十支動作也不可能再悄悄選錯政策。
+  const editSession = (
+    // mutate 吃目前的 session、回傳「要覆蓋上去的欄位」；回傳 null 表示這次呼叫其實沒有
+    // 造成任何實質改變（例如要更新的 id 根本不存在），這種情況既不該動 state、也不該記歷史。
+    mutate: (s: WhiteboardSession) => Partial<WhiteboardSession> | null,
+    opts: { history: HistoryPolicy; select?: string | null },
+  ) => {
+    // changed 用來在 set() 的 updater 跑完之後，告訴外層「這次要不要 pushHistory()」。
+    // 這裡看似是在讀一個「還沒被非同步賦值」的變數，但其實安全：zustand 的 set() 是同步執行
+    // updater 的（不像 React 的 setState 可能被排程延後），所以 set() 呼叫一結束、下面立刻讀
+    // changed 時，updater 內的賦值早就跑完了。
+    let changed = false;
     set((state) => {
-      const keepSession =
-        matchId != null && state.session != null && state.session.snapshot.matchId === matchId;
+      const s = state.session;
+      if (!s) return state; // 沒有 session 可編，維持原樣、changed 保持 false
+      const patch = mutate(s);
+      if (patch === null) return state; // mutate 說「沒改到東西」，同樣維持原樣
+      changed = true;
       return {
-        session: keepSession ? state.session : null,
+        session: { ...s, ...patch },
+        // 只有呼叫端明確傳了 select 這個 key 才動 selectedObjectId——不能用
+        // `opts.select ?? state.selectedObjectId` 這種寫法，因為 select: null 是「清空選取」
+        // 的合法意圖，跟「呼叫端根本沒提到選取」必須分得開，否則會出現「清空」被誤判成
+        // 「不動」的 bug。
+        ...("select" in opts ? { selectedObjectId: opts.select } : {}),
+      };
+    });
+    // pushHistory 必須在 set() 之後才呼叫（#147「先改後記」的約定：history 記的必須是「改完
+    // 之後」的畫面，先記再改會讓 undo 永遠慢一拍）。這裡把它收在 editSession 裡統一呼叫，
+    // 就是整支 helper 存在的意義——以後不管加幾支場景編輯動作，都不可能再各自決定要不要記、
+    // 或忘記把 pushHistory() 擺在 set() 後面。
+    if (changed && opts.history === "record") get().pushHistory();
+  };
+
+  return {
+    session: null,
+    viewingScene: null,
+    viewingTacticId: null,
+    viewingTacticName: "",
+
+    activeTool: "select",
+    selectedObjectId: null,
+    courtView: "rotation",
+    newTacticOpen: false,
+
+    openNewTactic: () => set({ newTacticOpen: true }),
+    closeNewTactic: () => set({ newTacticOpen: false }),
+
+    setActiveTool: (tool) => set({ activeTool: tool, selectedObjectId: null }),
+    setSelectedObjectId: (id) => set({ selectedObjectId: id }),
+    // 翻回輪轉視圖＝離開「看已存戰術」，順手清掉檢視狀態，避免下次進戰術視圖殘留上一張照片。
+    //（切到 tactics 不清，因為即時 session 也用 tactics 視圖。）
+    setCourtView: (v) =>
+      set(
+        v === "rotation"
+          ? { courtView: v, viewingScene: null, viewingTacticId: null, viewingTacticName: "" }
+          : { courtView: v },
+      ),
+    // #119 加這道 reset 是為了防「跨場殘留」：全域共用的 undo 歷史/session 如果不歸零，
+    // 從 A 場帶著歷史切到 B 場，再按 Ctrl+Z 會把 A 的快照還原進 B。但病根是「跨場」，不是
+    // 「進頁面就該清空」——原本的寫法沒有分辨這兩種情況，所以連「同一場，但由計分頁先
+    // startSession() 再導航過來」這種正常的交棒，也會被無條件清光（issue #160 C3 踩到）。
+    //
+    // 改法：多收一個 matchId 參數，跟目前 session 的 snapshot.matchId 比對。相符（且不是
+    // null/undefined，代表雙方都明確知道自己是哪一場）就判定為「同一場」，只保留 session、
+    // 其他暫時性畫面狀態（viewingScene、選取物件、工具、視圖）照樣重置成剛進頁面的預設值；
+    // 不符就退回舊行為，session 也一起清掉。嚴格來說這比原本的寫法更正確：舊寫法連「同一場
+    // 重新整理頁面」都會把使用者交棒進來、還沒存檔的東西清掉。
+    resetBoardView: (matchId) =>
+      set((state) => {
+        const keepSession =
+          matchId != null && state.session != null && state.session.snapshot.matchId === matchId;
+        return {
+          session: keepSession ? state.session : null,
+          viewingScene: null,
+          viewingTacticId: null,
+          viewingTacticName: "",
+          // courtView 必須跟著 session 一起保留，不能無條件打回 "rotation"。原因是畫面上
+          // 「看得到 session」這件事同時取決於兩個狀態：Court.tsx 只有在
+          // `courtView === "tactics" && session` 時才畫 session 的球員與筆跡。startSession()
+          // 會把 courtView 設成 "tactics"，若這裡又把它重設回 "rotation"，就會出現
+          // 「session 明明還在、畫面卻空白」的詭異狀態——資料沒掉，但使用者看不到。
+          // 兩個狀態要嘛一起留、要嘛一起清，不能各走各的。
+          courtView: keepSession ? state.courtView : "rotation",
+          selectedObjectId: null,
+          activeTool: "select",
+          // issue #177：「新增戰術」中央浮層的開關也是全域暫時 UI 狀態，一起歸零。否則使用者
+          // 在 A 場開了浮層、沒選就切走，這個旗標會留在 store，下次一 mount 戰術板（這個 reset
+          // 就是在 mount／換場時跑的）浮層就會無來由地自己冒出來。跟上面那些 selectedObjectId／
+          // activeTool 同一種性質，不受 keepSession 影響——它跟「是不是同一場」無關，永遠該關。
+          newTacticOpen: false,
+        };
+      }),
+
+    startSession: (snapshot, opts) => {
+      // 深拷貝入值：session 拿到的是跟外面來源完全脫鉤的獨立資料，之後怎麼編都碰不到輪轉表。
+      const players = snapshot.players.map((p) => ({ ...p }));
+      const markers = (opts?.markers ?? []).map((m) => ({ ...m }));
+      const defenseRanges = (opts?.defenseRanges ?? []).map((d) => ({ ...d }));
+      const session: WhiteboardSession = {
+        snapshot: { ...snapshot, players },
+        markers,
+        defenseRanges,
+        name: opts?.name ?? "",
+        serverId: opts?.serverId ?? null,
+        // 種入「起始畫面」當歷史第 0 格：任何後續編輯都會 push 成第 1 格以後，於是
+        //「history.length > 1」剛好等於「使用者動過東西＝有未存內容」（見面板的 dirty 判斷）。
+        history: [
+          { players: clone(players), markers: clone(markers), defenseRanges: clone(defenseRanges) },
+        ],
+        historyIndex: 0,
+        arranging: opts?.arranging ?? false,
+      };
+      set({
+        session,
         viewingScene: null,
         viewingTacticId: null,
         viewingTacticName: "",
-        // courtView 必須跟著 session 一起保留，不能無條件打回 "rotation"。原因是畫面上
-        // 「看得到 session」這件事同時取決於兩個狀態：Court.tsx 只有在
-        // `courtView === "tactics" && session` 時才畫 session 的球員與筆跡。startSession()
-        // 會把 courtView 設成 "tactics"，若這裡又把它重設回 "rotation"，就會出現
-        // 「session 明明還在、畫面卻空白」的詭異狀態——資料沒掉，但使用者看不到。
-        // 兩個狀態要嘛一起留、要嘛一起清，不能各走各的。
-        courtView: keepSession ? state.courtView : "rotation",
-        selectedObjectId: null,
+        courtView: "tactics",
         activeTool: "select",
-        // issue #177：「新增戰術」中央浮層的開關也是全域暫時 UI 狀態，一起歸零。否則使用者
-        // 在 A 場開了浮層、沒選就切走，這個旗標會留在 store，下次一 mount 戰術板（這個 reset
-        // 就是在 mount／換場時跑的）浮層就會無來由地自己冒出來。跟上面那些 selectedObjectId／
-        // activeTool 同一種性質，不受 keepSession 影響——它跟「是不是同一場」無關，永遠該關。
-        newTacticOpen: false,
-      };
-    }),
-
-  startSession: (snapshot, opts) => {
-    // 深拷貝入值：session 拿到的是跟外面來源完全脫鉤的獨立資料，之後怎麼編都碰不到輪轉表。
-    const players = snapshot.players.map((p) => ({ ...p }));
-    const markers = (opts?.markers ?? []).map((m) => ({ ...m }));
-    const defenseRanges = (opts?.defenseRanges ?? []).map((d) => ({ ...d }));
-    const session: WhiteboardSession = {
-      snapshot: { ...snapshot, players },
-      markers,
-      defenseRanges,
-      name: opts?.name ?? "",
-      serverId: opts?.serverId ?? null,
-      // 種入「起始畫面」當歷史第 0 格：任何後續編輯都會 push 成第 1 格以後，於是
-      //「history.length > 1」剛好等於「使用者動過東西＝有未存內容」（見面板的 dirty 判斷）。
-      history: [
-        { players: clone(players), markers: clone(markers), defenseRanges: clone(defenseRanges) },
-      ],
-      historyIndex: 0,
-      arranging: opts?.arranging ?? false,
-    };
-    set({
-      session,
-      viewingScene: null,
-      viewingTacticId: null,
-      viewingTacticName: "",
-      courtView: "tactics",
-      activeTool: "select",
-      selectedObjectId: null,
-    });
-  },
-
-  discardSession: () =>
-    set({ session: null, courtView: "rotation", selectedObjectId: null, activeTool: "select" }),
-
-  confirmArrangement: () =>
-    set((state) => (state.session ? { session: { ...state.session, arranging: false } } : state)),
-
-  enterEditFromViewing: () => {
-    const { viewingScene, viewingTacticId, viewingTacticName } = get();
-    if (!viewingScene) return;
-    get().startSession(viewingScene.snapshot, {
-      markers: viewingScene.markers,
-      defenseRanges: viewingScene.defenseRanges,
-      name: viewingTacticName,
-      serverId: viewingTacticId,
-    });
-  },
-
-  setSessionName: (name) =>
-    set((state) => (state.session ? { session: { ...state.session, name } } : state)),
-
-  moveSessionPlayer: (sourcePlayerId, x, y) => {
-    set((state) => {
-      const s = state.session;
-      if (!s) return state;
-      const players = s.snapshot.players.map((p) =>
-        p.sourcePlayerId === sourcePlayerId ? { ...p, x, y } : p,
-      );
-      return { session: { ...s, snapshot: { ...s.snapshot, players } } };
-    });
-    get().pushHistory(); // 先改後記（#147）
-  },
-
-  removeSessionPlayer: (sourcePlayerId) => {
-    set((state) => {
-      const s = state.session;
-      if (!s) return state;
-      return {
         selectedObjectId: null,
-        session: {
-          ...s,
+      });
+    },
+
+    discardSession: () =>
+      set({ session: null, courtView: "rotation", selectedObjectId: null, activeTool: "select" }),
+
+    confirmArrangement: () =>
+      set((state) => (state.session ? { session: { ...state.session, arranging: false } } : state)),
+
+    enterEditFromViewing: () => {
+      const { viewingScene, viewingTacticId, viewingTacticName } = get();
+      if (!viewingScene) return;
+      get().startSession(viewingScene.snapshot, {
+        markers: viewingScene.markers,
+        defenseRanges: viewingScene.defenseRanges,
+        name: viewingTacticName,
+        serverId: viewingTacticId,
+      });
+    },
+
+    setSessionName: (name) =>
+      set((state) => (state.session ? { session: { ...state.session, name } } : state)),
+
+    moveSessionPlayer: (sourcePlayerId, x, y) =>
+      editSession(
+        (s) => ({
+          snapshot: {
+            ...s.snapshot,
+            players: s.snapshot.players.map((p) =>
+              p.sourcePlayerId === sourcePlayerId ? { ...p, x, y } : p,
+            ),
+          },
+        }),
+        { history: "record" },
+      ),
+
+    removeSessionPlayer: (sourcePlayerId) =>
+      editSession(
+        (s) => ({
           snapshot: {
             ...s.snapshot,
             players: s.snapshot.players.filter((p) => p.sourcePlayerId !== sourcePlayerId),
           },
+        }),
+        { history: "record", select: null },
+      ),
+
+    placeSessionPlayer: (player) =>
+      editSession(
+        (s) => {
+          // upsert：同一個 sourcePlayerId 已在場上就換位置，否則新增（從名單拖入板外球員）。
+          const filtered = s.snapshot.players.filter(
+            (p) => p.sourcePlayerId !== player.sourcePlayerId,
+          );
+          return { snapshot: { ...s.snapshot, players: [...filtered, player] } };
         },
-      };
-    });
-    get().pushHistory();
-  },
+        { history: "record" },
+      ),
 
-  placeSessionPlayer: (player) => {
-    set((state) => {
-      const s = state.session;
-      if (!s) return state;
-      // upsert：同一個 sourcePlayerId 已在場上就換位置，否則新增（從名單拖入板外球員）。
-      const filtered = s.snapshot.players.filter((p) => p.sourcePlayerId !== player.sourcePlayerId);
-      return { session: { ...s, snapshot: { ...s.snapshot, players: [...filtered, player] } } };
-    });
-    get().pushHistory();
-  },
+    addMarker: (marker, options) => {
+      const id = uuidv4();
+      editSession((s) => ({ markers: [...s.markers, { ...marker, id }] }), {
+        // #147 殘留的病灶：pointerDown 放起點時傳 skipHistory，避免把「起點＝終點」的殘缺線
+        // 記進歷史；pointerUp 放開時（Court.tsx 的 handlePointerUp）才由呼叫端補記一次完整的線。
+        history: options?.skipHistory ? "defer" : "record",
+        select: id,
+      });
+    },
 
-  addMarker: (marker, options) => {
-    const id = uuidv4();
-    set((state) => {
-      const s = state.session;
-      if (!s) return state;
-      return {
-        selectedObjectId: id,
-        session: { ...s, markers: [...s.markers, { ...marker, id }] },
-      };
-    });
-    if (!options?.skipHistory) get().pushHistory();
-  },
-
-  updateMarker: (id, updates) =>
-    set((state) => {
-      const s = state.session;
-      if (!s) return state;
-      return {
-        session: { ...s, markers: s.markers.map((m) => (m.id === id ? { ...m, ...updates } : m)) },
-      };
-    }),
-
-  removeMarker: (id) => {
-    set((state) => {
-      const s = state.session;
-      if (!s) return state;
-      return {
-        selectedObjectId: null,
-        session: { ...s, markers: s.markers.filter((m) => m.id !== id) },
-      };
-    });
-    get().pushHistory();
-  },
-
-  addDefenseRange: (range) => {
-    set((state) => {
-      const s = state.session;
-      if (!s) return state;
-      return {
-        activeTool: "select",
-        session: { ...s, defenseRanges: [...s.defenseRanges, { ...range, id: uuidv4() }] },
-      };
-    });
-    get().pushHistory();
-  },
-
-  updateDefenseRange: (id, updates) => {
-    set((state) => {
-      const s = state.session;
-      if (!s) return state;
-      return {
-        session: {
-          ...s,
-          defenseRanges: s.defenseRanges.map((dr) => (dr.id === id ? { ...dr, ...updates } : dr)),
+    // #361-1/#361-2：updateMarker 不再永遠跳過歷史。mutate 找不到對應 id 時回傳 null（沒有任何
+    // marker 被改到），editSession 會把這次呼叫當成沒發生過，不動 state 也不記歷史。
+    updateMarker: (id, updates, options) =>
+      editSession(
+        (s) => {
+          if (!s.markers.some((m) => m.id === id)) return null;
+          return { markers: s.markers.map((m) => (m.id === id ? { ...m, ...updates } : m)) };
         },
-      };
-    });
-    get().pushHistory();
-  },
+        { history: options?.skipHistory ? "defer" : "record" },
+      ),
 
-  removeDefenseRange: (id) => {
-    set((state) => {
-      const s = state.session;
-      if (!s) return state;
-      return {
-        selectedObjectId: null,
-        session: { ...s, defenseRanges: s.defenseRanges.filter((dr) => dr.id !== id) },
-      };
-    });
-    get().pushHistory();
-  },
+    addDefenseRange: (range) => {
+      editSession((s) => ({ defenseRanges: [...s.defenseRanges, { ...range, id: uuidv4() }] }), {
+        history: "record",
+      });
+      // activeTool 是全域 UI 狀態、不屬於 session 內容，editSession 只認得 session 欄位跟
+      // selectedObjectId，所以這個「畫完防守範圍自動切回選取工具」的副作用得另外用一個 set()
+      // 補上——這是九支動作裡唯一會動到 activeTool 的，其餘都不需要。
+      set({ activeTool: "select" });
+    },
 
-  clearDrawings: () => {
-    set((state) => {
-      const s = state.session;
-      if (!s) return state;
-      return { selectedObjectId: null, session: { ...s, markers: [], defenseRanges: [] } };
-    });
-    get().pushHistory();
-  },
-
-  // 把「動作完成後的當前畫面」存進 undo 歷史。#147 的約定：每個動作都是「先 set 改狀態、
-  // 再 pushHistory」，所以 history[historyIndex] 永遠等於畫面現況，undo 往回退一格剛好差一步。
-  pushHistory: () =>
-    set((state) => {
-      const s = state.session;
-      if (!s) return state;
-      // 砍掉 redo 分支：剛 undo 過又畫了新東西，被退掉的未來就不該還留著。
-      const newHistory = s.history.slice(0, s.historyIndex + 1);
-      newHistory.push(contentOf(s));
-      if (newHistory.length > 30) newHistory.shift();
-      return { session: { ...s, history: newHistory, historyIndex: newHistory.length - 1 } };
-    }),
-
-  undo: () =>
-    set((state) => {
-      const s = state.session;
-      if (!s || s.historyIndex <= 0) return state;
-      const idx = s.historyIndex - 1;
-      const c = clone(s.history[idx]);
-      return {
-        selectedObjectId: null,
-        session: {
-          ...s,
-          historyIndex: idx,
-          snapshot: { ...s.snapshot, players: c.players },
-          markers: c.markers,
-          defenseRanges: c.defenseRanges,
+    // #361-3：updateDefenseRange 預設也記歷史，但它的唯一呼叫端（DefenseRange.tsx 拖曳）每個
+    // pointerMove frame 都會呼叫一次，必須明確傳 skipHistory:true，否則拖一下就會把 30 格的
+    // 歷史上限灌爆。mutate 同樣在找不到 id 時回傳 null，讓「id 對不上」既不髒 state 也不記歷史。
+    updateDefenseRange: (id, updates, options) =>
+      editSession(
+        (s) => {
+          if (!s.defenseRanges.some((dr) => dr.id === id)) return null;
+          return {
+            defenseRanges: s.defenseRanges.map((dr) => (dr.id === id ? { ...dr, ...updates } : dr)),
+          };
         },
-      };
-    }),
+        { history: options?.skipHistory ? "defer" : "record" },
+      ),
 
-  redo: () =>
-    set((state) => {
-      const s = state.session;
-      if (!s || s.historyIndex >= s.history.length - 1) return state;
-      const idx = s.historyIndex + 1;
-      const c = clone(s.history[idx]);
-      return {
-        selectedObjectId: null,
-        session: {
-          ...s,
-          historyIndex: idx,
-          snapshot: { ...s.snapshot, players: c.players },
-          markers: c.markers,
-          defenseRanges: c.defenseRanges,
+    // #361-4：取代舊的 removeMarker + removeDefenseRange。刪除跟 add/update 不一樣，唯一合理合併
+    // 成型別無關的版本——呼叫端（TacticsEditToolRail 的刪除鍵）拿到的只有 selectedObjectId，
+    // 根本不知道選到的是畫筆還是防守範圍（舊寫法索性兩個 remove 都呼叫，反正對不上的那個是
+    // no-op）。但這正是舊寫法本身壞掉的地方：兩支各自 pushHistory()，於是刪一個東西會在歷史
+    // 記兩格，第一次 Ctrl+Z 只會把「本來就沒變的那個空陣列 filter」復原回來，畫面看起來像
+    // 「按了沒反應」。合併成一支、內部一次判斷「兩個陣列裡有沒有這個 id」、只記一次歷史，
+    // 才是誠實對應「使用者做了一件事」的寫法。
+    //
+    // 而 add/update 沒有跟著合併：add/update 的呼叫端（Markers.tsx、DefenseRange.tsx、
+    // Court.tsx）永遠知道自己在編輯哪一種物件（拖曳中的是哪個元件的 pointer handler 就決定了
+    // 型別），合併成 `updates: Partial<Marker> & Partial<DefenseRange>` 只會讓型別變鬆、
+    // 呼叫端也拿不到什麼好處——這是 #304 開放性問題 2 的答案：三組動作不會一律收斂成同一種
+    // 形狀，要看呼叫端到底知不知道自己在編什麼。
+    removeSceneObject: (id) =>
+      editSession(
+        (s) => {
+          const inMarkers = s.markers.some((m) => m.id === id);
+          const inRanges = s.defenseRanges.some((dr) => dr.id === id);
+          if (!inMarkers && !inRanges) return null;
+          return {
+            markers: s.markers.filter((m) => m.id !== id),
+            defenseRanges: s.defenseRanges.filter((dr) => dr.id !== id),
+          };
         },
-      };
-    }),
+        { history: "record", select: null },
+      ),
 
-  // 載入已存戰術＝唯讀檢視（issue #154 PR B）。parseSavedTactic 會用 zod 驗證並把舊格式
-  // 轉成單景 v2；解析失敗會 throw，交給呼叫端 try/catch 提示。刻意「不」開 session、也不碰
-  // 任何真相來源——這就是把「載入會覆蓋名單/站位」那道門焊死的地方。
-  loadProject: (data, id, name) => {
-    const scene = parseSavedTactic(data).scenes[0] ?? null;
-    set({
-      session: null,
-      viewingScene: scene,
-      viewingTacticId: id,
-      viewingTacticName: name,
-      courtView: "tactics",
-      selectedObjectId: null,
-    });
-  },
+    clearDrawings: () =>
+      editSession(() => ({ markers: [], defenseRanges: [] }), { history: "record", select: null }),
 
-  // 匯入 JSON 也是唯讀檢視，跟 loadProject 同一條路，只是沒有 server id/name（匯入的檔案
-  // 不屬於任何一筆已存戰術）。
-  importState: (data) => {
-    const scene = parseSavedTactic(data).scenes[0] ?? null;
-    set({
-      session: null,
-      viewingScene: scene,
-      viewingTacticId: null,
-      viewingTacticName: "",
-      courtView: "tactics",
-      selectedObjectId: null,
-    });
-  },
+    // 把「動作完成後的當前畫面」存進 undo 歷史。#147 的約定：每個動作都是「先 set 改狀態、
+    // 再 pushHistory」，所以 history[historyIndex] 永遠等於畫面現況，undo 往回退一格剛好差一步。
+    pushHistory: () =>
+      set((state) => {
+        const s = state.session;
+        if (!s) return state;
+        // 砍掉 redo 分支：剛 undo 過又畫了新東西，被退掉的未來就不該還留著。
+        const newHistory = s.history.slice(0, s.historyIndex + 1);
+        newHistory.push(contentOf(s));
+        if (newHistory.length > 30) newHistory.shift();
+        return { session: { ...s, history: newHistory, historyIndex: newHistory.length - 1 } };
+      }),
 
-  buildSavedTactic: () => {
-    const s = get().session;
-    const scene: TacticScene = s
-      ? { label: s.name, snapshot: s.snapshot, markers: s.markers, defenseRanges: s.defenseRanges }
-      : { label: "", snapshot: blankSnapshot(), markers: [], defenseRanges: [] };
-    return { version: 2, scenes: [scene] };
-  },
-}));
+    undo: () =>
+      set((state) => {
+        const s = state.session;
+        if (!s || s.historyIndex <= 0) return state;
+        const idx = s.historyIndex - 1;
+        const c = clone(s.history[idx]);
+        return {
+          selectedObjectId: null,
+          session: {
+            ...s,
+            historyIndex: idx,
+            snapshot: { ...s.snapshot, players: c.players },
+            markers: c.markers,
+            defenseRanges: c.defenseRanges,
+          },
+        };
+      }),
+
+    redo: () =>
+      set((state) => {
+        const s = state.session;
+        if (!s || s.historyIndex >= s.history.length - 1) return state;
+        const idx = s.historyIndex + 1;
+        const c = clone(s.history[idx]);
+        return {
+          selectedObjectId: null,
+          session: {
+            ...s,
+            historyIndex: idx,
+            snapshot: { ...s.snapshot, players: c.players },
+            markers: c.markers,
+            defenseRanges: c.defenseRanges,
+          },
+        };
+      }),
+
+    // 載入已存戰術＝唯讀檢視（issue #154 PR B）。parseSavedTactic 會用 zod 驗證並把舊格式
+    // 轉成單景 v2；解析失敗會 throw，交給呼叫端 try/catch 提示。刻意「不」開 session、也不碰
+    // 任何真相來源——這就是把「載入會覆蓋名單/站位」那道門焊死的地方。
+    loadProject: (data, id, name) => {
+      const scene = parseSavedTactic(data).scenes[0] ?? null;
+      set({
+        session: null,
+        viewingScene: scene,
+        viewingTacticId: id,
+        viewingTacticName: name,
+        courtView: "tactics",
+        selectedObjectId: null,
+      });
+    },
+
+    // 匯入 JSON 也是唯讀檢視，跟 loadProject 同一條路，只是沒有 server id/name（匯入的檔案
+    // 不屬於任何一筆已存戰術）。
+    importState: (data) => {
+      const scene = parseSavedTactic(data).scenes[0] ?? null;
+      set({
+        session: null,
+        viewingScene: scene,
+        viewingTacticId: null,
+        viewingTacticName: "",
+        courtView: "tactics",
+        selectedObjectId: null,
+      });
+    },
+
+    buildSavedTactic: () => {
+      const s = get().session;
+      const scene: TacticScene = s
+        ? {
+            label: s.name,
+            snapshot: s.snapshot,
+            markers: s.markers,
+            defenseRanges: s.defenseRanges,
+          }
+        : { label: "", snapshot: blankSnapshot(), markers: [], defenseRanges: [] };
+      return { version: 2, scenes: [scene] };
+    },
+  };
+});
