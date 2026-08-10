@@ -149,36 +149,41 @@ export function removePlayerFromZone(lineup: LineupSnapshot, zone: number): Line
 
 // 把某一輪的先發快照展開成該輪實際站位，並套上自由球員替換。
 //
-// liberoZone 是「這一輪 L 站在哪個號位」（1/5/6），null＝這一輪沒派 L。注意它跟 lineup 的
-// key 不是同一個基準：lineup 的 key 是**起始號位**（第 0 輪站哪），會跟著 rotation 換算；
-// liberoZone 是**當下那一輪的實際號位**，因為自由球員不參與輪轉（規則上他是替換上場的，
-// 不佔輪轉序），每一輪各自記各自的。
+// ⚠️ 第三個參數在 #326 換了語意：以前是 liberoZone（「這一輪 L 站在哪個號位」），現在是
+// replacedPlayerId（「L 頂替的是哪個球員」）。原因見 types/rotationTable.ts 那個欄位的說明，
+// 一句話版本：站哪格是推導值，頂替誰才是原始事實。
+//
+// 換過來之後，「L 這一輪在不在場上」不再是另外一個要維護的旗標，而是這裡算出來的結果：
+// 被頂替者落在後排 → L 站他的格子；被頂替者輪到前排（或已不在場上）→ L 不在場上，被頂替
+// 者自己站回去。這正是排球規則本身（L 不能跟著輪到前排），只是寫成了一行推導。
 //
 // 回傳型別刻意仍是 RotationPositions（positions + liberoReplacement），這樣呼叫端（Court.tsx
-// 畫球場、擷取戰術快照）完全不用改——對它們來說「這一輪長什麼樣」的答案格式沒變，只是從
-// 「store 裡撈出來的」變成「現場算出來的」。
+// 畫球場、擷取戰術快照）拿到的答案格式沒變。
 export function deriveRotation(
   lineup: LineupSnapshot,
   liberoId: string | null,
-  liberoZone: number | null,
+  replacedPlayerId: string | null,
   rotation: number,
 ): RotationPositions {
   const basePositions = lineupToPositions(lineup, rotation);
-  if (liberoId === null || liberoZone === null) {
+  if (liberoId === null || replacedPlayerId === null) {
     return { positions: basePositions, liberoReplacement: null };
   }
 
-  // 「L 蓋住了誰」＝這一輪輪轉之後，誰剛好落在 liberoZone 那一格。舊模型是把這個人另外
-  // 存進 liberoReplacement（存了第二份），新模型直接算——所以「被蓋住的人」永遠跟先發那
-  // 一份對得起來，不可能出現「lineup 說是 A、liberoReplacement 說是 B」的不同步。
-  const replaced = basePositions.find((p) => findNearestZone(p.x, p.y) === liberoZone) ?? null;
-  const coords = getZoneCoords(liberoZone);
+  const replaced = basePositions.find((p) => p.playerId === replacedPlayerId);
+  // 被頂替者不在這一輪的六人裡（名單被改過留下的殘留），或已經輪到前排 → L 不在場上。
+  // 兩種情況合成同一條分支不是偷懶：對畫面來說結果一模一樣（六人照站、沒有 L），而「殘留
+  // 的 id 要不要順手清掉」是 store 的事，不是這支純函式該有的副作用。
+  if (!replaced || !isBackRowPosition(replaced.x, replaced.y)) {
+    return { positions: basePositions, liberoReplacement: null };
+  }
+
   return {
     positions: [
-      ...basePositions.filter((p) => findNearestZone(p.x, p.y) !== liberoZone),
-      { playerId: liberoId, x: coords.x, y: coords.y },
+      ...basePositions.filter((p) => p.playerId !== replacedPlayerId),
+      { playerId: liberoId, x: replaced.x, y: replaced.y },
     ],
-    liberoReplacement: replaced ? { liberoId, replacedPosition: replaced } : null,
+    liberoReplacement: { liberoId, replacedPosition: replaced },
   };
 }
 

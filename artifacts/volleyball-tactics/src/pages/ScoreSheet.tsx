@@ -150,13 +150,15 @@ export default function ScoreSheet() {
   // 更惱人，而忘記按的成本很低（回列表隨時能再進來按）。
   const [showFinishConfirm, setShowFinishConfirm] = useState(false);
 
-  // ── 自由球員替換記憶 ──
+  // ── 自由球員替換 ──
   // useRef 讓 useEffect 讀到最新值，避免陳舊閉包（stale closure）。
-  const [previousLiberoTarget, setPreviousLiberoTarget] = useState<string | null>(null);
+  //
+  // 這裡以前還有一個 previousLiberoTarget（上一個被頂替的人），專門餵給
+  // resolveLiberoOnRotation 的「接替」啟發式。#326 把那條規則刪掉之後（L 轉出去就下場、
+  // 留在場外，不自動找下一個頂替對象），這份記憶沒有任何讀取者，連同它散在
+  // handleUndo/handleNextSet 裡的兩處清除一起移除。
   const liberoSubRef = useRef(liberoSubstitution);
   liberoSubRef.current = liberoSubstitution;
-  const prevLiberoRef = useRef(previousLiberoTarget);
-  prevLiberoRef.current = previousLiberoTarget;
 
   // ── 一般換人 ──
   // regularSubs/subCountsHistory 已搬到上面從 record 衍生；這裡只留「換人模式選中哪個場邊
@@ -204,10 +206,11 @@ export default function ScoreSheet() {
   // activeLineup：優先用已凍結的，其次用可擷取的——球場渲染、開賽擷取都以它為準。
   const activeLineup = lineup ?? capturableLineup;
 
-  // ── 自由球員自動輪轉接替 ──
-  // 每次我方輪轉（ourRotation 變動）檢查被替換的球員是否已輪到前排。
-  // 規則本體已抽到 lib/liberoRotation.ts（issue #303）——那裡是純函式、有單元測試釘住三條
-  // 分支；這個 effect 只剩「湊出輸入、把結果寫回去」，沒有任何領域判斷。
+  // ── 自由球員自動下場 ──
+  // 每次我方輪轉（ourRotation 變動）檢查被替換的球員是否已輪到前排；輪到前排就把替補狀態
+  // 清掉＝L 下場、留在場外，等記錄者自己再派他上去（#326：系統不猜下一個頂替對象）。
+  // 規則本體在 lib/liberoRotation.ts（issue #303）——那裡是純函式、有單元測試釘住兩條分支；
+  // 這個 effect 只剩「湊出輸入、把結果寫回去」，沒有任何領域判斷。
   const currentSet = record?.currentSet;
   useEffect(() => {
     const libSub = liberoSubRef.current;
@@ -215,14 +218,13 @@ export default function ScoreSheet() {
 
     // 從計分表自己的先發快照算出「這一輪」場上 6 人的座標（不再讀全域 rotations）。
     const positions = lineupToPositions(activeLineup, currentSet.ourRotation);
-    const state = { current: libSub, previousTarget: prevLiberoRef.current };
-    const next = resolveLiberoOnRotation(state, positions);
-    // 沒事發生時 resolveLiberoOnRotation 回傳的就是傳進去的那個物件，比對參照即可跳過
-    // 兩次寫入（少一輪 render，也避免把相同的值重新灌進 store）。
-    if (next === state) return;
+    const next = resolveLiberoOnRotation(libSub, positions);
+    // 沒事發生時回傳的就是傳進去的那個 id，值比對即可跳過寫入（少一輪 render，也避免把
+    // 相同的值重新灌進 store）。#326 之前這裡比的是物件參照，靠純函式那端刻意不換參照來
+    // 維持——現在回傳的是字串，這件事變成天生成立的。
+    if (next === libSub) return;
 
-    setPreviousLiberoTarget(next.previousTarget);
-    setLiberoSubstitution(id, next.current);
+    setLiberoSubstitution(id, next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentSet?.ourRotation]);
 
@@ -391,9 +393,6 @@ export default function ScoreSheet() {
     // 手動把自由球員換上場是一個「使用者動作」，先存快照才能被「復原」退掉（issue #41）。
     // backendKind null：libero 替補是純前端狀態、沒寫後端（見 controller 說明），復原只還原畫面。
     snapshotForUndo(id, null);
-    if (liberoSubstitution !== null) {
-      setPreviousLiberoTarget(liberoSubstitution);
-    }
     setLiberoSubstitution(id, targetPlayerId);
     setSelectedBenchPlayer(null);
   };
@@ -411,10 +410,10 @@ export default function ScoreSheet() {
 
   const handleUndo = () => {
     undo();
-    // previousLiberoTarget 是「自動回位」用的啟發式記憶，存在 component state、不在復原快照裡。
-    // 復原可能把 liberoSubstitution 一起退回去，這裡順手清掉這份記憶，避免它跟還原後的替補
-    // 狀態對不上（清成 null 是安全的：頂多讓之後的自動回位走預設行為，不會出錯）。
-    setPreviousLiberoTarget(null);
+    // 這裡以前還要清掉 previousLiberoTarget（接替啟發式的記憶）——那份記憶存在 component
+    // state、不在復原快照裡，復原之後可能跟還原的替補狀態對不上。#326 刪掉啟發式之後，
+    // 「L 現在頂替誰」的唯一來源就是 record.liberoSubstitution，它本來就跟著復原快照走，
+    // 不再有第二份需要手動同步的狀態。
   };
 
   const handleNextSet = () => {
@@ -437,7 +436,6 @@ export default function ScoreSheet() {
     // 右欄也就自動變回「開賽前、可編輯」的樣子——不需要另外一套「right rail 進編輯模式」
     // 的狀態機來銜接這一步。
     goNextSet();
-    setPreviousLiberoTarget(null);
     setSelectedBenchPlayer(null);
   };
 

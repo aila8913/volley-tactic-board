@@ -28,12 +28,8 @@ export function captureCurrentRotation(matchId: string): CourtSnapshot {
   // 對這裡沒有實質差別：擷取要的一直都是「按下去那一刻，這一輪誰站哪」，以前是從快取撈、
   // 現在是當場算，算出來的東西一模一樣（deriveRotation 是純函式，同輸入必同輸出）。
   const positions = data
-    ? deriveRotation(
-        data.lineup,
-        data.startingLiberoId,
-        data.liberoZones[rotation] ?? null,
-        rotation,
-      ).positions
+    ? deriveRotation(data.lineup, data.startingLiberoId, data.liberoReplacesPlayerId, rotation)
+        .positions
     : [];
   const roster = data?.roster ?? [];
   return captureFromRotation(positions, roster, { matchId, rotation });

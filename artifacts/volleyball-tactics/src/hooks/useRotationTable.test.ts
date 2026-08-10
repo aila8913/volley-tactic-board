@@ -37,13 +37,13 @@ const B = "match-B";
 
 const rt = () => useRotationTable.getState();
 
-// 「這一輪誰站哪」——store 現在只存先發 + L 的號位，畫面上看到的站位是現算的，所以測試也
+// 「這一輪誰站哪」——store 現在只存先發 + L 頂替誰，畫面上看到的站位是現算的，所以測試也
 // 走同一條推導路徑來觀察。這正是這份測試該有的視角：使用者看得到的是球場上的圈圈，不是
 // store 裡的欄位長相。省略 rotation 參數時看目前輪次。
 const rotationOf = (matchId: string, rotation?: number) => {
   const m = rt().dataByMatch[matchId];
   const r = rotation ?? m.currentRotation;
-  return deriveRotation(m.lineup, m.startingLiberoId, m.liberoZones[r] ?? null, r);
+  return deriveRotation(m.lineup, m.startingLiberoId, m.liberoReplacesPlayerId, r);
 };
 
 // store 是 module 級單例，每個 it() 之間會共用同一份記憶體，不重設的話上一個測試排的站位
@@ -136,12 +136,12 @@ describe("六輪傳播公式（#231 清單 2）：排好一輪，其他 5 輪自
 });
 
 describe("自由球員上場/替補/還原（#231 清單 3）", () => {
-  // 自由球員（L）跟一般球員的站位邏輯完全獨立：L 不參與六輪傳播，每輪各自記錄；同時間只能有
-  // 一位 L 在場上，上場時會「頂替」目標格原本站的人，該被頂替的人不會留在 positions 裡
-  //（Court.tsx 才不會畫出兩個人疊在同一格）。這一段是 issue #14 兩個 L 同時出現的 bug 根源。
+  // 自由球員（L）跟一般球員的站位邏輯完全獨立：L 不參與六輪傳播；同時間只能有一位 L 在場上，
+  // 上場時會「頂替」目標格原本站的人，該被頂替的人不會留在 positions 裡（Court.tsx 才不會
+  // 畫出兩個人疊在同一格）。這一段是 issue #14 兩個 L 同時出現的 bug 根源。
   //
-  // PR3 之後「被頂替的是誰」不再是存起來的欄位（liberoReplacement），而是 deriveRotation
-  // 從先發現算的結果——所以不可能再出現「先發說是 A、替補紀錄說是 B」的不同步。斷言本身不變。
+  // #326 之後 store 記的是「L 頂替誰」（liberoReplacesPlayerId），不是「L 站哪格」——下面
+  // 這幾條的斷言完全不用改，因為它們一開始就只看使用者看得到的東西（誰在場上、誰被蓋住）。
 
   function setupSixOnCourt() {
     const roster = [
@@ -195,7 +195,7 @@ describe("自由球員上場/替補/還原（#231 清單 3）", () => {
     });
   });
 
-  it("removePlayerFromCourt(L)：只清當前輪次，被替換者回到場上", () => {
+  it("removePlayerFromCourt(L)：解除頂替，被替換者回到場上", () => {
     setupSixOnCourt();
     rt().placePlayerOnCourt(A, "l1", 1);
 
@@ -207,6 +207,48 @@ describe("自由球員上場/替補/還原（#231 清單 3）", () => {
     expect(ids).toContain("p1"); // 被頂替的 p1 露出來（他其實一直都在先發裡）
     expect(rot0.positions).toHaveLength(6);
     expect(rot0.liberoReplacement).toBeNull();
+  });
+
+  it("拖 L 上場記的是「頂替誰」，不是「哪一格」（#326）", () => {
+    setupSixOnCourt();
+    rt().placePlayerOnCourt(A, "l1", 1); // 目前輪次 0，1 號位站的是 p1
+
+    expect(rt().dataByMatch[A].liberoReplacesPlayerId).toBe("p1");
+  });
+
+  it("在非 0 輪拖 L 上場：記的是那一格「當下站的人」，不是起始號位的人", () => {
+    setupSixOnCourt();
+    // 轉一輪之後，1 號位站的是原本排在 2 號位的 p2（shiftSequence 1→6→5→4→3→2）。
+    // 這條在防的是「忘記把當下號位換算回起始號位」——那樣會誤記成頂替 p1。
+    rt().setCurrentRotation(A, 1);
+    rt().placePlayerOnCourt(A, "l1", 1);
+
+    expect(rt().dataByMatch[A].liberoReplacesPlayerId).toBe("p2");
+    expect(rotationOf(A, 1).liberoReplacement?.replacedPosition.playerId).toBe("p2");
+  });
+
+  it("⚠️ 被頂替者輪到前排的那一輪，L 不在場上（#326 的核心規則）", () => {
+    setupSixOnCourt();
+    rt().placePlayerOnCourt(A, "l1", 1); // 頂替 p1
+
+    // p1 從 1 號位轉 5 輪後落在 2 號位（前排）——L 不能跟到前排，所以那一輪他不在場上。
+    const rot5 = rotationOf(A, 5);
+    expect(rot5.positions.map((p) => p.playerId)).not.toContain("l1");
+    expect(rot5.positions.map((p) => p.playerId)).toContain("p1");
+    // 但頂替關係本身沒被清掉——只是這一輪算出來 L 不上場。轉回後排的輪次他就在場上，
+    // 因為輪轉表是「同一份先發的六個切面」，不是六個各自獨立的時刻（計分表那邊才是時間軸，
+    // 那裡由 ScoreSheet 的 effect 真的把替補狀態清成 null，見 lib/liberoRotation.ts）。
+    expect(rotationOf(A, 0).positions.map((p) => p.playerId)).toContain("l1");
+  });
+
+  it("L 拖到「空的」後排格 → 忽略（沒有可頂替的對象）", () => {
+    rt().setRoster(A, [player("l1", "L")]); // 先發一個人都沒有
+    const before = rt().dataByMatch[A];
+
+    rt().placePlayerOnCourt(A, "l1", 1);
+
+    // 新模型只認得「L 頂替某個人」，「L 站在空格上」在規則上不存在，所以連 state 都不換。
+    expect(rt().dataByMatch[A]).toBe(before);
   });
 });
 
@@ -228,12 +270,13 @@ describe("自由球員後排限制（#231 清單 4）", () => {
 describe("排 L 時同步 startingLiberoId（#231 清單 5 / issue #14 bug 1 的修法）", () => {
   it("不管從板凳或備位區拖上場的是哪個 L，都要把它設成 startingLiberoId", () => {
     rt().setRoster(A, [player("p1"), player("l1", "L"), player("l2", "L")]);
+    // L 一定要落在「有人站著」的後排格（#326：拖曳的語意是「頂替這個人」），所以先排 p1。
     rt().placePlayerOnCourt(A, "p1", 1);
 
-    rt().placePlayerOnCourt(A, "l1", 5);
+    rt().placePlayerOnCourt(A, "l1", 1);
     expect(rt().dataByMatch[A].startingLiberoId).toBe("l1");
 
-    rt().placePlayerOnCourt(A, "l2", 5); // 換另一位 L 上場
+    rt().placePlayerOnCourt(A, "l2", 1); // 換另一位 L 上場
     expect(rt().dataByMatch[A].startingLiberoId).toBe("l2"); // 備位區顯示要跟著換，不能停在 l1
   });
 });
@@ -247,7 +290,11 @@ describe("⚠️ 行為變更：一般球員拖到自由球員正站著的格子
   // 自由球員，「那格有沒有人」只剩一個答案；L 是渲染時蓋在先發上面的一層，蓋子底下站著誰
   // 由 deriveRotation 現算。這正是 characterization test 存在的意義——行為變了，這條就會紅，
   // 逼這個 PR 明講「我改了這件事」，而不是讓它混在 diff 裡溜過去。
-  it("1 號位只會有一個人（L 站在上面，被他蓋住的是新拖進來的 p7）", () => {
+  //
+  // ⚠️ 再變一次（#326）：被 L 頂替的人被擠出先發時，那次頂替不再成立，L 回到場外。舊版
+  // （記號位）會讓 L 自動改成蓋住新來的 p7；新版不猜，理由跟刪掉「接替」啟發式一樣——
+  // 教練沒說過要換頂替對象，系統替他寫下來就是在紀錄裡捏造一次替換。
+  it("1 號位只會有一個人：p7 擠掉 p1 進先發，L 因為頂替對象離場而下場", () => {
     const roster = [
       player("p1"),
       player("p2"),
@@ -269,9 +316,9 @@ describe("⚠️ 行為變更：一般球員拖到自由球員正站著的格子
     const rot0 = rotationOf(A, 0);
     const zone1 = getZoneCoords(1);
     const atZone1 = rot0.positions.filter((p) => p.x === zone1.x && p.y === zone1.y);
-    expect(atZone1.map((p) => p.playerId)).toEqual(["l1"]); // ← 只有一個人，不再疊圈
-    // p7 確實進了先發（他擠掉 p1），只是這一輪被 L 蓋住而已——L 一下場他就會露出來。
-    expect(rot0.liberoReplacement?.replacedPosition.playerId).toBe("p7");
+    expect(atZone1.map((p) => p.playerId)).toEqual(["p7"]); // ← 只有一個人，不再疊圈
+    expect(rot0.liberoReplacement).toBeNull(); // 頂替對象 p1 離場，這次頂替不成立
+    expect(rt().dataByMatch[A].liberoReplacesPlayerId).toBeNull(); // 而且 store 裡不留殘值
     expect(rot0.positions.map((p) => p.playerId)).not.toContain("p1"); // p1 被 p7 擠掉了
   });
 });
@@ -299,7 +346,7 @@ describe("setRoster 幽靈站位清理（#231 清單 6 / issue #35）", () => {
     expect(rotationOf(A, 0).liberoReplacement).toBeNull();
   });
 
-  it("先發 L 被移出名單時，他在各輪的站位也一併撤掉", () => {
+  it("先發 L 被移出名單時，他的頂替關係也一併撤掉", () => {
     rt().setRoster(A, [player("p1"), player("l1", "L")]);
     rt().placePlayerOnCourt(A, "p1", 1);
     rt().placePlayerOnCourt(A, "l1", 1);
@@ -307,8 +354,22 @@ describe("setRoster 幽靈站位清理（#231 清單 6 / issue #35）", () => {
     rt().setRoster(A, [player("p1")]); // 名單裡沒有任何 L 了
 
     expect(rt().dataByMatch[A].startingLiberoId).toBeNull();
-    expect(rt().dataByMatch[A].liberoZones.every((z) => z === null)).toBe(true);
+    expect(rt().dataByMatch[A].liberoReplacesPlayerId).toBeNull();
     expect(rotationOf(A, 0).positions.map((p) => p.playerId)).toEqual(["p1"]); // p1 露出來
+  });
+
+  it("被頂替的人被移出名單時，頂替關係也要跟著清掉（#326 才需要顧的殘留）", () => {
+    // 舊模型記的是號位，人被刪掉頂多讓那格空著；新模型記的是**人**，所以會留下一個指向
+    // 不存在球員的 id。畫面上看不出差別（deriveRotation 算出來一樣是「L 不在場上」），
+    // 但 store 裡留著一個永遠不會成真的值，下一個讀它的人就會被騙。
+    rt().setRoster(A, [player("p1"), player("l1", "L")]);
+    rt().placePlayerOnCourt(A, "p1", 1);
+    rt().placePlayerOnCourt(A, "l1", 1);
+
+    rt().setRoster(A, [player("l1", "L")]); // p1 被移出名單，L 還在
+
+    expect(rt().dataByMatch[A].liberoReplacesPlayerId).toBeNull();
+    expect(rt().dataByMatch[A].startingLiberoId).toBe("l1"); // L 本人還在名單裡，不受影響
   });
 });
 
@@ -363,27 +424,27 @@ describe("removePlayerFromCourt — 一般球員 vs 自由球員（#231 清單 8
     }
   });
 
-  it("自由球員：只從目前輪次移除，其他輪次的 L 站位不受影響", () => {
-    rt().setRoster(A, [player("p1"), player("l1", "L")]);
+  // ⚠️ 行為變更（#326）：這一條原本釘的是「L 只從目前輪次移除，其他輪次的 L 站位不受影響」，
+  // 因為舊模型讓 L 在六輪各有一個獨立的號位。新模型只有一份「頂替誰」，那件事不再可表示——
+  // 而且它本來就跟規則對不上：把 L 換下場是一個當下的動作，不是「只有第 3 輪他不上場」。
+  it("自由球員：解除頂替＝整份先發都看不到他了", () => {
+    rt().setRoster(A, [player("p1"), player("p5", "OH"), player("l1", "L")]);
     rt().placePlayerOnCourt(A, "p1", 1);
-    rt().setCurrentRotation(A, 0);
-    rt().placePlayerOnCourt(A, "l1", 1); // 只寫進輪次 0
+    rt().placePlayerOnCourt(A, "p5", 5);
+    rt().placePlayerOnCourt(A, "l1", 1); // 頂替 p1
 
-    rt().setCurrentRotation(A, 1);
-    rt().placePlayerOnCourt(A, "l1", 5); // 輪次 1 另外單獨排一個 L 站位（L 不跟著輪轉，各輪獨立記錄）
+    rt().removePlayerFromCourt(A, "l1");
 
-    rt().setCurrentRotation(A, 0);
-    rt().removePlayerFromCourt(A, "l1"); // 目前輪次是 0，只該清輪次 0
-
-    expect(rotationOf(A, 0).positions.map((p) => p.playerId)).not.toContain("l1");
-    expect(rotationOf(A, 1).positions.map((p) => p.playerId)).toContain("l1"); // 輪次 1 沒被動到
+    for (let r = 0; r < 6; r++) {
+      expect(rotationOf(A, r).positions.map((p) => p.playerId)).not.toContain("l1");
+    }
   });
 });
 
 describe("setLineupFromSnapshot（#231 清單 9）", () => {
-  it("先發直接就是傳進來那一份，L 各輪站位一律清空", () => {
+  it("先發直接就是傳進來那一份，L 的頂替關係一律清空", () => {
     const lineup: LineupSnapshot = { 1: "p1", 2: "p2" };
-    // 先手動塞一個 L 站位，確認 setLineupFromSnapshot 真的會把它清掉，
+    // 先手動塞一個頂替關係，確認 setLineupFromSnapshot 真的會把它清掉，
     // 而不是「本來就是空的，測不出有沒有清」。
     useRotationTable.setState((state) => ({
       dataByMatch: {
@@ -393,7 +454,7 @@ describe("setLineupFromSnapshot（#231 清單 9）", () => {
           currentRotation: 0,
           startingLiberoId: "leftover-l",
           lineup: {},
-          liberoZones: [1, 5, null, null, null, null],
+          liberoReplacesPlayerId: "leftover-target",
         },
       },
     }));
@@ -403,7 +464,7 @@ describe("setLineupFromSnapshot（#231 清單 9）", () => {
     // ⚠️ 行為變更（表述層面）：以前這個 action 要把號位快照「展開」成六輪座標寫進 state，
     // 現在 store 存的本來就是同一種格式，直接放進去即可——少掉的正是那層翻譯。
     expect(rt().dataByMatch[A].lineup).toEqual(lineup);
-    expect(rt().dataByMatch[A].liberoZones.every((z) => z === null)).toBe(true);
+    expect(rt().dataByMatch[A].liberoReplacesPlayerId).toBeNull();
 
     // 使用者看得到的結果沒變：輪次 0 照排，輪次 1 起始站 1 號位的人（p1）落在 6 號位。
     expect(rotationOf(A, 0).positions).toEqual(
@@ -425,10 +486,10 @@ describe("⚠️ 行為變更：resetPositions 清全部輪次（原 resetCurren
   // 這個行為其實舊版也名不副實：清掉第 3 輪之後，只要再拖任何一個人，六輪就會全部從那一輪
   // 重新推算，被清掉的其他輪資料本來就留不住——「只清一輪」是舊表示法多存了五份副本才變得
   // 出來的假象。所以改成誠實地清全部，按鈕的確認文案也一併改過（RotationControlsFooter）。
-  it("清掉之後六個輪次都沒有人，L 站位也一併清空", () => {
+  it("清掉之後六個輪次都沒有人，L 的頂替關係也一併清空", () => {
     rt().setRoster(A, [player("p1"), player("l1", "L")]);
     rt().placePlayerOnCourt(A, "p1", 1);
-    rt().placePlayerOnCourt(A, "l1", 5);
+    rt().placePlayerOnCourt(A, "l1", 1); // 頂替 p1
 
     rt().setCurrentRotation(A, 2);
     rt().resetPositions(A);

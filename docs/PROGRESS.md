@@ -120,14 +120,14 @@ lives in git log + the issues named).
   已在 #115 補留言註記其解耦模型作廢（多處文件曾拿它當法規引用）。
 - **輪轉表 store 的站位表示法只剩一份（#231，08-06 合併、08-07 關閉）。**
   `PerMatchRotationState` 現在只存 `lineup: LineupSnapshot`（起始號位 → playerId，**0~6 人皆合法**）
-  ＋ `liberoZones: (number|null)[]`（長度 6，L 這一輪站哪個後排格）＋ `startingLiberoId`；
+  ＋ `liberoReplacesPlayerId`（L 頂替誰；**08-10 由 #326 從 `liberoZones` 改過來**）＋ `startingLiberoId`；
   舊的 `rotations: RotationPositions[]`（六輪座標）與 `liberoReplacement`（被 L 蓋住的人）都刪了，
-  改由 `deriveRotation(lineup, liberoId, liberoZone, rotation)` 在渲染時現算。原則是
+  改由 `deriveRotation(lineup, liberoId, replacedPlayerId, rotation)` 在渲染時現算。原則是
   `docs/event-grammar-spec.md` 那條**「能推導就不存」**套到前端 store。
   - `resetCurrentRotationPositions` → **`resetPositions`（清全部六輪）**：一份共用 `lineup` 下
     「只有第 3 輪是空的」不可表示；舊行為本來也名不副實（清完再拖一個人，六輪就全部重算）。PO 已確認接受。
   - 「可不可以開賽」的門檻獨立成 `isLineupFull`，跟「現在排了誰」徹底分家（#174 死結的根因）。
-  - ⚠️ **`liberoZones` 這個方向已於 08-07 被 PO 推翻，#326 接手改掉**。當時的理由是「L 不佔輪轉序，
+  - ⚠️ **`liberoZones` 這個方向已於 08-07 被 PO 推翻，08-10 由 #326 改掉（見下方獨立條目）**。當時的理由是「L 不佔輪轉序，
     所以各輪站哪格是獨立的真實資訊」；但 PO 定案的規則是**「L 從後排轉出去就下場、留在場外，直到
     手動再換上場」**，在這條規則下「L 站哪格」＝被頂替者在該輪的號位，是**推導值**。
     **判準值得記住：「這個值能不能從別的值推出來」要先確定領域規則是什麼——規則沒釘死之前，
@@ -135,6 +135,25 @@ lives in git log + the issues named).
     才是原始事實，留下的 `liberoZones` 才是推導值，方向反了。
   - **#14 的「一般球員疊到 L 站的格子」這次驗證不了**（原本以為順帶消失）：QA 時發現使用者根本
     排不出自由球員先發，構造不出那個情境。見下一條。
+- **自由球員模型改成「記頂替誰」（#326，08-10 交付）。** 規則定案：**L 從後排轉出去就下場、留在
+  場外，直到使用者手動再把他換上場——系統不自動幫他找下一個頂替對象。** 理由不是「猜得不準」，而是
+  **這個 app 產出的是紀錄不是示意圖**：替教練猜一個頂替對象，會在資料裡寫下一次根本沒發生過的替換。
+  兩處改動：
+  - `lib/liberoRotation.ts` 刪掉「接替」啟發式（被頂替者輪到前排時，若上一輪的目標現在在後排就自動
+    改頂替他）。諷刺的是那條分支正好違反它自己隔壁那行寫的判準。連帶 `LiberoState.previousTarget`
+    整個消失，函式簽章從「吃/吐一個物件」收斂成 `(replacedPlayerId, positions) => string | null`——
+    順手解掉一個舊包袱：以前「沒變化要回傳原物件參照」是靠紀律維持的（PR #69→#70 的 render loop），
+    現在回傳字串，`next === current` 天生就是值比較。`ScoreSheet.tsx` 的 `previousLiberoTarget`
+    state 及其散在 `handleUndo`/`handleNextSet` 的兩處清除一併移除。
+  - store 的 `liberoZones: (number|null)[]` → **`liberoReplacesPlayerId: string | null`**。
+    「L 站哪格」從此是渲染時算的：被頂替者在後排→ L 站他的格子，被頂替者輪到前排（或已不在先發裡）
+    → L 不在場上。**「L 不能跟著輪到前排」這條排球規則因此變成一行推導，不再需要一段清理邏輯。**
+  - 三個連帶的行為變更（都在測試裡標了 ⚠️）：(a) `removePlayerFromCourt(L)` 從「只清目前這一輪」變成
+    「解除頂替」，因為 L 已經沒有各輪獨立的站位可以分開清；(b) 把 L 拖到**空的**後排格會被忽略——新
+    模型只認得「頂替某個人」，「L 站在空格上」在規則上不存在；(c) 被 L 頂替的人被擠出先發時，那次頂替
+    不成立、L 回場外，**不會**自動改成頂替新來的那個人（跟刪掉接替啟發式是同一條理由）。
+  - **還沒解的**：#327（3×2＋1 的先發格）仍然開著，所以「排 L 先發」的唯一入口依舊是 `Court.tsx`
+    那顆備位圓圈。這張只換了地基，使用者可及性沒有改善。
 - **自由球員目前完全沒有可用的設定入口（08-07 QA 發現，#327）。** 「誰是先發 L」在整個 app 裡只有
   一個入口——`Court.tsx:568` 的 L 備位圓圈，只在 `courtView === "rotation"` 渲染。而 (1)
   `useTacticsBoard.ts:287` 的 `startSession()` 無條件把 `courtView` 設成 `"tactics"`，新開一份戰術
@@ -437,7 +456,8 @@ Portal，飛出選單與帶 mutation 副作用的 controller 全在自動測試�
 **#14** 的「一般球員疊到 L 那格」**仍未驗證**——08-07 實測時發現排不出自由球員先發（#327），
 構造不出那個情境，驗收改隨 #326／#327 一起補；
 **ADR-0006**（單一表示法決策 ＋「persist 永不能帶 match 資料」不變條件）尚未寫，
-且要等 #326 改完 L 模型再寫，否則會把已被推翻的 `liberoZones` 方向寫進 Accepted 狀態。
+但**08-10 起不再被擋著**——#326 已把 L 模型改成 `liberoReplacesPlayerId`，寫 ADR 時要記的是這個
+方向，不是被推翻的 `liberoZones`。
 **#40**（undo/redo 不涵蓋輪轉拖曳，與 #147 同塊邏輯但不同 store）——建議排在 **#231 之後**：先發表示法
 收斂成一份、座標降級為衍生值之後，undo 要回捲的目標才明確，屆時這張可能小很多。
 **#64**（背景寫入失敗不 reconcile）——#201 在 `useScoreSheet.start()` 補了 guard，**堵掉「單機就能製造
