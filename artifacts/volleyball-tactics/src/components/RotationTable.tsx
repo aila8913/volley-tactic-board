@@ -69,6 +69,13 @@ export function RotationPanel({ matchId, showTips = false }: RotationPanelProps)
           roster={roster}
           rotation={currentRotation}
           onStep={onStep}
+          // 第七格（#327）在戰術板是**唯讀顯示**：ADR-0001 訂死戰術板不從右欄改先發，
+          // 自由球員也適用同一條——沒有 onLiberoChange，這一格就只是「目前 L 頂替誰」的
+          // 對照資訊。在此之前這裡連 L 是誰都看不到（清單把 role "L" 整個濾掉了），
+          // 教練畫戰術時完全不知道場上那個位置站的是誰。
+          showLiberoCell
+          liberoId={data?.startingLiberoId ?? null}
+          liberoReplacesPlayerId={data?.liberoReplacesPlayerId ?? null}
           footer={
             <div className="mt-4 space-y-5">
               <div className="flex items-center justify-between">
