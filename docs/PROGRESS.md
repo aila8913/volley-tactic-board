@@ -26,9 +26,9 @@
 同批把計分板改成一鍵記分。新開 #320（背景強度微調）／#322／#323／#324；#134 Track B 標記為已由設計
 系統接手，#21／#19 過時的 body 一併修正。\_
 
-\_Last updated: 2026-08-10 (aila) — **M3.5 架構深化收完並關閉 milestone**（11 張全數 closed）：#304 把
-戰術板場景編輯的歷史政策收斂成一支 helper、順手修掉四個 undo bug（#361，PR #362），#352 把「有幾格
-可以滑」收進 `visibleSetCount()`（PR #363）。下一階段 M4，#21/#51/#99 已放進 Project 的 Todo。\_
+\_Last updated: 2026-08-10 (aila) — **M3.5 收完關閉**（#304／#361 歷史政策收斂＋四個 undo bug、
+#352 `visibleSetCount`），接著 **#168 第一批：前端互動行為終於測得到**（PR #366，該張仍 open，
+剩 `didMove` 手勢與 `Court` 座標兩塊）。下一階段 M4，#21/#51/#99 在 Project 的 Todo。\_
 
 ## Current state
 
@@ -61,7 +61,31 @@ lives in git log + the issues named).
   「這個選擇器有幾格可以滑」。那個 `+1` 隱含的正是同一條慣例，卻在 UI 層被兩顆元件各自從頭推導。
   函式吃三個原始值包成的具名物件（不吃 `ScoreSheetState`，照 `volleyballRules.ts` 開頭「只吃規則需要
   的最原始資料」的哲學；不用 issue 草擬的三個位置參數，是因為後兩個都是 boolean、呼叫端讀不出誰是誰）。
-  **殘留**：規則本身現在有 4 條測試，但「`MatchInfoRail` 有沒有正確用它」仍測不到（卡 #168，已補留言）。
+  **殘留已補上**：規則本身的 4 條測試之外，「`MatchInfoRail` 有沒有正確用它」現在也測得到了
+  （#168 第一批，見下一條）——而且是實測過的：把算式改回舊版 `completedSets.length + 1`，測試會紅。
+- **前端互動行為終於測得到了（#168 第一批，08-10 交付 PR #366；這張票仍 open）。**
+  在此之前元件測試只有 `renderToStaticMarkup` 一條路——一次性的 HTML 字串序列化，發不出事件、
+  看不到 state 變化後的重繪、也讀不到 Radix Portal 的內容。結果是**覆蓋的都是安全的部分，
+  沒覆蓋的都是危險的部分**：純函式規則全有測試，握著點擊分流／手勢／彈窗的元件全在盲區——
+  而那正是 #120／#172／#349 三次 bug 的落點。
+  - 基礎設施在 `artifacts/volleyball-tactics/src/test/`：`setup.ts`（掛 vitest 的 `setupFiles`，
+    jest-dom 斷言 ＋ 每個測試後 `cleanup()`——這個專案沒開 `globals`，RTL 的自動清理不會生效）、
+    `renderWithProviders.tsx`（`QueryClientProvider` ＋ wouter 的 `memoryLocation`，導覽因此變成
+    可以直接讀的值，才驗得了「**不該**換頁」）。測試數 286 → 319。
+  - **兩種寫法並存是刻意的**（已寫進 `CLAUDE.md`）：純展示元件（資料全由 props 決定、沒有互動）
+    繼續用 `renderToStaticMarkup`，改寫沒有好處；有互動的一律用 testing-library。看到兩種寫法
+    不要以為是遷移到一半。
+  - 挑的測試目標不是新功能，是**修過、而且修錯過一次的既有行為**：NavRail（含 #120 那個「開彈窗
+    再按 Esc 卻被拉去戰術頁」的回歸測試）、`NewTacticDialogModal`（issue 點名的 Portal 死角本身）、
+    `RotationRailPanel` 的 stepper 邊界與點擊指派、`MatchInfoRail` 的局軸格數。
+  - ⚠️ **jsdom 沒有排版引擎**，`getBoundingClientRect()` 全是 0×0。userEvent 連續點兩個元素時，
+    第一個的 `mouseout` 會帶 `relatedTarget: null`，React 於是合成一個 `mouseLeave` 給外層容器——
+    **靠 hover 展開的 UI 會在點擊送達前自己收掉**（第一次寫 NavRail 測試時 8 條全紅就是這個，
+    而且第一個假設「元件的 blur 判斷有 bug」被 probe 推翻了才找到真因）。解法是用 `fireEvent`
+    開面板、`userEvent` 做真正要驗的那一下，完整說明在 `NavRail.test.tsx` 的 `openSubmenu()` 上方。
+  - **還在盲區的兩塊**（#168 留著就是為了它們，範圍已寫進該張留言）：`Markers.tsx`／`DefenseRange.tsx`
+    的 `didMove` 手勢守衛、`Court.tsx`／`ScoreSheetCourt.tsx` 的座標數學與拖曳。兩塊都是指標事件
+    密集區，八成會再撞上上面那個 jsdom 坑。
 - **戰術板場景編輯的歷史政策收斂成一支 helper，順手修掉四個 undo bug（#304／#361，08-10 交付 PR #362）。**
   #304 開票時的說法是「35 個成員裡有三組平行的 add/update/remove 三連，大介面、薄實作」，並問了三個
   問題。查證後的答案值得記，因為結論跟票面直覺相反：
@@ -661,34 +685,6 @@ serving≠null 但 record.lineup=null」那條路**，但真正的 reconcile 仍
   `currentSet`↔`completedSets`——`CompletedSet` 沒存 serving／輪轉／serverId，搬回來那局會少掉發球方，
   從 rallies 重放才全對；(2) 完賽時要**砍掉沒開球的尾巴局**（按了「下一局」才想起比賽已結束），
   否則各局比分多一行 0:0，前後端兩邊都要砍。seed 的假空局一併移除。
-- **#287**（球隊帶出歷史用過的人當建議清單，08-05）— #252 定案的查詢層推導實作：新增
-  `GET /teams/:teamId/roster-suggestions`，`matches.teamId → players.personId → people` 一句 join
-  撈出「這支球隊登錄過的人」，**不建 `team_members`、完全不動 schema**。**走後端 endpoint 而非前端
-  拼**：前端拼會變成「撈全部比賽→過濾 teamId→逐場再打一次 `/matches/{id}/players`」的 N+1 請求。
-  回傳的 `name`/`number`/`role` 取**最近一場**那一列（`players` 而非 `people.name`，跟 number/role
-  同一列來源才一致）——背號/位置會換季換人變，最近一次最可能還是對的。UI 是 `MatchDetailForm` 選了
-  既有球隊後出現的一排 chip，**點一顆才加一個人、不自動整批帶入**：自動填會覆蓋使用者已經打好的列，
-  是會產生錯誤答案的方向（同 #213/#215 那條「能不能給預設，取決於預設的方向會不會產生錯誤答案」）。
-  已在表單裡的 `personId` 會從建議清單濾掉；名單只剩一列空白佔位列時第一次點是**取代**而非 append
-  （否則留一列空名字卡住 zod 驗證）。`PlayerRosterMatchHint` 完全沒動——兩者互補：建議清單接住
-  「這隊打過的人」，打字比對接住清單裡沒有的人（臨時上場、別隊老面孔）。**實機驗過**：種子資料裡
-  林小美同時出現在 A 隊（#15）與 B 隊（#13），正是「一人跨多隊」情境下背號各自不同的預期行為。
-- **#221 ＋ #224**（人員合併機制與管理頁，08-05，PR #293/#295）— #213 留下的缺口：`people` 只在
-  MatchDetailForm 送出名單時被動建立，同名重複沒地方合併、打錯字沒地方改。#221（後端）：新增
-  `person_merges` append-only 稽核表（一次合併寫 N 列，記 target／來源名字快照／被改指的
-  `players.id` 清單——合併不可逆，這張表是誤併後人工拆得回來的保險）；`POST /people/:id/merge`
-  在單一 transaction 裡「改指向→寫日誌→刪來源」，body 帶進來的 `sourceIds` 額外手動驗擁有權
-  （`owns` closure 只驗得到 path param，驗不到 body 陣列，漏掉就是 #225 那類 IDOR）；候選偵測
-  `normalizePersonName` 刻意比 MatchDetailForm 的去重判準寬（NFKC＋拿掉所有空白含全形空白），
-  因為這裡只是列出來給人勾選確認、猜寬了成本趨近於零，猜漏了才是問題。#224（前端）：
-  `GET /people` 順手補上 `matchCount`/`teamNames`（新 `PersonSummary` schema，`Person` 本身
-  不動，因為 POST/PATCH 那幾支回應算不出這兩個欄位）；新增 `PeopleManagement.tsx`
-  （`/analytics/people/manage`）——列表／新增／行內改名／刪除（`window.confirm` 講清楚只解除
-  跨場關聯不刪比賽資料）／合併建議區塊（每組候選選目標＋來源，確認訊息點名哪些名字會消失）。
-  **實測抓到的坑**：`normalizePersonName` 原本只把內部空白壓成一個而非整個拿掉，「王　小明」
-  （全形空白）配不到「王小明」，正是這功能最該抓的那種手誤，已修正並補測試。**副產品 #294**：
-  合併測試時發現 `GET /matches/{matchId}/players` 沒有 `ORDER BY`，Postgres MVCC 讓任何 UPDATE
-  都把該列擠到名單最後——與合併無關的既有 bug，另開追蹤、不混進這兩張 PR。
 
 ### 設計 (tang)
 
