@@ -6,6 +6,7 @@
   "scripts": {
     "hello": "tsx ./src/hello.ts",
     "backfill-person-ids": "tsx ./src/backfill-person-ids.ts",
+    "backfill-event-outcomes": "tsx ./src/backfill-event-outcomes.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

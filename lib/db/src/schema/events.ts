@@ -19,8 +19,13 @@ export const ballTypeEnum = pgEnum("ball_type", ["serve", "spike", "tip", "chanc
 
 export const eventSourceEnum = pgEnum("event_source", ["live", "review"]);
 
-// 這一球的「結果」：point = 我方因這球得分、loss = 我方因這球失分、in_play = 球還在來回中
-// （既不是得分也不是失分的中間過程球，例如一次成功的接發、一次到位的舉球）。
+// 這一球的「結果」，判準是「執行這球的一方」（events.side），不是「我方」：
+//   outcome = (event.side === rally.winner) ? "point" : "loss"
+// 例：我方扣球被攔死 → side=home、winner=away → loss（不是「我方失分」這種以我方為基準
+// 的講法，而是「執行這球的 home 方沒有贏得這分」）；對手攔網得分 → side=away、winner=away
+// → point。in_play = 球還在來回中（既不是得分也不是失分的中間過程球，例如一次成功的
+// 接發、一次到位的舉球），只會出現在進階版逐球記錄——簡易版一個 rally 只記一顆決定球，
+// 所以簡易版的 outcome 永遠是 point 或 loss，不會是 in_play。
 // 對應 docs/event-grammar-spec.md 決策 7。簡易版錄球手勢第 3 步本來就會問「得分/失分」，
 // 所以簡易版也一起存這個欄位（不是進階版才有）—— 反正使用者已經按過那個按鈕了，
 // 存起來是零額外成本，之後才能直接拿來做「失分結構」（哪一種動作最常造成失分）這類統計。

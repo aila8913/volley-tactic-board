@@ -7,6 +7,7 @@
  */
 import type { BallType } from './ballType';
 import type { EventAction } from './eventAction';
+import type { EventOutcome } from './eventOutcome';
 import type { EventSide } from './eventSide';
 import type { EventSource } from './eventSource';
 
@@ -27,4 +28,5 @@ export interface MatchEvent {
   note?: string | null;
   videoTimestamp?: number | null;
   source: EventSource;
+  outcome?: EventOutcome | null;
 }

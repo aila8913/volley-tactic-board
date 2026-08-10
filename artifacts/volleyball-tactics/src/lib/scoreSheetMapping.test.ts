@@ -148,6 +148,7 @@ describe("pointRecordToEvent", () => {
       playerId: "12",
       action: "attack",
       source: "live",
+      outcome: "point", // 動作方(us)＝贏家(us)
     });
   });
 
@@ -164,6 +165,55 @@ describe("pointRecordToEvent", () => {
       playerId: null,
       action: "serve",
       source: "live",
+      outcome: "point", // 動作方(opponent)＝贏家(opponent)
+    });
+  });
+
+  // outcome（#51 第一塊）：以「執行這球的一方」為基準，不是以我方為基準。四種組合都要測到，
+  // 因為「我方動作、我方贏」跟「我方動作、對手贏（我方失誤）」這兩種最容易搞混方向。
+  describe("outcome（以執行方為基準，見 docs/event-grammar-spec.md 決策 7）", () => {
+    it("我方執行、我方贏 → point", () => {
+      const point: PointRecord = {
+        side: "us",
+        wasSideOut: false,
+        action: "attack",
+        touchedBy: { side: "us", playerId: "12" },
+      };
+      expect(pointRecordToEvent(point, 1)?.outcome).toBe("point");
+    });
+
+    it("我方執行、對手贏（我方失誤）→ loss", () => {
+      const point: PointRecord = {
+        side: "opponent",
+        wasSideOut: true,
+        action: "attack",
+        touchedBy: { side: "us", playerId: "12" }, // 我方扣球被攔死：side=home、winner=away
+      };
+      expect(pointRecordToEvent(point, 1)?.outcome).toBe("loss");
+    });
+
+    it("對手執行、對手贏 → point", () => {
+      const point: PointRecord = {
+        side: "opponent",
+        wasSideOut: true,
+        action: "block",
+        touchedBy: { side: "opponent" }, // 對手攔網得分：side=away、winner=away
+      };
+      expect(pointRecordToEvent(point, 1)?.outcome).toBe("point");
+    });
+
+    it("對手執行、我方贏 → loss", () => {
+      const point: PointRecord = {
+        side: "us",
+        wasSideOut: false,
+        action: "serve",
+        touchedBy: { side: "opponent" }, // 對手發球失誤：side=away、winner=home
+      };
+      expect(pointRecordToEvent(point, 1)?.outcome).toBe("loss");
+    });
+
+    it("沒看到（沒有 action/touchedBy）仍回傳 null，不是「回傳一個沒有 outcome 的物件」", () => {
+      expect(pointRecordToEvent({ side: "us", wasSideOut: false }, 1)).toBeNull();
     });
   });
 });
