@@ -141,3 +141,39 @@ export function splitCompletedAndCurrent<T>(
   if (isFinished) return { completed: sets, current: undefined };
   return { completed: sets.slice(0, -1), current: sets[sets.length - 1] };
 }
+
+// 「這個局數選擇器有幾格可以滑」（issue #352）。
+//
+// 這是 splitCompletedAndCurrent() 的下游：切分回答的是「哪些局已結束、哪一局進行中」，
+// 這支回答的是從那個切分推出來的下一件事——UI 上到底要排出幾格。兩顆右欄元件
+//（AnalyticsRotationRail 唯讀、MatchInfoRail 最後一格可編輯）以前各自手寫同一段
+// 三行算式，#349「已完賽的比賽預設停在不存在的第 4 局」因此修了兩次才修完（PR #350 只
+// 改了其中一份，PR #351 才補上另一份）。規則模組原本就該多劃這一格邊界。
+//
+// 規則本身：
+//   - **未完賽** → 已結束局數 + 1。那個 +1 是「目前這一局」，可能還在打，也可能還沒開賽
+//     而正等著在右欄排先發（MatchInfoRail 的可編輯分支），一定要留。
+//   - **已完賽** → #218 之後沒有「進行中的那一局」，重建出來的 currentSet 只是個
+//     serving=null 的佔位，無條件 +1 會多開一格永遠空白、而且預設就停在上面的格子。
+//   - **例外：已完賽但目前這局真的記過分**（hasCurrentSetData）→ 例如三戰兩勝已經 2:0，
+//     教練仍按了「下一局」並繼續記分，那一局有真實資料，不能因為判定完賽就滑不到。
+//     所以判準不是「完賽與否」，是**那一格裡到底有沒有東西**（PR #351 修正的判準）。
+//   - 保底 1 格：完賽卻連一局都沒有（資料異常或紀錄被刪光）時仍要留一格，否則回傳 0
+//     會讓呼叫端的 clamp 算出 -1 這種不存在的索引。
+//
+// 為什麼吃三個原始值、不直接吃 ScoreSheetState：跟這個檔案開頭寫的設計哲學一致——規則
+// 模組只吃「規則需要的最原始資料」，不吃任何呼叫端的容器型別。兩顆元件手上的 record 現在
+// 剛好同型別，但讓純規則反過來依賴 UI 的狀態形狀，正是 applyRally 當初刻意避開的耦合。
+//
+// 為什麼參數包成物件、不是 issue 裡草擬的三個位置參數：後兩個都是 boolean，
+// `visibleSetCount(3, false, true)` 在呼叫端完全讀不出哪個是哪個，寫反了型別也不會擋。
+// 具名欄位讓呼叫端自我說明，也讓日後多一個條件時不會又是一個沒名字的布林。
+export function visibleSetCount(input: {
+  completedSetCount: number;
+  hasCurrentSetData: boolean;
+  isMatchFinished: boolean;
+}): number {
+  const { completedSetCount, hasCurrentSetData, isMatchFinished } = input;
+  if (!isMatchFinished) return completedSetCount + 1;
+  return Math.max(completedSetCount + (hasCurrentSetData ? 1 : 0), 1);
+}

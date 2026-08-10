@@ -1,6 +1,7 @@
 import { useState } from "react";
 import RotationRailPanel from "@/components/RotationRailPanel";
 import { getMatchWinner } from "@/lib/matchOutcome";
+import { visibleSetCount } from "@/lib/volleyballRules";
 import { INFO_RAIL_BASE_CLASS } from "@/lib/appChromeStyles";
 import type { MatchPlayer } from "@/types/match";
 import type { LineupSnapshot, ScoreSheetState } from "@/types/scoresheet";
@@ -54,25 +55,16 @@ export default function AnalyticsRotationRail({
 
   const completedSets = record?.completedSets ?? [];
   const isMatchFinished = getMatchWinner(completedSets, winsNeeded) !== null;
-  // 選擇器一共有幾格可以走。未完賽時是「已結束的局 + 進行中的那一局」，所以 +1；
-  // 已完賽時**沒有進行中的那一局**（#218 之後，已完賽比賽重建出來的 currentSet 只是一個
-  // serving=null 的佔位，不是真的一局），那個 +1 會多開一格空格子——三局的比賽會預設停在
-  // 標著「第 4 局」的空盤子上（#349 Bug A）。
-  //
-  // 例外是「已完賽、但目前這局真的記過分」（serving !== null）：三戰兩勝已經 2:0、教練仍按了
-  // 「下一局」並繼續記，那一局有真實資料，不能因為判定完賽就滑不到。所以判準不是「完賽與否」，
-  // 是**那一格裡到底有沒有東西**。
-  // Math.max(..., 1)：完賽但一局都沒有（資料異常，或整場記錄被刪光）時仍要留一格，否則
-  // totalSets = 0 會讓下面的 clamp 算出 -1 這種不存在的索引。
-  //
-  // ⚠️ 這段規則 `MatchInfoRail.tsx` 有一份**幾乎相同**的拷貝（那邊多一個「可編輯」分支）。
-  // #349 只修了這裡、漏了那裡，結果比賽列表右欄照樣顯示「第 4 局」——改動任一邊都要同時看
-  // 另一邊。刻意沒抽成共用函式：兩顆元件的分支結構不同（唯讀 vs 可寫），共用的只有這三行
-  // 算式，抽出去反而要傳一堆參數；但這條「有兩份」的事實必須寫在兩邊的註解裡。
+  // 選擇器一共有幾格可以走。規則本身（為什麼未完賽要 +1、已完賽為什麼不能無條件 +1）
+  // 收在 lib/volleyballRules.ts 的 visibleSetCount()，MatchInfoRail 的右欄呼叫的是同一支
+  //（#352）。這裡以前跟那邊各自手寫一份相同的算式，#349 只修了其中一份，比賽列表右欄
+  // 照樣顯示不存在的「第 4 局」——現在改一次兩邊一起生效。
   const hasCurrentSetData = record?.currentSet != null && record.currentSet.serving !== null;
-  const totalSets = isMatchFinished
-    ? Math.max(completedSets.length + (hasCurrentSetData ? 1 : 0), 1)
-    : completedSets.length + 1;
+  const totalSets = visibleSetCount({
+    completedSetCount: completedSets.length,
+    hasCurrentSetData,
+    isMatchFinished,
+  });
   const clampedIndex = Math.min(Math.max(manualSetIndex ?? totalSets - 1, 0), totalSets - 1);
 
   let lineup: LineupSnapshot | null;
@@ -88,8 +80,8 @@ export default function AnalyticsRotationRail({
       opponent: completedSets[clampedIndex].opponentScore,
     };
   } else if (isMatchFinished) {
-    // 整場已經打完、但上面那格取不到已結束局＝completedSets 是空的（見 totalSets 的
-    // Math.max(..., 1)）。正常的完賽比賽走不到這裡，每一格都會落在上面的 historical 分支。
+    // 整場已經打完、但上面那格取不到已結束局＝completedSets 是空的（見 visibleSetCount()
+    // 的保底 1 格）。正常的完賽比賽走不到這裡，每一格都會落在上面的 historical 分支。
     // 不管目前這局有沒有資料一律算歷史。
     lineup = record?.lineup ?? null;
     setStatus = "historical";
