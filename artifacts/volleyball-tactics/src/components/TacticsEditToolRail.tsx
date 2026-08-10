@@ -80,8 +80,7 @@ export default function TacticsEditToolRail({
   const session = useTacticsBoard((s) => s.session);
   const activeTool = useTacticsBoard((s) => s.activeTool);
   const setActiveTool = useTacticsBoard((s) => s.setActiveTool);
-  const removeMarker = useTacticsBoard((s) => s.removeMarker);
-  const removeDefenseRange = useTacticsBoard((s) => s.removeDefenseRange);
+  const removeSceneObject = useTacticsBoard((s) => s.removeSceneObject);
   const selectedObjectId = useTacticsBoard((s) => s.selectedObjectId);
   const undo = useTacticsBoard((s) => s.undo);
   const redo = useTacticsBoard((s) => s.redo);
@@ -105,11 +104,12 @@ export default function TacticsEditToolRail({
 
   const handleDeleteSelected = () => {
     if (!selectedObjectId) return;
-    // 選中的物件到底是畫筆標記還是防守範圍，這條軌不知道（也不需要知道）——兩個 remove
-    // 都是「id 對不上就是 no-op」，直接兩個都呼叫，跟 TacticsEditPanel 原本的 handleDelete
-    // 是同一招。
-    removeMarker(selectedObjectId);
-    removeDefenseRange(selectedObjectId);
+    // 選中的物件到底是畫筆標記還是防守範圍，這條軌不知道（也不需要知道）——removeSceneObject
+    // 把「兩種都試著刪、id 對不上的那一種是 no-op」這件事收進 store 內部一次判斷、一次記歷史
+    // （#361-4）。舊版是分別呼叫 removeMarker + removeDefenseRange 兩支各自 pushHistory 的
+    // 動作，刪一個東西會在 undo 歷史記兩格，第一次 Ctrl+Z 只會復原到「都還沒刪」之前那一格
+    // 之間的一步空動作，畫面看起來像「按了沒反應」——換成單一呼叫後，一次刪除就是一步。
+    removeSceneObject(selectedObjectId);
   };
 
   return (

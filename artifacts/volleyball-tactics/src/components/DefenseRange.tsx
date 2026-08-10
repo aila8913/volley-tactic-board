@@ -6,12 +6,24 @@ import { fromScreen } from "../lib/courtGeometry";
 
 export default function DefenseRange({ range }: { range: DefenseRangeType }) {
   const { id: matchId } = useParams<{ id: string }>();
-  const { selectedObjectId, setSelectedObjectId, activeTool, updateDefenseRange, session } =
-    useTacticsBoard();
+  const {
+    selectedObjectId,
+    setSelectedObjectId,
+    activeTool,
+    updateDefenseRange,
+    pushHistory,
+    session,
+  } = useTacticsBoard();
   // 有 session＝正在即時布置、可拖曳編輯（取代舊的 isLayoutMode，issue #154 PR C）。
   const isLayoutMode = session !== null;
   const isDragging = useRef(false);
   const dragStart = useRef({ x: 0, y: 0, initialX: 0, initialY: 0 });
+  // 「這次按下去之後有沒有真的移動過」——判斷該不該記歷史要看這個，不能看 isDragging。
+  // isDragging 在 pointerDown 就被設成 true（那時還分不出使用者是要拖曳還是只是點一下選取），
+  // 拿它當條件的話，單純點一下就會記進一格跟現在完全相同的歷史，第一次 Ctrl+Z 會像沒反應
+  //（正是 #361-4 的症狀），還會讓 isSessionDirty 誤判成「動過、有未存內容」。
+  // 跟 Markers.tsx 的拖曳是同一套處理。
+  const didMove = useRef(false);
 
   if (!range.visible) return null;
 
@@ -25,6 +37,7 @@ export default function DefenseRange({ range }: { range: DefenseRangeType }) {
     if (activeTool === "select" && isLayoutMode) {
       setSelectedObjectId(range.id);
       isDragging.current = true;
+      didMove.current = false;
       const target = e.target as Element;
       target.setPointerCapture(e.pointerId);
 
@@ -45,10 +58,15 @@ export default function DefenseRange({ range }: { range: DefenseRangeType }) {
       const dx = currentX - dragStart.current.x;
       const dy = currentY - dragStart.current.y;
 
-      updateDefenseRange(range.id, {
-        x: dragStart.current.initialX + dx,
-        y: dragStart.current.initialY + dy,
-      });
+      // #361-3：拖曳中每個 pointerMove 都會呼叫這裡，updateDefenseRange 現在預設會記歷史，
+      // 所以必須明確傳 skipHistory，不然一次拖曳會灌爆歷史堆疊（30 格上限一下就滿）。
+      // 放開滑鼠時（下面 handlePointerUp）才補記一次，一整次拖曳算「一步」。
+      didMove.current = true;
+      updateDefenseRange(
+        range.id,
+        { x: dragStart.current.initialX + dx, y: dragStart.current.initialY + dy },
+        { skipHistory: true },
+      );
     }
   };
 
@@ -57,6 +75,13 @@ export default function DefenseRange({ range }: { range: DefenseRangeType }) {
       isDragging.current = false;
       const target = e.target as Element;
       target.releasePointerCapture(e.pointerId);
+      // 真的拖動過才補記一格歷史：一整次拖曳（按下→移動→放開）算「一步」。單純點一下選取
+      // 也會走完 down→up，但那不是一次編輯，記進去只會變成一格跟現在一模一樣的歷史，
+      // undo 就會像按了沒反應（理由見上面 didMove 宣告處）。
+      if (didMove.current) {
+        didMove.current = false;
+        pushHistory();
+      }
     }
   };
 
