@@ -22,12 +22,21 @@ agent to rebuild a mental model of the codebase from scratch every time.
    starting snapshot.
 2. **Check the backlog — it is time-ordered, not flat.** `gh issue list --state open
 --limit 100` for the full list, but the roadmap structure answers "what's next"
-   directly: **Milestones M1–M5** are the phases (current phase = the lowest-numbered
-   milestone that still has open issues; scope with
-   `gh issue list --milestone "M1 簡易版收尾"`), and the GitHub Project board
+   directly: **Milestones M1–M7** are the phases (current phase = the lowest-numbered
+   milestone that still has open issues). **別把當前階段的名字寫死在任何檔案裡**——它是
+   推導值，抄下來就會過期（這一行以前寫著 `"M1 簡易版收尾"`，M1 關掉之後就一直是錯的）。
+   現算就好，milestone API 預設按 `due_on` 遞增排序，正好就是階段順序：
+
+   ```sh
+   gh issue list --milestone "$(gh api repos/:owner/:repo/milestones \
+     --jq 'map(select(.open_issues>0))|.[0].title')"
+   ```
+
+   The GitHub Project board
    (https://github.com/users/aila8913/projects/4) holds 當下狀態 — its **Todo column
    is the agreed next-up list**, so don't re-ask the user "接下來做什麼" when Todo
    already says so.
+
 3. **Scan partner @mentions — 有人在等你回的事，優先權高於「接下來做什麼」。**
    GitHub 的 @ 通知只會送到人類的鈴鐺和 email，Claude 開新對話不會自動看到，
    所以在這裡主動掃（兩人共用同一份 skill，先查這台機器登入的是誰）：

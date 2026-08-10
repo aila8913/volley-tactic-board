@@ -8,17 +8,32 @@
 
 ## Milestones（階段，時間序）
 
-M1 簡易版收尾 → M 1.5 up 大改版 → M2 數據分析價值 → M2.5 架構深化：收斂重複規則 →
+階段的**順序**是固定的、可以寫在這裡：
+
+M1 簡易版收尾 → M1.5 UI 大改版 → M2 數據分析價值 → M2.5 架構深化：收斂重複規則 →
 M3 部署給真人試用 → M3.5 架構深化：可測性與資料流 → M4 進階版差異化 →
-**M5 自由球員與計分正確性 → M6 介面精簡與導覽重構 → M7 打磨與雜項**
+M5 自由球員與計分正確性 → M6 介面精簡與導覽重構 → M7 打磨與雜項
 
-目前仍 open 的是 M3.5、M4、M5、M6、M7；M1～M3 已全數關閉。
+⚠️ **但「現在開著哪些／當前階段是哪個」是推導值，這份文件刻意不記**——記了就是一個一定會
+過期的常數，而且過期時會誤導（這一段以前寫「目前仍 open 的是 M3.5、M4…」，M3.5 一關就錯了；
+`catch-up/SKILL.md` 拿已關閉的 M1 當範例更是一直沒人發現）。同理，milestone 的**數字 id**
+也不抄——新增一個階段就會多一個，抄下來的表遲早對不上。全部現查：
 
-- 指派 milestone：`gh issue edit <n> --milestone "M5 自由球員與計分正確性"`
-  （**要打完整名稱，不能只打 "M5"**）
-- Soft due dates（估自實際 velocity，2026-07-11 起算）：M1=7/18 → M5=9/11 →
-  M6=9/25 → M7=10/9。這些日期餵 Roadmap view 的 timeline 用，不是 deadline。
-- milestone number（`gh api` 用，跟顯示名稱不同）：M3.5=8、M4=4、M5=5、M6=9、M7=10。
+```sh
+# 開著的階段、各自還有幾張、以及 gh api 用的數字 id（預設按 due_on 遞增＝階段順序）
+gh api repos/:owner/:repo/milestones --jq '.[] | "\(.number)\t\(.title)\topen=\(.open_issues)"'
+
+# 當前階段（編號最小、還有 open issue 的那個）
+gh api repos/:owner/:repo/milestones --jq 'map(select(.open_issues>0)) | .[0].title'
+```
+
+- 指派 milestone：`gh issue edit <n> --milestone "<完整名稱>"`
+  （**要打完整名稱，不能只打 "M5"**；名稱從上面那句查，別憑記憶打）
+- 關閉一個做完的階段（`gh` 沒有 milestone 子命令，只能走 REST）：
+  `gh api -X PATCH repos/:owner/:repo/milestones/<number> -f state=closed`
+- Soft due dates 由 milestone 自己帶著（上面那句加 `.due_on` 就看得到），估自實際 velocity、
+  2026-07-11 起算。這些日期餵 Roadmap view 的 timeline 用，**不是 deadline**；實際明顯漂掉時
+  提案調整、由 PO 確認。
 
 ### 2026-08-07：原 M5「體驗重整與雜項」拆成三包
 

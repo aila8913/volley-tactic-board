@@ -454,17 +454,25 @@ localStorage（`partialize` 只留 `circleLabel`）、不在逐局快照（`Line
 使用者實際會走的那一條**。
 
 Backlog lives in **GitHub Issues, phase-ordered via Milestones M1–M7** — this file no longer
-duplicates it. Current phase = lowest-numbered milestone with open issues：**2026-08-10 起是 M4**
-（M3.5 已於當日收完並關閉 milestone，11 張全數 closed）。
+duplicates it. **當前階段 ＝ 編號最小、還有 open issue 的那個 milestone。**
 
-```
-gh issue list --milestone "M4 進階版差異化"   # 當前階段（#21／#51／#99）
-gh issue list --state open                     # 全部
-```
+⚠️ **這裡刻意不寫出當前階段的名字**——milestone 名稱是推導值（它只是「編號最小且還有 open
+issue」今天的答案），抄進靜態文件就是一個一定會過期的常數。這個坑已經踩了三次：08-07 原 M5
+改名、08-10 這行原本寫著 `"M3 部署給真人試用"`（M3 早已關閉，那行指令會直接執行失敗）、以及
+`.claude/skills/catch-up/SKILL.md` 拿 `"M1 簡易版收尾"` 當範例一直沒人發現。
+**這正是 `docs/event-grammar-spec.md`「能推導就不存」那條原則的文件版**（#231 是它的 store 版）。
+所以要用就現算——GitHub 的 milestone API 預設按 `due_on` 遞增排序，而 due date 順序就是階段順序，
+不用另外排：
 
-⚠️ **別把 milestone 名稱抄進靜態文件當常數**——這行指令上一版寫的是 `"M3 部署給真人試用"`，
-M3 關閉後它就是一行會直接執行失敗的指路。要列當前階段，先 `gh api repos/:owner/:repo/milestones`
-看還開著哪些，判準是「編號最小、還有 open issue 的那個」。
+```sh
+# 當前階段是哪一個
+gh api repos/:owner/:repo/milestones --jq 'map(select(.open_issues>0)) | .[0].title'
+
+# 列出當前階段的票（把上面那句套進去，不要手打名稱）
+gh issue list --milestone "$(gh api repos/:owner/:repo/milestones --jq 'map(select(.open_issues>0))|.[0].title')"
+
+gh issue list --state open   # 全部
+```
 
 **M4 的三張刻意一起設計、不單張開工**（#51 動作子分類決定 #21 記得出什麼、#21 的球線分布是產品定位
 裡的 wow 點、#99 站位快照同屬 advanced tier），#21／#51 都掛 `needs-plan`。三張已於 08-10 放進
