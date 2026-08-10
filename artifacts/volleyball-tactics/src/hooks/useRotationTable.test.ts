@@ -442,29 +442,39 @@ describe("removePlayerFromCourt — 一般球員 vs 自由球員（#231 清單 8
 });
 
 describe("setLineupFromSnapshot（#231 清單 9）", () => {
-  it("先發直接就是傳進來那一份，L 的頂替關係一律清空", () => {
-    const lineup: LineupSnapshot = { 1: "p1", 2: "p2" };
-    // 先手動塞一個頂替關係，確認 setLineupFromSnapshot 真的會把它清掉，
-    // 而不是「本來就是空的，測不出有沒有清」。
+  it("⚠️ 行為變更（#327）：被頂替的人還在新先發裡，頂替關係就留著", () => {
+    // 舊行為是無條件清空 liberoReplacesPlayerId。當時說得通——那時右欄面板沒有任何地方
+    // 能指定 L，這支的呼叫端都是「教練剛動過六個號位」，清掉一個別處設的殘留值沒人察覺。
+    // #327 把第七格搬進同一個面板之後就完全不同：排好 L、再調整任何一格，L 就無聲消失。
     useRotationTable.setState((state) => ({
       dataByMatch: {
         ...state.dataByMatch,
         [A]: {
           roster: [],
           currentRotation: 0,
-          startingLiberoId: "leftover-l",
-          lineup: {},
-          liberoReplacesPlayerId: "leftover-target",
+          startingLiberoId: "l1",
+          lineup: { 1: "p1" },
+          liberoReplacesPlayerId: "p1",
         },
       },
     }));
 
+    // 新的先發裡 p1 還在（只是換了格），頂替關係沒有理由失效。
+    rt().setLineupFromSnapshot(A, { 5: "p1", 2: "p2" });
+    expect(rt().dataByMatch[A].liberoReplacesPlayerId).toBe("p1");
+
+    // 反過來：新的先發裡沒有 p1 了，這次頂替就不成立（#326：系統不替教練猜下一個對象）。
+    rt().setLineupFromSnapshot(A, { 1: "p9" });
+    expect(rt().dataByMatch[A].liberoReplacesPlayerId).toBeNull();
+  });
+
+  it("先發直接就是傳進來那一份", () => {
+    const lineup: LineupSnapshot = { 1: "p1", 2: "p2" };
     rt().setLineupFromSnapshot(A, lineup);
 
     // ⚠️ 行為變更（表述層面）：以前這個 action 要把號位快照「展開」成六輪座標寫進 state，
     // 現在 store 存的本來就是同一種格式，直接放進去即可——少掉的正是那層翻譯。
     expect(rt().dataByMatch[A].lineup).toEqual(lineup);
-    expect(rt().dataByMatch[A].liberoReplacesPlayerId).toBeNull();
 
     // 使用者看得到的結果沒變：輪次 0 照排，輪次 1 起始站 1 號位的人（p1）落在 6 號位。
     expect(rotationOf(A, 0).positions).toEqual(
@@ -476,6 +486,74 @@ describe("setLineupFromSnapshot（#231 清單 9）", () => {
     expect(rotationOf(A, 1).positions).toEqual(
       expect.arrayContaining([{ playerId: "p1", ...getZoneCoords(6) }]),
     );
+  });
+});
+
+describe("setLiberoAssignment — 第七格的寫入口（#327）", () => {
+  const seed = () => {
+    rt().setRoster(A, [player("p1"), player("p2"), player("l1", "L"), player("l2", "L")]);
+    rt().setLineupFromSnapshot(A, { 1: "p1", 4: "p2" });
+  };
+
+  it("一次寫定「哪位 L」跟「頂替誰」", () => {
+    seed();
+    rt().setLiberoAssignment(A, "l1", "p1");
+
+    expect(rt().dataByMatch[A].startingLiberoId).toBe("l1");
+    expect(rt().dataByMatch[A].liberoReplacesPlayerId).toBe("p1");
+    // 被頂替的人站 1 號位（後排）→ L 在場上，蓋住他那一格。
+    const rot = rotationOf(A, 0);
+    expect(rot.liberoReplacement?.liberoId).toBe("l1");
+    expect(rot.positions.map((p) => p.playerId)).not.toContain("p1");
+  });
+
+  it("頂替一個站前排的人是合法的計畫，只是 L 現在不在場上", () => {
+    // 跟 placePlayerOnCourt 的前排拒絕不一樣，不是漏擋：那邊的手勢是「把 L 放到這一格
+    // 站著」（前排站位不存在），這裡的手勢是「指定 L 要頂誰」（等他轉到後排再上）。
+    seed();
+    rt().setLiberoAssignment(A, "l1", "p2"); // p2 在 4 號位＝前排
+
+    expect(rt().dataByMatch[A].liberoReplacesPlayerId).toBe("p2");
+    expect(rotationOf(A, 0).liberoReplacement).toBeNull();
+    // 轉三輪之後 4 號位的人走到 1 號位（後排），同一份資料就推導出「L 上場了」。
+    expect(BACK_ROW_ZONES.has(1)).toBe(true);
+    expect(rotationOf(A, 3).liberoReplacement?.liberoId).toBe("l1");
+  });
+
+  it("liberoId 傳 null＝整個指派收掉（L 下場、也不頂替任何人）", () => {
+    seed();
+    rt().setLiberoAssignment(A, "l1", "p1");
+    rt().setLiberoAssignment(A, null, null);
+
+    expect(rt().dataByMatch[A].startingLiberoId).toBeNull();
+    expect(rt().dataByMatch[A].liberoReplacesPlayerId).toBeNull();
+  });
+
+  it("白名單：不是名單裡的 L 就整個忽略，不寫進任何東西", () => {
+    seed();
+    rt().setLiberoAssignment(A, "l1", "p1");
+
+    rt().setLiberoAssignment(A, "p2", "p1"); // p2 是 OH，不是自由球員
+    rt().setLiberoAssignment(A, "ghost", "p1"); // 根本不在名單裡
+
+    expect(rt().dataByMatch[A].startingLiberoId).toBe("l1");
+  });
+
+  it("白名單：頂替對象不在先發裡就當作沒指定（L 仍然設定成功）", () => {
+    seed();
+    rt().setLiberoAssignment(A, "l1", "ghost");
+
+    expect(rt().dataByMatch[A].startingLiberoId).toBe("l1");
+    expect(rt().dataByMatch[A].liberoReplacesPlayerId).toBeNull();
+  });
+
+  it("換一位 L 不會動到頂替對象（兩個決定是分開的）", () => {
+    seed();
+    rt().setLiberoAssignment(A, "l1", "p1");
+    rt().setLiberoAssignment(A, "l2", "p1");
+
+    expect(rt().dataByMatch[A].startingLiberoId).toBe("l2");
+    expect(rt().dataByMatch[A].liberoReplacesPlayerId).toBe("p1");
   });
 });
 

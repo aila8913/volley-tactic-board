@@ -172,6 +172,15 @@ function MatchDetailSection({
   const setRoster = useRotationTable((state) => state.setRoster);
   const storedLineup = useRotationTable((state) => state.dataByMatch[matchId]?.lineup);
   const setLineupFromSnapshot = useRotationTable((state) => state.setLineupFromSnapshot);
+  // 自由球員先發（#327）跟 lineup 存在同一份分片裡——「誰先發、L 頂替誰」本來就是同一
+  // 份站位真相的兩半，分開存就會出現「先發換人了但 L 還頂著已經下場的人」這種狀態。
+  const startingLiberoId = useRotationTable(
+    (state) => state.dataByMatch[matchId]?.startingLiberoId,
+  );
+  const liberoReplacesPlayerId = useRotationTable(
+    (state) => state.dataByMatch[matchId]?.liberoReplacesPlayerId,
+  );
+  const setLiberoAssignment = useRotationTable((state) => state.setLiberoAssignment);
 
   const record = useScoreSheet((state) => state.recordingsByMatch[matchId]);
   // 只借用 controller 的「進頁重建」副作用（見 hooks/useScoreSheet.ts 開頭的架構說明）：
@@ -242,6 +251,8 @@ function MatchDetailSection({
   // 卻只記得改 lineup 那一支，藥丸跟著顯示錯誤的狀態）。
   let setStatus: "historical" | "live" | "upcoming";
   let score: { our: number; opponent: number } | null;
+  // 第七格（#327）預設不出現，只有「還沒開賽的那一局」才打開——理由見那一支分支。
+  let showLiberoCell = false;
 
   // ⚠️ issue #329 的紅線：下面這串 if/else 是**站位**的領域規則（歷史局／局中凍結一律唯讀，
   // 只有還沒開賽的局才排得了先發），跟新的「編輯模式」是兩回事。`editing` 刻意完全不參與
@@ -299,6 +310,11 @@ function MatchDetailSection({
     onLineupChange = (next) => setLineupFromSnapshot(matchId, next);
     setStatus = "upcoming";
     score = null; // 還沒開賽，沒有分可看。
+    // 自由球員先發格（#327）只在這一支分支出現，而且理由跟 lineup 是同一條：它顯示的是
+    // 「現役」的 L 指派（useRotationTable，跟先發同一份真相）。已打完/進行中的局讀的是
+    // 那一局封存的 lineup 快照，而封存的快照裡**沒有**自由球員資料——把現在的 L 指派畫在
+    // 一局三天前打完的站位旁邊，等於憑空宣稱那局是這樣配的。寧可不顯示。
+    showLiberoCell = true;
   }
 
   // 站位面板在唯讀/編輯兩種模式下是**同一組 props**，只有球員清單的呈現方式不同
@@ -322,9 +338,12 @@ function MatchDetailSection({
       setStatus={setStatus}
       score={score}
       rosterList={rosterList}
-      // 這份清單合併後要當「這場比賽的完整名單」用，自由球員也得列出來（唯讀資訊列）——
-      // 不然名單看起來會少人。怎麼排 L 的先發是 #326/#327 的題目。
-      includeLibero
+      showLiberoCell={showLiberoCell}
+      liberoId={startingLiberoId ?? null}
+      liberoReplacesPlayerId={liberoReplacesPlayerId ?? null}
+      onLiberoChange={(nextLiberoId, replaces) =>
+        setLiberoAssignment(matchId, nextLiberoId, replaces)
+      }
     />
   );
 

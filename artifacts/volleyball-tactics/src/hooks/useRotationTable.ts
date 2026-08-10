@@ -42,6 +42,23 @@ interface RotationTableStore {
   setCurrentRotation: (matchId: string, index: number) => void;
   setStartingLiberoId: (matchId: string, id: string | null) => void;
 
+  // 一次寫定「先發自由球員是誰 ＋ 他頂替誰」（issue #327 的第七格）。
+  //
+  // 為什麼不沿用既有的兩支（setStartingLiberoId ＋ placePlayerOnCourt）：那兩支的輸入是
+  // 「號位」，因為它們服務的是球場拖曳——使用者指的是畫面上某一格。第七格的輸入是**人**
+  //（「L 頂替 12 號」），中間沒有格子。硬要湊成 placePlayerOnCourt 就得先把人反查回號位、
+  // 再讓它換算回起始號位，多繞兩層還會被 currentRotation 影響，等於把一件簡單的事重新
+  // 編碼成座標——正是 #326 判定為方向錯誤的那種做法。
+  //
+  // 兩個參數一起寫也是刻意的：這兩個欄位描述的是**同一件事**（哪一位 L 上場頂替哪一位）。
+  // 拆成兩支各寫一半，就會出現「L 換人了但頂替對象還是舊的」這種中間狀態——store 端不該
+  // 讓那種狀態存在得起來。
+  setLiberoAssignment: (
+    matchId: string,
+    liberoId: string | null,
+    replacesPlayerId: string | null,
+  ) => void;
+
   // 把球員放到場上某個格子（1~6 號位）——不管是從球員設定名單拖上場的新人，還是把
   // 已經在場上的人拖到別的格子，都是呼叫這個。放開時格子已經有人會直接互換位置；
   // 這個格子排定之後，其他 5 個輪次會依照「輪轉了幾格」自動推算，不用每輪都重新拖
@@ -70,8 +87,8 @@ interface RotationTableStore {
   //
   // #231 PR3 之後這個 action 幾乎變成一行賦值：以前它要把一份號位快照「展開」成六輪座標
   // （兩種表示法之間的翻譯），現在 store 存的本來就是同一種 LineupSnapshot，不用翻譯了。
-  // 自由球員的頂替狀態一律清空：LineupSnapshot 本來就不記自由球員（見 types/scoresheet.ts），
-  // 這裡等於是「先發只排六個非自由球員」，L 上場另外走 placePlayerOnCourt。
+  // LineupSnapshot 本來就不記自由球員（見 types/scoresheet.ts），所以這支只管六個號位；
+  // 自由球員的頂替狀態只在「被頂替的人不在新先發裡」時才收掉（理由見實作處的 ⚠️）。
   setLineupFromSnapshot: (matchId: string, lineup: LineupSnapshot) => void;
 
   // 註：舊的 loadRotationData（整批把存檔覆蓋回輪轉表）已在 #154 PR B 移除。載入已存戰術
@@ -111,6 +128,39 @@ export const useRotationTable = create<RotationTableStore>()(
 
       setStartingLiberoId: (matchId, id) =>
         set((state) => updateMatch(state, matchId, (m) => ({ ...m, startingLiberoId: id }))),
+
+      setLiberoAssignment: (matchId, liberoId, replacesPlayerId) =>
+        set((state) =>
+          updateMatch(state, matchId, (m) => {
+            // 收掉整個指派：L 下場、也不再頂替任何人。
+            if (liberoId === null) {
+              if (m.startingLiberoId === null && m.liberoReplacesPlayerId === null) return m;
+              return { ...m, startingLiberoId: null, liberoReplacesPlayerId: null };
+            }
+
+            // ── 白名單把關 ──
+            // 兩道檢查都寫成「必須等於允許的值」而不是「不可以是危險值」（見專案 memory
+            // 「安全閘門一律白名單」）：這個 action 的輸入來自拖曳事件的 dataTransfer，
+            // 那是外部字串，別的分頁、桌面上的一段文字都可能丟進來。
+            //   (a) 這個人必須真的在這場名單裡、而且真的是自由球員——不然會寫進一個
+            //       deriveRotation 永遠找不到人的幽靈 id。
+            //   (b) 被頂替的人必須真的在先發裡——頂替一個不在場上的人沒有意義。
+            //
+            // 刻意**不**檢查「被頂替者是不是站後排」，這跟 placePlayerOnCourt 的自由球員
+            // 分支不一樣，不是漏寫：那邊的手勢是「把 L 拖到球場的某一格站著」，落在前排格
+            // 是規則上不存在的站位，當然要擋。這裡的手勢是「指定 L 要頂誰」——「頂替 12 號，
+            // 等他轉到後排我再上」是完全合法的計畫。被頂替者在前排時 L 不在場上，由
+            // deriveRotation 推導出來（#326），不需要在寫入這端先擋掉。
+            if (!m.roster.some((p) => p.id === liberoId && p.role === "L")) return m;
+            const replaced =
+              replacesPlayerId !== null && Object.values(m.lineup).includes(replacesPlayerId)
+                ? replacesPlayerId
+                : null;
+
+            if (m.startingLiberoId === liberoId && m.liberoReplacesPlayerId === replaced) return m;
+            return { ...m, startingLiberoId: liberoId, liberoReplacesPlayerId: replaced };
+          }),
+        ),
 
       // 更新名單時同步維護 startingLiberoId：
       // 若先發 L 已被移出名單，改選名單裡第一個 L；若名單沒有 L 則清空。
@@ -263,7 +313,16 @@ export const useRotationTable = create<RotationTableStore>()(
           updateMatch(state, matchId, (m) => ({
             ...m,
             lineup,
-            liberoReplacesPlayerId: null,
+            // ⚠️ 行為變更（#327）：這裡以前是無條件 `liberoReplacesPlayerId: null`。
+            // 當時說得通——那時右欄面板沒有任何地方能指定 L，這支的每個呼叫端都是「教練
+            // 剛動過六個號位」，順手清掉一個永遠是別處設的殘留值不會有人察覺。
+            // 第七格搬進同一個面板之後就完全不同了：教練排好 L、接著調整任何一格，L 就會
+            // 無聲消失，看起來就是「設了沒用」。
+            // 改成跟 placePlayerOnCourt 同一條規則：被頂替的人還在新的先發裡，這次頂替就
+            // 繼續成立；被換掉/擠掉了就收回 null（#326：系統不替教練猜下一個頂替對象）。
+            liberoReplacesPlayerId: Object.values(lineup).includes(m.liberoReplacesPlayerId ?? "")
+              ? m.liberoReplacesPlayerId
+              : null,
           })),
         ),
     }),

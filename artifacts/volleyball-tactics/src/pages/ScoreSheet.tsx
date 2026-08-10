@@ -103,6 +103,19 @@ export default function ScoreSheet() {
   // 開局前，右欄的先發編輯就是直接改這份共用真相（PO 決策：輪轉/先發是跨頁共用的一份，
   // 不是計分頁自己再存一份副本）——教練在計分頁排先發，戰術板也要立刻看到同一份結果。
   const setLineupFromSnapshot = useRotationTable((state) => state.setLineupFromSnapshot);
+  // 自由球員先發（#327）：跟先發同一份分片、同一條「跨頁共用一份真相」的規矩。
+  // 注意這跟下面的 liberoSubstitution 是**兩件不同的事**：這裡是「開賽前排的先發 L」
+  //（規劃，存在輪轉表），liberoSubstitution 是「這一局進行中 L 實際頂替著誰」（紀錄，
+  // 存在計分表）。開賽的瞬間前者被凍進該局的快照，之後就各走各的——把兩者接成同一個
+  // 欄位會讓「教練改先發規劃」回頭竄改已經記錄的比賽事實。
+  const startingLiberoId = useRotationTable((state) =>
+    id ? (state.dataByMatch[id]?.startingLiberoId ?? null) : null,
+  );
+  const liberoReplacesPlayerId = useRotationTable((state) =>
+    id ? (state.dataByMatch[id]?.liberoReplacesPlayerId ?? null) : null,
+  );
+  const setLiberoAssignment = useRotationTable((state) => state.setLiberoAssignment);
+  const setRoster = useRotationTable((state) => state.setRoster);
 
   const record = useScoreSheet((state) => (id ? state.recordingsByMatch[id] : undefined));
   const setLiberoSubstitution = useScoreSheet((state) => state.setLiberoSubstitution);
@@ -205,6 +218,22 @@ export default function ScoreSheet() {
   const capturableLineup = editableLineup && isLineupFull(editableLineup) ? editableLineup : null;
   // activeLineup：優先用已凍結的，其次用可擷取的——球場渲染、開賽擷取都以它為準。
   const activeLineup = lineup ?? capturableLineup;
+
+  // ── 把這場的名單種進輪轉表分片 ──
+  // 戰術板（TacticsBoard.tsx）跟比賽列表右欄（MatchInfoRail.tsx）進頁時都做這件事，計分頁
+  // 一直漏了。之前看不出來，是因為計分頁右欄的 roster 是直接用 match.players 這個 prop 畫的
+  // ——畫面上有名單，store 裡卻是空的。
+  //
+  // #327 把它逼出水面：setLiberoAssignment 要用 store 的 roster 驗「這個 id 真的是這場的
+  // 自由球員嗎」，roster 是空陣列的話每次指派都會被自己的白名單擋掉，使用者看到的是「點了
+  // 沒反應」。同一個坑其實 placePlayerOnCourt 早就有一半（它靠 m.roster 判斷是不是 L）。
+  // 修法是補上種名單，不是把白名單放寬——白名單是對的，缺的是它要查的那份資料。
+  //
+  // 依賴用 `match`（而不是 match.players）避免無限迴圈的理由，見 MatchInfoRail.tsx 同一個
+  // effect 的長註解（memory：zustand stable ref in effect actions）。
+  useEffect(() => {
+    if (match && id) setRoster(id, match.players);
+  }, [match, id, setRoster]);
 
   // ── 自由球員自動下場 ──
   // 每次我方輪轉（ourRotation 變動）檢查被替換的球員是否已輪到前排；輪到前排就把替補狀態
@@ -646,6 +675,14 @@ export default function ScoreSheet() {
             readOnly={!canEditLineup || isFinished}
             onLineupChange={
               canEditLineup && !isFinished ? (next) => setLineupFromSnapshot(id, next) : undefined
+            }
+            // 第七格（#327）只在「還能排先發」時出現。開賽後這一格就不該再是入口：那時
+            // 換 L 上下場是**記錄**（走球場上那顆 L 鈕 → liberoSubstitution），不是改規劃。
+            showLiberoCell={canEditLineup && !isFinished}
+            liberoId={startingLiberoId}
+            liberoReplacesPlayerId={liberoReplacesPlayerId}
+            onLiberoChange={(nextLiberoId, replaces) =>
+              setLiberoAssignment(id, nextLiberoId, replaces)
             }
           />
 
