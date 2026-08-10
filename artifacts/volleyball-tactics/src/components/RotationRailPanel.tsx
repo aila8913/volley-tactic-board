@@ -279,7 +279,8 @@ export default function RotationRailPanel({
 
   // 點球員＝把他指派到目前選中的號位。真正的指派/互換規則放在 lib/rotationLogic.ts 的
   // assignPlayerToZone：那是領域規則（六人佈陣怎麼調整才合法），不是這個元件的 UI 細節，
-  // 抽出去才測得到（專案還沒有 @testing-library/react，見 issue #168）。
+  // 抽出去，它就能用單元測試直接釘死四種分支，不必先渲染元件、模擬點擊
+  //（#168 之後元件層也測得動了，見這個檔案的測試下半部——但規則本身仍該住在 lib/）。
   const assignToSelectedZone = (playerId: string) => {
     if (selectedZone === null) return;
     // 選中第七格時，點清單裡的球員＝指定他當先發 L。只有 role "L" 才有意義，點到別人
@@ -495,13 +496,18 @@ export default function RotationRailPanel({
 
           // readOnly 用 div 而不是 disabled button：既不用處理 disabled 的按鈕樣式，
           // 也從語意上明確表示「這裡沒有任何互動」，不會被螢幕閱讀器唸成一顆按不動的按鈕。
+          // 兩個分支共用同一個 testid（#168 的互動測試要能指名某一格）：唯讀時它是 <div>、
+          // 可編輯時是 <button>，「這一格現在是哪一種」本身就是要被測的規格之一，所以刻意
+          // 不用兩個不同的 testid 去區分——測試該問的是「zone-1 這格是不是可按的」，
+          // 而不是「zone-1-readonly 這個節點在不在」（後者等於把答案寫進查詢條件裡）。
           return readOnly ? (
-            <div key={zone} className={cellClass}>
+            <div key={zone} data-testid={`rotation-zone-${zone}`} className={cellClass}>
               {cellContent}
             </div>
           ) : (
             <button
               key={zone}
+              data-testid={`rotation-zone-${zone}`}
               // type="button" 不是可有可無的：#329 之後這個面板會被塞進 MatchDetailForm 的
               // <form> 裡（編輯模式的版面順序要跟唯讀模式一致），而 <button> 在 form 內的
               // 預設 type 是 "submit"——少了這行，點一下號位格子就會直接送出整張表單。

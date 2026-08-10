@@ -1,9 +1,9 @@
 // issue #329 的回歸測試：右欄「比賽資訊」的唯讀檢視。
 //
-// 為什麼只測這一半：這個專案還沒裝 @testing-library/react（issue #168），元件測試只能用
-// renderToStaticMarkup 比對「一次性的初始渲染」（同 AnalyticsRotationRail.test.tsx 開頭的說明）。
-// 編輯表單那半掛滿 React Query hook，沒有 QueryClientProvider 跟假 server 就渲染不起來，
-// 硬寫只會得到一支假測試——所以那半走手動驗收，這半（純元件）測起來。
+// 為什麼只測這一半：這個元件是純展示元件（資料全由 props 來），renderToStaticMarkup 就夠用，
+// #168 引進 @testing-library/react 之後也沒有改寫的理由——它沒有互動可測。編輯表單那半掛滿
+// React Query hook 與 react-hook-form，是另一回事，目前仍走手動驗收
+//（要測的話得像 MatchInfoRail.test.tsx 那樣把資料層 mock 掉）。
 //
 // 這支測試守的是驗收條件第 1 條：「選中比賽 → 右欄看得到時間／球隊／對手／賽制，
 // **全部唯讀**」。最後那個 not.toContain("<input") 就是「唯讀」這件事的機器判準——以後有人

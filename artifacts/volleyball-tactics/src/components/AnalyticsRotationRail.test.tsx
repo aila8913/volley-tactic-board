@@ -1,8 +1,9 @@
 // #349 的回歸測試：分析頁右欄「場上站位」。
 //
-// 跟 NavRail.test.tsx 同一套限制：這個專案還沒裝 @testing-library/react（issue #168），
-// 只能用 renderToStaticMarkup 比對「一次性的初始渲染」。這剛好夠用——#349 Bug A 講的
-// 正是「**預設**停在第 4 局」，也就是初始渲染那一刻的事，不需要模擬使用者按 stepper。
+// 這裡仍然用 renderToStaticMarkup 而不是 @testing-library/react（#168 之後兩種都能用）：
+// #349 Bug A 講的正是「**預設**停在第 4 局」，也就是初始渲染那一刻的事，不需要模擬使用者
+// 按 stepper。這一頁的 rail 本來就是唯讀的，沒有互動可測——留著純渲染的寫法最貼近它的性質。
+// （會動的那一份在 MatchInfoRail.test.tsx，那支用 RTL 驗同一條規則的可編輯版本。）
 //
 // record 刻意不手刻，而是餵假的後端 DTO 給 reconstructRecording 生出來（跟正式流程用的是
 // 同一個重建函式）。這樣測到的是「後端資料 → 畫面」整條路，只少了 useMatchRecording 那層

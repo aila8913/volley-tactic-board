@@ -77,6 +77,14 @@ enforcing code is `lib/db/src/index.ts`, `vite.config.ts`, `artifacts/api-server
 matchMapping.test.ts`, `src/types/match.test.ts`). `@workspace/api-server` also has vitest now
   (`src/lib/personName.test.ts`, added with #221), so root `pnpm run test` fans out to both. `db` and the
   other packages still have no `test` script.
+- **`@testing-library/react` + `user-event` 已裝好** (#168)：元件的**互動行為**測得動了（點擊、
+  鍵盤、state 變化後的重繪、Radix Portal 裡的彈窗內容）。共用前置在
+  `artifacts/volleyball-tactics/src/test/`（`setup.ts` 掛在 vitest 的 `setupFiles`，
+  `renderWithProviders.tsx` 包好 QueryClient + wouter 的記憶體路由）。兩種寫法並存是刻意的：
+  **純展示元件**（資料全由 props 決定、沒有互動）繼續用 `renderToStaticMarkup`，改寫沒有好處；
+  **有互動的**一律用 testing-library。⚠️ 已知坑：jsdom 沒有排版引擎，userEvent 連續點兩個元素時
+  第一個的 `mouseout` 會帶 `relatedTarget: null`，靠 hover 展開的 UI（NavRail）會因此誤收合——
+  解法與完整說明寫在 `NavRail.test.tsx` 的 `openSubmenu()` 上方。
 - **Test files are typechecked** (#292): no tsconfig excludes `**/*.test.ts(x)` anymore, so a type error in
   a test fails `pnpm run typecheck` / CI just like production code. The exclusions used to hide the fact
   that fixtures had drifted a whole refactor behind the DTOs they mock.
