@@ -21,6 +21,15 @@ comment for the distinction). Don't duplicate full TODO detail into both places 
 own the backlog, PROGRESS.md owns a short narrative snapshot that points at issue
 numbers.
 
+## 事實住哪裡
+
+**對照表在 [`CLAUDE.md`](../../../CLAUDE.md) 的「事實住哪裡」一節**（那裡是唯一一份，別在這裡再抄
+一次——抄了就是那張表自己在示範的錯）。整個 wrap-up 的第 3、7 步都靠它。
+
+在這裡要記住的是**為什麼 PROGRESS 特別容易變成垃圾桶**：它是**唯一每次 wrap-up 都保證會被寫**的
+檔案，所以是預設的沉澱處。而步驟 7 又規定「孤兒不能丟」——沒有那張表的話，倒進來的東西**再也刪
+不掉**。它在 2026-07-11 被重置過一次（580 行），2026-08-11 又長到 830 行被重剪，兩次同一個原因。
+
 ## Steps
 
 1. **Gather what happened this session.**
@@ -64,7 +73,22 @@ numbers.
      implements it without updating the doc. Read the code, not just the doc, before
      filing.
 
-3. **Propose, don't execute blindly.** Creating/closing GitHub issues is a visible,
+3. **Check whether this session produced an ADR.** Ask the two questions from
+   [`docs/adr/README.md`](../../../docs/adr/README.md) 的「什麼時候寫」, verbatim:
+   - 這個 session 有沒有**一個提議被否決**，而理由是未來的人需要知道的？
+   - 有沒有一個決定經歷過**決定 → 推翻 → 重新決定**？
+
+   大多數 session 的答案是「沒有」——**答「沒有」是正常結果，不要為了填欄位硬湊一張**。
+   ADR 的門檻是「未來的人看到程式碼會很自然想改回去」，不是「這個決定很重要」。
+   只有**架構／實作**決策進 `docs/adr/`；產品定位進 `product-vision.md`、詞彙進 `CONTEXT.md`
+   （見上面的對照表）。還沒拍板的討論留在 issue，ADR 只收結論。
+
+   這一步之所以存在：README 說「不要事後補一批，當下就寫」，但「當下」不是一個會發生的時刻——
+   wrap-up 是唯一每次都會跑的檢查點。少了這一步，`docs/adr/` 從流程上走不到
+   （2026-08-11 盤點：三張 ADR 全是順手寫的，沒有一張是流程要求的，而同期至少一條符合判準的
+   決策——「部署刻意不含 `drizzle-kit push`」——只住在 PROGRESS 裡）。
+
+4. **Propose, don't execute blindly.** Creating/closing GitHub issues is a visible,
    shared-state action (per this project's general safety rules) — always show the user
    a short proposed list first:
 
@@ -75,13 +99,15 @@ numbers.
      #42 "..." — body now stale: <what changed> → <what to fix>
    Create:
      "..." — surfaced this session: <one-line reason>
+   ADR:
+     "..." — <which of the two triggers it hit>；沒有就寫「無」
    ```
 
    Wait for explicit confirmation (or edits) before running any `gh issue close` /
    `gh issue edit` / `gh issue create` command. Don't ask about read-only commands like
    `gh issue list`.
 
-4. **Execute the confirmed changes.**
+5. **Execute the confirmed changes.**
    - Close: `gh issue close <n> --comment "Resolved by <commit-hash-or-summary>"`
    - Update a stale body: `gh issue edit <n> --body-file <file>` (write the corrected body
      to a temp file first — multi-line bodies are error-prone inline). Fix only the parts
@@ -96,11 +122,11 @@ numbers.
        `docs/tactics-board-todo.md` that say "範圍很大，先進 Plan 模式") and `priority:*`
        only when genuinely urgent/essential, not by default.
 
-5. **Sync the roadmap (Milestones + GitHub Project).** The time-ordered roadmap
+6. **Sync the roadmap (Milestones + GitHub Project).** The time-ordered roadmap
    lives in two GitHub structures with distinct jobs — each fact has exactly one
    home（single source of truth）:
    - **Milestones M1–M7 = 階段（時間序）**. Every open issue should carry exactly
-     one — assign new issues from step 4 in the same pass. Milestones carry **soft
+     one — assign new issues from step 5 in the same pass. Milestones carry **soft
      due dates** that feed the Roadmap view's timeline, not deadlines; if reality
      has drifted noticeably, propose adjusted dates (PO confirms).
    - **Project "Volley Tactics Board" = 當下狀態**（Status:
@@ -109,13 +135,13 @@ numbers.
      current milestone's next 3–5 items, no more. That discipline is the whole
      point of the Backlog/Todo split.
    - Re-scoping the roadmap (moving an issue between milestones, splitting/adding a
-     phase) is a PO decision — put it in step 3's proposal list, don't settle it
+     phase) is a PO decision — put it in step 4's proposal list, don't settle it
      unilaterally.
    - Exact milestone names, due dates, stable CLI ids, and the `gh` commands for
      all of the above live in [reference.md](reference.md) — read it when actually
      executing this step, not before.
 
-6. **Refresh `docs/PROGRESS.md` — it is a rolling ~1-week snapshot, not a log.** The
+7. **Refresh `docs/PROGRESS.md` — it is a rolling ~1-week snapshot, not a log.** The
    single most common failure mode here is letting it grow into an append-only session
    history (it hit 580 lines that way before being reset on 2026-07-11). Keep it lean:
    - **Overwrite, don't append.** Rewrite "Current state" to describe where the project
@@ -125,12 +151,14 @@ numbers.
    - **Prune anything older than roughly a week.** "Recently closed" keeps only the past
      ~week's closes; drop older ones (their record lives in the closed issues + git log).
      Same for stale "Current state" bullets that no longer describe the present.
-   - **Before deleting an old entry, confirm it has a durable home** — git log, the
-     issue's comments, a `docs/*-spec.md`, `CLAUDE.md`, or auto-memory. If it's a **major
+   - **Before deleting an old entry, confirm it has a durable home** — 對照上面的
+     「事實住哪裡」表：git log、issue 留言、`docs/adr/`、`docs/product-vision.md`、
+     `CONTEXT.md`、`docs/*-spec.md`、`CLAUDE.md`、auto-memory。If it's a **major
      fact/decision/lesson that lives _only_ here** (an orphan), promote it to the right
-     home _first_ (usually an auto-memory file for lessons/product judgments, or the
-     relevant issue/spec for design decisions), _then_ delete it from PROGRESS. Never drop
-     an orphan on the floor.
+     home _first_, _then_ delete it from PROGRESS. Never drop an orphan on the floor.
+     **特別注意寫成「刻意不做 X」「別改成 Y」的段落**——那是 ADR 的形狀跑進了快照裡，
+     它會讓那則條目永遠刪不掉（因為刪了就沒別的地方有）。這正是 PROGRESS 肥大的機制：
+     不是沒在剪，是剪下來沒地方放。先開一張 ADR，快照只留一行指過去。
    - **Don't duplicate the backlog.** "Known gaps" points at `gh issue list` / Milestones
      with a one-line current-phase summary — it does not re-list every open issue's detail.
    - **Keep the owner sub-sections separate (#146).** `Current state` and `Recently closed`
@@ -144,7 +172,7 @@ numbers.
      owner + what changed); it's the one shared line both owners touch, so don't let it grow
      back into a multi-paragraph blob.
 
-7. **Don't recreate a "current behaviour" doc.** `docs/flow-diagrams.html` (操作流程＋狀態機
+8. **Don't recreate a "current behaviour" doc.** `docs/flow-diagrams.html` (操作流程＋狀態機
    reference) was **deleted on 2026-07-21** by PO decision, and this step used to say
    "keep it in sync". The distinction that killed it is worth keeping:
    - **Decisional docs** (`docs/*-spec.md`, issue comments) record _why_ a choice was
@@ -158,7 +186,7 @@ numbers.
    comments unusually densely on purpose — see CLAUDE.md「Collaboration style」) and the
    relevant issue. Don't start a new file that narrates how the app works.
 
-8. **Remind, don't act.** If there are still uncommitted changes after all this, remind
+9. **Remind, don't act.** If there are still uncommitted changes after all this, remind
    the user to commit — don't commit on their behalf unless they ask.
 
 ## What NOT to do

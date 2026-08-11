@@ -106,6 +106,33 @@ issue #81 (PRs #83/#84), so all four checks are expected to pass. `.gitattribute
 in the working tree (overriding Windows `core.autocrlf`) — without it, `prettier --check` fails locally on
 Windows while passing in CI.
 
+## 事實住哪裡（每種事實一個家）
+
+寫下任何「以後還要成立」的東西之前，先決定它住哪。判斷法一句話：
+**問「這件事一週後還該留著嗎？」該留 → 家就不是 `docs/PROGRESS.md`。**
+
+| 事實的種類                     | 家                       | 特徵                                             |
+| ------------------------------ | ------------------------ | ------------------------------------------------ |
+| 架構決策，且不希望被改回去     | `docs/adr/`              | 有「不要重新提議」清單；不可刪改，只能 supersede |
+| 產品定位、做／不做的邊界       | `docs/product-vision.md` | 是產品判斷不是技術判斷                           |
+| 官方用詞、同義詞禁用           | `CONTEXT.md`             | 只有詞彙，沒有實作與狀態                         |
+| 某個功能的規格與設計           | `docs/*-spec.md`         | 決策文件，不是「程式現在怎麼跑」的衍生文件       |
+| 單張票的來龍去脈、被否決的備案 | 該 issue 的 body／留言   | 範圍不超出那張票                                 |
+| 某段程式為什麼長這樣           | 該檔案自己的註解         | 離現場最近，改程式的人一定會看到                 |
+| _why_ 某次改動發生             | `git log` + commit 訊息  | 一次性的、綁在那個 diff 上                       |
+| repo 結構、指令、已知落差      | `CLAUDE.md`（本檔）      | 下一個 session 一開始就需要知道                  |
+| 協作教訓、PO 的偏好            | auto-memory              | 換一個 repo 還是成立                             |
+| **現況快照**                   | `docs/PROGRESS.md`       | **預期會被刪**——一週後就該不見                   |
+
+⚠️ **寫成「刻意不做 X」「別改成 Y」的段落，就是 ADR 跑進了快照。** 那種條目會永遠刪不掉
+（刪了就沒別的地方有），PROGRESS 兩次肥大（580 行→重置、830 行→重剪）都是這個機制：
+**不是沒在剪，是剪下來沒有地方放。** 先開 ADR，快照只留一行指過去。
+
+這張表**只有這一份**——`.claude/skills/wrap-up/`（收東西時）與 `.claude/skills/catch-up/`
+（找東西時）都指回這裡，不要各自抄一份（抄了就是這張表自己在示範的錯）。它寫在 CLAUDE.md
+而不是 skill 裡，是因為 **skill 靠觸發詞才載入**，而決策不是只在收工時產生的——同 #350
+把合併關卡從 `ship` skill 移進本檔的理由。
+
 ## Workflow notes
 
 - pnpm is enforced (root `preinstall` script blocks npm/yarn).
