@@ -4,6 +4,7 @@ import { db, tournamentsTable } from "@workspace/db";
 import { requireAuth } from "../middleware/requireAuth";
 import { tournamentBelongsToUser } from "../lib/ownership";
 import { handler } from "../lib/handler";
+import type { EveryColumnOnInsert, EveryColumnOnUpdate } from "../lib/everyColumn";
 import {
   CreateTournamentBody,
   UpdateTournamentParams,
@@ -44,14 +45,20 @@ router.get(
 router.post(
   "/tournaments",
   handler({ body: CreateTournamentBody, owns: "public" }, async ({ res, body, userId }) => {
-    const [created] = await db
-      .insert(tournamentsTable)
-      .values({
-        ...(body.id !== undefined && { id: body.id }),
-        userId,
-        name: body.name,
-      })
-      .returning();
+    // 型別標註是 #368 的守衛：EveryColumnOnInsert 讓 tournaments 的每一欄都變必填，
+    // 漏列一欄就編譯不過（見 lib/everyColumn.ts）。
+    const values: EveryColumnOnInsert<typeof tournamentsTable> = {
+      // client-mintable 主鍵，做法與理由見 sets.ts 的 POST 註解。`?? undefined` 取代了
+      // 原本的條件展開 `...(body.id !== undefined && { id })`：條件展開產生的是 optional
+      // key，窮舉檢查看不到它。
+      id: body.id ?? undefined,
+      userId,
+      name: body.name,
+      // 建立時間交給資料庫的 defaultNow() 填。
+      createdAt: undefined,
+    };
+
+    const [created] = await db.insert(tournamentsTable).values(values).returning();
 
     res.status(201).json(created);
   }),
@@ -72,12 +79,20 @@ router.patch(
       owns: ({ params, userId }) => tournamentBelongsToUser(params.tournamentId, userId),
     },
     async ({ res, params, body, userId }) => {
+      // 型別標註是 #368 的守衛：EveryColumnOnUpdate 讓 tournaments 的每一欄都要在物件裡
+      // 出現（見 lib/everyColumn.ts）。
+      const patch: EveryColumnOnUpdate<typeof tournamentsTable> = {
+        // id/userId 由路徑與 where 條件鎖定，不開放改。
+        id: undefined,
+        userId: undefined,
+        name: body.name,
+        // createdAt 是建立時的時間戳，PATCH 不開放改它。
+        createdAt: undefined,
+      };
+
       const [updated] = await db
         .update(tournamentsTable)
-        .set({
-          // 只在 body 真的帶了 name 才寫（沿用 matches 的 !== undefined 展開技巧）。
-          ...(body.name !== undefined && { name: body.name }),
-        })
+        .set(patch)
         .where(
           and(eq(tournamentsTable.id, params.tournamentId), eq(tournamentsTable.userId, userId)),
         )

@@ -5,6 +5,7 @@ import { requireAuth } from "../middleware/requireAuth";
 import { rallyBelongsToUser, eventBelongsToUser, matchBelongsToUser } from "../lib/ownership";
 import { handler } from "../lib/handler";
 import { insertIdempotent } from "../lib/insertIdempotent";
+import type { EveryColumnOnInsert, EveryColumnOnUpdate } from "../lib/everyColumn";
 import {
   ListMatchEventsParams,
   ListEventsParams,
@@ -86,37 +87,42 @@ router.post(
       owns: ({ params, userId }) => rallyBelongsToUser(params.rallyId, userId),
     },
     async ({ res, params, body }) => {
+      // rallyId 來自路徑（已驗擁有權）。其餘欄位大多是 nullable：簡易版只記「誰做了什麼動作」，
+      // 座標 / ballType / quality 都留空，用 ?? null 把「body 沒帶」轉成 DB 的 null。
+      // tags 沒帶時給 []，對齊 DB 欄位的 default（notNull，預設空陣列）。
+      //
+      // 型別標註是 #368 的守衛：EveryColumnOnInsert 讓 events 的每一欄都變必填，漏列一欄
+      // 就編譯不過（見 lib/everyColumn.ts）。這支 route 正是那張 issue 的實例。
+      const values: EveryColumnOnInsert<typeof eventsTable> = {
+        // 選填的 client-mintable 主鍵（#64 PR2），做法與理由見 sets.ts 的 POST 註解。
+        // `?? undefined` 取代了原本的條件展開 `...(body.id ? { id } : {})`：條件展開產生的是
+        // optional key，窮舉檢查看不到它。drizzle 對 undefined 會送出 `default`，行為不變。
+        id: body.id ?? undefined,
+        rallyId: params.rallyId,
+        sequence: body.sequence,
+        side: body.side,
+        playerId: body.playerId ?? null,
+        action: body.action,
+        ballType: body.ballType ?? null,
+        quality: body.quality ?? null,
+        fromX: body.fromX ?? null,
+        fromY: body.fromY ?? null,
+        toX: body.toX ?? null,
+        toY: body.toY ?? null,
+        tags: body.tags ?? [],
+        note: body.note ?? null,
+        videoTimestamp: body.videoTimestamp ?? null,
+        source: body.source,
+        // 這球怎麼終結（#51 第一塊）。就是這一欄在 PR #365 被漏掉過：前端已經在 body 裡送
+        // outcome，route 少列一欄不會有任何型別錯誤，event 照樣寫得進去、只是 outcome 永遠
+        // 是 null——「四道 CI 全綠但功能沒生效」。現在漏掉會被上面那個型別標註擋下來。
+        outcome: body.outcome ?? null,
+      };
+
       // 冪等寫入 + 重送回既有列（#64 PR3）：做法與理由見 lib/insertIdempotent.ts。
       const row = await insertIdempotent(
         eventsTable,
-        // rallyId 來自路徑（已驗擁有權）。其餘欄位大多是 nullable：簡易版只記「誰做了什麼動作」，
-        // 座標 / ballType / quality 都留空，用 ?? null 把「body 沒帶」轉成 DB 的 null。
-        // tags 沒帶時給 []，對齊 DB 欄位的 default（notNull，預設空陣列）。
-        {
-          // 選填的 client-mintable 主鍵（#64 PR2），做法與理由見 sets.ts 的 POST 註解。
-          ...(body.id ? { id: body.id } : {}),
-          rallyId: params.rallyId,
-          sequence: body.sequence,
-          side: body.side,
-          playerId: body.playerId ?? null,
-          action: body.action,
-          ballType: body.ballType ?? null,
-          quality: body.quality ?? null,
-          fromX: body.fromX ?? null,
-          fromY: body.fromY ?? null,
-          toX: body.toX ?? null,
-          toY: body.toY ?? null,
-          tags: body.tags ?? [],
-          note: body.note ?? null,
-          videoTimestamp: body.videoTimestamp ?? null,
-          source: body.source,
-          // 這球怎麼終結（#51 第一塊）。跟上面那些欄位一樣是 nullable + `?? null`，但漏寫的
-          // 後果比較陰險：前端已經在 body 裡送 outcome 了，這裡少列一欄不會有任何型別錯誤，
-          // event 照樣寫得進去，只是 outcome 永遠是 null——也就是「四道 CI 全綠但功能沒生效」。
-          // 這種逐欄列舉的寫法（而不是 `...body`）是刻意的：body 是使用者送來的資料，全部展開
-          // 會讓「路徑決定的欄位」（rallyId）有被 body 蓋掉的風險。代價就是新增欄位時兩邊都要記得改。
-          outcome: body.outcome ?? null,
-        },
+        values,
         eq(eventsTable.rallyId, params.rallyId),
       );
 
@@ -142,24 +148,45 @@ router.patch(
       owns: ({ params, userId }) => eventBelongsToUser(params.eventId, userId),
     },
     async ({ res, params, body }) => {
+      // 「body 有帶的才改、沒帶的維持原值」。舊寫法是一串條件展開
+      // （`...(body.side !== undefined && { side: body.side })`），現在改成每一欄都直接
+      // 列出來、值就是 `body.x`——drizzle 的 mapUpdateSet 會把 undefined 的欄位濾掉，
+      // 送出的 SQL 跟舊寫法完全一樣（見 lib/everyColumn.ts）。
+      // 這樣做的目的是 #368：條件展開產生的全是 optional key，少列一欄型別檢查看不出來。
+      const patch: EveryColumnOnUpdate<typeof eventsTable> = {
+        // 明寫 undefined 的三欄 = 「這支 PATCH 不開放改它」，不是漏寫：
+        // id 是主鍵、rallyId 由 POST 的路徑決定（改它等於把這球搬到別人的 rally）、
+        // sequence 是這球在 rally 裡的順序（要重排得整批處理，不是單球 PATCH 的事）。
+        id: undefined,
+        rallyId: undefined,
+        sequence: undefined,
+        // 這兩欄是被這次窮舉檢查「照出來」的，不是刻意設計：openapi 的 UpdateEventBody
+        // 根本沒有 playerId 和 source，所以 PATCH 改不了它們。賽後看影片補記時想把一球
+        // 從「對手(全體)」改指到某位球員，目前做不到——這是合約缺口不是實作缺口，補它要
+        // 動 openapi + codegen + 前端，不塞進這張純守衛的 PR，另外記在 #368 的留言。
+        playerId: undefined,
+        source: undefined,
+        // 底下這些是真的可以改的。值直接給 body.x：沒帶就是 undefined（濾掉、維持原值），
+        // 帶了 null 就是「想清空」——這個區別正是舊寫法用 `!== undefined` 而不是 truthy
+        // 判斷的原因，現在由 mapUpdateSet 自己處理，不用再手寫一次。
+        side: body.side,
+        action: body.action,
+        ballType: body.ballType,
+        quality: body.quality,
+        fromX: body.fromX,
+        fromY: body.fromY,
+        toX: body.toX,
+        toY: body.toY,
+        tags: body.tags,
+        note: body.note,
+        videoTimestamp: body.videoTimestamp,
+        // 進階版賽後補填時會用這支把 outcome 從 null 改成實際結果（#51 第一塊）。
+        outcome: body.outcome,
+      };
+
       const [updated] = await db
         .update(eventsTable)
-        .set({
-          // !== undefined（而非 truthy）才能讓 note: null、quality: null 這種「想清空」的合法值寫得進去。
-          ...(body.side !== undefined && { side: body.side }),
-          ...(body.action !== undefined && { action: body.action }),
-          ...(body.ballType !== undefined && { ballType: body.ballType }),
-          ...(body.quality !== undefined && { quality: body.quality }),
-          ...(body.fromX !== undefined && { fromX: body.fromX }),
-          ...(body.fromY !== undefined && { fromY: body.fromY }),
-          ...(body.toX !== undefined && { toX: body.toX }),
-          ...(body.toY !== undefined && { toY: body.toY }),
-          ...(body.tags !== undefined && { tags: body.tags }),
-          ...(body.note !== undefined && { note: body.note }),
-          ...(body.videoTimestamp !== undefined && { videoTimestamp: body.videoTimestamp }),
-          // 進階版賽後補填時會用這支把 outcome 從 null 改成實際結果（#51 第一塊）。
-          ...(body.outcome !== undefined && { outcome: body.outcome }),
-        })
+        .set(patch)
         .where(eq(eventsTable.id, params.eventId))
         .returning();
 

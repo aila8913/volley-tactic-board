@@ -4,6 +4,7 @@ import { db, teamsTable, playersTable, matchesTable, peopleTable } from "@worksp
 import { requireAuth } from "../middleware/requireAuth";
 import { teamBelongsToUser } from "../lib/ownership";
 import { handler } from "../lib/handler";
+import type { EveryColumnOnInsert, EveryColumnOnUpdate } from "../lib/everyColumn";
 import {
   CreateTeamBody,
   UpdateTeamParams,
@@ -52,13 +53,19 @@ router.get(
 router.post(
   "/teams",
   handler({ body: CreateTeamBody, owns: "public" }, async ({ res, body, userId }) => {
-    const [created] = await db
-      .insert(teamsTable)
-      .values({
-        userId,
-        name: body.name,
-      })
-      .returning();
+    // 型別標註是 #368 的守衛：EveryColumnOnInsert 讓 teams 的每一欄都變必填，
+    // 漏列一欄就編譯不過（見 lib/everyColumn.ts）。
+    const values: EveryColumnOnInsert<typeof teamsTable> = {
+      // id 是 serial 主鍵，交給資料庫自動遞增。
+      id: undefined,
+      userId,
+      name: body.name,
+      // 是不是示範資料（#336）：一般使用者建立的球隊一律不是，交給 DB 的 default(false)。
+      // 只有 demoData.ts 那支種子腳本會直接寫這一欄，不會經過這支路由。
+      isDemo: undefined,
+    };
+
+    const [created] = await db.insert(teamsTable).values(values).returning();
 
     res.status(201).json(created);
   }),
@@ -189,12 +196,20 @@ router.patch(
       owns: ({ params, userId }) => teamBelongsToUser(params.teamId, userId),
     },
     async ({ res, params, body, userId }) => {
+      // 型別標註是 #368 的守衛：EveryColumnOnUpdate 讓 teams 的每一欄都要在物件裡出現
+      // （見 lib/everyColumn.ts）。
+      const patch: EveryColumnOnUpdate<typeof teamsTable> = {
+        // id/userId 由路徑與 where 條件鎖定，不開放改。
+        id: undefined,
+        userId: undefined,
+        name: body.name,
+        // isDemo 是資料庫維護的示範資料標記，不開放使用者透過 PATCH 更動。
+        isDemo: undefined,
+      };
+
       const [updated] = await db
         .update(teamsTable)
-        .set({
-          // 沿用 matches/tournaments 的「欄位在 body 才寫」技巧，判斷 !== undefined。
-          ...(body.name !== undefined && { name: body.name }),
-        })
+        .set(patch)
         .where(and(eq(teamsTable.id, params.teamId), eq(teamsTable.userId, userId)))
         .returning();
 

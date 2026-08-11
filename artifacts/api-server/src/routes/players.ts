@@ -4,6 +4,7 @@ import { db, playersTable } from "@workspace/db";
 import { requireAuth } from "../middleware/requireAuth";
 import { matchBelongsToUser, playerBelongsToMatch, personBelongsToUser } from "../lib/ownership";
 import { handler } from "../lib/handler";
+import type { EveryColumnOnInsert, EveryColumnOnUpdate } from "../lib/everyColumn";
 import {
   ListPlayersParams,
   CreatePlayerParams,
@@ -74,21 +75,25 @@ router.post(
       ],
     },
     async ({ res, params, body }) => {
-      const [created] = await db
-        .insert(playersTable)
+      // 型別標註是 #368 的守衛：EveryColumnOnInsert 讓 players 的每一欄都變必填，
+      // 漏列一欄就編譯不過（見 lib/everyColumn.ts）。
+      const values: EveryColumnOnInsert<typeof playersTable> = {
         // matchId 來自路徑（已驗證擁有權），不是 body——避免 client 亂塞別場比賽的 id。
         // id 則相反：body.id 有帶就用前端自己生的 uuid（client-mintable，見
         // lib/db/src/schema/players.ts 的說明）；沒帶就交給資料庫的 defaultRandom() 生一個。
-        .values({
-          ...(body.id !== undefined && { id: body.id }),
-          matchId: params.matchId,
-          name: body.name,
-          number: body.number,
-          role: body.role,
-          // 沿用「有帶才寫」慣例，判斷 !== undefined 而不是 truthy——見 PATCH 那邊的詳細說明。
-          ...(body.personId !== undefined && { personId: body.personId }),
-        })
-        .returning();
+        // `?? undefined` 取代了原本的條件展開 `...(body.id !== undefined && { id })`：
+        // 條件展開產生的是 optional key，窮舉檢查看不到它。
+        id: body.id ?? undefined,
+        matchId: params.matchId,
+        name: body.name,
+        number: body.number,
+        role: body.role,
+        // 沒帶就是 undefined（維持 personId 沒有對應），帶了就是新值——跟 PATCH 那邊
+        // 用 `!== undefined` 而不是 truthy 判斷的理由完全一樣（見下方 PATCH 的說明）。
+        personId: body.personId,
+      };
+
+      const [created] = await db.insert(playersTable).values(values).returning();
 
       res.status(201).json(created);
     },
@@ -112,20 +117,28 @@ router.patch(
       ],
     },
     async ({ res, params, body }) => {
+      // 型別標註是 #368 的守衛：EveryColumnOnUpdate 讓 players 的每一欄都要在物件裡出現
+      // （見 lib/everyColumn.ts）。
+      const patch: EveryColumnOnUpdate<typeof playersTable> = {
+        // id/matchId 由路徑與 where 條件鎖定，不開放 PATCH 改（改 matchId 等於把球員
+        // 搬到別場比賽，同 events.ts 的 rallyId 不開放改）。
+        id: undefined,
+        matchId: undefined,
+        // 「body 有帶的才改、沒帶的維持原值」，值直接給 body.x：沒帶就是 undefined
+        // （被 mapUpdateSet 濾掉，維持原值）。
+        name: body.name,
+        number: body.number,
+        role: body.role,
+        // 這裡刻意跟舊寫法一樣用「值直接給 body.personId」而不是 truthy 判斷。
+        // 原因：personId 有三種合法的「帶了」狀態——一個數字（改對應到某人）、null（解除對應，
+        // 這名單列變回「歸屬不明」）、或整個欄位沒出現在 body 裡（不動它，保留原值）。
+        // mapUpdateSet 只濾掉 undefined，null 會照常送進 SQL，所以這三種狀態都對得上。
+        personId: body.personId,
+      };
+
       const [updated] = await db
         .update(playersTable)
-        .set({
-          // 一樣「有帶才寫」，沒帶的欄位保持原值。
-          ...(body.name !== undefined && { name: body.name }),
-          ...(body.number !== undefined && { number: body.number }),
-          ...(body.role !== undefined && { role: body.role }),
-          // 這裡的判斷條件刻意是 `!== undefined`，不是 truthy（也就是不是單純 `body.personId &&`）。
-          // 原因：personId 有三種合法的「帶了」狀態——一個數字（改對應到某人）、null（解除對應，
-          // 這名單列變回「歸屬不明」）、或整個欄位沒出現在 body 裡（不動它，保留原值）。
-          // 如果用 truthy 判斷，`personId: null` 會被當成 falsy 而整個被跳過，等於使用者按了
-          // 「解除對應」的 UI，結果請求送出去卻悄悄地什麼都沒發生——這種「操作靜默失效」比報錯還危險。
-          ...(body.personId !== undefined && { personId: body.personId }),
-        })
+        .set(patch)
         // where 綁 playerId 也綁 matchId，雙重保險（前面已驗過，這裡再多一層界線）。
         .where(and(eq(playersTable.id, params.playerId), eq(playersTable.matchId, params.matchId)))
         .returning();

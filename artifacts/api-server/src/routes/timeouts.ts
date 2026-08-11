@@ -5,6 +5,7 @@ import { requireAuth } from "../middleware/requireAuth";
 import { setBelongsToUser, matchBelongsToUser, timeoutBelongsToUser } from "../lib/ownership";
 import { handler } from "../lib/handler";
 import { insertIdempotent } from "../lib/insertIdempotent";
+import type { EveryColumnOnInsert } from "../lib/everyColumn";
 import {
   ListMatchTimeoutsParams,
   CreateTimeoutParams,
@@ -67,18 +68,25 @@ router.post(
       owns: ({ params, userId }) => setBelongsToUser(params.setId, userId),
     },
     async ({ res, params, body }) => {
+      // 型別標註是 #368 的守衛：EveryColumnOnInsert 讓 timeouts 的每一欄都變必填，
+      // 漏列一欄就編譯不過（見 lib/everyColumn.ts）。
+      const values: EveryColumnOnInsert<typeof timeoutsTable> = {
+        // 選填的 client-mintable 主鍵（#64 PR2），做法與理由見 sets.ts 的 POST 註解。
+        // `?? undefined` 取代了原本的條件展開，理由同 sets.ts 的 POST。
+        id: body.id ?? undefined,
+        // setId 來自路徑（已驗擁有權），不吃 body 的，避免 client 把暫停紀錄塞到別局去。
+        setId: params.setId,
+        homeScore: body.homeScore,
+        awayScore: body.awayScore,
+        side: body.side,
+        // seq 是伺服器插入時才決定的排序流水號（DB 的 serial 自增），前端不該也不能自己指定。
+        seq: undefined,
+      };
+
       // 冪等寫入 + 重送回既有列（#64 PR3）：做法與理由見 lib/insertIdempotent.ts。
       const row = await insertIdempotent(
         timeoutsTable,
-        {
-          // 選填的 client-mintable 主鍵（#64 PR2），做法與理由見 sets.ts 的 POST 註解。
-          ...(body.id ? { id: body.id } : {}),
-          // setId 來自路徑（已驗擁有權），不吃 body 的，避免 client 把暫停紀錄塞到別局去。
-          setId: params.setId,
-          homeScore: body.homeScore,
-          awayScore: body.awayScore,
-          side: body.side,
-        },
+        values,
         eq(timeoutsTable.setId, params.setId),
       );
 

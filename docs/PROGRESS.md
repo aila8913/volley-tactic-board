@@ -15,7 +15,7 @@
 > **開發進度 (aila)** 與 **設計進度 (tang)** 兩個子區塊。各自 wrap-up 時只改自己那區，
 > 平行 PR 就落在不同行段、git 幾乎都能自動合併。上面的 `_Last updated_` 是**共用一行**摘要。
 
-\_Last updated: 2026-08-11 (aila) — #372 五個決策全數拍板（含 [ADR-0007](adr/0007-tactics-match-is-optional-tag.md)＋PR #378），C1 分出去成 #379；另清掉 #322／#324 與兩張 infra 守衛票 #341／#354。tang 區未動（最後交付 08-06 PR #321）。\_
+\_Last updated: 2026-08-11 (aila) — #372 五個決策全數拍板（含 [ADR-0007](adr/0007-tactics-match-is-optional-tag.md)＋PR #378），C1 分出去成 #379；另清掉 #322／#324、兩張 infra 守衛票 #341／#354，以及 #368（逐欄列舉補上編譯期守衛，24 個寫入點全掃）。tang 區未動（最後交付 08-06 PR #321）。\_
 
 ## Current state
 
@@ -30,9 +30,10 @@ Where the project actually stands right now（**只寫現在成立的事實**；
   同樣進 DB。設計與分期沿革見 `docs/backend-architecture.md`。
   - route 檔的兩層儀式已收斂且**必填**：`lib/handler.ts` 的 `owns`（漏寫擁有權檢查＝編譯錯誤）、
     `lib/insertIdempotent.ts` 的 `scope`（不限定在已驗過擁有權的上層底下，重送重讀那列就是 IDOR 探測管道）。
-  - ⚠️ **POST/PATCH 是逐欄列舉**（刻意的——`...body` 會讓路徑決定的 `rallyId` 有被蓋掉的風險），
-    而**漏列一個 nullable 欄位不是型別錯誤、也沒有測試會紅**。結構缺口是 **#368**，別為了解那張票
-    把它改成展開。
+  - route 檔的第三層儀式也補上了（#368）：POST/PATCH 的寫入物件標註
+    `EveryColumnOnInsert` / `EveryColumnOnUpdate`，**漏列一欄＝編譯錯誤**。逐欄列舉為什麼是
+    刻意的、以及這個型別為什麼能純靠型別做到（drizzle 對 undefined 的兩個行為）都寫在
+    `artifacts/api-server/src/lib/everyColumn.ts` 的檔頭，不在這裡。
 - **Schema 地基齊了。** `lineups`（起始先發，一局一 row）、`substitutions`／`timeouts`（存比分快照）、
   `events.outcome`、`people`＋`teams`（`players.personId`／`matches.teamId` nullable FK、
   `onDelete: set null` 保留歷史事實）、`matches.format`（賽制 enum）、`matches.status`
@@ -282,6 +283,11 @@ gh issue list --milestone "$(gh api repos/:owner/:repo/milestones --jq 'map(sele
 
 ### 開發 (aila)
 
+- **#368**（08-11）逐欄列舉漏欄位變成編譯錯誤。三個備選裡選了**型別層窮舉**，理由是它能做到
+  另外兩個做不到的事：**執行期與送出的 SQL 一個位元都沒變**（合約測試要開 Postgres、pick helper
+  只是把那份會漏的清單搬個家）。24 個寫入點全掃。副產物：窮舉檢查**照出三個合約缺口**——
+  `UpdateEventBody` 沒有 playerId／source、`UpdateMatchBody` 沒有 name、`UpdateTacticBody`
+  沒有 matchId，也就是這三件事目前 PATCH 不了；留在 #368 的留言，沒有順手補（要動 openapi）。
 - **#370**（08-11）視圖③ 長出得/失分結構。範圍比預期小很多：單場分析頁**早就有**得失分結構
   （`buildPlayerMatrix()` 從前端 `history` 現算），只是不讀 `events.outcome`——而那正好是這欄位存在的
   最好註腳，**前端那條推導路只在「這場比賽已載進記憶體」時成立**，跨場統計沒有 `history` 可推。

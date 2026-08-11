@@ -4,6 +4,7 @@ import { db, tacticsTable } from "@workspace/db";
 import { requireAuth } from "../middleware/requireAuth";
 import { matchBelongsToUser, tacticBelongsToUser } from "../lib/ownership";
 import { handler } from "../lib/handler";
+import type { EveryColumnOnInsert, EveryColumnOnUpdate } from "../lib/everyColumn";
 import {
   CreateTacticBody,
   UpdateTacticBody,
@@ -63,17 +64,23 @@ router.post(
       owns: ({ body, userId }) => body.matchId == null || matchBelongsToUser(body.matchId, userId),
     },
     async ({ res, body, userId }) => {
-      const [created] = await db
-        .insert(tacticsTable)
-        .values({
-          userId,
-          // 歸屬到哪一場比賽（#119）。前端存檔時帶當前 matchId；沒帶就是 null（全域戰術）。
-          matchId: body.matchId,
-          name: body.name,
-          // data 欄位是 jsonb，Drizzle 直接接受 JS 物件
-          data: body.data,
-        })
-        .returning();
+      // 型別標註是 #368 的守衛：EveryColumnOnInsert 讓 tactics 的每一欄都變必填，
+      // 漏列一欄就編譯不過（見 lib/everyColumn.ts）。
+      const values: EveryColumnOnInsert<typeof tacticsTable> = {
+        // id 是 uuid + defaultRandom()，交給資料庫生。
+        id: undefined,
+        userId,
+        // 歸屬到哪一場比賽（#119）。前端存檔時帶當前 matchId；沒帶就是 null（全域戰術）。
+        matchId: body.matchId,
+        name: body.name,
+        // data 欄位是 jsonb，Drizzle 直接接受 JS 物件
+        data: body.data,
+        // 建立/更新時間都交給資料庫的 defaultNow() 填。
+        createdAt: undefined,
+        updatedAt: undefined,
+      };
+
+      const [created] = await db.insert(tacticsTable).values(values).returning();
 
       res.status(201).json(created);
     },
@@ -114,14 +121,28 @@ router.put(
       owns: ({ params, userId }) => tacticBelongsToUser(params.tacticId, userId),
     },
     async ({ res, params, body, userId }) => {
+      // 型別標註是 #368 的守衛：EveryColumnOnUpdate 讓 tactics 的每一欄都要在物件裡出現，
+      // 「這欄不開放 PATCH」現在要明寫 undefined（見 lib/everyColumn.ts）。
+      const patch: EveryColumnOnUpdate<typeof tacticsTable> = {
+        // id/userId 由路徑與 where 條件鎖定，不開放改。
+        id: undefined,
+        userId: undefined,
+        // matchId 是這次窮舉檢查照出來的合約缺口：UpdateTacticBody 根本沒有 matchId 這個
+        // 欄位，所以覆寫戰術時目前改不了它歸屬的比賽——是合約缺口不是實作缺口，
+        // 記在 #368 的留言。
+        matchId: undefined,
+        name: body.name,
+        data: body.data,
+        // updatedAt 手動設定，因為 Postgres 不會自動更新——這欄無條件寫入，不是「body 有帶
+        // 才改」，維持原本的既有行為。
+        updatedAt: new Date(),
+        // createdAt 是建立時的時間戳，PUT 不該動它。
+        createdAt: undefined,
+      };
+
       const [updated] = await db
         .update(tacticsTable)
-        .set({
-          ...(body.name !== undefined && { name: body.name }),
-          ...(body.data !== undefined && { data: body.data }),
-          // updatedAt 手動設定，因為 Postgres 不會自動更新
-          updatedAt: new Date(),
-        })
+        .set(patch)
         .where(and(eq(tacticsTable.id, params.tacticId), eq(tacticsTable.userId, userId)))
         .returning();
 
