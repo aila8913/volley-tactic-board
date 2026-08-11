@@ -12,6 +12,7 @@ import { requireAuth } from "../middleware/requireAuth";
 import { personBelongsToUser } from "../lib/ownership";
 import { handler } from "../lib/handler";
 import { groupMergeCandidates } from "../lib/personName";
+import type { EveryColumnOnInsert, EveryColumnOnUpdate } from "../lib/everyColumn";
 import {
   CreatePersonBody,
   UpdatePersonParams,
@@ -116,13 +117,19 @@ router.get(
 router.post(
   "/people",
   handler({ body: CreatePersonBody, owns: "public" }, async ({ res, body, userId }) => {
-    const [created] = await db
-      .insert(peopleTable)
-      .values({
-        userId,
-        name: body.name,
-      })
-      .returning();
+    // 型別標註是 #368 的守衛：EveryColumnOnInsert 讓 people 的每一欄都變必填，
+    // 漏列一欄就編譯不過（見 lib/everyColumn.ts）。
+    const values: EveryColumnOnInsert<typeof peopleTable> = {
+      // id 是 serial 主鍵，交給資料庫自動遞增。
+      id: undefined,
+      userId,
+      name: body.name,
+      // 是不是示範資料（#336）：一般使用者建立的「人」一律不是，交給 DB 的 default(false)。
+      // 只有 demoData.ts 那支種子腳本會直接寫這一欄，不會經過這支路由。
+      isDemo: undefined,
+    };
+
+    const [created] = await db.insert(peopleTable).values(values).returning();
 
     res.status(201).json(created);
   }),
@@ -168,11 +175,20 @@ router.patch(
       owns: ({ params, userId }) => personBelongsToUser(params.personId, userId),
     },
     async ({ res, params, body, userId }) => {
+      // 型別標註是 #368 的守衛：EveryColumnOnUpdate 讓 people 的每一欄都要在物件裡出現，
+      // 「這欄不開放 PATCH」現在要明寫 undefined（見 lib/everyColumn.ts）。
+      const patch: EveryColumnOnUpdate<typeof peopleTable> = {
+        // id/userId 由路徑與 where 條件鎖定，不開放改。
+        id: undefined,
+        userId: undefined,
+        name: body.name,
+        // isDemo 是資料庫維護的示範資料標記，不開放使用者透過 PATCH 更動。
+        isDemo: undefined,
+      };
+
       const [updated] = await db
         .update(peopleTable)
-        .set({
-          ...(body.name !== undefined && { name: body.name }),
-        })
+        .set(patch)
         .where(and(eq(peopleTable.id, params.personId), eq(peopleTable.userId, userId)))
         .returning();
 
@@ -274,17 +290,34 @@ router.post(
           const movedPlayerIds = movedRows.map((row) => row.id);
           movedPlayerCount += movedPlayerIds.length;
 
+          // 型別標註是 #368 的守衛（見 lib/everyColumn.ts）。這裡只改 personId 一欄，
+          // 其餘全部明寫 undefined：id/matchId/name/number/role 是這場比賽名單列本身的
+          // 事實（背號、位置…），合併操作只改「這個人是誰」，不該動到其他欄位。
+          const playerPatch: EveryColumnOnUpdate<typeof playersTable> = {
+            id: undefined,
+            matchId: undefined,
+            name: undefined,
+            number: undefined,
+            role: undefined,
+            personId: targetId,
+          };
           await tx
             .update(playersTable)
-            .set({ personId: targetId })
+            .set(playerPatch)
             .where(eq(playersTable.personId, source.id));
 
-          await tx.insert(personMergesTable).values({
+          // 同樣的型別守衛套在稽核表的 insert 上。
+          const mergeValues: EveryColumnOnInsert<typeof personMergesTable> = {
+            // id 是 serial 主鍵，交給資料庫自動遞增。
+            id: undefined,
             userId,
             targetId,
             sourceName: source.name,
             movedPlayerIds,
-          });
+            // 合併時間交給資料庫的 defaultNow() 填。
+            mergedAt: undefined,
+          };
+          await tx.insert(personMergesTable).values(mergeValues);
         }
 
         await tx

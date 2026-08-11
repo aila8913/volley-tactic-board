@@ -3,6 +3,7 @@ import { eq, getTableColumns } from "drizzle-orm";
 import { db, lineupsTable, setsTable } from "@workspace/db";
 import { requireAuth } from "../middleware/requireAuth";
 import { setBelongsToUser, matchBelongsToUser } from "../lib/ownership";
+import type { EveryColumnOnInsert } from "../lib/everyColumn";
 import { ListMatchLineupsParams, PutSetLineupParams, PutSetLineupBody } from "@workspace/api-zod";
 
 // 一局（set）的起始先發：我方六個號位各站哪個球員（見 lib/db/src/schema/lineups.ts）。
@@ -67,7 +68,13 @@ router.put("/sets/:setId/lineup", async (req, res) => {
     return;
   }
 
-  const values = {
+  // 這個 values 物件同時餵給 insert 跟 onConflictDoUpdate 的 set（見下方）——兩種情境剛好
+  // 都是「把六個號位整組寫成新的一份」，值完全相同，所以共用同一個物件沒有問題。
+  // 型別標註用 EveryColumnOnInsert（而不是 OnUpdate）：insert 這邊的窮舉檢查較嚴格
+  // （少列一欄就編譯不過），能滿足它，自然也能滿足較寬鬆的 update 用法。
+  const values: EveryColumnOnInsert<typeof lineupsTable> = {
+    // id 是 serial 主鍵，交給資料庫自動遞增；lineups 沒有 client-mintable id 的設計。
+    id: undefined,
     setId,
     zone1PlayerId: body.zone1PlayerId,
     zone2PlayerId: body.zone2PlayerId,

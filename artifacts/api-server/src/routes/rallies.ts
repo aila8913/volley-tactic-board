@@ -5,6 +5,7 @@ import { requireAuth } from "../middleware/requireAuth";
 import { setBelongsToUser, rallyBelongsToUser } from "../lib/ownership";
 import { handler } from "../lib/handler";
 import { insertIdempotent } from "../lib/insertIdempotent";
+import type { EveryColumnOnInsert } from "../lib/everyColumn";
 import {
   ListRalliesParams,
   CreateRallyParams,
@@ -53,21 +54,27 @@ router.post(
       owns: ({ params, userId }) => setBelongsToUser(params.setId, userId),
     },
     async ({ res, params, body }) => {
+      // 型別標註是 #368 的守衛：EveryColumnOnInsert 讓 rallies 的每一欄都變必填，
+      // 漏列一欄就編譯不過（見 lib/everyColumn.ts）。
+      const values: EveryColumnOnInsert<typeof ralliesTable> = {
+        // 選填的 client-mintable 主鍵（#64 PR2），做法與理由見 sets.ts 的 POST 註解。
+        // `?? undefined` 取代了原本的條件展開 `...(body.id ? { id } : {})`：條件展開產生的是
+        // optional key，窮舉檢查看不到它。drizzle 對 undefined 會送出 `default`，行為不變。
+        id: body.id ?? undefined,
+        // setId 來自路徑（已驗擁有權），不吃 body 的，避免 client 把 rally 塞到別局去。
+        setId: params.setId,
+        rallyNumber: body.rallyNumber,
+        homeScore: body.homeScore,
+        awayScore: body.awayScore,
+        homeRotation: body.homeRotation,
+        awayRotation: body.awayRotation,
+        winner: body.winner,
+      };
+
       // 冪等寫入 + 重送回既有列（#64 PR3）：做法與理由見 lib/insertIdempotent.ts。
       const row = await insertIdempotent(
         ralliesTable,
-        {
-          // 選填的 client-mintable 主鍵（#64 PR2），做法與理由見 sets.ts 的 POST 註解。
-          ...(body.id ? { id: body.id } : {}),
-          // setId 來自路徑（已驗擁有權），不吃 body 的，避免 client 把 rally 塞到別局去。
-          setId: params.setId,
-          rallyNumber: body.rallyNumber,
-          homeScore: body.homeScore,
-          awayScore: body.awayScore,
-          homeRotation: body.homeRotation,
-          awayRotation: body.awayRotation,
-          winner: body.winner,
-        },
+        values,
         eq(ralliesTable.setId, params.setId),
       );
 

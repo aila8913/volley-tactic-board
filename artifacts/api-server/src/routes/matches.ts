@@ -4,6 +4,7 @@ import { db, matchesTable } from "@workspace/db";
 import { requireAuth } from "../middleware/requireAuth";
 import { matchBelongsToUser, tournamentBelongsToUser, teamBelongsToUser } from "../lib/ownership";
 import { handler } from "../lib/handler";
+import type { EveryColumnOnInsert, EveryColumnOnUpdate } from "../lib/everyColumn";
 import {
   CreateMatchBody,
   GetMatchParams,
@@ -54,29 +55,40 @@ router.post(
       ],
     },
     async ({ res, body, userId }) => {
-      const [created] = await db
-        .insert(matchesTable)
-        .values({
-          userId,
-          name: body.name ?? null,
-          // CreateMatchBody 的 date 是 zod.coerce.date()，parse 後已經是 Date 物件，
-          // Drizzle 的 timestamp 欄位直接吃 Date。
-          date: body.date,
-          opponent: body.opponent,
-          location: body.location ?? null,
-          videoUrl: body.videoUrl ?? null,
-          // 資料夾 id（可為 null＝放最上層）。擁有權已在上面的 owns 檢查驗過，這裡才敢直接存。
-          tournamentId: body.tournamentId ?? null,
-          // 球隊標籤 id（可為 null＝未分類）。擁有權同樣已在上面驗過。
-          teamId: body.teamId ?? null,
-          // 賽制（#215）：跟 teamId 不同，這欄不是外鍵、不用驗擁有權，也不用像其他欄位一樣
-          // 給 ?? null 的 fallback——沒帶就直接不寫進這個 key，讓 DB 的 default("best_of_3")
-          // 自己接手。如果這裡改成 body.format ?? "best_of_3"，就會多出「應用層也記一份預設值」
-          // 的第二個地方，之後兩邊的預設值一旦想法飄開（例如只改了 DB 沒改到這裡）就會出現
-          // 兩套不一致的行為，所以刻意讓「沒給值」這件事只由 DB 處理一次。
-          ...(body.format !== undefined && { format: body.format }),
-        })
-        .returning();
+      // 型別標註是 #368 的守衛：EveryColumnOnInsert 讓 matches 的每一欄都變必填，
+      // 漏列一欄就編譯不過（見 lib/everyColumn.ts）。
+      const values: EveryColumnOnInsert<typeof matchesTable> = {
+        // id 是 serial 主鍵，交給資料庫自動遞增。
+        id: undefined,
+        userId,
+        name: body.name ?? null,
+        // CreateMatchBody 的 date 是 zod.coerce.date()，parse 後已經是 Date 物件，
+        // Drizzle 的 timestamp 欄位直接吃 Date。
+        date: body.date,
+        opponent: body.opponent,
+        location: body.location ?? null,
+        videoUrl: body.videoUrl ?? null,
+        // 資料夾 id（可為 null＝放最上層）。擁有權已在上面的 owns 檢查驗過，這裡才敢直接存。
+        tournamentId: body.tournamentId ?? null,
+        // 球隊標籤 id（可為 null＝未分類）。擁有權同樣已在上面驗過。
+        teamId: body.teamId ?? null,
+        // 賽制（#215）：跟 teamId 不同，這欄不是外鍵、不用驗擁有權，也不用像其他欄位一樣
+        // 給 ?? null 的 fallback——沒帶就給 undefined，讓 DB 的 default("best_of_3")
+        // 自己接手。如果這裡改成 body.format ?? "best_of_3"，就會多出「應用層也記一份預設值」
+        // 的第二個地方，之後兩邊的預設值一旦想法飄開（例如只改了 DB 沒改到這裡）就會出現
+        // 兩套不一致的行為，所以刻意讓「沒給值」這件事只由 DB 處理一次。
+        format: body.format,
+        // 比賽狀態（#218）：新建比賽一律是「進行中」，不開放在建立當下就指定成 finished，
+        // 交給 DB 的 default("in_progress") 處理。
+        status: undefined,
+        // 是不是示範資料（#336）：一般使用者建立的比賽一律不是，交給 DB 的 default(false)。
+        // 只有 demoData.ts 那支種子腳本會直接寫這一欄，不會經過這支路由。
+        isDemo: undefined,
+        // 建立時間交給資料庫的 defaultNow() 填。
+        createdAt: undefined,
+      };
+
+      const [created] = await db.insert(matchesTable).values(values).returning();
 
       res.status(201).json(created);
     },
@@ -129,27 +141,41 @@ router.patch(
       ],
     },
     async ({ res, params, body, userId }) => {
+      // 型別標註是 #368 的守衛：EveryColumnOnUpdate 讓 matches 的每一欄都要在物件裡出現，
+      // 「這欄不開放 PATCH」現在要明寫 undefined，而不是靠沒寫這件事本身表達（見
+      // lib/everyColumn.ts）。
+      const patch: EveryColumnOnUpdate<typeof matchesTable> = {
+        // id 是主鍵、userId 由 where 條件鎖定（不是 PATCH 的對象），兩者都不開放改。
+        id: undefined,
+        userId: undefined,
+        // name 是這次窮舉檢查照出來的合約缺口：UpdateMatchBody 根本沒有 name 這個欄位，
+        // 所以 PATCH 目前改不了它——是合約缺口不是實作缺口，記在 #368 的留言。
+        name: undefined,
+        // body 沒帶的欄位直接給 body.x，值是 undefined（drizzle 的 mapUpdateSet 會濾掉，
+        // 維持原值）；帶了就是新值。跟舊寫法的條件展開完全等價，見 lib/everyColumn.ts。
+        opponent: body.opponent,
+        // UpdateMatchBody 的 date 是 zod.coerce.date()，parse 後已是 Date 物件，timestamp 欄位直接吃。
+        date: body.date,
+        location: body.location,
+        videoUrl: body.videoUrl,
+        tournamentId: body.tournamentId,
+        teamId: body.teamId,
+        // 賽制（#215）：沒帶就不動這一欄，維持原本的賽制不變。
+        format: body.format,
+        // 比賽狀態（#218）：計分頁的「結束比賽」送 finished、「重新開啟比賽」送
+        // in_progress。收尾／重新開啟刻意不另開端點（例如 POST /matches/:id/finish）——
+        // 它就是「把一個欄位改成另一個值」，跟改對手名稱沒有本質差別，用既有的 PATCH
+        // 表達就夠；開專用端點反而要多維護一條路由、多一份擁有權檢查。
+        status: body.status,
+        // isDemo/createdAt 是資料庫維護的中繼資訊（示範資料標記、建立時間），
+        // 不開放使用者透過 PATCH 更動。
+        isDemo: undefined,
+        createdAt: undefined,
+      };
+
       const [updated] = await db
         .update(matchesTable)
-        .set({
-          // 用「欄位在 body 裡才寫」的展開技巧：body 沒帶的 key 不會出現在 set 物件裡，
-          // Drizzle 就不會去動那一欄。注意要判斷 !== undefined 而不是 truthy，
-          // 否則像 videoUrl: null（想清空影片連結）這種合法值會被誤判成「沒帶」。
-          ...(body.opponent !== undefined && { opponent: body.opponent }),
-          // UpdateMatchBody 的 date 是 zod.coerce.date()，parse 後已是 Date 物件，timestamp 欄位直接吃。
-          ...(body.date !== undefined && { date: body.date }),
-          ...(body.location !== undefined && { location: body.location }),
-          ...(body.videoUrl !== undefined && { videoUrl: body.videoUrl }),
-          ...(body.tournamentId !== undefined && { tournamentId: body.tournamentId }),
-          ...(body.teamId !== undefined && { teamId: body.teamId }),
-          // 賽制（#215）：沒帶就不動這一欄，維持原本的賽制不變。
-          ...(body.format !== undefined && { format: body.format }),
-          // 比賽狀態（#218）：計分頁的「結束比賽」送 finished、「重新開啟比賽」送
-          // in_progress。收尾／重新開啟刻意不另開端點（例如 POST /matches/:id/finish）——
-          // 它就是「把一個欄位改成另一個值」，跟改對手名稱沒有本質差別，用既有的 PATCH
-          // 表達就夠；開專用端點反而要多維護一條路由、多一份擁有權檢查。
-          ...(body.status !== undefined && { status: body.status }),
-        })
+        .set(patch)
         .where(and(eq(matchesTable.id, params.matchId), eq(matchesTable.userId, userId)))
         .returning();
 

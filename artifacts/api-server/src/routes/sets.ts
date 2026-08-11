@@ -5,6 +5,7 @@ import { requireAuth } from "../middleware/requireAuth";
 import { matchBelongsToUser, setBelongsToUser } from "../lib/ownership";
 import { handler } from "../lib/handler";
 import { insertIdempotent } from "../lib/insertIdempotent";
+import type { EveryColumnOnInsert, EveryColumnOnUpdate } from "../lib/everyColumn";
 import {
   ListSetsParams,
   CreateSetParams,
@@ -49,24 +50,25 @@ router.post(
       owns: ({ params, userId }) => matchBelongsToUser(params.matchId, userId),
     },
     async ({ res, params, body }) => {
+      // 型別標註是 #368 的守衛：EveryColumnOnInsert 讓 sets 的每一欄都變必填，
+      // 漏列一欄就編譯不過（見 lib/everyColumn.ts）。
+      const values: EveryColumnOnInsert<typeof setsTable> = {
+        // client-mintable 主鍵（#64 PR2）：前端離線記錄時得先有 id 才能把「建立」與之後的
+        // 「刪除」排進同一條有序 write log，所以允許 body 指定 id。`?? undefined` 取代了
+        // 原本的條件展開 `...(body.id ? { id } : {})`：條件展開產生的是 optional key，
+        // 窮舉檢查看不到它；drizzle 遇到 undefined 一樣會送出 SQL 的 `default`，
+        // DB 的 defaultRandom() 照樣生效，行為不變。
+        id: body.id ?? undefined,
+        // firstServer 從 body 帶進來（開局時前端已知道誰先發）；matchId 從路徑取（已驗擁有權）。
+        matchId: params.matchId,
+        setNumber: body.setNumber,
+        firstServer: body.firstServer,
+      };
+
       // 冪等寫入 + 重送回既有列的整套邏輯收在 lib/insertIdempotent.ts（原本這裡有一份、
       // 另外四張表各抄一份）。第三個參數是重讀既有列時的 scope：確認那列真的掛在這個
       // 已驗過擁有權的 match 底下，否則就是一條 IDOR 探測管道——理由詳見那支模組的說明。
-      const row = await insertIdempotent(
-        setsTable,
-        {
-          // client-mintable 主鍵（#64 PR2）：前端離線記錄時得先有 id 才能把「建立」與之後的
-          // 「刪除」排進同一條有序 write log，所以允許 body 指定 id。用條件展開而不是直接寫
-          // `id: body.id`，是為了不依賴「drizzle 遇到 undefined 會自動退回 default」這個隱性
-          // 行為——沒帶 id 時這個 key 根本不存在，DB 的 defaultRandom() 一定生效。
-          ...(body.id ? { id: body.id } : {}),
-          // firstServer 從 body 帶進來（開局時前端已知道誰先發）；matchId 從路徑取（已驗擁有權）。
-          matchId: params.matchId,
-          setNumber: body.setNumber,
-          firstServer: body.firstServer,
-        },
-        eq(setsTable.matchId, params.matchId),
-      );
+      const row = await insertIdempotent(setsTable, values, eq(setsTable.matchId, params.matchId));
 
       if (!row) {
         res.status(409).json({ error: "Conflict" });
@@ -97,9 +99,19 @@ router.patch(
       ],
     },
     async ({ res, params, body }) => {
+      // 型別標註是 #368 的守衛：EveryColumnOnUpdate 讓 sets 的每一欄都要在物件裡出現，
+      // 「這欄不開放 PATCH」現在要明寫 undefined（見 lib/everyColumn.ts）。
+      const patch: EveryColumnOnUpdate<typeof setsTable> = {
+        // id 是主鍵、matchId 由路徑決定、setNumber 是這局在比賽裡的順序，三者都不開放改。
+        id: undefined,
+        matchId: undefined,
+        setNumber: undefined,
+        firstServer: body.firstServer,
+      };
+
       const [updated] = await db
         .update(setsTable)
-        .set({ firstServer: body.firstServer })
+        .set(patch)
         // setBelongsToUser 已經驗過 set→match→userId，這裡再帶 matchId 進 where
         // 只是多一層保險，跟 players.ts 的 PATCH 一致。
         .where(and(eq(setsTable.id, params.setId), eq(setsTable.matchId, params.matchId)))
