@@ -3,11 +3,12 @@
 // 跨越所有場次/球隊的歷程」。people 這層「跨場身分」(#212 建的 people CRUD) 就是為了讓這頁
 // 有事可做：同一個人在不同場可能背號、位置、甚至球隊都不同，這頁要能把這些歷程串起來看。
 //
-// 重要：這頁只呈現「資料真的支援」的統計。events.outcome（得分/失分）目前恆為 null——
-// 即時記錄路徑（lib/scoreSheetMapping.ts 的 pointRecordToEvent）根本沒有寫這欄，所以做不出
-// 「這個人得幾分/失幾分」，也刻意不做「戰績（勝/負）」（那需要 matches.format，是另一張
-// PR 的東西，見 api-server 的 analysis.ts 對應路由註解）。頁面上要老實告知這個限制，而不是
-// 靜默地不顯示讓人以為壞了——見下面 <p> 那段常駐說明文字。
+// 重要：這頁只呈現「資料真的支援」的統計。events.outcome（得分/失分）的寫入路徑已經補上
+// 了（#365），這頁也從 #370 開始消費它，呈現跨場加總的得分/失分結構。仍然做不到的是
+// 比率統計（side-out%／決定率這類），那需要「這一分開始時是誰在發球」，要從發球序反推，
+// 邏輯複雜到不適合塞進現有聚合查詢，留給 #235；也刻意不做「戰績（勝/負）」（那需要
+// matches.format，是另一張 PR 的東西，見 api-server 的 analysis.ts 對應路由註解）。
+// 頁面上要老實告知還缺什麼，而不是靜默地不顯示讓人以為壞了——見下面 <p> 那段常駐說明文字。
 import { useMemo, useState } from "react";
 import { useLocation, Link } from "wouter";
 import { Users } from "lucide-react";
@@ -18,7 +19,7 @@ import { usePersonList } from "@/hooks/usePeople";
 import { usePersonAnalysis } from "@/hooks/usePersonAnalysis";
 import { useTeamList } from "@/hooks/useTeams";
 import { APP_BACKGROUND_STYLE, APP_SHELL_CLASS } from "@/lib/appChromeStyles";
-import { buildPersonActionSummary } from "@/lib/personAnalysisMapping";
+import { buildPersonActionSummary, buildPersonOutcomeSummary } from "@/lib/personAnalysisMapping";
 import { formatMatchDateTime } from "@/lib/matchSummary";
 
 // 跟 CrossMatchAnalytics.tsx 同一套次要按鈕／玻璃卡片語言，維持三個分析頁視覺一致。
@@ -49,6 +50,17 @@ export default function PersonAnalytics() {
     () => buildPersonActionSummary(analysis?.actionCounts ?? []),
     [analysis],
   );
+
+  // 得分／失分結構同一套固定排序＋補 0 邏輯（#370），見 personAnalysisMapping.ts 的
+  // buildPersonOutcomeSummary 註解。
+  const outcomeSummary = useMemo(
+    () => buildPersonOutcomeSummary(analysis?.outcomeBreakdown ?? []),
+    [analysis],
+  );
+  // 「未填」欄要不要出現是整張表一起決定，不是逐列各自判斷——只要任一動作有
+  // outcome=null 的資料，就代表這個人身上真的有一批舊資料還沒跑過回填腳本，整張表
+  // 一起亮出這欄比較看得出「這裡缺資料」，逐列各自出現/消失反而讓表格欄位對不齊。
+  const hasUnknownOutcome = outcomeSummary.some((row) => row.unknown > 0);
 
   return (
     // mode="A"：跟 CrossMatchAnalytics 一樣是「列表/彙總瀏覽」頁面模式。nav 一樣走 base
@@ -121,13 +133,15 @@ export default function PersonAnalytics() {
           </section>
 
           {/* 資料完整性的常駐說明：不管選了誰，都要老實告知這頁做不到什麼，避免使用者
-              以為「怎麼沒有得失分」是系統壞掉。 */}
+              以為「少了什麼」是系統壞掉。這頁已經接上得分/失分結構（#370），還缺的是
+              「比率」這個維度，不是「有沒有得失分」——這條要跟著功能一起更新，不然舊說法
+              會變成誤導使用者的假話（見 CLAUDE.md 對這段的要求）。 */}
           {personId !== undefined && (
             <p className="rounded-xl border border-white/[0.1] bg-white/[0.03] px-3 py-2 text-xs text-[#a9b096]">
-              逐球得失分統計（例如這個人得了幾分、失了幾分）需要
+              下面的得分／失分結構已經接上
               <code className="mx-1 rounded bg-white/[0.08] px-1 py-0.5">events.outcome</code>
-              這個欄位。記錄流程現在已經會寫入它（#51），但這頁的呈現還沒接上，所以這裡目前
-              只呈現出賽場數、背號/位置歷程、觸球動作次數、先發局數——都是目前資料真的算得出來的部分。
+              這個欄位（#370），但還沒有 side-out%／決定率這類「比率」統計——那需要先推導出
+              「這一分開始時是誰在發球」（發球序），邏輯複雜到現在的聚合查詢還做不到，留給 #235。
             </p>
           )}
 
@@ -206,6 +220,46 @@ export default function PersonAnalytics() {
                     </li>
                   ))}
                 </ul>
+              </section>
+
+              {/* 得分／失分結構：跨場加總，同一套固定順序＋補 0，見 buildPersonOutcomeSummary
+                  註解。「未填」欄只在真的有 outcome=null 的資料時才出現——固定顯示一欄
+                  永遠 0 的「未填」是雜訊，不如乾脆不畫，只在真的發生時才提醒使用者這裡有
+                  一批舊資料還沒補值。 */}
+              <section className={GLASS_SECTION_CLASS}>
+                <h2 className="mb-3 text-sm font-bold text-[#f5f5f0]">
+                  得分／失分結構（跨場加總）
+                </h2>
+                <table className="w-full border-collapse text-sm">
+                  <thead>
+                    <tr className="border-b-2 border-white/[0.2]">
+                      <th className="pb-1 text-left font-normal text-[#a9b096]">動作</th>
+                      <th className="pb-1 text-right font-normal text-[#a9b096]">得分</th>
+                      <th className="pb-1 text-right font-normal text-[#a9b096]">失分</th>
+                      {hasUnknownOutcome && (
+                        <th className="pb-1 text-right font-normal text-[#a9b096]">未填</th>
+                      )}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {outcomeSummary.map((row) => (
+                      <tr key={row.action} className="border-b border-white/[0.06] last:border-b-0">
+                        <td className="py-1.5 text-[#f5f5f0]">{row.label}</td>
+                        <td className="py-1.5 text-right font-numeric tabular-nums text-[#c6f135]">
+                          {row.points}
+                        </td>
+                        <td className="py-1.5 text-right font-numeric tabular-nums text-[#f5f5f0]">
+                          {row.losses}
+                        </td>
+                        {hasUnknownOutcome && (
+                          <td className="py-1.5 text-right font-numeric tabular-nums text-[#a9b096]">
+                            {row.unknown}
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </section>
 
               {/* 各場背號與位置：一列一場，點整列導去該場的單場分析頁——跟視圖②「點整列

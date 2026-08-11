@@ -28,11 +28,14 @@ router.use(requireAuth);
 
 // GET /analysis/matches/:matchId/rotations — 這場比賽「我方各輪次」的得失分。
 //
-// 為什麼只用 rallies、不碰 events：events.outcome（這一球的攻防結果）目前恆為 null——
-// 即時記錄的路徑（lib/scoreSheetMapping.ts 的 pointRecordToEvent）根本沒有寫這個欄位，
-// 所以沒辦法從 events 算出「哪一種攻擊得分/失分」這種更細的統計。rallies 就不同：
-// homeRotation（這分開始前我方的輪次快照）跟 winner（這分誰贏）兩欄本來就是每筆 rally
-// 必填、隨計分即時寫入的，資料完整可靠，用它們算「第 N 輪得幾分/失幾分」很穩。
+// 為什麼只用 rallies、不碰 events：events.outcome（這一球的攻防結果）的寫入路徑已經補上
+// 了（#365），/analysis/people/:personId 也已經在用它算得失分結構（#370，見該路由下面的
+// actionRows 查詢）。但這支路由要算的是「輪次」，rallies 才是對的資料來源，理由是完整性
+// 而不是有沒有值：rallies.homeRotation（這分開始前我方的輪次快照）跟 winner（這分誰贏）
+// 兩欄是每筆 rally 必填、隨計分即時寫入的，一分絕對對得到一筆 rally。events 就不同——
+// 「沒看到」這個逃生閥（見 events 的記錄流程說明）允許整分完全不留任何 event，只留 rally，
+// 這種分如果改用 events 當輪次來源就會直接漏算，統計出來的得失分會少於實際比分。所以這裡
+// 仍然用 rallies，不是因為 events.outcome 沒有用，而是輪次統計本來就該用「每分必有」的表。
 //
 // 為什麼不做 side-out% / 破發率：那需要知道「這一分開始時是誰在發球」，但 rallies 沒有
 // 直接存這欄——發球方要從發球序（誰先發、每次 side-out 才輪轉）反推，邏輯複雜到不適合
@@ -192,10 +195,13 @@ router.get(
 );
 
 // GET /analysis/people/:personId — 「視圖③：球員跨場/跨隊分析」(#213)。一個人跨越多場、
-// 可能跨隊的出賽紀錄、各場背號/位置、觸球動作分布、先發局數，一支請求彙整成一份。
+// 可能跨隊的出賽紀錄、各場背號/位置、觸球動作分布、得失分結構、先發局數，一支請求彙整成一份。
 //
-// 這裡「資料真的支援的才做」：events.outcome（得分/失分）目前恆為 null（見上面 /rotations
-// 的長註解，#51 待補），所以不提供「這個人得幾分/失幾分」——那需要近似值假裝，寧可不做。
+// events.outcome（#365 補上寫入路徑）從這支路由開始有消費者了（#370）：下面的 actionRows
+// 查詢同時依 action 跟 outcome 分組，一次掃描餵出兩種東西——既有的「觸球動作分布」
+// （actionCounts，把 outcome 加總回單一 action 一列）跟新的「得失分結構」
+// （outcomeBreakdown，依 action 拆 point/loss/in_play/unknown）。仍然不做的是比率統計
+// （side-out%／決定率）：那需要知道「這一分開始時是誰在發球」，要從發球序反推，是 #235。
 router.get(
   "/analysis/people/:personId",
   handler(
@@ -249,20 +255,28 @@ router.get(
         return;
       }
 
-      // 觸球動作次數分布（grain = event）。events.playerId 只會指向「我方」動作的球員
-      // （見 lib/db/src/schema/events.ts 的 side/playerId 註解），且 playerIds 已經是
-      // 篩過「這個使用者名下」的名單列，所以這裡不需要再 join matches/rallies/sets
-      // 驗一次擁有權——跟 /analysis/matches 拆分不同 grain 查詢是同一個道理：這是獨立的
-      // 單一 grain（event）查詢，不跟上面的 match grain 查詢湊成一支 join，否則一個人
-      // 打了 3 場、每場上百顆球，count 會被場次數相乘出去、變成假數字。
+      // 觸球動作次數分布，現在再加上得失分結構（grain = event × outcome，#370）。
+      // events.playerId 只會指向「我方」動作的球員（見 lib/db/src/schema/events.ts 的
+      // side/playerId 註解），且 playerIds 已經是篩過「這個使用者名下」的名單列，所以這裡
+      // 不需要再 join matches/rallies/sets 驗一次擁有權——跟 /analysis/matches 拆分不同
+      // grain 查詢是同一個道理：這是獨立的單一 grain 查詢，不跟上面的 match grain 查詢湊成
+      // 一支 join，否則一個人打了 3 場、每場上百顆球，count 會被場次數相乘出去、變成假數字。
+      //
+      // 刻意只發一支查詢、groupBy 兩欄（action、outcome）而不是分兩支各查一次：反正都要
+      // 掃過同一批 events 列，groupBy 多一欄不會多付一次全表掃描的成本，卻能同時餵出兩種
+      // 東西——lib/analysisSummary.ts 的 summarisePerson 再把這批 action×outcome 的列
+      // 分別合併成「既有的 actionCounts（跨 outcome 加總）」跟「新的 outcomeBreakdown
+      // （依 outcome 分桶）」，維持「查詢只管怎麼查、合併規則搬去 analysisSummary.ts」
+      // 的既有分工（#229）。
       const actionRows = await db
         .select({
           action: eventsTable.action,
+          outcome: eventsTable.outcome,
           count: sql<number>`count(*)`.mapWith(Number),
         })
         .from(eventsTable)
         .where(inArray(eventsTable.playerId, playerIds))
-        .groupBy(eventsTable.action);
+        .groupBy(eventsTable.action, eventsTable.outcome);
 
       // 先發局數（grain = set/lineup）：lineups 一局一 row，六個號位（zone1~6）分別存
       // 一個 playerId，只要任一號位命中這個人「任一場」的 playerId，這一局就算他先發過。

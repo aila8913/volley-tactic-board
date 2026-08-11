@@ -30,6 +30,10 @@
 （PR #366），並開始 **M4：`events.outcome` 從「有欄位沒人寫」變成真的有值**（PR #365，#51 第一塊，
 本機與正式站都已回填）。#21/#51/#99 在 Project 的 Todo。\_
 
+\_Last updated: 2026-08-11 (aila) — **M4 設計討論開場**：PO 拍板進階版影片載體＝**內嵌 YouTube
+播放器**（記在 #21／#51），並把 `outcome` 的呈現層獨立成 **#370**（本 PR 交付：視圖③ 長出得/失分
+結構）。\_
+
 ## Current state
 
 Where the project actually stands right now (durable "current" facts; per-session detail
@@ -112,6 +116,28 @@ lives in git log + the issues named).
     `drizzle-kit push`（schema 沒動）。腳本留著是為了下一個環境，不是還有事沒做完。
   - **「呈現」刻意留著**：`PersonAnalytics` 與單場分析頁還沒長出得/失分結構，那需要後端聚合
     endpoint ＋ 前端 UI。要單獨排一張、還是併進 #21/#51 的進階版介面設計，是 PO 的排期決定。
+- **`events.outcome` 有第一個消費者了：視圖③ 長出得/失分結構（#370，08-11 交付）。** #365 讓欄位有值，
+  這張讓畫面用得到。**範圍比預期小很多，原因值得記**：#365 的收尾留言寫「`PersonAnalytics` 與單場分析頁
+  都還沒長出得/失分結構」——查證後只對了一半。**單場分析頁其實早就有**（`lib/statsMapping.ts` 的
+  `buildPlayerMatrix()`），只是不讀 `events.outcome`，而是從前端 `history` 用 `point.side === 'us'` 現算。
+  而這正好是 `events.outcome` 存在的最好註腳：**前端那條推導路只在「這場比賽已載進記憶體」時成立**，
+  跨場統計沒有 `history` 可推、後端只能查 DB。所以真正的缺口只有視圖③ 一處。
+  - 後端只動一行關鍵處：`actionRows` 的 `groupBy(action)` → `groupBy(action, outcome)`。grain 變成
+    action × outcome，**同一次掃描同時餵出舊的「觸球動作分布」與新的「得失分結構」**，不多發查詢。
+    `summarisePerson` 保留 `actionCounts` 原本的形狀（跨 outcome 加總）、另吐 `outcomeBreakdown`，
+    所以既有前端與測試一行未改，新資料純 additive。
+  - **`unknown` 桶（`outcome` 是 null）刻意保留、不丟掉**：回填腳本跑過本機與正式站，但那不是欄位
+    與生俱來的保證——任何新環境（新沙盒 DB、新 clone 接空 DB）的舊資料仍會是 null。前端只在
+    `unknown > 0` 時才顯示「未填」那一欄（永遠 0 的欄位是雜訊）。
+  - ⚠️ **同一條規則現在有三份推導**：`resolveOutcome()`（後端寫入，`side === winner`）／
+    `buildPlayerMatrix()`（前端單場，`point.side === 'us'`）／`buildRotationStats()`（前端輪次，
+    `rally.winner === 'home'`）。**三份目前答案一致，所以不是 bug**，但這正是 M3.5 那條主題
+    （#352／#304：規則被複製成兩三份手寫拷貝然後各自漂走）的**前期長相**。記在 #370 當觀察點，
+    等真的漂走或出現第四份再開票——**現在收斂等於為了對稱而改一段沒壞的程式**。
+  - 順手修掉五處已經過期的長註解（`routes/analysis.ts` ×2、`openapi.yaml` ×3、`PersonAnalytics.tsx` ×1），
+    它們都還寫著「`events.outcome` 目前恆為 null」——#365 之後這句是假的。`/rotations` 那支**仍然
+    用 rallies 不用 events**，但理由改正了：不是「outcome 沒值」，而是**「沒看到」逃生閥允許整分不留
+    任何 event**，改用 events 當輪次來源會直接漏算。
 - **戰術板場景編輯的歷史政策收斂成一支 helper，順手修掉四個 undo bug（#304／#361，08-10 交付 PR #362）。**
   #304 開票時的說法是「35 個成員裡有三組平行的 add/update/remove 三連，大介面、薄實作」，並問了三個
   問題。查證後的答案值得記，因為結論跟票面直覺相反：
@@ -528,7 +554,20 @@ gh issue list --state open   # 全部
 裡的 wow 點、#99 站位快照同屬 advanced tier），#21／#51 都掛 `needs-plan`。三張已於 08-10 放進
 Project #4 的 Todo 欄。**08-10 已先切出一塊地基動工**：PO 選了「先落 outcome 地基，再開設計」——
 `events.outcome` 的寫入路徑已補（PR #365，見 Current state），因為它同時是簡易版就需要的東西、
-範圍小且驗得起來，不必等三張的設計會。**設計那一步還沒開始。**
+範圍小且驗得起來，不必等三張的設計會。
+
+**08-11 設計討論開場，兩個決定**：
+（a）**進階版的影片載體＝內嵌 YouTube 播放器**（PO 拍板，記在 #21／#51）。這題之前**完全懸空**——
+整套進階版的可行性建立在「可暫停倒帶的影片」上，而 `videoTimestamp` 從 schema 到 API 都通了、
+schema 註解甚至寫著「對應 YouTube 播放時間」，**卻沒有任何前端在寫它**。定了之後 `videoTimestamp`
+升格成進階版的時間軸主鍵：「待補清單」（本來就是推導值）從一份清單變成**可以一鍵跳到那一球重看**。
+**還沒決定、擋著 #21 實作的三題**：影片網址存哪（一場很可能有多段影片，`matches` 加一欄表達不了）、
+要不要同時支援本機檔案（系隊影片不一定會上 YouTube）、時間軸怎麼對齊（手動標一個錨點再靠 rally
+順序推，還是每分都對）。
+（b）**`outcome` 的「呈現」層獨立成 #370**（#365 留言問的「單獨排還是併進設計」，PO 選單獨排），
+已於 08-11 交付，見 Current state。
+
+**其餘的設計那一步還沒開始。**
 
 **M1／M2／M1.5／M2.5／M3／M3.5 milestone 皆已關閉。**
 **M3.5「架構深化：可測性與資料流」（軟目標日 8/15）於 08-10 提前收完**：#229 後端合併規則抽純函式、

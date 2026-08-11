@@ -166,11 +166,31 @@ export type AppearanceRow = {
   role: "S" | "OH" | "MB" | "OPP" | "L";
 };
 
-// 對應 `actionRows` 查詢的每一列（grain = event，依 action 分組後的次數）。
-// action 型別對應 lib/db/src/schema/events.ts 的 eventActionEnum。
+// 對應 `actionRows` 查詢的每一列（grain = event，依 action × outcome 分組後的次數，#370）。
+// action 型別對應 lib/db/src/schema/events.ts 的 eventActionEnum，outcome 對應
+// eventOutcomeEnum、允許 null——events.outcome 這欄本身就是 nullable（見該檔案的欄位註解），
+// 一顆球「還沒被回填過結果」是合法狀態，不是查詢寫錯。
 export type ActionRow = {
   action: "serve" | "receive" | "set" | "attack" | "block" | "dig";
+  outcome: "point" | "loss" | "in_play" | null;
   count: number;
+};
+
+// GET /analysis/people/:personId 的新欄位（#370）：把 actionRows 依 outcome 分桶，是視圖③
+// 第一次真的用到 events.outcome。unknown 桶特別重要，不能省略或悄悄丟掉——events.outcome
+// 是 #365 才補上的欄位，local／production 這兩個既有環境都已經跑過一次性的
+// `scripts/src/backfill-event-outcomes.ts` 讓舊資料補值，但「跑過回填腳本」不是這個欄位
+// 與生俱來的保證：任何全新環境（例如新開的 sandbox DB、或有人重新 clone 專案接一顆全新的
+// 空 DB）從今以後新寫入的資料 outcome 都會有值，可是如果沒人記得手動再跑一次回填腳本，
+// 舊資料的 outcome 依然是 null。與其假裝這種情況不會發生、讓 null 列悄悄消失在加總裡，
+// 不如老實分一個 unknown 桶秀出來——這也是為什麼前端只在 unknown > 0 時才顯示「未填」
+// 那一欄（見 PersonAnalytics.tsx）。
+export type OutcomeBreakdownEntry = {
+  action: "serve" | "receive" | "set" | "attack" | "block" | "dig";
+  points: number;
+  losses: number;
+  inPlay: number;
+  unknown: number;
 };
 
 // 對應 `setsStartedRow` 查詢（單筆聚合，理論上一定有一列，但跟 handler 解構
@@ -190,7 +210,8 @@ export type PersonAnalysisResult = {
   matchesPlayed: number;
   setsStarted: number;
   teamBreakdown: TeamBreakdownEntry[];
-  actionCounts: ActionRow[];
+  actionCounts: { action: ActionRow["action"]; count: number }[];
+  outcomeBreakdown: OutcomeBreakdownEntry[];
   appearances: AppearanceRow[];
 };
 
@@ -225,13 +246,55 @@ export function summarisePerson(
     matchesPlayed: count,
   }));
 
+  // actionCounts：查詢那邊的 grain 從單純「action」變成「action × outcome」之後（#370，
+  // 為了讓同一支查詢能同時餵出這欄跟下面的 outcomeBreakdown，見 routes/analysis.ts 的
+  // actionRows 查詢註解），這裡要把同一個 action 底下、不同 outcome 的好幾列加回同一筆，
+  // 才能維持這個欄位原本「一個 action 一列」的形狀不變——前端既有的「觸球動作分布」
+  // （buildPersonActionSummary）跟既有測試都假設這個形狀，不該因為查詢細了就跟著變。
+  const actionCountTotals = new Map<ActionRow["action"], number>();
+  for (const row of actionRows) {
+    actionCountTotals.set(row.action, (actionCountTotals.get(row.action) ?? 0) + row.count);
+  }
+  const actionCounts = [...actionCountTotals.entries()].map(([action, count]) => ({
+    action,
+    count,
+  }));
+
+  // outcomeBreakdown：新欄位（#370），把同一個 action 底下依 outcome 分成 point/loss/
+  // in_play/unknown 四桶。in_play 理論上不會出現在簡易版資料裡（見 openapi.yaml 的
+  // EventOutcome 註解：簡易版一個 rally 只記一顆決定球，outcome 只會是 point 或 loss），
+  // 但這裡不因為「理論上不會發生」就漏接那個桶——資料庫實際回什麼就照實分類。unknown 桶
+  // 的理由見上面 OutcomeBreakdownEntry 型別的長註解：outcome 是 null 不能悄悄被丟掉。
+  const breakdownByAction = new Map<
+    ActionRow["action"],
+    { points: number; losses: number; inPlay: number; unknown: number }
+  >();
+  for (const row of actionRows) {
+    const bucket = breakdownByAction.get(row.action) ?? {
+      points: 0,
+      losses: 0,
+      inPlay: 0,
+      unknown: 0,
+    };
+    if (row.outcome === "point") bucket.points += row.count;
+    else if (row.outcome === "loss") bucket.losses += row.count;
+    else if (row.outcome === "in_play") bucket.inPlay += row.count;
+    else bucket.unknown += row.count;
+    breakdownByAction.set(row.action, bucket);
+  }
+  const outcomeBreakdown = [...breakdownByAction.entries()].map(([action, bucket]) => ({
+    action,
+    ...bucket,
+  }));
+
   return {
     personId,
     name: person?.name ?? "",
     matchesPlayed,
     setsStarted: setsStartedRow?.count ?? 0,
     teamBreakdown,
-    actionCounts: actionRows,
+    actionCounts,
+    outcomeBreakdown,
     appearances: appearanceRows,
   };
 }

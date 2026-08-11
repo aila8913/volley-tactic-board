@@ -222,6 +222,7 @@ describe("summarisePerson", () => {
       setsStarted: 0,
       teamBreakdown: [],
       actionCounts: [],
+      outcomeBreakdown: [],
       appearances: [],
     });
   });
@@ -233,14 +234,53 @@ describe("summarisePerson", () => {
     expect(result.setsStarted).toBe(0);
   });
 
-  it("actionCounts / setsStarted 原樣帶入回應（合併規則本身不改動這兩者）", () => {
+  it("setsStarted 原樣帶入回應（合併規則本身不改動這個欄位）", () => {
     const actionRows: ActionRow[] = [
-      { action: "serve", count: 3 },
-      { action: "attack", count: 7 },
+      { action: "serve", outcome: "point", count: 3 },
+      { action: "attack", outcome: "point", count: 7 },
     ];
     const result = summarisePerson(1, { name: "王小明" }, [], actionRows, { count: 4 });
 
-    expect(result.actionCounts).toEqual(actionRows);
     expect(result.setsStarted).toBe(4);
+  });
+
+  // #370：actionRows 的 grain 從單純 action 變成 action × outcome，下面幾個案例釘住
+  // 「合併回 actionCounts／拆成 outcomeBreakdown」這兩條規則。
+  it("actionCounts：同一個 action 底下不同 outcome 的列要加總回同一筆，形狀維持 {action, count}", () => {
+    const actionRows: ActionRow[] = [
+      { action: "attack", outcome: "point", count: 7 },
+      { action: "attack", outcome: "loss", count: 3 },
+      { action: "attack", outcome: null, count: 2 },
+      { action: "serve", outcome: "point", count: 5 },
+    ];
+    const result = summarisePerson(1, { name: "王小明" }, [], actionRows, undefined);
+
+    expect(result.actionCounts).toContainEqual({ action: "attack", count: 12 });
+    expect(result.actionCounts).toContainEqual({ action: "serve", count: 5 });
+  });
+
+  it("outcomeBreakdown：依 outcome 分成 point/loss/in_play/unknown 四桶，outcome=null 落進 unknown", () => {
+    const actionRows: ActionRow[] = [
+      { action: "attack", outcome: "point", count: 7 },
+      { action: "attack", outcome: "loss", count: 3 },
+      { action: "attack", outcome: "in_play", count: 1 },
+      // outcome 是 null：新環境沒跑過回填腳本時會出現，不能悄悄被丟掉（見 analysisSummary.ts
+      // OutcomeBreakdownEntry 的長註解），要落進 unknown 桶而不是消失。
+      { action: "attack", outcome: null, count: 2 },
+    ];
+    const result = summarisePerson(1, { name: "王小明" }, [], actionRows, undefined);
+
+    expect(result.outcomeBreakdown).toEqual([
+      { action: "attack", points: 7, losses: 3, inPlay: 1, unknown: 2 },
+    ]);
+  });
+
+  it("outcomeBreakdown：只出現在資料裡的 action 才有列，沒被查到的 action 不補 0（跟 actionCounts 一樣）", () => {
+    const actionRows: ActionRow[] = [{ action: "serve", outcome: "point", count: 5 }];
+    const result = summarisePerson(1, { name: "王小明" }, [], actionRows, undefined);
+
+    expect(result.outcomeBreakdown).toEqual([
+      { action: "serve", points: 5, losses: 0, inPlay: 0, unknown: 0 },
+    ]);
   });
 });
