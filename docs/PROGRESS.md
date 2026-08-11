@@ -15,7 +15,7 @@
 > **開發進度 (aila)** 與 **設計進度 (tang)** 兩個子區塊。各自 wrap-up 時只改自己那區，
 > 平行 PR 就落在不同行段、git 幾乎都能自動合併。上面的 `_Last updated_` 是**共用一行**摘要。
 
-\_Last updated: 2026-08-11 (aila) — #372 五個決策全數拍板（含 [ADR-0007](adr/0007-tactics-match-is-optional-tag.md)＋PR #378），C1 分出去成 #379；另清掉 #322／#324、兩張 infra 守衛票 #341／#354，以及 #368（逐欄列舉補上編譯期守衛，24 個寫入點全掃）。tang 區未動（最後交付 08-06 PR #321）。\_
+\_Last updated: 2026-08-11 (aila) — #372 五個決策全數拍板（含 [ADR-0007](adr/0007-tactics-match-is-optional-tag.md)＋PR #378），C1 分出去成 #379；另清掉 #322／#324、兩張 infra 守衛票 #341／#354，以及 #368（逐欄列舉補上編譯期守衛，24 個寫入點全掃 → ADR-0008，照出的合約缺口成 #385）。tang 區只改了一句過期的待調（#322 已交付）。\_
 
 ## Current state
 
@@ -30,10 +30,10 @@ Where the project actually stands right now（**只寫現在成立的事實**；
   同樣進 DB。設計與分期沿革見 `docs/backend-architecture.md`。
   - route 檔的兩層儀式已收斂且**必填**：`lib/handler.ts` 的 `owns`（漏寫擁有權檢查＝編譯錯誤）、
     `lib/insertIdempotent.ts` 的 `scope`（不限定在已驗過擁有權的上層底下，重送重讀那列就是 IDOR 探測管道）。
-  - route 檔的第三層儀式也補上了（#368）：POST/PATCH 的寫入物件標註
-    `EveryColumnOnInsert` / `EveryColumnOnUpdate`，**漏列一欄＝編譯錯誤**。逐欄列舉為什麼是
-    刻意的、以及這個型別為什麼能純靠型別做到（drizzle 對 undefined 的兩個行為）都寫在
-    `artifacts/api-server/src/lib/everyColumn.ts` 的檔頭，不在這裡。
+  - route 檔的第三層儀式也補上了（#368，**[ADR-0008](adr/0008-exhaustive-column-lists-on-writes.md)**）：
+    POST/PATCH 的寫入物件標註 `EveryColumnOnInsert` / `EveryColumnOnUpdate`，**漏列一欄＝編譯錯誤**。
+    為什麼不能改回條件展開／`...body` 見那張 ADR；型別怎麼運作見
+    `artifacts/api-server/src/lib/everyColumn.ts` 檔頭。
 - **Schema 地基齊了。** `lineups`（起始先發，一局一 row）、`substitutions`／`timeouts`（存比分快照）、
   `events.outcome`、`people`＋`teams`（`players.personId`／`matches.teamId` nullable FK、
   `onDelete: set null` 保留歷史事實）、`matches.format`（賽制 enum）、`matches.status`
@@ -143,7 +143,7 @@ Where the project actually stands right now（**只寫現在成立的事實**；
   **技術細節**：背景層用 `z-index: -1` 搭 `isolation: isolate`——isolate 讓 `.app-canvas` 自成 stacking
   context，負 z-index 被關在裡面，只疊在自己底色之上、所有內容之下；少了 isolate 會往頁面後面竄而看不見。
   29 個 token 目前 12 個有 `var()` 消費者，其餘 17 個（色彩／玻璃兩階／骨架寬度）是既有字面值的正規
-  來源，遷移另計。**待調**：底色更深＋格線更弱（#320）；載入／錯誤狀態頁還沒吃到新背景（#322）。
+  來源，遷移另計。**待調**：底色更深＋格線更弱（#320）。（載入／錯誤狀態頁已補上，#322／PR #381。）
 - **計分板改成一鍵記分**（PR #321 同批，08-06）：點我方／對手大比分卡直接記一分，不再彈「選動作 →
   選得失分」兩層選單（原本記一分要點三次，跟不上比賽節奏）。**刻意不記 `action`／`touchedBy`**——那個
   當下不知道是誰碰的球、做了什麼動作（可能是對方失誤），硬填推測值會汙染球員統計，**寧可少記也不要記
@@ -250,7 +250,7 @@ gh issue list --milestone "$(gh api repos/:owner/:repo/milestones --jq 'map(sele
 - **擋著動工的換成 @tangyi1025 的版面題**（調色盤展開規則、選比賽下拉位置、「出」放哪）。
   該票已標 Project Status: Blocked。
 - ⚠️ **PR #378 動到 `lib/db/src/schema/`，正式站要人工跑一次 push**（ADR-0006；dev DB 已跑過並
-  用 `pg_constraint.confdeltype` 驗過是 `'n'`）。提醒機制本身是 #354。
+  用 `pg_constraint.confdeltype` 驗過是 `'n'`）。提醒機制已上線（#354，見上方部署那條）。
 - 實作時會踩到的既有寫法：`useTacticsBoardController.ts:147/159` 兩處 `if (!session || !matchId) return`
   ——空板天生沒有 matchId，不改的話按儲存會**安靜地什麼都不發生**；`routes/tactics.ts:40` 的
   「沒帶 matchId ＝回全部」表達不了決策 ④ 的「只回全域」，要另立旗標。細節寫在 #372 留言。
@@ -283,11 +283,16 @@ gh issue list --milestone "$(gh api repos/:owner/:repo/milestones --jq 'map(sele
 
 ### 開發 (aila)
 
-- **#368**（08-11）逐欄列舉漏欄位變成編譯錯誤。三個備選裡選了**型別層窮舉**，理由是它能做到
-  另外兩個做不到的事：**執行期與送出的 SQL 一個位元都沒變**（合約測試要開 Postgres、pick helper
-  只是把那份會漏的清單搬個家）。24 個寫入點全掃。副產物：窮舉檢查**照出三個合約缺口**——
-  `UpdateEventBody` 沒有 playerId／source、`UpdateMatchBody` 沒有 name、`UpdateTacticBody`
-  沒有 matchId，也就是這三件事目前 PATCH 不了；留在 #368 的留言，沒有順手補（要動 openapi）。
+- **#368**（08-11）逐欄列舉漏欄位變成編譯錯誤 → **[ADR-0008](adr/0008-exhaustive-column-lists-on-writes.md)**
+  （含「不要重新提議」四條）。三個備選裡選了**型別層窮舉**，因為只有它做得到
+  **執行期與送出的 SQL 一個位元都沒變**。24 個寫入點全掃。副產物：窮舉檢查**照出三個合約缺口**
+  （PATCH 改不到 `events.playerId`／`source`、`matches.name`、`tactics.matchId`）→ 已開成 **#385**。
+- **#341 ＋ #354**（08-11）db push 兩道守衛。`db:reset` 換成 `scripts/src/db-reset.ts`（stdin 必須
+  inherit，理由見 Current state 那條）；動 `lib/db/src/schema/` 的 PR 會被 CI 留言提醒，**不擋合併**。
+  兩條路徑都在真的 PR 上實跑驗過（命中留言＝#383 的探測 commit，沒命中跳過＝#384）。
+- **#322 ＋ #324**（08-11，兩張都是 tang 開的）載入／找不到資料的狀態畫面補上製圖紙背景（PR #381）；
+  #324「兩顆按鈕被蓋住」查證後**不是堆疊順序問題**——容器 320px 而內容 392px，按鈕是被捲出去，
+  票上的偵測腳本沒有區分「被蓋住」與「被捲出去」。根因併進 #331。
 - **#370**（08-11）視圖③ 長出得/失分結構。範圍比預期小很多：單場分析頁**早就有**得失分結構
   （`buildPlayerMatrix()` 從前端 `history` 現算），只是不讀 `events.outcome`——而那正好是這欄位存在的
   最好註腳，**前端那條推導路只在「這場比賽已載進記憶體」時成立**，跨場統計沒有 `history` 可推。
