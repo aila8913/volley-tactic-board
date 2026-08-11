@@ -15,7 +15,7 @@
 > **開發進度 (aila)** 與 **設計進度 (tang)** 兩個子區塊。各自 wrap-up 時只改自己那區，
 > 平行 PR 就落在不同行段、git 幾乎都能自動合併。上面的 `_Last updated_` 是**共用一行**摘要。
 
-\_Last updated: 2026-08-11 (aila) — #368 逐欄列舉補上編譯期守衛（24 個寫入點全掃）；#372 五個決策全數拍板（含 [ADR-0007](adr/0007-tactics-match-is-optional-tag.md)＋PR #378），C1 分出去成 #379。tang 區未動（最後交付 08-06 PR #321）。\_
+\_Last updated: 2026-08-11 (aila) — #372 五個決策全數拍板（含 [ADR-0007](adr/0007-tactics-match-is-optional-tag.md)＋PR #378），C1 分出去成 #379；另清掉 #322／#324、兩張 infra 守衛票 #341／#354，以及 #368（逐欄列舉補上編譯期守衛，24 個寫入點全掃）。tang 區未動（最後交付 08-06 PR #321）。\_
 
 ## Current state
 
@@ -100,7 +100,11 @@ Where the project actually stands right now（**只寫現在成立的事實**；
   **1 場完整走完的比賽**而不是多場零碎的——示範資料的價值在「完整走完一場」。
   `pnpm run db:reset` ＝ push ＋ 清空 ＋ 重灌，搭配另開一顆沙盒 DB 用。
   **兩道安全閘門都是白名單不是黑名單**（`assertSafeDatabaseHost` 只放行 localhost 那幾個、
-  刪示範資料用 `and(eq(userId), eq(isDemo, true))`）。已知限制 → #341。
+  刪示範資料用 `and(eq(userId), eq(isDemo, true))`）。
+  `db:reset` 現在是 `scripts/src/db-reset.ts` 這支包裝腳本（#341），不再是一行 `push && seed`：
+  子行程的 **stdin 走 inherit**（設成 `ignore` 會讓 drizzle-kit 的互動選單收不到 keypress、
+  然後以**離開碼 0 安靜地沒套用變更**——比卡住更糟，別改回去），再加一道「活著但兩分鐘沒有輸出
+  就殺整棵行程樹並印下一步」的守衛，順帶接住 Neon pooled 連線字串永遠卡住那個坑。
 - **有一份使用者情境盤點了：`docs/usage-scenarios.md`**（08-11，導覽討論的副產物）。
   五大類使用者 × 十七個時機（A1–A5／B1–B6／C1–C3／D1／E1–E2），每個標裝置、身體約束、時間預算；
   大類沿用 `product-vision.md` 已定義的 TA，不另立一套。**它存在的理由是導覽爭論會原地打轉，
@@ -112,7 +116,9 @@ Where the project actually stands right now（**只寫現在成立的事實**；
     過程記在 #372——**推翻的理由比結論有用**。
 - **部署：merge 不會幫你 push schema，這是刻意的** → [ADR-0006](adr/0006-no-schema-push-in-build.md)。
   動 `lib/db/src/schema/` 的 PR 合併後要**人工**跑一次 push；CI 全綠不代表正式站會動。
-  提醒機制本身開成 #354。
+  提醒機制已補上（#354）：`ci.yml` 的 `db-schema-reminder` job 在 PR 動到 `lib/db/src/schema/`
+  時留一則帶 Direct/pooled 與 dotenv 兩個坑的留言，**刻意不擋合併**（是提醒不是門），
+  也刻意不自動 push（那要把正式站憑證放進 CI secrets，正好推翻 ADR-0006）。
 
 ### 設計進度 (tang — 視覺 / UX / area:design)
 
