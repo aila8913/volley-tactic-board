@@ -4,430 +4,107 @@
 > the "Current state" section each session and prunes anything older than roughly a week —
 > it does **not** append an ever-growing history.
 >
-> **Durable facts don't live here.** A decision, lesson, or fact that must still hold weeks
-> from now belongs in its permanent home, not this file:
+> **Durable facts don't live here.** 每種事實只有一個家，對照表在 `CLAUDE.md` 的
+> **「事實住哪裡」**一節（唯一一份，這裡不再抄——抄了就是那張表自己在示範的錯）。
+> 判斷法一句話：**問「這件事一週後還該留著嗎？」該留 → 家就不是這裡。**
 >
-> - _why_ code/schema changed → `git log` + commit messages
-> - a feature's design decisions → the GitHub issue's comments + `docs/*-spec.md`
-> - collaboration lessons / product judgments → auto-memory (`memory/`)
-> - static repo layout/commands/architecture → `CLAUDE.md`
-> - the planned-but-not-done backlog → GitHub Issues / Milestones, not here
->
-> Before pruning an old entry, check it already has one of those homes; if it's an orphan,
-> promote it first, then drop it. Read this file + `gh issue list --state open` + recent
-> `git log` at the start of a session instead of re-exploring the codebase.
+> ⚠️ **這份檔案很薄是刻意的，不是過期。** 判斷它 stale 的依據是「內容跟 `git log`／issue
+> 狀態衝突」，不是行數；**「這裡沒寫」＝「它的家在別處」**，不是「不存在」。
 >
 > **各自的進度分區寫，別跨區改**（#146）：`Current state` / `Recently closed` 都拆成
 > **開發進度 (aila)** 與 **設計進度 (tang)** 兩個子區塊。各自 wrap-up 時只改自己那區，
-> 平行 PR 就落在不同行段、git 幾乎都能自動合併，不用真的把檔案拆兩份、也保住一眼 catch-up。
-> 上面的 `_Last updated_` 是共用一行摘要（誰更新了什麼），保持精簡、別長成段落。
+> 平行 PR 就落在不同行段、git 幾乎都能自動合併。上面的 `_Last updated_` 是**共用一行**摘要。
 
-\_Last updated: 2026-08-06 (tang) — **設計系統「戰術版風格」的背景層與 token 落地全站（PR #321）**，
-同批把計分板改成一鍵記分。新開 #320（背景強度微調）／#322／#323／#324；#134 Track B 標記為已由設計
-系統接手，#21／#19 過時的 body 一併修正。\_
-
-\_Last updated: 2026-08-10 (aila) — **M3.5 收完關閉**（#304／#361、#352），**#168 第一批**
-（PR #366），並開始 **M4：`events.outcome` 從「有欄位沒人寫」變成真的有值**（PR #365，#51 第一塊，
-本機與正式站都已回填）。#21/#51/#99 在 Project 的 Todo。\_
-
-\_Last updated: 2026-08-11 (aila) — **M4 設計討論開場**：PO 拍板進階版影片載體＝**內嵌 YouTube
-播放器**（記在 #21／#51），並把 `outcome` 的呈現層獨立成 **#370**（本 PR 交付：視圖③ 長出得/失分
-結構）。\_
+\_Last updated: 2026-08-11 (aila) — **PROGRESS 大剪一次（830 → 約 340 行）**：判準與教訓各自歸位
+（新增 [ADR-0006](adr/0006-no-schema-push-in-build.md)，milestone 收件標準歸 `wrap-up/reference.md`，
+fixture 規則歸該檔檔頭），Known gaps 一批過期的 milestone 歸屬與已交付項目一併修正。
+同批交付 #370（視圖③ 得/失分結構）與 wrap-up 的 ADR 檢查步驟。tang 於 08-06 交付 PR #321
+（設計系統背景層＋token＋一鍵記分），該區未動。\_
 
 ## Current state
 
-Where the project actually stands right now (durable "current" facts; per-session detail
-lives in git log + the issues named).
+Where the project actually stands right now（**只寫現在成立的事實**；某一次 session 做了什麼，
+去 git log 與那張 issue 看）。
 
 ### 開發進度 (aila — backend / frontend / db / infra)
 
-- **示範資料整條打通了（#344／#345／#346／#348，08-08～09）。** `lib/db/src/demoData.ts` 的
-  `seedDemoData(exec, userId, seed)` 是**唯一一份**示範資料建構器，兩個消費者共用：`db:reset` 的
-  種子腳本、以及 `POST/DELETE /demo-data`（灌進使用者自己的帳號、刪除時用
-  `and(eq(userId), eq(isDemo, true))` 白名單只砍示範資料）。前端空狀態多了「載入示範比賽」按鈕。
-  **#348 把 4 場零碎比賽改成 1 場完整的**（範例球隊 vs 範例對手、烏野 12 人名單、三局 2:1、
-  含換人／暫停／自由球員上下場），因為 4 場之中有 2 場湊不滿六個非自由球員、seed 不出 lineups，
-  新使用者第一次點進去看到的反而是空盤子——**示範資料的價值在「完整走完一場」，不在場數**。
-- **正式站踩到的坑：merge 不會幫你 push schema（08-08）。** `render.yaml` 的 `buildCommand`
-  **刻意沒有** `drizzle-kit push`——雲端 schema 變更必須是明確的人為動作，不能是合併的副作用。
-  代價是合併了動 `lib/db/src/schema/` 的 PR 卻忘了 push，正式站的新程式就會查一個不存在的欄位、
-  當場 500，而**四道 CI 全綠**（CI 跑的是本機／CI 資料庫，看不到雲端的 schema 漂移）。
-  另外兩件當場學到的：Neon 要用 **Direct** 連線字串（pooled 會靜靜卡在「Pulling schema…」）；
-  dotenv **不覆蓋**已存在的 `process.env`，所以在 shell 裡設 `DATABASE_URL` 會蓋過 repo 的 `.env`。
-- **「有幾格可以滑」已收斂成 `visibleSetCount()`（#352，08-10 交付 PR #363，M3.5 最後一張）。**
-  前情是 #349「已完賽的比賽預設停在不存在的第 4 局」修了兩次才修完：病根是 #218 之後已完賽**沒有
-  進行中的那一局**，但 UI 仍無條件 `completedSets.length + 1`，而這段算式有**兩份手寫拷貝**——
-  PR #350 只改了分析頁，PR #351 才補上 `MatchInfoRail.tsx`（比賽列表右欄，也就是範例比賽最先被看到
-  的地方）。判準同時從「已完賽就不 +1」改成**看那一格裡有沒有資料**（`currentSet.serving !== null`），
-  否則「2:0 已分勝負但教練仍按下一局並繼續記分」那局會滑不到。
-  **這張補的是規則模組少劃的一格邊界，不是「沒人做過」**：#226 已經把「最後一局是進行中」收進
-  `splitCompletedAndCurrent()`，模組守住的是**切分**；但沒有人擁有從切分推出來的下一件事——
-  「這個選擇器有幾格可以滑」。那個 `+1` 隱含的正是同一條慣例，卻在 UI 層被兩顆元件各自從頭推導。
-  函式吃三個原始值包成的具名物件（不吃 `ScoreSheetState`，照 `volleyballRules.ts` 開頭「只吃規則需要
-  的最原始資料」的哲學；不用 issue 草擬的三個位置參數，是因為後兩個都是 boolean、呼叫端讀不出誰是誰）。
-  **殘留已補上**：規則本身的 4 條測試之外，「`MatchInfoRail` 有沒有正確用它」現在也測得到了
-  （#168 第一批，見下一條）——而且是實測過的：把算式改回舊版 `completedSets.length + 1`，測試會紅。
-- **前端互動行為終於測得到了（#168 第一批，08-10 交付 PR #366；這張票仍 open）。**
-  在此之前元件測試只有 `renderToStaticMarkup` 一條路——一次性的 HTML 字串序列化，發不出事件、
-  看不到 state 變化後的重繪、也讀不到 Radix Portal 的內容。結果是**覆蓋的都是安全的部分，
-  沒覆蓋的都是危險的部分**：純函式規則全有測試，握著點擊分流／手勢／彈窗的元件全在盲區——
-  而那正是 #120／#172／#349 三次 bug 的落點。
-  - 基礎設施在 `artifacts/volleyball-tactics/src/test/`：`setup.ts`（掛 vitest 的 `setupFiles`，
-    jest-dom 斷言 ＋ 每個測試後 `cleanup()`——這個專案沒開 `globals`，RTL 的自動清理不會生效）、
-    `renderWithProviders.tsx`（`QueryClientProvider` ＋ wouter 的 `memoryLocation`，導覽因此變成
-    可以直接讀的值，才驗得了「**不該**換頁」）。測試數 286 → 319。
-  - **兩種寫法並存是刻意的**（已寫進 `CLAUDE.md`）：純展示元件（資料全由 props 決定、沒有互動）
-    繼續用 `renderToStaticMarkup`，改寫沒有好處；有互動的一律用 testing-library。看到兩種寫法
-    不要以為是遷移到一半。
-  - 挑的測試目標不是新功能，是**修過、而且修錯過一次的既有行為**：NavRail（含 #120 那個「開彈窗
-    再按 Esc 卻被拉去戰術頁」的回歸測試）、`NewTacticDialogModal`（issue 點名的 Portal 死角本身）、
-    `RotationRailPanel` 的 stepper 邊界與點擊指派、`MatchInfoRail` 的局軸格數。
-  - ⚠️ **jsdom 沒有排版引擎**，`getBoundingClientRect()` 全是 0×0。userEvent 連續點兩個元素時，
-    第一個的 `mouseout` 會帶 `relatedTarget: null`，React 於是合成一個 `mouseLeave` 給外層容器——
-    **靠 hover 展開的 UI 會在點擊送達前自己收掉**（第一次寫 NavRail 測試時 8 條全紅就是這個，
-    而且第一個假設「元件的 blur 判斷有 bug」被 probe 推翻了才找到真因）。解法是用 `fireEvent`
-    開面板、`userEvent` 做真正要驗的那一下，完整說明在 `NavRail.test.tsx` 的 `openSubmenu()` 上方。
-  - **還在盲區的兩塊**（#168 留著就是為了它們，範圍已寫進該張留言）：`Markers.tsx`／`DefenseRange.tsx`
-    的 `didMove` 手勢守衛、`Court.tsx`／`ScoreSheetCourt.tsx` 的座標數學與拖曳。兩塊都是指標事件
-    密集區，八成會再撞上上面那個 jsdom 坑。
-- **`events.outcome` 從「有欄位沒人寫」變成真的有值（#51 第一塊，08-10 交付 PR #365；M4 的第一步）。**
-  這欄位早在 #102 就建好了（`pgEnum("event_outcome", ["point","loss","in_play"])`），但兩年來
-  沒有任何寫入路徑填它——即時記錄與示範資料都留 null。這張把地基補起來，**刻意不做「呈現」**。
-  - **語意釐清（本次真正的智力工作）**：schema 的舊註解寫「point ＝ **我方**因這球得分」，跟
-    `docs/event-grammar-spec.md` 決策 7 的「可由 `rallies.winner` ＋ `events.side` 推導」互相矛盾
-    ——若真是我方為基準，`winner` 一個欄位就夠了，`side` 根本不必存在。正解是**以執行這球的一方
-    為基準**：`outcome = (events.side === rallies.winner) ? "point" : "loss"`。我方扣球被攔死＝
-    `side=home, winner=away → loss`。簡易版一個 rally 只記一顆決定球，所以永遠不會產生 `in_play`。
-    schema 註解已改正。三處落點共用同一條推導式：`scoreSheetMapping.ts` 的 `resolveOutcome()`、
-    `demoData.ts`、回填腳本。
-  - ⚠️ **踩到一個型別與 CI 都擋不住的洞**：`routes/events.ts` 的 POST/PATCH 是**逐欄列舉**
-    （刻意的——`...body` 會讓路徑決定的 `rallyId` 有被蓋掉的風險），而漏列一個 nullable 欄位
-    **不是型別錯誤**。前端已經在送 `outcome`、後端沒列它，結果是 event 照樣寫得進去、值永遠是
-    null——**四道 CI 全綠、功能沒生效**。是靠人工讀 route 抓到的，跟 #350 是同一類（CI 綠 ≠ 行為
-    驗證）。**結構缺口本身已開成 #368**（M7），三個候選修法寫在票裡；逐欄列舉本身是刻意的
-    （防 `...body` 蓋掉 `rallyId`），別為了解那張票把它改成展開。
-  - **驗收走的是使用者實際那條路**（#359 記的判準）：建比賽 → 排 6 人先發 → 球場上畫線到 A6 →
-    選攻擊 → 選失分，然後查 DB 得到 `side=home | winner=away | outcome=loss`。沒有用 curl 造
-    剛好合用的資料。測試數 48 → 53（四種 side×winner 組合 ＋「沒看到」回 null）。
-  - **一次性回填腳本 `scripts/src/backfill-event-outcomes.ts`**（比照 `backfill-person-ids.ts`）：
-    預設 dry-run、`--apply` 才寫、白名單條件 `isNull(outcome)`、包 transaction、天然冪等。
-    **本機（122 筆：99 point／23 loss）與正式站都已跑完**，兩邊歷史資料不再有 null outcome。
-    正式站要用 Neon 的 **Direct** 連線字串（pooled 會靜靜卡在「Pulling schema…」）；這次不需要
-    `drizzle-kit push`（schema 沒動）。腳本留著是為了下一個環境，不是還有事沒做完。
-  - **「呈現」刻意留著**：`PersonAnalytics` 與單場分析頁還沒長出得/失分結構，那需要後端聚合
-    endpoint ＋ 前端 UI。要單獨排一張、還是併進 #21/#51 的進階版介面設計，是 PO 的排期決定。
-- **`events.outcome` 有第一個消費者了：視圖③ 長出得/失分結構（#370，08-11 交付）。** #365 讓欄位有值，
-  這張讓畫面用得到。**範圍比預期小很多，原因值得記**：#365 的收尾留言寫「`PersonAnalytics` 與單場分析頁
-  都還沒長出得/失分結構」——查證後只對了一半。**單場分析頁其實早就有**（`lib/statsMapping.ts` 的
-  `buildPlayerMatrix()`），只是不讀 `events.outcome`，而是從前端 `history` 用 `point.side === 'us'` 現算。
-  而這正好是 `events.outcome` 存在的最好註腳：**前端那條推導路只在「這場比賽已載進記憶體」時成立**，
-  跨場統計沒有 `history` 可推、後端只能查 DB。所以真正的缺口只有視圖③ 一處。
-  - 後端只動一行關鍵處：`actionRows` 的 `groupBy(action)` → `groupBy(action, outcome)`。grain 變成
-    action × outcome，**同一次掃描同時餵出舊的「觸球動作分布」與新的「得失分結構」**，不多發查詢。
-    `summarisePerson` 保留 `actionCounts` 原本的形狀（跨 outcome 加總）、另吐 `outcomeBreakdown`，
-    所以既有前端與測試一行未改，新資料純 additive。
-  - **`unknown` 桶（`outcome` 是 null）刻意保留、不丟掉**：回填腳本跑過本機與正式站，但那不是欄位
-    與生俱來的保證——任何新環境（新沙盒 DB、新 clone 接空 DB）的舊資料仍會是 null。前端只在
-    `unknown > 0` 時才顯示「未填」那一欄（永遠 0 的欄位是雜訊）。
-  - ⚠️ **同一條規則現在有三份推導**：`resolveOutcome()`（後端寫入，`side === winner`）／
-    `buildPlayerMatrix()`（前端單場，`point.side === 'us'`）／`buildRotationStats()`（前端輪次，
-    `rally.winner === 'home'`）。**三份目前答案一致，所以不是 bug**，但這正是 M3.5 那條主題
-    （#352／#304：規則被複製成兩三份手寫拷貝然後各自漂走）的**前期長相**。記在 #370 當觀察點，
-    等真的漂走或出現第四份再開票——**現在收斂等於為了對稱而改一段沒壞的程式**。
-  - 順手修掉五處已經過期的長註解（`routes/analysis.ts` ×2、`openapi.yaml` ×3、`PersonAnalytics.tsx` ×1），
-    它們都還寫著「`events.outcome` 目前恆為 null」——#365 之後這句是假的。`/rotations` 那支**仍然
-    用 rallies 不用 events**，但理由改正了：不是「outcome 沒值」，而是**「沒看到」逃生閥允許整分不留
-    任何 event**，改用 events 當輪次來源會直接漏算。
-- **戰術板場景編輯的歷史政策收斂成一支 helper，順手修掉四個 undo bug（#304／#361，08-10 交付 PR #362）。**
-  #304 開票時的說法是「35 個成員裡有三組平行的 add/update/remove 三連，大介面、薄實作」，並問了三個
-  問題。查證後的答案值得記，因為結論跟票面直覺相反：
-  - **三組三連並不齊頭收斂**。只有 `remove` 該合併（成 `removeSceneObject(id)`）——它的呼叫端手上
-    只有 `selectedObjectId`，**真的不知道那是標記還是防守範圍**；`add`／`update` 的呼叫端永遠知道
-    自己在動哪一種，合併只會讓型別變鬆。介面成員因此只從 35 掉到 34。
-  - **真正該收斂的不是 CRUD 的形狀，是「何時記 undo 歷史」這條規則**。它原本散在九支動作裡各自硬寫、
-    然後各自漂走——只有 `addMarker` 有 `skipHistory` 選項不是設計，是 drift，而且**當下正在製造四個
-    使用者看得見的 bug**（#361：拖標記／改文字退不回、拖防守範圍灌爆 30 格歷史堆疊、刪除要按兩次）。
-    現在所有場景編輯都走 `editSession(mutate, { history })`，`type HistoryPolicy = "record" | "defer"`
-    是**必填的字面量聯集**——第十支動作漏寫政策會是編譯錯誤，不是靜靜挑到錯的預設值。
-  - **判準：收斂要對著「會漂走的規則」下手，不是對著「長得像的程式碼」。** 這跟 #352 是同一種病的
-    兩種長相（那張是規則模組的邊界少劃一格，這張是規則沒有主人）。
-  - ⚠️ **元件層的手勢仍是零測試**：`Markers.tsx`／`DefenseRange.tsx` 的 `didMove` ref（判斷「這次按下去
-    有沒有真的移動過」，不能用 `isDragging`，它在 `pointerDown` 就是 true）是靠 code review 抓下來的，
-    寫錯會直接重現 #361-4。證據已補進 #168。
-- **合併關卡改寫進 `CLAUDE.md`（08-09）。** 原本「push 前確認、merge 前確認」只寫在
-  `.claude/skills/ship/SKILL.md` 裡，而 skill **靠觸發詞才載入**——任務式的講法（「解決 #349」）
-  不會載入它，那三道關卡就一次都沒生效，PR #350 因此在 CI 綠、但只修一半的狀態下被合併。
-  現在的規則：**commit／push／開 PR 不用問，`gh pr merge` 一定停下來等使用者驗過**。
-  這條跟「不用等 tangyi1025 approve」是兩件事，不衝突。
-- **Roadmap 結構改了（08-07）：原 M5「體驗重整與雜項」拆成三包**——**M5 自由球員與計分正確性**
-  （記出來的數據會不會錯）／**M6 介面精簡與導覽重構**（源自 #209、票之間互相牽動）／**M7 打磨與雜項**
-  （只收獨立、小、隨時可插隊的）。拆的原因值得記住，因為會復發：**名字裡有「雜項」的 milestone 會變成
-  垃圾桶**——原 M5 三週吃掉 31 張 open 的 23 張（74%），一行 CSS bug 跟要開設計會的方向題混在同一張
-  清單裡，就無法排序。M1～M3.5 運作良好是因為每個都是「一個價值假設＋少量票＋做完就關」。
-  **各 milestone 的收件標準與 CLI id 見 `.claude/skills/wrap-up/reference.md`**（那裡也記了為什麼
-  「M5」這種會滾動的編號不該被抄進靜態文件——那行 `--milestone "M5 體驗重整與雜項"` 今天起會執行失敗）。
-  同批把 `CONTRIBUTING.md` 的 **`needs-plan` 定義修正成「動工時要好好規劃」**（原本寫「範圍或設計還沒
-  定案」，害這次盤點差點把 10 張可動工的票當成待決策凍結）並補上新的 `epic` 標籤。
-- **後端「合併規則」現在測得到了（#229，08-07）。** `routes/analysis.ts` 兩支彙總 endpoint 的 JS 合併
-  段（哪一局算已結束、已完賽要砍沒開球的尾巴局、跨場去重、teamBreakdown）搬進
-  `artifacts/api-server/src/lib/analysisSummary.ts` 的 `summariseMatches` / `summarisePerson`，
-  餵 literal rows 就能斷言、不用開 Postgres。**PO 拍板的取捨要記住：只抽純函式，不做 query adapter、
-  不做 DI**——issue body 自己的警告成立，只有一個實作的 adapter 是假 seam、只是多一層。因此
-  **#232（`createDb` 注入）並沒有被這張帶掉**，它剩下的價值要單獨評估：真要動就得同時接上第二個
-  adapter，並把 `insertIdempotent`／`handler` 的 owns 這兩個「收斂過的守衛」補上測試。
-- **測試假資料有共用 builder 了（#306，08-07）。** `artifacts/volleyball-tactics/src/lib/__fixtures__/scoreSheet.ts`
-  提供 `makeSet` / `makeRally` / `makeEvent` / `makeSubstitution` / `makeTimeout` / `makeLineup`，
-  簽章一律是「一包 `Partial<T>` 覆寫，其餘給最無趣的預設值」。**要守住的規則：預設值不能帶語意**
-  ——任何某條測試正在斷言的值，一律要在該測試的呼叫裡明寫，否則讀測試的人看不出關鍵條件從哪來。
-  背景是 #64 PR1 把主鍵改成 uuid 時、光這一支測試檔就要手改 36 處；#292 補上了偵測（測試檔納入
-  typecheck），這張補上的是修復成本。目前只導入 `scoreSheetMapping.test.ts`（收益最集中），
-  其他測試檔要不要跟進另外判斷。
-- **手動測試有沙盒了（#339，08-07）。** `pnpm run db:reset`＝schema push ＋ 清空 ＋ 重灌
-  `lib/db/src/seed-testdata.ts` 的種子資料。用法是**另開一顆「試驗沙盒」資料庫**、`.env` 指過去，
-  隨手點畫面就不會把開發資料越測越亂。這次補上：**production 安全閘門**（`assertSafeDatabaseHost`）、
-  `lineups`／`tactics` 種子（原本被 TRUNCATE 卻從沒被 insert，所以先發／戰術板畫面一直是空的）、
-  npm script、以及 `.env.example`／README 的說明。
-  **安全閘門是白名單不是黑名單**——只放行 `localhost`／`127.0.0.1`／`::1`／`host.docker.internal`，
-  其餘一律拒絕，逃生門是必須完全等於 `"yes"` 的 `ALLOW_DESTRUCTIVE_SEED`。理由：黑名單
-  （`!== "production"`）是在窮舉「想得到的壞情況」，`prod-db.example.com` 這種沒被想到的名字會
-  直接放行。跟 `requireAuth` 的 `NODE_ENV === "development"` 是同一套慣例。
-  **刻意沒做假後端**——見 #339 body：手動測試的價值就在抓真實後端行為（ownership／Zod／冪等），
-  手寫的記憶體假後端必然跟 `routes/*.ts` 漂移，漂移之後測試會過、正式環境會壞。出貨給使用者的
-  示範資料（#336）才走前端攔截，兩張**刻意不共用實作**。
-  剩下的已知限制見 #341（schema 刪欄位時 `drizzle-kit push` 會跳 y/n，而 `db:reset` 沒東西餵它）。
-- **Backend match-recording API is fully implemented and live (dev DB).** matches / players /
-  sets / rallies / events / substitutions / lineups / timeouts / tournaments / teams CRUD +
-  tactics/health + `analysis` 唯讀報表路由，全部 ownership-scoped。前端計分表**已完全脫離
-  localStorage**（比賽、比分/輪轉、事件讀回→逐球員統計），資料夾（tournaments）同樣進 DB
-  （#117）。設計與分期沿革見 `docs/backend-architecture.md`；#58 closed。
-- **前端 store 已全面 per-match 分片、去汙染**（#115/#119）：計分表（`useScoreSheet`）、戰術板／
-  輪轉表（`useTacticsBoard`／`useRotationTable`）都是 `dataByMatch[matchId]`，A 場編輯不污染 B 場；
+- **後端 REST API 全實作、live（dev DB）。** matches / players / sets / rallies / events /
+  substitutions / lineups / timeouts / tournaments / teams CRUD ＋ tactics / health ＋ `analysis`
+  唯讀報表路由，全部 ownership-scoped。前端計分表**已完全脫離 localStorage**，資料夾（tournaments）
+  同樣進 DB。設計與分期沿革見 `docs/backend-architecture.md`。
+  - route 檔的兩層儀式已收斂且**必填**：`lib/handler.ts` 的 `owns`（漏寫擁有權檢查＝編譯錯誤）、
+    `lib/insertIdempotent.ts` 的 `scope`（不限定在已驗過擁有權的上層底下，重送重讀那列就是 IDOR 探測管道）。
+  - ⚠️ **POST/PATCH 是逐欄列舉**（刻意的——`...body` 會讓路徑決定的 `rallyId` 有被蓋掉的風險），
+    而**漏列一個 nullable 欄位不是型別錯誤、也沒有測試會紅**。結構缺口是 **#368**，別為了解那張票
+    把它改成展開。
+- **Schema 地基齊了。** `lineups`（起始先發，一局一 row）、`substitutions`／`timeouts`（存比分快照）、
+  `events.outcome`、`people`＋`teams`（`players.personId`／`matches.teamId` nullable FK、
+  `onDelete: set null` 保留歷史事實）、`matches.format`（賽制 enum）、`matches.status`
+  （`in_progress | finished`，**ADR-0005**）全部 live。五張表主鍵是 client-mintable uuid，
+  **主鍵本身就是冪等鍵**。`people` 已有應用層（#213）。詳見 `docs/db-schema-spec.md`。
+- **`events.outcome` 有值、也有消費者。** 推導式只有一條、三處落點共用：
+  **`outcome = (events.side === rallies.winner) ? "point" : "loss"`**（以**執行這球的一方**為基準，
+  不是以我方）。簡易版一個 rally 只記一顆決定球，所以永遠不會有 `in_play`。視圖③ 已長出得/失分結構
+  （後端 grain 是 action × outcome，同一次掃描餵出舊的動作分布與新的得失分結構）。
+  - `unknown` 桶（null）刻意保留：回填腳本跑過本機與正式站，但那不是欄位與生俱來的保證，
+    任何新環境的舊資料仍會是 null。前端只在 `unknown > 0` 時才顯示那一欄。
+  - ⚠️ **同一條規則目前有三份推導**（`resolveOutcome` / `buildPlayerMatrix` / `buildRotationStats`），
+    答案一致所以不是 bug，觀察點記在 #370——**現在收斂等於為了對稱而改一段沒壞的程式**。
+- **前端 store 全面 per-match 分片。** 計分表（`useScoreSheet`）、戰術板／輪轉表
+  （`useTacticsBoard`／`useRotationTable`）都是 `dataByMatch[matchId]`，A 場編輯不污染 B 場；
   戰術板/輪轉表工作狀態**不 persist**（PO 決策：只有存成戰術才算數）。切輪次的跨 store 同步走
   `RotationSwitcher → syncRotationChange` 明確呼叫，不靠全域 subscribe。
-- **戰術板單向化（#154）＋ UI 改版（#160）都已落地。** 戰術快照是 denormalized 的自給自足
-  `CourtSnapshot`，載入已存戰術＝唯讀檢視、**不反向寫回輪轉表**，這條單向依賴由 eslint
-  `no-restricted-imports` **焊在 CI 上，不得停用**。模式（browse／viewing／edit）是
-  `session`/`viewingScene` 的**推導值**，store 裡沒有 mode 欄位。完整權衡在 #154 / #160 的留言。
-- **站位＝全站共用單一真相（07-21 PO 定案，推翻 #115 的解耦模型）。** 唯一真相是
-  `useRotationTable.dataByMatch[matchId]`：比賽列表決定站位，計分表讀它也寫它，**戰術板右欄唯讀**
-  （白板不影響資料紀錄）。共存機制是「**共用現役＋開局凍結**」：共用的是「目前站位」，每局開賽
-  那一刻擷取成該局的凍結快照（`ScoreSheetState.lineup` 語意＝歷史快照，不是平行的第二份先發），
-  此後該局唯讀，事後編輯污染不到歷史統計。判斷式只有一行 `activeLineup = lineup ?? capturableLineup`。
-  幽靈站位掃空先發仍由 `filterLineupToRoster` 的名單過濾擋著（`lib/rotationLogic.ts`；#231 PR3
-  之前這件事由 `captureLineupFromRotations` 兼著做）。
-  已在 #115 補留言註記其解耦模型作廢（多處文件曾拿它當法規引用）。
-- **輪轉表 store 的站位表示法只剩一份（#231，08-06 合併、08-07 關閉）。**
-  `PerMatchRotationState` 現在只存 `lineup: LineupSnapshot`（起始號位 → playerId，**0~6 人皆合法**）
-  ＋ `liberoReplacesPlayerId`（L 頂替誰；**08-10 由 #326 從 `liberoZones` 改過來**）＋ `startingLiberoId`；
-  舊的 `rotations: RotationPositions[]`（六輪座標）與 `liberoReplacement`（被 L 蓋住的人）都刪了，
-  改由 `deriveRotation(lineup, liberoId, replacedPlayerId, rotation)` 在渲染時現算。原則是
-  `docs/event-grammar-spec.md` 那條**「能推導就不存」**套到前端 store。
-  - `resetCurrentRotationPositions` → **`resetPositions`（清全部六輪）**：一份共用 `lineup` 下
-    「只有第 3 輪是空的」不可表示；舊行為本來也名不副實（清完再拖一個人，六輪就全部重算）。PO 已確認接受。
-  - 「可不可以開賽」的門檻獨立成 `isLineupFull`，跟「現在排了誰」徹底分家（#174 死結的根因）。
-  - ⚠️ **`liberoZones` 這個方向已於 08-07 被 PO 推翻，08-10 由 #326 改掉（見下方獨立條目）**。當時的理由是「L 不佔輪轉序，
-    所以各輪站哪格是獨立的真實資訊」；但 PO 定案的規則是**「L 從後排轉出去就下場、留在場外，直到
-    手動再換上場」**，在這條規則下「L 站哪格」＝被頂替者在該輪的號位，是**推導值**。
-    **判準值得記住：「這個值能不能從別的值推出來」要先確定領域規則是什麼——規則沒釘死之前，
-    看起來像獨立事實的東西可能只是缺了那條規則。** #231 刪掉的 `liberoReplacement`（頂替誰）其實
-    才是原始事實，留下的 `liberoZones` 才是推導值，方向反了。
-  - **#14 的「一般球員疊到 L 站的格子」這次驗證不了**（原本以為順帶消失）：QA 時發現使用者根本
-    排不出自由球員先發，構造不出那個情境。見下一條。
-- **自由球員模型改成「記頂替誰」（#326，08-10 交付）。** 規則定案：**L 從後排轉出去就下場、留在
-  場外，直到使用者手動再把他換上場——系統不自動幫他找下一個頂替對象。** 理由不是「猜得不準」，而是
-  **這個 app 產出的是紀錄不是示意圖**：替教練猜一個頂替對象，會在資料裡寫下一次根本沒發生過的替換。
-  兩處改動：
-  - `lib/liberoRotation.ts` 刪掉「接替」啟發式（被頂替者輪到前排時，若上一輪的目標現在在後排就自動
-    改頂替他）。諷刺的是那條分支正好違反它自己隔壁那行寫的判準。連帶 `LiberoState.previousTarget`
-    整個消失，函式簽章從「吃/吐一個物件」收斂成 `(replacedPlayerId, positions) => string | null`——
-    順手解掉一個舊包袱：以前「沒變化要回傳原物件參照」是靠紀律維持的（PR #69→#70 的 render loop），
-    現在回傳字串，`next === current` 天生就是值比較。`ScoreSheet.tsx` 的 `previousLiberoTarget`
-    state 及其散在 `handleUndo`/`handleNextSet` 的兩處清除一併移除。
-  - store 的 `liberoZones: (number|null)[]` → **`liberoReplacesPlayerId: string | null`**。
-    「L 站哪格」從此是渲染時算的：被頂替者在後排→ L 站他的格子，被頂替者輪到前排（或已不在先發裡）
-    → L 不在場上。**「L 不能跟著輪到前排」這條排球規則因此變成一行推導，不再需要一段清理邏輯。**
-  - 三個連帶的行為變更（都在測試裡標了 ⚠️）：(a) `removePlayerFromCourt(L)` 從「只清目前這一輪」變成
-    「解除頂替」，因為 L 已經沒有各輪獨立的站位可以分開清；(b) 把 L 拖到**空的**後排格會被忽略——新
-    模型只認得「頂替某個人」，「L 站在空格上」在規則上不存在；(c) 被 L 頂替的人被擠出先發時，那次頂替
-    不成立、L 回場外，**不會**自動改成頂替新來的那個人（跟刪掉接替啟發式是同一條理由）。
-  - 使用者可及性由 #327 補上（下一條）。
-- **輪轉表加自由球員先發格（3×2＋1）：L 終於排得出來了（#327，08-10 交付）。** 建在 #326 的模型上，
-  第七格存的就是「L 頂替誰」，不是「L 站哪格」。
-  - **為什麼是「第七格」而不是塞進六宮格**：六個號位是輪轉序，L 不佔輪轉序（他是替換上場的），
-    塞進去等於宣稱他會跟著轉。獨立一格跨滿整列，視覺上就跟會轉的六格分開。
-  - **兩種手勢**：把清單裡的 L 拖到某個號位＝**由他頂替站在那一格的人**（格子只是指到那個人的方式，
-    六個號位一個字都沒改）；點第七格再點清單裡的 L＝指定「先發 L 是誰」。第七格自己也是拖曳來源
-    （拖到別的號位＝改頂替對象，拖回清單＝L 下場）。× 分兩段：有頂替對象時先解除頂替，沒有時才撤掉
-    這位 L——「先發 L 是誰」跟「這一輪頂誰」在教練心裡是兩個決定。
-  - **第七格的四種說法**，全部從「頂替誰」推導：未指派／尚未指定頂替對象／`頂替 N`（此時那一格直接
-    畫成 L，標一行 `L 頂 N`）／`場外（N 號在前排）`。**最後一種就是 #326 那條規則唯一看得見的樣子。**
-    第一版把「場外」合成一句，結果在先發還沒排滿時謊稱「N 號在前排」（戰術板只在滿 6 人才傳 lineup），
-    實測抓到後拆成第五種說法 `場外（N 號不在這份先發裡）`——長得一樣、成因不同、該做的事也不同。
-  - **⚠️ 行為變更**：(a) 球員清單一律列出自由球員（`includeLibero` 這個 prop 移除）。舊的預設過濾
-    把兩件事綁在同一個 filter 上——「誰排得進六個號位」（L 永遠不行，是規則）跟「這場有哪些球員」
-    （L 當然算）；後者被前者連坐，所以計分頁/戰術板的清單裡完全看不到 L。(b) `setLineupFromSnapshot`
-    不再無條件清掉頂替關係，改成「被頂替的人還在新先發裡就留著」——不然教練排好 L、再動任何一格，
-    L 就無聲消失。
-  - **順手修掉的洞**：`ScoreSheet.tsx` 從來沒有 `setRoster` 把名單種進輪轉表分片（戰術板跟比賽列表
-    右欄都有做）。以前看不出來，因為計分頁右欄的名單是直接用 `match.players` 這個 prop 畫的——畫面
-    有名單、store 是空的。#327 把它逼出水面：新的 `setLiberoAssignment` 要用 store 的 roster 驗
-    「這個 id 真的是這場的自由球員嗎」，roster 空的話每次指派都被自己的白名單擋掉，使用者看到的是
-    「點了沒反應」。修法是補上種名單，**不是把白名單放寬**——白名單是對的，缺的是它要查的那份資料。
-  - **三個呼叫端**：計分頁右欄（開賽前可編輯＝真正的入口）、比賽列表右欄（「未開賽」那一局可編輯）、
-    戰術板右欄（唯讀顯示，ADR-0001）。已打完/進行中的局刻意不顯示這一格——那些讀的是封存的 lineup
-    快照，而快照裡沒有自由球員資料，把「現在的 L 指派」畫在三天前打完的那局旁邊等於憑空宣稱。
-  - **已知落差（留給 #328）**：面板的六宮格顯示的是**起始站位**，不隨 stepper 轉（既有行為，不是這張
-    改的），所以第七格的「場外」也是用同一份起始站位判斷的，跟戰術板球場上會轉的畫面不同步。
-- **自由球員目前完全沒有可用的設定入口（08-07 QA 發現，#327 已於 08-10 修掉，保留成因記錄）。**
-  「誰是先發 L」在整個 app 裡只有
-  一個入口——`Court.tsx:568` 的 L 備位圓圈，只在 `courtView === "rotation"` 渲染。而 (1)
-  `useTacticsBoard.ts:287` 的 `startSession()` 無條件把 `courtView` 設成 `"tactics"`，新開一份戰術
-  就跳過去了、到不了那顆圓圈；(2) `RotationRailPanel.tsx:161` 的 `roster.filter(p => p.role !== "L")`
-  把 L 從球員清單濾掉，而戰術板右欄與比賽列表右欄用的都是這顆元件（#251 統一的）；(3) 格子只有
-  `grid-cols-3` × 2 六格，沒有自由球員格。**三個各自看都合理的決定疊起來，結果是一個功能完全無法使用**
-  ——而且沒有任何測試會失敗，因為每一處單獨看都是對的。修正順序 #326（模型，08-10 done）→
-  #327（3×2＋1 格，08-10 done）→ #328（中央輪轉視圖退役，**現在不再被擋著**）。
-- **`courtView` 是個沒有名字也沒有切換入口的隱性狀態（#328）。** `Court.tsx` 一支元件兼「輪轉站位」
-  與「戰術快照」兩種畫法，但**沒有任何按鈕能切換它**——只是 `startSession`/`viewTactic`/`discardSession`/
-  `useRotationStepper.ts:33` 的副作用，畫面上也沒有任何地方指出現在是哪一種。PO 實測時明確表示看不懂
-  這個概念，而 `CONTEXT.md`／`docs/layout-spec.md` 兩份都沒有它的名字——**它是 #174/#251 把輪轉表搬進
-  右欄之後剩下來的遺留畫面，不是被設計出來的**，唯一還獨有的東西就是那顆 L 備位圓圈。
-- **比賽編輯已從彈窗搬進右欄就地編輯（#329，08-09 交付）。** 原本「這場比賽是什麼」被切成兩半：右欄
-  `MatchInfoRail` 看比分／站位，改時間／對手／球隊／賽制／名單卻要開 `MatchFormDialog`（492 行），
-  而彈窗一開就把右欄整個蓋掉。現在**右欄＝比賽的唯一編輯面板**：選中→唯讀（`MatchDetailView`）、
-  按左欄卡片的「編輯」→ 同一欄就地變表單（`MatchDetailForm`，底色提亮＋萊姆綠 ring 當提示）、
-  新增比賽→右欄直接開在空白編輯模式（`selected.kind === "new-match"`）。`MatchFormDialog` 已刪除。
-  - **站位的唯讀規則沒有被這個新開關碰到**（這是實作時最容易做錯的一點）：站位可不可以改是領域規則
-    （歷史局／局中凍結一律唯讀，只有未開賽的局能排先發，見 `MatchInfoRail.tsx` 那串 if/else），跟
-    「比賽資訊在不在編輯狀態」是**兩個不同層次的可寫性**。`editing` 刻意完全不參與那段計算，也沒有接進
-    `RotationRailPanel` 的 `readOnly`——檔案裡有一段 ⚠️ 註解把這條紅線寫死，別把它們接在一起。
-  - 選取＋編輯模式＋未存檔攔截收在 `hooks/useMatchRailSelection.ts`，比賽列表與資料夾內頁共用一份
-    （狀態放頁面層而非右欄內部，因為「編輯」鈕長在左欄卡片上）。未存檔切走沿用既有的
-    `window.confirm` 慣例，只有真的改過（`formState.isDirty` ＋球隊選擇器的獨立 dirty 旗標）才問。
-  - **順序決策（08-09 PO 拍板）：沒有等 #327。** issue body 原本寫「#327 先做」，理由是「免得平行開工
-    在同一個檔案打架」；實際是單線作業，而且兩張改的是不同檔案（#327 改 `RotationRailPanel` 內部
-    六格→七格，#329 改的是它的容器）。**#326／#327 兩張都已於 08-10 交付並關閉**，入口 bug 已修
-    （見上方兩條獨立條目）——這個順序決策事後看是對的，兩張確實沒有互相打架。
-  - 相依：#222 的修法本來指向已刪除的 `MatchFormDialog`，現在該重新確認要抽在哪裡；#24（複製比賽）
-    body 的「展開編輯彈窗」已改寫成「右欄開在編輯模式」。
-- **右欄的兩份球員名單合併成一份（08-09 PO 追加，接在 #329 後面）。** #329 交付之後 PO 實測發現右欄
-  在畫兩份一模一樣的名單：`MatchDetailView` 的唯讀「球員名單」，加上 `RotationRailPanel` 底下那份
-  拖上場用的清單（被 `max-h-28` 壓到只露兩列，正是 #331 記的「塞不下」訊號）。合併之後右欄由上而下是
-  **比賽資訊 → 場上站位 3×2 → 第幾局 → 球員名單**，唯讀與編輯兩種模式的模組順序完全一致。
-  - 那一份清單現在身兼兩職：不在編輯狀態時＝站位的來源（點/拖上場），按了編輯才換成
-    `MatchDetailForm` 裡可增刪的版本。同一份東西不會同時畫兩次。
-  - `RotationRailPanel` 為此多了兩個 prop：`rosterList`（`compact` 既有行為／`fill` 吃掉剩餘高度／
-    `hidden` 整塊不畫，連操作提示一起）與 `includeLibero`（把 L 列成唯讀資訊列，不然合併後名單會少人；
-    **怎麼排 L 的先發仍是 #326/#327，這裡沒有偷跑做入口**）。位置（S/OH/MB/OP/L）改成三個呼叫端都顯示。
-  - 編輯模式下站位面板是**塞進表單裡面**的（`MatchDetailForm` 的 `lineupSlot`），不是接在表單下方——
-    就地編輯的重點就是按下編輯前後模組不換位置。連帶把 `RotationRailPanel` 裡所有 `<button>` 補上
-    `type="button"`：`<button>` 在 form 內預設是 submit，少了它點一下號位格子就會送出整張表單。
-  - 「+1」（自由球員格）這一輪**沒做**：PO 選了「只做合併，格子維持 3×2」，因為 #327 卡在 #326
-    （自由球員模型要先改成「記頂替誰」），先做會做出一個之後要重寫的格子。
-- **衍生文件不維護（07-21 PO 決定，`docs/flow-diagrams.html` 已刪）。判準值得記住：決策文件
-  （`docs/*-spec.md`、issue 留言）值得維護，「描述程式碼現在怎麼跑」的衍生文件不值得**——它註定
-  落後，而落後時**主動誤導**（#163 整張 issue 就在處理這件事：它描述的 API 不是「舊」而是已被刪除，
-  照著讀會實作出一條被 CI 焊死禁止的資料流）。onboarding 入口改成「跑起來自己點一遍」＋
-  `docs/requirements-pattern-language.md`。**同判準於 07-28 再砍一份：`docs/match-recording-erd.html`
-  （582 行手繪 ERD）只畫 6 張表，實際 schema 已有 13 張——它獨有的推論早就寫進
-  `backend-architecture.md` 本文，刪掉不損失資訊。**
-- **#120 計分頁右欄兩階段落地（已關，隨 PR #239 收尾）。** `CourtReadOnlyView` 常駐唯讀站位（**純展示、不訂閱
-  任何 store**）＋`RotationRailPanel` 改為**受控元件**——改動直接進共用真相，草稿 state 與「確定」鈕
-  整組移除，連帶消滅「排到一半被無關 re-render 洗掉」那類 bug。**`lib/rotationLogic.ts` 連續兩次 UI
-  重寫都一行未動**——把領域邏輯抽出元件的回報。**換局換輪視窗已作廢**（右欄本來就能就地改，彈窗是
-  多餘轉場）。分析頁站位列已由 #193 交付**唯讀**版（`AnalyticsRotationRail`）。**#120 的收尾條件是 #174
-  環 3**（見 #120 的 07-21 留言：列表頁與資料夾內頁掛上右欄後才算滿足），不是 #76——#76 已關（ADR-0002）。
-- **Schema foundations for stats are in place:** `lineups`（起始先發，一局一 row）、`substitutions`
-  （換人，存比分快照）、`timeouts`（#44，比分快照＋side，純記錄事件不記時長）、`events.outcome`
-  （得/失/球續 enum）、`people`＋`teams`（跨場跨隊身分／分組標籤，`players.personId`/`matches.teamId`
-  nullable FK、`onDelete: set null` 保留歷史事實）、**`matches.format`（#215，賽制 enum）** 全部 live。
-  `people`／`players.personId` **已補上應用層**（#213）：`/people` CRUD＋名單去重 UX＋`personBelongsToUser`，
-  不再是「建了表沒人用」的狀態。
-- **賽制成為比賽的固有欄位（#215，07-27）。** `matches.format` 是 `pgEnum("match_format",
-["best_of_3","best_of_5"])`、`notNull().default("best_of_3")`——既有資料 push 時自動補值，不需要
-  資料補丁。`getMatchWinner(sets, winsNeeded)` 的第二個參數**刻意必填、不給預設值**：#215 的病根正是
-  一個「看似合理的預設」（寫死 3＝五戰三勝）讓所有呼叫端都不必想這件事。**判準值得記住：當一個參數
-  的正確值取決於呼叫端情境時，必填比預設安全——「合理的預設值」和「沉默的錯誤答案」常常是同一個東西。**
-- **人員去重的預設方向（#213，07-28）——上一條判準的補完。** 名單打字時命中同名 person 會顯示建議，
-  **按下才綁；但送出時仍沒有 `personId` 的列會自動建一個新 person**。看似違反上一條，其實不是，關鍵是
-  **方向不對稱**：自動建**新身分**安全（最壞是同一人散成多筆待合併，資料仍正確）；自動**合併到既有身分**
-  不安全（猜錯就把兩人生涯數據永久混在一起且難以發現）。**判準：能不能給預設值，取決於預設的那個方向
-  會不會產生錯誤答案**——#215 兩個方向都會錯所以必填，這裡只有一個方向會錯所以另一個方向可以當預設。
-- **#252 定案：不建「球隊常態名單」資料概念（08-04）。** tang 提的「新增比賽時能否從已知球員挑選」
-  訴求，討論後決定**不**新增 `team_members` 多對多表、也不在 `people` 加 `teamId`——前者會推翻
-  `teams.ts` 現有「teams 只是分組標籤」的決定並引出一串 membership 語意問題，後者跟「一人跨多隊」
-  的產品定位衝突。改用查詢層推導：`matches.teamId → players.personId → people` 撈出「這支球隊歷史
-  用過的人」當建議清單，套用 ADR-0003 判準（讀取不貴、無需物化）。實作追蹤移到 #287（M3），#252 已關。
-- **#65 數據分析頁：視圖①②已上線＋teams 端到端＋入口＝常駐紀錄本。** 視圖①單場分析
-  （`pages/MatchAnalytics.tsx`）＝比分總覽＋球員決定球矩陣＋換人統計＋各輪次得失分；**比分總覽已改成
-  全頁範圍選擇器**（PR #216：點某局就把底下所有區塊篩到那局、「全場」按鈕顯示局數比數，全頁由單一
-  `scope` state 驅動；各輪次得失分連帶改前端算 `buildRotationStats`，因為後端聚合只能算整場、跟不了
-  選局）。視圖②跨場彙總（`pages/CrossMatchAnalytics.tsx`＋`GET /analysis/matches`）＝一支請求列全部
-  場次摘要＋球隊過濾。入口改 context-aware（左欄「數」永遠可到：有比賽→單場、沒選→跨場）。
-  **視圖③已於 #213 落地**（`pages/PersonAnalytics.tsx`＋`GET /analysis/people/:personId`，路由
-  `/analytics/people`）。**仍未做**：導覽重構（頁內選比賽下拉＋日期篩選＋左側子導覽）是 **#214**
-  ——#213 刻意不碰 `NavRail.tsx`，把左側子導覽整塊留給它，避免兩個 issue 在同一檔案打架；比率統計
-  （side-out%）與差異化（到位率/球線熱區）仍是**誠實空狀態**，等 #51/#21 與發球序推導。
-  **#65 傘已於 07-28 關閉**：三個視圖都上線、剩下的內容全部有各自的 issue 接手（得/失分→#51、
-  球線→#21、比率統計→**#235**、導覽→#214、人員合併/管理頁→#221/#224）。#235 是收傘時發現的孤兒
-  （#65 body 列的「到位率」類比率統計原本沒人接）——重點是**資料已經夠了、不用改 schema**：
-  發球方可由 `sets.firstServer` 當種子 ＋「第 n 分的發球方＝第 n-1 分的贏家」逐分推導出來。
-- **離線可靠性契約定案（#75，08-02）＝按「資料能不能事後重建」切線。** 保證的四張表都是「比賽當下
-  不記就永遠沒有」；先發（`lineups`）與戰術板/名單丟了要重做、但**重做得回來**，所以不保證。
-  **判準值得記住：離線保證的邊界不是照技術難度切，是照可重建性切**——跟 #74 記錄成本預算的簡易/進階
-  硬分界是同一種判準。`sets` 一併進佇列但**不算擴大範圍**：四類保證資料全掛在 `setId` 底下（FK），
-  局本身若只在線上才建，離線第一步就斷鏈；它沒有使用者感受得到的內容，是達成保證的必要掛鉤。
-  **這份設計的正確性建立在「單裝置單人」（P7）前提上**——要支援「教練與球經各拿一台平板記同一場」
-  就得整個重來，已寫進 #75 當警語。因為前提成立，要做的是**重放（replay）不是合併（merge）**，
-  所以不需要 CRDT。**#230 依此設計不獨立做**（它要的有序寫入紀錄就是離線佇列本來需要的結構，
-  分兩次做等於同一份設計做兩遍），落地併進 #64 PR2。
-- **五張表主鍵已改 client-mintable uuid（#64 PR1）。** `sets`/`rallies`/`events`/`substitutions`/
-  `timeouts` 的 `id` 從 `serial` 改成 `uuid().defaultRandom()`（比照 `players`/`people`/`teams` 既有
-  模式），`lineups.setId` 的 FK 型別跟著改。**非改不可的理由**：寫入鏈是「一分 → 一球」，`event` 要掛
-  `rallyId`，線上靠「先等 POST 一分回來拿到 DB 配的號碼」撐住，而**離線根本沒有「等後端」這個選項**。
-  附帶好處是**主鍵本身就是冪等鍵**（重試時同一個 uuid 重送，`ON CONFLICT DO NOTHING` 即安全 no-op），
-  不用另設冪等鍵欄位。**過程中抓到一個型別檢查抓不到的正確性地雷**：`substitutions`/`timeouts` 的
-  `orderBy` 原本用 `id` 當第二層 tiebreaker，靠的是「自增主鍵＝insert 順序」，改隨機 uuid 後會變成
-  **隨機排序**，同一分內連續換兩次人的 replay 結果每次都不同。修法是兩張表各加一個非主鍵的
-  `seq: serial()` 專供排序。**這類「舊語意藏在型別裡」的相依，是機械式型別遷移最容易無聲踩掉的東西。**
-  另一個踩到的坑：**Postgres 無法把 integer 自動轉成 uuid**（`cannot be cast automatically`），
-  schema-first + `drizzle-kit push` 沒有 migration 檔可以寫 `USING` 轉換，只能 drop 六張表再 push＋
-  重跑 seed（PO 已授權；seed 本來就是 `TRUNCATE ... RESTART IDENTITY CASCADE` ＋固定種子 PRNG，
-  重灌結果與先前完全一致）。
-- **計分頁的寫入已收斂成一條有序 write log（#64 PR2，順帶關掉 #230）。** 新增
-  `artifacts/volleyball-tactics/src/lib/writeLog.ts`：六個動作（`start`/`score`/`undo`/`goNextSet`/
-  `substitute`/`callTimeout`）不再各自呼叫各自的 mutation，而是 append 一筆
-  `WriteLogEntry`，由一個集中的 executor 依序翻成 API 呼叫。**三疊平行的 id ref
-  （`rallyIdsRef`/`subIdsRef`/`timeoutIdsRef`）與那個「undo 該 pop 哪一疊」的字串 switch 一起消失**——
-  因為主鍵已是 uuid，動作發生的當下就鑄得出 id，直接存進 undo 快照的 `backendRef: { table, id }`，
-  刪誰變成資料而不是推論。**PR1 只改了 DB 型別，API 仍逐欄白名單、不收 body 的 `id`**，所以這張 PR
-  一併把 `NewSet`/`NewRally`/`NewEvent`/`NewSubstitution`/`NewTimeout` 開出選填的 `id`（否則 log 的
-  `id` 只能等 POST 回來才填、delete 又得回頭查表，等於先蓋一版 PR3 會拆掉的東西）。冪等
-  （`ON CONFLICT DO NOTHING`）仍留給 PR3——PR2 沒有重送，撞不到。#230 抱怨的「create 先於 delete
-  只靠佇列巧合、沒有測試守著」現在有 `writeLog.test.ts` 五條合約測試守住。
-- **write log 已落地、撐得過 reload（#64 PR3）。** 新增
-  `artifacts/volleyball-tactics/src/lib/writeLogStore.ts`：entry 進 **IndexedDB**（主鍵
-  `[matchId, seq]`），開頁時把上一輪沒送完的讀回來、**依 `seq` 補送**，送成功才刪掉（＝「至少送
-  一次」；先刪再送斷在中間就是永久掉一筆）。三個非顯然的決定：①**序號游標存 localStorage**——
-  `seq` 必須在同步的 `append()` 當下就決定，而 IndexedDB 全是非同步的，游標要是重新從 1 開始，
-  新 entry 會直接覆蓋掉還沒送出的舊 entry。②**drain 從 promise 鏈改成「挑 `seq` 最小的 pending」**
-  ——重放的 entry 是非同步才進得了 log，promise 鏈會讓使用者的新動作插到它前面。
-  ③**重放跑完才 hydrate**（`replayed` promise ＋ `invalidateQueries`），否則畫面會先少幾分、
-  補送完又冒回來。undo 多了「還沒送出就直接作廢」的路徑（`cancelPending`，連同子 event 一起），
-  取代盲目 append 一筆 delete。後端五支 POST 補上 `ON CONFLICT (id) DO NOTHING` ＋重送回既有列
-  （**先驗 parent 相符才回，否則 409**，不然等於開了一條拿別人 row id 換內容的探測管道）；
-  DELETE 的重送則由前端把 404 當成功處理。
-- **離線寫入會自己補送，畫面也說得出「還有幾筆沒上去」（#64 PR4，這張做完 #64 收工）。**
-  `createWriteLog` 多了退避重送：一輪 drain 結束還有 `error` 就排一次計時器，間隔
-  `3s → 10s → 30s → 60s`（全數送成功就歸零），時間到把 `error` 推回 `pending` 再跑一次。
-  另外開放 `retry()`（立刻重試＋退避歸零）與 `dispose()`（停掉計時器）。**兩個觸發點都留是刻意的**：
-  `online` 事件快但會說謊（它只代表「作業系統覺得有網路」，後端掛掉/咖啡廳登入頁都會讓它說謊），
-  退避計時器慢但唯一判準是「真的送成功了沒有」——只有前者會漏掉「網路一直在、後端掛了五分鐘」。
-  UI 是 `components/UnsyncedWritesBadge.tsx`（計分頁標題列右上、amber、0 筆時完全不出現、
-  點一下手動重試）；數字靠 `WriteLogOptions.onChange` 回呼抄進 React state——log 的 entry 是就地
-  改狀態的普通物件，React 看不到。**已知缺口（不在 #64 範圍）**：開頁當下後端就連不上時，
-  hydrate 的 query 全失敗 → 計分頁停在「載入計分記錄中…」，未同步徽章根本沒機會顯示；
-  要修得先有「整場資料的本機快取」，那是離線讀取、不是離線寫入的題目。
+- **站位＝全站共用單一真相**（07-21 PO 定案，**推翻 #115 的解耦模型**，作廢註記在 #115 留言）。
+  唯一真相是 `useRotationTable.dataByMatch[matchId]`：比賽列表決定站位，計分表讀它也寫它，
+  戰術板右欄唯讀。共存機制是「**共用現役＋開局凍結**」——每局開賽那一刻擷取成該局的凍結快照
+  （`ScoreSheetState.lineup` 語意＝歷史快照，不是平行的第二份先發），此後該局唯讀。
+  判斷式只有一行 `activeLineup = lineup ?? capturableLineup`。
+- **戰術板是單向的**：快照是 denormalized 的自給自足 `CourtSnapshot`，載入已存戰術＝唯讀檢視、
+  **不反向寫回輪轉表**，這條單向依賴由 eslint `no-restricted-imports` **焊在 CI 上，不得停用**。
+  模式（browse／viewing／edit）是推導值，store 裡沒有 mode 欄位。決策見 **ADR-0001**／**ADR-0002**。
+- **先發與自由球員的表示法只剩一份。** `PerMatchRotationState` 只存
+  `lineup: LineupSnapshot`（起始號位 → playerId，0~6 人皆合法）＋ `liberoReplacesPlayerId`（L 頂替誰）
+  ＋ `startingLiberoId`，六輪座標由 `deriveRotation(...)` 渲染時現算（`event-grammar-spec.md`
+  那條**「能推導就不存」**的 store 版）。「可不可以開賽」獨立成 `isLineupFull`。
+  - **L 的規則定案：從後排轉出去就下場、留在場外，直到手動再換上場**——系統不自動找下一個頂替對象。
+    理由不是「猜得不準」，而是**這個 app 產出的是紀錄不是示意圖**。「L 不能跟著輪到前排」因此是
+    一行推導，不需要清理邏輯。
+  - 入口是輪轉表的**第七格**（3×2＋1）：存的是「頂替誰」不是「站哪格」，六個號位是輪轉序、L 不佔輪轉序。
+    三個呼叫端＝計分頁右欄（真正的入口）／比賽列表右欄／戰術板右欄（唯讀，ADR-0001）。
+  - ⚠️ **這些指派完全沒有持久化**（不在 DB、不在 localStorage、不在逐局快照）→ #359。
+- **比賽編輯＝右欄就地編輯**（#329）。選中→唯讀（`MatchDetailView`）、按左欄卡片「編輯」→ 同一欄
+  變表單（`MatchDetailForm`）、新增比賽→右欄開在空白編輯模式。`MatchFormDialog` 已刪除。右欄由上而下
+  固定是**比賽資訊 → 場上站位 → 第幾局 → 球員名單**，唯讀與編輯兩種模式模組順序一致。
+  - ⚠️ **站位的唯讀規則跟「比賽資訊在不在編輯狀態」是兩個不同層次的可寫性**，`editing` 刻意完全不參與
+    那段計算、也沒接進 `RotationRailPanel` 的 `readOnly`。`MatchInfoRail.tsx` 有一段註解把這條紅線寫死。
+- **計分頁的寫入是一條有序 write log，撐得過離線與 reload**（#64 四個 PR 已全數交付）。
+  六個動作 append `WriteLogEntry`，集中的 executor 依序翻成 API 呼叫；entry 進 **IndexedDB**
+  （主鍵 `[matchId, seq]`），開頁補送、送成功才刪（＝至少送一次）。退避 `3s→10s→30s→60s`，
+  UI 是 `UnsyncedWritesBadge`。後端五支 POST 有 `ON CONFLICT (id) DO NOTHING`＋**先驗 parent 相符才回
+  既有列，否則 409**。設計契約見 #75（**建立在「單裝置單人」前提上**，所以是重放不是合併、不需要 CRDT）。
+  - **已知缺口**：開頁當下後端就連不上時，hydrate 全失敗 → 停在「載入計分記錄中…」，徽章沒機會顯示。
+    要修得先有「整場資料的本機快取」，那是離線**讀取**、不是離線寫入的題目。
+- **領域規則都有主人了**（M3.5 的共同主題：一條規則被複製成兩三份手寫拷貝然後各自漂走）。
+  現有的規則模組：`volleyballRules.ts`（含 `visibleSetCount()`＝「有幾格可以滑」，判準是
+  **那一格裡有沒有資料**而不是「已完賽就不 +1」）／`rotationLogic.ts`／`liberoRotation.ts`／
+  `courtGeometry.ts`／`matchOutcome.ts`／後端 `analysisSummary.ts`。戰術板場景編輯一律走
+  `editSession(mutate, { history })`，`HistoryPolicy = "record" | "defer"` 是**必填的字面量聯集**
+  ——漏寫政策是編譯錯誤，不是靜靜挑到錯的預設值。
+- **測試現況。** vitest 跑 `volleyball-tactics`（jsdom）與 `api-server` 兩包；
+  **`@testing-library/react` ＋ user-event 已裝**，基礎設施在 `src/test/`（詳見 `CLAUDE.md`，
+  含那個 jsdom 沒有排版引擎、hover 展開的 UI 會誤收合的坑）。測試檔**會被 typecheck**。
+  假資料走 `src/lib/__fixtures__/scoreSheet.ts` 的 builder。
+  - **仍在盲區**：`Markers.tsx`／`DefenseRange.tsx` 的 `didMove` 手勢守衛、
+    `Court.tsx`／`ScoreSheetCourt.tsx` 的座標數學與拖曳（→ #168）。
+- **示範資料與測試沙盒。** `lib/db/src/demoData.ts` 的 `seedDemoData(exec, userId, seed)` 是**唯一一份**
+  示範資料建構器，兩個消費者共用（`db:reset` 種子腳本、`POST/DELETE /demo-data`）。內容是
+  **1 場完整走完的比賽**而不是多場零碎的——示範資料的價值在「完整走完一場」。
+  `pnpm run db:reset` ＝ push ＋ 清空 ＋ 重灌，搭配另開一顆沙盒 DB 用。
+  **兩道安全閘門都是白名單不是黑名單**（`assertSafeDatabaseHost` 只放行 localhost 那幾個、
+  刪示範資料用 `and(eq(userId), eq(isDemo, true))`）。已知限制 → #341。
+- **部署：merge 不會幫你 push schema，這是刻意的** → [ADR-0006](adr/0006-no-schema-push-in-build.md)。
+  動 `lib/db/src/schema/` 的 PR 合併後要**人工**跑一次 push；CI 全綠不代表正式站會動。
+  提醒機制本身開成 #354。
 
 ### 設計進度 (tang — 視覺 / UX / area:design)
 
@@ -519,26 +196,13 @@ lives in git log + the issues named).
 
 ## Known gaps / next big pieces
 
-**自由球員先發指派沒有持久化（#359，08-10 開，PO 當場決定不修）。** `startingLiberoId` /
-`liberoReplacesPlayerId` 只活在前端 Zustand——不在 DB（`lineups` 表刻意只收 6 個非 L）、不在
-localStorage（`partialize` 只留 `circleLabel`）、不在逐局快照（`LineupSnapshot` 同上）。後果：
-**示範資料唯一那場是 `finished`，第七格兩個呼叫端都只在「還能排先發」時渲染 → 載入示範比賽的人
-一格都看不到**；重整就沒；打完的局回看永遠沒有 L。PO 08-10 在「示範資料加一場未開賽比賽」／
-「把 L 寫進 lineups 表」／「不動」三條裡選了不動，理由與完整查證留在 #359。
-**這裡順帶記一條判準**：#327 是拿 curl 手開的一場未開賽比賽驗的，所以「載入示範比賽」——一般人
-第一次會走的那條路——從沒被走過。跟 #231 那次是同一型的失誤升級版：**不只要走一遍流程，還要走
-使用者實際會走的那一條**。
+Backlog lives in **GitHub Issues, phase-ordered via Milestones** — this file **不重述票的內容**，
+只寫「issue 裡看不到的東西」。
 
-Backlog lives in **GitHub Issues, phase-ordered via Milestones M1–M7** — this file no longer
-duplicates it. **當前階段 ＝ 編號最小、還有 open issue 的那個 milestone。**
-
-⚠️ **這裡刻意不寫出當前階段的名字**——milestone 名稱是推導值（它只是「編號最小且還有 open
-issue」今天的答案），抄進靜態文件就是一個一定會過期的常數。這個坑已經踩了三次：08-07 原 M5
-改名、08-10 這行原本寫著 `"M3 部署給真人試用"`（M3 早已關閉，那行指令會直接執行失敗）、以及
-`.claude/skills/catch-up/SKILL.md` 拿 `"M1 簡易版收尾"` 當範例一直沒人發現。
-**這正是 `docs/event-grammar-spec.md`「能推導就不存」那條原則的文件版**（#231 是它的 store 版）。
-所以要用就現算——GitHub 的 milestone API 預設按 `due_on` 遞增排序，而 due date 順序就是階段順序，
-不用另外排：
+**當前階段 ＝ 編號最小、還有 open issue 的那個 milestone。**
+⚠️ **這裡刻意不寫出它的名字**——milestone 名稱是推導值，抄進靜態文件就是一個一定會過期的常數
+（這個坑踩過三次：08-07 原 M5 改名、`"M3 部署給真人試用"` 早已關閉、`catch-up` 的範例用 `"M1 簡易版收尾"`）。
+**這是 `event-grammar-spec.md`「能推導就不存」那條原則的文件版。** 要用就現算：
 
 ```sh
 # 當前階段是哪一個
@@ -546,213 +210,89 @@ gh api repos/:owner/:repo/milestones --jq 'map(select(.open_issues>0)) | .[0].ti
 
 # 列出當前階段的票（把上面那句套進去，不要手打名稱）
 gh issue list --milestone "$(gh api repos/:owner/:repo/milestones --jq 'map(select(.open_issues>0))|.[0].title')"
-
-gh issue list --state open   # 全部
 ```
 
-**M4 的三張刻意一起設計、不單張開工**（#51 動作子分類決定 #21 記得出什麼、#21 的球線分布是產品定位
-裡的 wow 點、#99 站位快照同屬 advanced tier），#21／#51 都掛 `needs-plan`。三張已於 08-10 放進
-Project #4 的 Todo 欄。**08-10 已先切出一塊地基動工**：PO 選了「先落 outcome 地基，再開設計」——
-`events.outcome` 的寫入路徑已補（PR #365，見 Current state），因為它同時是簡易版就需要的東西、
-範圍小且驗得起來，不必等三張的設計會。
+各 milestone 的**收件標準**（包含「名字裡有『雜項』的 milestone 會變成垃圾桶」那條教訓）
+寫在 `.claude/skills/wrap-up/reference.md`，不在這裡。
 
-**08-11 設計討論開場，兩個決定**：
-（a）**進階版的影片載體＝內嵌 YouTube 播放器**（PO 拍板，記在 #21／#51）。這題之前**完全懸空**——
-整套進階版的可行性建立在「可暫停倒帶的影片」上，而 `videoTimestamp` 從 schema 到 API 都通了、
-schema 註解甚至寫著「對應 YouTube 播放時間」，**卻沒有任何前端在寫它**。定了之後 `videoTimestamp`
-升格成進階版的時間軸主鍵：「待補清單」（本來就是推導值）從一份清單變成**可以一鍵跳到那一球重看**。
-**還沒決定、擋著 #21 實作的三題**：影片網址存哪（一場很可能有多段影片，`matches` 加一欄表達不了）、
-要不要同時支援本機檔案（系隊影片不一定會上 YouTube）、時間軸怎麼對齊（手動標一個錨點再靠 rally
-順序推，還是每分都對）。
-（b）**`outcome` 的「呈現」層獨立成 #370**（#365 留言問的「單獨排還是併進設計」，PO 選單獨排），
-已於 08-11 交付，見 Current state。
+### M4：三張刻意一起設計，不單張開工
 
-**其餘的設計那一步還沒開始。**
+#51 動作子分類決定 #21 記得出什麼、#21 的球線分布是產品定位裡的 wow 點、#99 站位快照同屬 advanced tier。
+**地基已先落一塊**：`events.outcome` 的寫入（#365）與呈現（#370）都已交付，不必等設計會。
 
-**M1／M2／M1.5／M2.5／M3／M3.5 milestone 皆已關閉。**
-**M3.5「架構深化：可測性與資料流」（軟目標日 8/15）於 08-10 提前收完**：#229 後端合併規則抽純函式、
-#230 write log、#231 先發單一表示法、#232 db 注入、#292／#294、#303 自由球員規則抽出、#304 歷史政策
-收斂、#306 fixture builder、#339 測試沙盒、#352 `visibleSetCount`。**這個 milestone 的共同主題是
-「規則有沒有主人」**——十一張裡有六張的病根都是同一句話的不同長相：一條領域規則被複製成兩三份手寫
-拷貝，然後各自漂走。 M1.5「戰術板 UI 大改版」＝七環
-（#172–#178），規格住 `docs/layout-spec.md`、相依鏈 `環1 →（環2 ‖ 環3 ‖ 環4）→ 環5 → 環6`；環 1–6
-結構工作全部落地，剩的一張尾巴（#178 環 7 響應式需線框稿）已移入 **M3**，卡在 M1.5 內部推不動的
-外部輸入（另一張 #176 繪圖工具圖示已於 08-04 關閉，細節統整轉 #284）。**#199**（戰術板對手球員分色渲染——Court
-從未渲染對手、snapshot player 無 `side`；spec 把 mode D 叫「對手佈陣」的那層 #177 沒做）07-28 補上
-milestone，歸 **M5**。
+**已拍板**：進階版的影片載體＝**內嵌 YouTube 播放器**。這題之前完全懸空——整套進階版的可行性
+建立在「可暫停倒帶的影片」上，而 `videoTimestamp` 從 schema 到 API 都通了卻沒有任何前端在寫它。
+定了之後它升格成進階版的時間軸主鍵：「待補清單」從一份清單變成**可以一鍵跳到那一球重看**。
 
-**M3「部署給真人試用」（軟目標日 8/7）已 0 張 open。** 最後一張 #209（UX 密度盤點）依 tang 08-06 的
-回覆移入 M5——比照 #178／#284 的既有判準：卡在設計輸入的純外部阻塞項，不掛在有軟目標日的階段。
-tang 選了「暫時沒空、之後回來繼續盤點」，所以那張留著當清單，不擋 M3 收尾。
-#218（一場比賽「結束」的操作節點）已於 08-05 交付並關閉（PR #300），#287（球隊帶出歷史名單建議）
-同日交付，兩張都見下方 Recently closed。**08-05 新開 #301「賽制自訂化」歸 M5**——PO 要友誼賽／
-自訂規則（一局 30 分不 deuce 之類），做法是**廢掉 `matchFormatEnum` 改存四個數字**（局數／一般局
-分數／決勝局分數／deuce 封頂），三戰兩勝等變成表單 preset；設計決定已在 issue body 裡拍板完，
-不掛 `needs-plan`。歸 M5 而非 M3 是 PO 的排期決定（不擋部署，8/7 軟目標日守得住）。脊椎已於 08-02
-（#77）與 08-04（#26）全數收尾，M3 剩下的都是不擋部署、搭便車的項目。**#221/#224/#240（人員合併
-與管理）已於 08-05 全數交付並關閉**，#176（工具軌圖示）也已關閉，尾巴切成 **#284**（圖示細節與
-視覺調整，08-05 歸 M5——它卡在 @tangyi1025 的設計輸入，同 #178 的判準：純外部阻塞項不掛在有軟目標日
-的當前階段）；#178（響應式）已移出 M3 歸 M5。**PWA 化已開成 #278**（manifest ＋ vite-plugin-pwa，
-歸 M5）——跟 #64 資料層零依賴、可平行，且是唯一能自然分給設計夥伴、又不需要先懂佇列設計的一塊。
+**還沒決定、擋著 #21 實作的三題**（記在 #21／#51）：影片網址存哪（一場很可能有多段影片，
+`matches` 加一欄表達不了）、要不要同時支援本機檔案（系隊影片不一定會上 YouTube）、
+時間軸怎麼對齊（手動標錨點再靠 rally 順序推，還是每分都對）。
 
-**M2.5「收斂重複規則」（軟目標日 8/1）已全數關閉。** `#228`（route handler 儀式：404 樣板 ×33、
-ownership 守衛 ×25 全靠人記得寫）08-01 完成收尾：`lib/handler.ts` 落地後 12 支 route 檔案
-（tactics/matches/teams/tournaments/people/players/sets/rallies/events/substitutions/timeouts/
-analysis）全部遷移完（PR #256/#262~#272），`owns` 必填欄位讓漏寫擁有權檢查變成編譯錯誤。
-**08-06 深模組盤點又補收一份同性質的**：`lib/insertIdempotent.ts` 收掉 sets/rallies/events/
-substitutions/timeouts 五份逐字相同的冪等寫入（各約 22 行），`scope` 參數比照 `owns` 設成**必填**
-——重送撞到既有 id 要重讀那列時，不限定「掛在已驗過擁有權的上層底下」就是 IDOR 探測管道。
-**#226（07-30）／#227（07-30，PR #250）／#238＋#257（08-01，PR #258/#259）都已收斂並關閉**（見下方
-Recently closed），Project #4 網頁上的卡片待 PO 手動移過去。**#247**（連鎖換人 A→B→C 摺疊後查不到
-原始先發，#226 PR1 過程中發現）是 M2.5 之外的新孤兒，未歸 milestone，需先討論修法方向（`needs-plan`
-性質）。下一個階段還沒有明確軟目標日，目前最新落地的是跨 milestone 的獨立缺口 **#251**（戰術板頁
-輪轉/名單面板重複顯示，08-02 已關閉，PR #274，見下方 Recently closed）。
+### 沒有 issue 在追、但需要知道的
 
-M2 雖已收 milestone，衍生待辦仍在各自 issue：**#214**（分析頁導覽重構，M5）、**#235**（side-out%
-等比率統計，M5——資料已足夠，發球方可由 `sets.firstServer` 當種子逐分推導）、**#222**
-（`RosterEditDialog` 沒有去重 UX，從戰術板那條路徑新增的球員 `personId` 永遠 null）。**#221/#224
-（人員合併與管理頁）已於 08-05 交付，見下方 Recently closed。**
-**#218**（一場比賽「結束」的操作節點與畫面）——目前「結束比賽」只是導去分析頁的 `<Link>`，**最後一局
-不會被封存**（`completedSets` 只在按「下一局」時累積），是資料缺口不只是 UX 缺口。
+- **一張 ADR 還沒寫**：#231／#326 收斂出來的「先發單一表示法」＋「persist 永不能帶 match 資料」不變條件。
+  要記的是 `liberoReplacesPlayerId` 這個方向，**不是被推翻的 `liberoZones`**。
+  ⚠️ 寫的時候**取當下最小的未用編號，不要在這裡預先佔號**——這一行原本寫著「ADR-0006」，
+  結果 0006 被別的決策先用掉了（預留編號跟上面那條「不要抄推導值」是同一個錯）。
+- **#40**（undo/redo 不涵蓋輪轉拖曳）的前提已消失：先發表示法已收斂成一份、座標已降級為衍生值，
+  所以那張票**現在可能小很多**，重估之前別照 body 的舊描述動工。
+- **#232**（`createDb` 注入）沒有被 #229 帶掉。#229 只抽純函式、**刻意不做 query adapter／不做 DI**
+  （只有一個實作的 adapter 是假 seam）。#232 剩下的價值要單獨評估：真要動就得同時接上第二個 adapter。
 
-其餘 open 的技術債與待辦（**#292／#294 已於 08-06 交付並關閉**，見下方 Recently closed）：
-**#168（引入 `@testing-library/react`）已於 08-10 交付第一批**（PR #366，見 Current state）——
-`renderToStaticMarkup` 發不出事件、讀不到 Radix Portal 那個限制已經解除，基礎設施在
-`src/test/`。**留下來的判準值得記住：測試覆蓋的是安全的部分，沒覆蓋的是危險的部分**——每一支
-刻意抽到 `lib/` 的純函式都有測試，每一個握著座標數學、指標事件、輪轉/自由球員規則的元件都沒有，
-而那正是 #120／#172／#349 三次 bug 的落點。**仍在盲區的兩塊**：`Markers.tsx`／`DefenseRange.tsx`
-的 `didMove` 手勢守衛、`Court.tsx`／`ScoreSheetCourt.tsx` 的座標數學與拖曳（座標數學已隨 #227 抽成
-`lib/courtGeometry.ts` 並有測試，元件本體的互動仍是零）。**另一塊盲區已開成 #368**（M7）：後端
-route 的逐欄列舉寫入，漏一個 nullable 欄位既不是型別錯誤、也沒有測試會紅（PR #365 實例，見
-Current state）。
-**#231 已於 08-06 全數合併、08-07 關閉**，依賴它的幾條現況：
-**#309**（計分頁站位單一真相）設計面與程式面都不再卡著；
-**#14**（自由球員邏輯 ＋ 先發 UX 統一）**早在 07-02 就已關閉**，08-06 有一則留言補記根因：那個
-「一般球員疊到 L 那格」的疊圈症狀，是 #231 PR3b 換掉輪轉表表示法時**順帶消失的，不是額外去修的**
-——舊模型判斷目標格有沒有人之前會先濾掉場上的 L，那格看起來是空的就直接塞進去；新模型的 `lineup`
-天生不含 L，`assignPlayerToZone` 看得到真實佔用者，走的是正常的擠位。08-10 第七格上線後在右欄實測
-也確認疊不出來（新模型下「兩個人在同一格」從型別上不可表示）。**這張不需要再處理**；
-（本檔 08-10 之前寫成「仍建議 PO 自己走一次再關」是查錯了狀態，已更正。）
-**ADR-0006**（單一表示法決策 ＋「persist 永不能帶 match 資料」不變條件）尚未寫，
-但**08-10 起不再被擋著**——#326 已把 L 模型改成 `liberoReplacesPlayerId`，寫 ADR 時要記的是這個
-方向，不是被推翻的 `liberoZones`。
-**#40**（undo/redo 不涵蓋輪轉拖曳，與 #147 同塊邏輯但不同 store）——建議排在 **#231 之後**：先發表示法
-收斂成一份、座標降級為衍生值之後，undo 要回捲的目標才明確，屆時這張可能小很多。
-**#64**（背景寫入失敗不 reconcile）——#201 在 `useScoreSheet.start()` 補了 guard，**堵掉「單機就能製造
-serving≠null 但 record.lineup=null」那條路**，但真正的 reconcile 仍未做；**#230 是它的結構前提**（現在
-六個 action 各自重寫寫入四步、三疊平行 id ref，沒有一條有序紀錄可以拿來對帳）。關聯部署 #26／離線契約
-#75，兩者仍屬 priority:essential 的自然接續。
-進階版差異化（M4）：#51 動作子分類、#21 球線座標、#99 站位快照——同屬 advanced tier，可一起設計。
+### 一條會復發的判準
 
-**已修掉但判準值得留著的**：#127（後端沒驗 tournamentId 擁有權）——**外鍵保證 referential integrity
-（uuid 指得到一列），不保證 ownership（那列是不是你的）**，兩者很容易被當成同一件事；`lib/ownership.ts`
-的 `tournamentBelongsToUser`／`teamBelongsToUser` 就是這條判準的落點。**這條判準已復發過一次**（#225，
-`tactics.ts` 是當初唯一沒 import `ownership` 的路由檔）——**判準寫下來擋不住復發，因為新檔案不會自動
-知道它**；真正的結構解法是 #228 的 route handler 儀式收斂，讓守衛不再依賴「人記得寫」。
+**外鍵保證 referential integrity（uuid 指得到一列），不保證 ownership（那列是不是你的）**——
+兩者很容易被當成同一件事。`lib/ownership.ts` 的 `tournamentBelongsToUser`／`teamBelongsToUser`
+就是這條的落點。**它已經復發過一次**（#225：`tactics.ts` 是當初唯一沒 import `ownership` 的路由檔），
+所以真正的解法不是把判準寫下來，是 #228 的 handler 儀式收斂——**判準擋不住復發，因為新檔案不會
+自動知道它；把約定寫進 CI 或型別才可靠**（同 #154 把單向依賴焊進 eslint、#310 把字級 token 焊進 eslint）。
 
 ## Recently closed (past ~week)
 
+一行一張，**細節在該 issue 與 git log**。只留過去約一週。
+
 ### 開發 (aila)
 
-- **#304 ＋ #361**（戰術板歷史政策收斂 ＋ 四個 undo bug，08-10 交付 PR #362）與 **#352**
-  （`visibleSetCount()`，08-10 交付 PR #363）— 細節見 Current state 的兩條獨立條目。**這兩張放在
-  一起看才有意義**：#304 是「一條規則散在九個地方、沒有主人」，#352 是「規則模組的邊界少劃了一格」，
-  同一種病的兩種長相，也是整個 M3.5 一路在處理的同一件事。
-  **#304 另外值得記一條方法論**：它是一張 `needs-plan` 的重構票，票面問了三個問題（歷史語意真的一樣
-  嗎／收斂後型別怎麼保精確／現在做值不值得），**三個答案都不是靠推理得到的，是靠查證推翻票面直覺的**
-  ——三組三連並不齊頭收斂（只有 `remove` 該合併）、真正的收斂目標不是 CRUD 形狀、而「值不值得做」的
-  決定性證據是那條規則**當下正在製造四個使用者看得見的 bug**。開票時沒人知道有那四個 bug。
-- **#326**（自由球員模型改成「記頂替誰」，08-10 交付 PR #357）＋ **#327**（輪轉表 3×2＋1 第七格，
-  08-10 交付 PR #358）— 一組相依的兩張，細節見 Current state 的兩條獨立條目。**這組的教訓不在程式**：
+- **#370**（08-11）視圖③ 長出得/失分結構。範圍比預期小很多：單場分析頁**早就有**得失分結構
+  （`buildPlayerMatrix()` 從前端 `history` 現算），只是不讀 `events.outcome`——而那正好是這欄位存在的
+  最好註腳，**前端那條推導路只在「這場比賽已載進記憶體」時成立**，跨場統計沒有 `history` 可推。
+- **#365**（08-10）`events.outcome` 從「有欄位沒人寫」變成真的有值。真正的智力工作是**語意釐清**
+  （schema 舊註解與 `event-grammar-spec.md` 決策 7 互相矛盾，見 Current state 那條推導式）。
+  ⚠️ 交付當下踩到一個**四道 CI 全綠、功能沒生效**的洞 → 已開成 #368。
+- **#168 第一批**（08-10，該張仍 open）前端互動行為終於測得到。**留下來的判準**：
+  在此之前**覆蓋的都是安全的部分、沒覆蓋的都是危險的部分**——每支刻意抽到 `lib/` 的純函式都有測試，
+  每個握著座標數學／指標事件的元件都沒有，而那正是 #120／#172／#349 三次 bug 的落點。
+- **#352**（08-10）`visibleSetCount()`。前情是 #349 修了兩次才修完，因為同一段算式有**兩份手寫拷貝**
+  （PR #350 只改了分析頁，#351 才補上比賽列表右欄）。**這張補的是規則模組少劃的一格邊界**：
+  #226 已經把「最後一局是進行中」收進 `splitCompletedAndCurrent()`，但沒有人擁有從切分推出來的
+  下一件事——「這個選擇器有幾格可以滑」。
+- **#304 ＋ #361**（08-10）戰術板歷史政策收斂＋四個 undo bug。**方法論值得記**：票面問的三個問題，
+  **三個答案都不是靠推理得到的，是靠查證推翻票面直覺的**——三組 CRUD 三連並不齊頭收斂（只有 `remove`
+  該合併），真正該收斂的不是 CRUD 的形狀而是「何時記 undo 歷史」這條規則，而「值不值得做」的
+  決定性證據是那條規則**當下正在製造四個使用者看得見的 bug**（開票時沒人知道）。
+  **判準：收斂要對著「會漂走的規則」下手，不是對著「長得像的程式碼」。**
+- **#326 ＋ #327**（08-10）自由球員模型改成「記頂替誰」＋輪轉表第七格。**這組的教訓不在程式**：
   #327 是拿 curl 手開的一場未開賽比賽驗完的，「載入示範比賽」那條路一次都沒走，所以交付當下就存在
-  「示範資料看不到第七格」的洞（→ #359）。連帶解鎖 **#328**（中央輪轉視圖退役，已進 Project 的 Todo），
-  並讓 **#309** 多了一條相依（右欄現在是排 L 先發的唯一入口，拿掉面板不是純減法，已寫進該張 body）。
-- **#231**（先發只留一種表示法，08-06 合併四個 PR、08-07 關閉）— 重構目標達成：`PerMatchRotationState`
-  只剩一份 `lineup`，其餘輪次由 `deriveRotation` 現算（#312 特徵化測試 → #317 改用既有
-  `assignPlayerToZone` → #314 推導層純函式 → #318 換 state 形狀＋刪死碼）。**但這張真正的產出是手動
-  QA 撈出來的東西，不是重構本身**：四個 PR 全綠、typecheck 過、CI 過，PO 一坐下來實際點，第一步就
-  卡住——**排不出自由球員**（#327）。那個洞是三個各自正確的決定疊出來的（`startSession` 切
-  `courtView`、`LineupSnapshot` 不收 L、格子只畫六格），**沒有任何一處寫錯，所以沒有任何測試會失敗**。
-  **判準值得記住：自動化驗證的是「每一處有沒有寫錯」，走一遍流程驗證的是「合起來還能不能用」，
-  後者抓不到的東西前者也抓不到。** 附帶推翻了本張的一個結論：`liberoZones` 方向反了（見 Current
-  state 該條的判準），#326 接手（08-10 交付），入口本身由 #327 補上（08-10 交付）。#14 的疊圈 bug
-  已隨 PR3b 的表示法替換一起消失（該張 07-02 就關了，詳見上方 Known gaps 那條）。
-- **#292 ＋ #294**（測試檔進 typecheck／players 名單補 `ORDER BY`，08-06）— #292 表面上是「tsconfig
-  的 `exclude` 少寫一個 `*.test.tsx` 對稱項」，拿掉排除後才看見代價的規模：**7 個測試檔冒出約 90 個
-  型別錯誤，全部是既有的脫節**。來源是三次重構——#64 PR1（主鍵改 uuid，fixture 還在寫 `id: 1`）、
-  #213（`MatchPlayer` 多了必填 `personId`）、#230（`backendRef` 從字串分類改成 `{ table, id }`）。
-  最值得記的是 `scoreSheetMapping.test.ts` 佔了其中約 80 處：**它是 replay 重建邏輯的核心測試，
-  假資料整整落後一個主鍵型別遷移，而 217 個測試一路全綠**——因為那些 id 在測試裡只被搬運、沒被
-  當字串用。**判準：測試通過只證明執行期沒爆，不證明它斷言的還是現在這套型別**；把測試排除在
-  typecheck 之外，等於讓重構的安全網成為唯一沒有型別保護的地方。修法只改假資料型別，沒刪測試、
-  沒加 `any`／`@ts-expect-error`。api-server 的 tsconfig 一併拿掉排除（它上個月才被加上、註解還
-  引用 #292 說「兩邊都排除才一致」——那是往錯的方向對齊），CLAUDE.md 補上「測試檔會被 typecheck」
-  的約定免得有人加回去。**修的過程本身變成 #306 的證據**：光這一次型別遷移，`scoreSheetMapping.test.ts`
-  就要手改 36 處假資料，因為每個 fixture 都是就地展開的字面物件——下次任何一個必填欄位變動都會
-  重演一次，所以開了 #306 把假資料抽成 fixture builder（Backlog，不擋任何事）。
-  #294：`GET /matches/:matchId/players` 補
-  `.orderBy(number, name, id)`——**Postgres MVCC 下 `UPDATE` 是「舊版本標記失效＋heap 尾端寫新版本」**，
-  所以沒有 `ORDER BY` 時任何一次 PATCH 都會把該列擠到名單最後（#221 合併時看到的「名單跳動」只是
-  最容易察覺的觸發方式）。三層排序鍵是因為 `number` 沒有 unique constraint，只排 number 仍是偏序，
-  補 `name`／`id`（uuid，對人無意義但唯一穩定）才是全序。其餘 15 支 route 掃過沒有第二處遺漏。
-- **#303**（自由球員自動回位抽成 `lib/liberoRotation.ts`，08-06）— 深模組盤點開出的第一張債還掉。
-  規則本體原本整段住在 `ScoreSheet.tsx` 的 `useEffect` 裡，要驗證它得先 render 元件＋模擬輪轉，
-  而這專案沒有 `@testing-library/react`（#168）——**結果最容易寫錯的那條「誰接替誰」啟發式反而是
-  零覆蓋**。抽出來的 `resolveLiberoOnRotation(state, positions)` 不需要 React（輸入是「現在誰被頂替
-  ＋上一輪的頂替目標＋這一輪六人站位」，輸出是新的頂替狀態），9 條測試把三條分支＋兩種幽靈 id
-  ＋繞完一整圈六輪釘死；元件那邊只剩「湊輸入、寫回去」。**不等 #168 就做得到**，跟
-  `assignPlayerToZone`（#120 時從 `SetLineupDialog` 抽出）是同一招。
-  ⚠️ **但「接替」啟發式（分支 2）已於 08-07 被 PO 推翻，#326 要刪掉它**——抽成純函式＋補測試這件事
-  仍然成立（那是本張的價值），**被推翻的是那條規則本身**：PO 定案 L 從後排轉出去就下場、留在場外，
-  不自動找下一個頂替對象。值得一提的是分支 2 當初就跟它隔壁分支 3 的註解自相矛盾（「不自動亂猜一個
-  人：猜錯會讓紀錄裡出現一次不存在的替換，而這是**紀錄**不是顯示」）——**把散在元件裡的規則抽成純
-  函式的附帶好處，就是讓這種矛盾變得看得見**，在 `useEffect` 裡它藏了很久沒人發現。
-  兩個順帶的決定：①**前後排判定從 `courtGeometry.rowOf` 換成 `rotationLogic.isBackRowPosition`**
-  ——對這裡的輸入兩者答案完全相同（座標必定是六個號位的精確值），但語意層次不同：`rowOf` 是
-  「圓圈該不該上前排配色」的純視覺判斷、`isBackRowPosition` 是從 `BACK_ROW_ZONES` 導出的領域規則，
-  `courtGeometry.ts` 的註解本來就警告過別把兩者混為一談，而這支函式整個就是領域規則。（PR #305
-  當天才把這裡從裸門檻收斂到 `rowOf`，那一步的重點是「別再寫第三份 `y > 0.75`」，方向沒錯、
-  只是停在視覺層。）②**沒有變化時回傳原本那個物件參照**，呼叫端據此跳過兩次寫入——這是
-  PR #69→#70 那個坑的預防（effect 裡回傳新參照會多觸發一輪 render，當時演變成無限迴圈）。
-- **#310 ＋ #209 盤點推進**（字級語意 token，08-06）— #209 是 tang 的 UX 密度盤點清單，08-06 把四點
-  重新對過現在的程式碼，第 3、4 點定案並各自拆成可執行 issue（#309／#310），第 2 點留在原 issue 裡，
-  **#209 保持 open** 當容器。查證結果值得記的兩件事：①**16 種字級的數字一種都沒少**——任意值的
-  _用量_ 有在降（`text-[10px]` 從 12 檔案/28 處 → 10 檔案/20 處），但 _種類_ 沒收斂，因為沒有一個叫得
-  出名字的東西可以用，下一個人就會再開一個 `text-[Npx]`。②#209 第 3 點（計分頁站位重複）的顧慮是
-  對的：`ScoreSheetCourt.tsx` 完全沒有拖放指派邏輯，只有 `findNearestZone` 拿來做「發球員不換」的
-  命中判定——但它已經有場邊欄、`Court.tsx` 也有現成協定可抄，缺口比原本寫的小（細節見 #309）。
-  #310 本身是**純換名字、畫面 no-op** 的重構：`index.css` 的 `@theme` 新增六個語意 token
-  （`--text-micro/caption/action/panel-title/marker/marker-xs`），初始值＝現在實際在用的 px，48 處
-  `text-[Npx]` 全部換掉。**命名規則刻意是「一個 px 值一個名字」而不是「一個元件一個名字」**，
-  讓這一輪維持機械替換、不偷渡設計判斷；數值定案仍留給 tang 的 Figma 線稿，屆時只改 `@theme`
-  一處。唯一例外是 `Markers.tsx` 的 `text-[5px]`——那個 input 在 `<foreignObject>` 裡，5px 是 SVG
-  viewBox 座標不是螢幕 px，跟正文字級不同單位系統，留任意值＋`eslint-disable` 註明理由。
-  **真正的價值在那條 eslint 規則**（`no-restricted-syntax`，`Literal` 與 `TemplateElement` 兩個
-  selector 都要，因為不少 className 是模板字串拼的）：沒有它，收斂完照樣會再漂回去——跟 #154
-  把單向依賴焊進 CI 是同一個判準，**把約定寫進 CI 比寫進文件可靠**。
-- **深模組盤點 ＋ 兩處重複收斂（08-06，PR 見 `chore/insert-idempotent-and-rowof-dedup`）** — 用
-  「深模組（小介面／大實作）」的判準掃全 repo。結論：`lib/` 層普遍健康（`handler.ts`、
-  `writeLog.ts`、`rotationLogic.ts`／`volleyballRules.ts` 都是好例子），問題集中在**頁面元件**與
-  **route 檔**。動手做掉兩處：(1) 五份逐字相同的冪等寫入 → `lib/insertIdempotent.ts`（見上方
-  M2.5 段落）；(2) `ScoreSheet.tsx` 自由球員 effect 裡的**第三份 `y > 0.75` 裸門檻** → 改用
-  `courtGeometry.rowOf()`（#43／#227 已收斂過兩份，同一個 effect 上面兩行用的就是 `rowOf`）。
-  盤點結果落成 **#303**（自由球員自動回位規則鎖在 useEffect 裡、測不到，**不用等 #168**）與
-  **#304**（`useTacticsBoard` 35 個成員、三組平行 add/update/remove 三連，低優先）。
-  第三項「api-server 補測試」**沒有開新 issue**——`#232` 已涵蓋且分析更完整，改為留言補證據
-  （`insertIdempotent` 加入「安全關鍵但測不到」名單；api-server 的 vitest 環境其實已備妥，
-  缺的純粹是 db 注入，該張剩餘範圍比 body 讀起來窄）。
-- **#218**（一場比賽「結束」的操作節點與畫面，08-05）— 表面上是「把計分頁那顆假的『結束比賽』
-  `<Link>` 變成真動作」，實際挖到的病根是全站那條「**sets 最後一局＝進行中**」的推導慣例
-  （前端 `splitCompletedAndCurrent` ＋ 後端 `analysis.ts` 的 SQL 鏡射）：打完的最後一局永遠被當成
-  進行中而**不算數**，局比數／分析頁／資料夾戰績全部少算一局，seed 資料還得靠「補一局空 set」
-  才顯示得對。修法是加 `matches.status`（`in_progress | finished`），讓那條慣例吃它——**ADR-0005**，
-  「不要重新提議」段落釘死「用局比數推導完賽」「補空 set」兩條回頭路。PO 四點拍板：加欄位／
-  達成勝局只把按鈕變強調**不自動彈窗**（誤判成本高於忘記按）／確認 dialog 後導既有分析頁**不做
-  賽後摘要頁**（會跟 `MatchAnalytics` 重複）／**可逆且不藏**（完賽後計分頁唯讀＋「重新開啟比賽」）。
-  兩個實作決定值得記：(1) 切換狀態後**重跑 `reconstructRecording`**，不在本地手搬
-  `currentSet`↔`completedSets`——`CompletedSet` 沒存 serving／輪轉／serverId，搬回來那局會少掉發球方，
-  從 rallies 重放才全對；(2) 完賽時要**砍掉沒開球的尾巴局**（按了「下一局」才想起比賽已結束），
-  否則各局比分多一行 0:0，前後端兩邊都要砍。seed 的假空局一併移除。
+  「示範資料看不到第七格」的洞（→ #359）。**不只要走一遍流程，還要走使用者實際會走的那一條。**
+  連帶解鎖 #328，並讓 #309 多了一條相依（右欄現在是排 L 先發的唯一入口，拿掉面板不是純減法）。
+- **#329**（08-09）比賽編輯從彈窗搬進右欄就地編輯，`MatchFormDialog` 已刪。相依：#222 的修法本來
+  指向那個已刪除的元件，要重新確認抽在哪裡；#24（複製比賽）body 已改寫。
+- **#229 / #306 / #339**（08-07）後端合併規則抽純函式／測試 fixture builder／測試沙盒 `db:reset`。
+- **#231**（08-06 合併、08-07 關閉）先發只留一種表示法。**但這張真正的產出是手動 QA 撈出來的東西，
+  不是重構本身**：四個 PR 全綠、CI 全過，PO 一坐下來實際點，第一步就卡住——排不出自由球員（→#326／#327）。
+  那個洞是三個各自正確的決定疊出來的，**沒有任何一處寫錯，所以沒有任何測試會失敗**。
+  **判準：自動化驗證的是「每一處有沒有寫錯」，走一遍流程驗證的是「合起來還能不能用」。**
+  附帶推翻了自己的一個結論：`liberoZones` 方向反了（頂替誰才是原始事實）。
+- **#292 ＋ #294**（08-06）測試檔納入 typecheck／players 名單補 `ORDER BY`。拿掉排除後冒出約 90 個
+  型別錯誤，全部是既有的脫節，而 217 個測試一路全綠。**判準：測試通過只證明執行期沒爆，
+  不證明它斷言的還是現在這套型別**——把測試排除在 typecheck 之外，等於讓重構的安全網成為唯一
+  沒有型別保護的地方。（#294 的成因：**Postgres MVCC 下 `UPDATE` 會把該列擠到 heap 尾端**，
+  沒有 `ORDER BY` 時任何一次 PATCH 都會讓名單跳動。）
+- **#303 / #310 ＋ 深模組盤點**（08-06）自由球員規則抽成純函式／字級語意 token／`insertIdempotent`。
+  **把散在元件裡的規則抽成純函式的附帶好處，是讓矛盾變得看得見**——`liberoRotation` 的「接替」啟發式
+  當初就跟它隔壁分支的註解自相矛盾，在 `useEffect` 裡藏了很久，抽出來才被發現、然後被 PO 推翻（→#326）。
+- **#218**（08-05）比賽「結束」成為真動作。病根是全站那條「sets 最後一局＝進行中」的推導慣例，
+  打完的最後一局永遠不算數 → 加 `matches.status` 讓那條慣例吃它，**ADR-0005** 釘死兩條回頭路。
 
 ### 設計 (tang)
 
@@ -789,15 +329,7 @@ serving≠null 但 record.lineup=null」那條路**，但真正的 reconcile 仍
 
 ---
 
-- （更早的條目已修剪——記錄住在各自 issue 留言、`docs/*-spec.md`、git log：
-  **08-10 修掉 #251 戰術板右欄整併（PR #274）、#238＋#257 比賽狀態判準收斂（PR #258/#259）、
-  #228 `lib/handler.ts` route 儀式收斂（PR #256）**——三者的判準都另有長期的家：#228 在上方 M2.5
-  段落、#251 在 Current state 的自由球員入口那條、#238 的 `deriveMatchStatus` 五態在
-  `lib/matchOutcome.ts` 的註解裡；
-  #177 環 6 新增戰術流程＋佈陣 mode D、#176 環 5 工具軌結構（PR #197，**#176 仍 open**，剩正式圖示待
-  @tangyi1025，已移 M3）、#175 環 4 中央列表型（`ListItemCard`/`ListScrollArea`/`matchSummary.ts`）、
-  PR #182 計分表計分區深色化、PR #167 戰術板球場材質（**#134 仍 open**）、
-  #172 `AppShell` 三欄骨架（PR #180）、PR #179 `layout-spec.md`＋七環拆解、
-  #163 文件同步、#160 C1/C2/C3 三顆 PR、#44 暫停全棧、#147/#149 undo 一次退兩步、
-  PR #141 協作規則放寬、PR #142 pattern-language、PR #148 品牌 logo、PR #140 戰術板材質、
-  PR #135/#129 深色語言首批，以及更早的 #118/#117/#115/#41/#50/#74/#73/#63/#20 等。）
+- （更早的條目已修剪。判準與決策都另有長期的家：架構決策在 `docs/adr/`、規格在 `docs/*-spec.md`、
+  票的來龍去脈在該 issue 留言、程式碼層的約定在檔案自己的註解裡、協作教訓在 auto-memory。
+  已關閉的 milestone：**M1／M1.5／M2／M2.5／M3／M3.5**。想查某張票怎麼收的，`gh issue view <n>`
+  比翻這份檔案準。）
