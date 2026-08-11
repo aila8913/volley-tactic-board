@@ -7,6 +7,7 @@
  */
 import type { PersonActionCount } from './personActionCount';
 import type { PersonAppearance } from './personAppearance';
+import type { PersonOutcomeBreakdown } from './personOutcomeBreakdown';
 import type { PersonTeamBreakdown } from './personTeamBreakdown';
 
 export interface PersonAnalysis {
@@ -16,5 +17,6 @@ export interface PersonAnalysis {
   setsStarted: number;
   teamBreakdown: PersonTeamBreakdown[];
   actionCounts: PersonActionCount[];
+  outcomeBreakdown: PersonOutcomeBreakdown[];
   appearances: PersonAppearance[];
 }

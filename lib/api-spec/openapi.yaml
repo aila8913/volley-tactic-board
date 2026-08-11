@@ -909,10 +909,11 @@ paths:
   # M2 分析頁「各輪次得失分」（#65）。跟上面 /matches/{matchId}/* 那些「一資源一 CRUD」的路徑
   # 不同，這支是純讀的報表型聚合：把一場比賽底下所有 rally 依 homeRotation 分組算得失分，
   # 不對應單一資料表，所以獨立掛在 /analysis 底下、用專屬的 analysis tag，不硬塞進 matches。
-  # 只用 rallies.winner/homeRotation 算，不碰 events——events.outcome 的寫入路徑已補上
-  # （#51 第一塊，pointRecordToEvent 已填這欄），舊資料要各環境各跑一次
-  # `scripts/src/backfill-event-outcomes.ts` 才會有值；分析端的呈現尚未接上，
-  # 攻擊細分統計留待之後。
+  # 只用 rallies.winner/homeRotation 算，不碰 events——不是因為 events.outcome 沒有值
+  # （#365 已經補上寫入路徑，/analysis/people/{personId} 也已經在消費它，見該路由下面的
+  # 長註解），而是輪次統計要的是「每分必有」的資料來源：rallies.homeRotation/winner 兩欄
+  # 隨計分即時寫入、每筆 rally 必填，events 則有「沒看到」逃生閥允許整分不留任何 event，
+  # 改用 events 當輪次來源會漏算那種分。
   /analysis/matches/{matchId}/rotations:
     parameters:
       - $ref: "#/components/parameters/MatchId"
@@ -956,10 +957,10 @@ paths:
   # 各場背號/位置、觸球動作分布、先發局數全部彙整成一份，讓 people 這層「跨場身分」真的有地方
   # 被用到（否則 #212 建的 people CRUD 只是白建一張表）。
   #
-  # 刻意「資料真的支援的才做」：events.outcome（得分/失分）的寫入路徑已補上（#51 第一塊，
-  # 見上面 /rotations 的長註解），但舊資料要跑回填腳本才有值、分析端的呈現也還沒接上，
-  # 所以這裡暫時還不提供「這個人得幾分/失幾分」這種戰績類統計，只回傳 action 次數分布
-  # 這種真正有資料撐得住的欄位——不要用近似值假裝出精細數據。
+  # events.outcome（得分/失分）從這支路由開始有消費者了（#370）：actionCounts 之外多回傳
+  # outcomeBreakdown，把跨場的觸球依 action 拆成 point/loss/in_play/unknown 幾桶。仍然
+  # 不做的是比率統計（side-out%／決定率）：那需要知道「這一分開始時是誰在發球」，要從
+  # 發球序反推，邏輯複雜到不適合塞進這支聚合查詢，留給 #235。
   /analysis/people/{personId}:
     parameters:
       - $ref: "#/components/parameters/PersonId"
@@ -1647,10 +1648,10 @@ components:
       required: [teamId, matchesPlayed]
 
     # GET /analysis/people/{personId} 的一列：這個人各種觸球動作（發/接/舉/攻/攔/防）的次數，
-    # 跨所有場次加總。grain 是 event（見後端路由註解），純粹數 events.action 的分布，
-    # 不含品質/得失分——outcome 的寫入路徑已補上（#51 第一塊），但舊資料要跑回填腳本才有值、
-    # 分析端呈現也還沒接上，且這類欄位跟這頁「一覽全貌」的定位不符，留給單場分析頁
-    # （MatchAnalytics.tsx）做更細的攻防解讀。
+    # 跨所有場次加總、跨 outcome 加總。grain 是 event（見後端路由註解），純粹數
+    # events.action 的分布，不含得失分細節——那個維度現在由 PersonOutcomeBreakdown
+    # （#370）提供，這欄自己維持原本「一個 action 一列」的形狀不變，是既有前端消費它的
+    # 假設，不隨查詢細化而跟著變。
     PersonActionCount:
       type: object
       properties:
@@ -1659,6 +1660,28 @@ components:
         count:
           type: integer
       required: [action, count]
+
+    # GET /analysis/people/{personId} 的一列：這個人某個觸球動作跨所有場次的得失分結構
+    # （#370）。以 EventSide 為基準看這球「誰執行」，outcome 沿用 EventOutcome 的定義：
+    # points = 這個動作直接得分、losses = 直接失分、inPlay = 球還在繼續（簡易版理論上不會
+    # 出現，見 EventOutcome 的長註解，但這裡不假設一定沒有）。unknown 是 outcome 為 null
+    # 的筆數——events.outcome 是 nullable 欄位，新環境（例如還沒跑過
+    # scripts/src/backfill-event-outcomes.ts 的全新 DB）一定會有這種列，這裡老實秀出來，
+    # 不要悄悄併進其他桶或直接丟掉。
+    PersonOutcomeBreakdown:
+      type: object
+      properties:
+        action:
+          $ref: "#/components/schemas/EventAction"
+        points:
+          type: integer
+        losses:
+          type: integer
+        inPlay:
+          type: integer
+        unknown:
+          type: integer
+      required: [action, points, losses, inPlay, unknown]
 
     # GET /analysis/people/{personId} 的一列：這個人在某一場比賽裡的一筆名單列——背號、位置、
     # 屬於哪支球隊。people 這層存在的意義正是「同一個人不同場可能不同背號/位置」，所以這裡
@@ -1712,12 +1735,28 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PersonActionCount"
+        # 得失分結構（#370）：跟 actionCounts 來自同一支查詢的同一批列，只是合併規則不同——
+        # actionCounts 是跨 outcome 加總，這欄是依 outcome 拆桶。見後端 analysisSummary.ts
+        # 的 summarisePerson 長註解。
+        outcomeBreakdown:
+          type: array
+          items:
+            $ref: "#/components/schemas/PersonOutcomeBreakdown"
         appearances:
           type: array
           items:
             $ref: "#/components/schemas/PersonAppearance"
       required:
-        [personId, name, matchesPlayed, setsStarted, teamBreakdown, actionCounts, appearances]
+        [
+          personId,
+          name,
+          matchesPlayed,
+          setsStarted,
+          teamBreakdown,
+          actionCounts,
+          outcomeBreakdown,
+          appearances,
+        ]
 
     # 換人的種類，見 lib/db/src/schema/substitutions.ts 的 substitutionKindEnum 註解：
     # regular = 一般換人；libero = 自由球員上/下（規則上不算正式換人次數，但記錄結構相同）。

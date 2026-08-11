@@ -890,6 +890,13 @@ export const GetPersonAnalysisResponse = zod.object({
   "action": zod.enum(['serve', 'receive', 'set', 'attack', 'block', 'dig']),
   "count": zod.number()
 })),
+  "outcomeBreakdown": zod.array(zod.object({
+  "action": zod.enum(['serve', 'receive', 'set', 'attack', 'block', 'dig']),
+  "points": zod.number(),
+  "losses": zod.number(),
+  "inPlay": zod.number(),
+  "unknown": zod.number()
+})),
   "appearances": zod.array(zod.object({
   "matchId": zod.number(),
   "opponent": zod.string(),

@@ -44,6 +44,7 @@ export * from './person';
 export * from './personActionCount';
 export * from './personAnalysis';
 export * from './personAppearance';
+export * from './personOutcomeBreakdown';
 export * from './personSummary';
 export * from './personTeamBreakdown';
 export * from './player';

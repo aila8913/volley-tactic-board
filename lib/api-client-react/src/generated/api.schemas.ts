@@ -310,6 +310,14 @@ export interface PersonActionCount {
   count: number;
 }
 
+export interface PersonOutcomeBreakdown {
+  action: EventAction;
+  points: number;
+  losses: number;
+  inPlay: number;
+  unknown: number;
+}
+
 export interface PersonAppearance {
   matchId: number;
   opponent: string;
@@ -327,6 +335,7 @@ export interface PersonAnalysis {
   setsStarted: number;
   teamBreakdown: PersonTeamBreakdown[];
   actionCounts: PersonActionCount[];
+  outcomeBreakdown: PersonOutcomeBreakdown[];
   appearances: PersonAppearance[];
 }
 
