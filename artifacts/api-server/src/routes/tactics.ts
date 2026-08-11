@@ -50,7 +50,9 @@ router.get(
 // owns 檢查：要把戰術歸屬到某場比賽的話，先確認那場比賽是「這個使用者的」（#225，同 #127 的判準）。
 // tacticsTable.matchId 是真的外鍵，但**外鍵保證的是 referential integrity（這個 id 真的指到
 // 一列存在的比賽），不保證 ownership（那場是不是你的）**——少了這關，A 就能把自己的戰術掛到
-// B 的 matchId 底下（IDOR），而且 FK 是 onDelete: cascade，B 刪掉那場比賽會連帶刪掉 A 的戰術。
+// B 的 matchId 底下（IDOR），之後 B 刪掉那場比賽，A 的戰術就會被 FK 的 onDelete 動到
+// （改成 set null 之後是「標籤被清掉」，不再是整份消失——見 ADR-0007——但仍然是 A 不該
+// 承受的副作用，所以這關照樣要守）。
 // body.matchId 是 nullish（可不帶＝全域戰術、可為 null），`!= null` 這個寬鬆比較剛好一次
 // 涵蓋 undefined 與 null 兩種「沒有比賽可驗」的情況——這種情況下直接視為通過（回傳 true）。
 router.post(
