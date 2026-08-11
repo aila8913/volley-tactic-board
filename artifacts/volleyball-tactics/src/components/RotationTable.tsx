@@ -23,20 +23,32 @@ const PANEL_BUTTON_CLASS =
 
 interface RotationPanelProps {
   matchId: string | undefined;
-  // 「新手提示 (Tips)」只有 mode B（沒在編）需要——那是使用者第一次進戰術板時最常見的
-  // 起手式（把名單拖上場排輪轉）。mode D（佈陣中）使用者已經在動手排陣，不需要重複提醒
-  // 同一件事，所以預設關閉、只有 mode B 的 default export 開它。
-  showTips?: boolean;
 }
+
+// 這裡以前還有一個 showTips prop，掛著 mode B 專屬的「👉 新手提示 (Tips)」摺疊區塊。
+// 2026-08-11 PO 決定拿掉，換空間給上面的名單／按鈕，兩個理由：
+//
+//   1. 它是右欄空間的主要競爭者。Tips 是 flex 的兄弟節點、佔掉固定一段高度，把上面
+//      `overflow-y-auto` 那塊擠到 745px 視窗下只剩 320px（內容 392px）——名單只露 3 列、
+//      「重置站位／清除畫筆」兩顆整個沉在摺線下。#324 就是因此被誤開成一張「按鈕被蓋住」
+//      的 bug（實際是捲出視野），根因併進 #331 追。
+//   2. 內容本身已經過期。四條裡有兩條在講「輪轉視圖」——正是 #328 要退役的那個沒有名字、
+//      沒有切換入口的遺留畫面。教學文案指著一個要拆掉的東西，留著只會誤導。
+//
+// 需要新手引導的話那是另一件事（該做在第一次進頁的 onboarding，不是常駐佔一塊版面），
+// 不在這次的範圍。
 
 // mode B（沒在編）跟 mode D（佈陣中）共用的輪轉/名單面板本體——issue #251 這一輪發現
 // 兩個 mode 需要的組合幾乎一模一樣（同一顆 RotationRailPanel、同一組 footer 按鈕），
 // 差別只在「matchId 從哪裡來」：mode B（這個檔案的 default export）自己用 useParams
 // 讀路由；mode D（TacticsRosterPanel.tsx）的 matchId 是 TacticsBoard.tsx 已經算好、
 // 用 prop 傳進來的。與其兩邊各自拼一份幾乎相同的 JSX，不如把「拼裝」這件事抽成這個
-// 吃 matchId prop 的元件，兩個檔案各自只負責「怎麼拿到 matchId」跟「外層要不要多包
-// 新手提示 Tips」（只有 mode B 有 Tips，見下面 default export）。
-export function RotationPanel({ matchId, showTips = false }: RotationPanelProps) {
+// 吃 matchId prop 的元件，兩個檔案各自只負責「怎麼拿到 matchId」。
+//
+// Tips 區塊拿掉之後（見上面 RotationPanelProps 的說明），兩個 mode 的差別只剩 matchId
+// 從哪來——這層包裝現在幾乎是純轉發，但先留著：#328／#331 都會再動這一帶的版面，
+// 等那兩張落地、確定兩邊真的不會再長出差異了再談要不要合併。
+export function RotationPanel({ matchId }: RotationPanelProps) {
   // 名單/站位/目前輪次/先發 L 現在都存在「這一場」的分片裡（issue #119），統一從
   // dataByMatch[matchId] 讀；那場還沒任何資料時給空白預設值。
   const data = useRotationTable((state) => (matchId ? state.dataByMatch[matchId] : undefined));
@@ -99,24 +111,6 @@ export function RotationPanel({ matchId, showTips = false }: RotationPanelProps)
         />
       </div>
 
-      {/* Tips Section：只有 mode B 顯示，見 RotationPanelProps.showTips 的說明。 */}
-      {showTips && (
-        <div className="border-t border-white/[0.12] p-3">
-          <details className="group">
-            <summary className="cursor-pointer text-sm font-bold outline-none marker:content-['']">
-              <span className="group-open:hidden">👉 新手提示 (Tips)</span>
-              <span className="hidden group-open:inline">👇 隱藏提示</span>
-            </summary>
-            <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-[#a9b096]">
-              <li>輪轉視圖：把球員從名單拖到球場，會自動吸附到最近的號位，6 個輪次同步推算</li>
-              <li>戰術視圖 + 布置模式：自由拖放，只影響目前輪次，不受格子限制</li>
-              <li>切換輪次後自動回到輪轉視圖</li>
-              <li>在右側面板選工具後點擊球場畫圖</li>
-            </ul>
-          </details>
-        </div>
-      )}
-
       <RosterEditDialog
         open={rosterEditor.isOpen}
         onOpenChange={rosterEditor.onOpenChange}
@@ -127,10 +121,9 @@ export function RotationPanel({ matchId, showTips = false }: RotationPanelProps)
   );
 }
 
-// mode B（沒在編）的右欄輪轉/名單面板：自己從路由讀 matchId，開 Tips 區塊——這是這個
-// 檔案原本唯一的職責，維持原檔名/預設匯出不變，這樣 TacticsBoard.tsx 等既有呼叫端
-// 不用跟著改 import。
+// mode B（沒在編）的右欄輪轉/名單面板：自己從路由讀 matchId——這是這個檔案原本唯一的
+// 職責，維持原檔名/預設匯出不變，這樣 TacticsBoard.tsx 等既有呼叫端不用跟著改 import。
 export default function RotationTable() {
   const { id: matchId } = useParams<{ id: string }>();
-  return <RotationPanel matchId={matchId} showTips />;
+  return <RotationPanel matchId={matchId} />;
 }

@@ -24,7 +24,5 @@ interface TacticsRosterPanelProps {
 }
 
 export default function TacticsRosterPanel({ matchId }: TacticsRosterPanelProps) {
-  // mode D 不顯示 Tips（見 RotationPanelProps.showTips 的說明：使用者已經在動手排陣，
-  // 不需要再被提醒「把名單拖到球場」這件事）。
   return <RotationPanel matchId={matchId} />;
 }
