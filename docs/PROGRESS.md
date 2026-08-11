@@ -15,12 +15,7 @@
 > **開發進度 (aila)** 與 **設計進度 (tang)** 兩個子區塊。各自 wrap-up 時只改自己那區，
 > 平行 PR 就落在不同行段、git 幾乎都能自動合併。上面的 `_Last updated_` 是**共用一行**摘要。
 
-\_Last updated: 2026-08-11 (aila) — **PROGRESS 大剪一次（830 → 約 340 行）**：判準與教訓各自歸位
-（新增 [ADR-0006](adr/0006-no-schema-push-in-build.md)，milestone 收件標準歸 `wrap-up/reference.md`，
-fixture 規則歸該檔檔頭），Known gaps 一批過期的 milestone 歸屬與已交付項目一併修正。
-同批交付 #370（視圖③ 得/失分結構）、wrap-up 的 ADR 檢查步驟、以及
-**`docs/usage-scenarios.md` 使用者情境盤點**（→ #372）。tang 於 08-06 交付 PR #321
-（設計系統背景層＋token＋一鍵記分），該區未動。\_
+\_Last updated: 2026-08-11 (aila) — #372 五個決策全數拍板（含 [ADR-0007](adr/0007-tactics-match-is-optional-tag.md)＋PR #378），C1 分出去成 #379。tang 區未動（最後交付 08-06 PR #321）。\_
 
 ## Current state
 
@@ -63,6 +58,8 @@ Where the project actually stands right now（**只寫現在成立的事實**；
 - **戰術板是單向的**：快照是 denormalized 的自給自足 `CourtSnapshot`，載入已存戰術＝唯讀檢視、
   **不反向寫回輪轉表**，這條單向依賴由 eslint `no-restricted-imports` **焊在 CI 上，不得停用**。
   模式（browse／viewing／edit）是推導值，store 裡沒有 mode 欄位。決策見 **ADR-0001**／**ADR-0002**。
+  - **`tactics.matchId` 已降級成「可選標籤」**（`onDelete: set null`，**ADR-0007**，PR #378，
+    dev DB 已 push）。沒有 `matchId` 的戰術是一級公民，不是待清理的孤兒——刪比賽只會清掉標籤。
 - **先發與自由球員的表示法只剩一份。** `PerMatchRotationState` 只存
   `lineup: LineupSnapshot`（起始號位 → playerId，0~6 人皆合法）＋ `liberoReplacesPlayerId`（L 頂替誰）
   ＋ `startingLiberoId`，六輪座標由 `deriveRotation(...)` 渲染時現算（`event-grammar-spec.md`
@@ -108,7 +105,8 @@ Where the project actually stands right now（**只寫現在成立的事實**；
   大類沿用 `product-vision.md` 已定義的 TA，不另立一套。**它存在的理由是導覽爭論會原地打轉，
   因為每個人腦裡假設的情境不同、而那個假設沒被講出來**——有編號之後可以問「你說的是 B3 還是 A3」。
   - 順帶照出兩個空白：**C1**（教練賽中借平板看一眼，30 秒）完全沒被設計過，現有分析頁全是為
-    A4（從容坐著找洞察）做的；**B5**（記錯了要改）沒出現在任何既有文件裡，但球經在壓力下記錯是必然。
+    A4（從容坐著找洞察）做的 → **已開成 #379**；**B5**（記錯了要改）沒出現在任何既有文件裡，
+    但球經在壓力下記錯是必然，**還沒有票在追**。
   - 這輪的判準被推翻兩次（各漏了一個時機）才收斂到「需不需要先指定一場比賽才有意義」，
     過程記在 #372——**推翻的理由比結論有用**。
 - **部署：merge 不會幫你 push schema，這是刻意的** → [ADR-0006](adr/0006-no-schema-push-in-build.md)。
@@ -237,12 +235,20 @@ gh issue list --milestone "$(gh api repos/:owner/:repo/milestones --jq 'map(sele
 `matches` 加一欄表達不了）、要不要同時支援本機檔案（系隊影片不一定會上 YouTube）、
 時間軸怎麼對齊（手動標錨點再靠 rally 順序推，還是每分都對）。
 
-### 導覽資訊架構要改，但卡一個決策（#372，M6）
+### 導覽資訊架構要改（#372，M6）——PO 決策全數拍板，現在卡 tang 的版面
 
-判準已定案（左欄只放「不需要先選比賽就有意義」的入口）。**擋著動工的是「戰術要脫離
-`tactics.matchId` 到什麼程度」**——最小改法是那一欄改可空，最徹底是換成自由標籤。沒有這一步，
-「戰」放進左欄只是換個地方灰掉；動 `lib/db/src/schema/` 要一次想清楚，且依協作規則要 heads-up
-@tangyi1025。**C1（教練賽中借平板 30 秒看一眼）是獨立的新題**，先定它要看什麼再決定浮層或頁面。
+判準已定案（左欄只放「不需要先選比賽就有意義」的入口）。**五個決策 08-11 全部結案，結論表在
+#372 body**，過程在該票兩則留言。已交付的只有 ① 那一半（ADR-0007／PR #378）；②～⑤ 是實作範圍。
+
+- **擋著動工的換成 @tangyi1025 的版面題**（調色盤展開規則、選比賽下拉位置、「出」放哪）。
+  該票已標 Project Status: Blocked。
+- ⚠️ **PR #378 動到 `lib/db/src/schema/`，正式站要人工跑一次 push**（ADR-0006；dev DB 已跑過並
+  用 `pg_constraint.confdeltype` 驗過是 `'n'`）。提醒機制本身是 #354。
+- 實作時會踩到的既有寫法：`useTacticsBoardController.ts:147/159` 兩處 `if (!session || !matchId) return`
+  ——空板天生沒有 matchId，不改的話按儲存會**安靜地什麼都不發生**；`routes/tactics.ts:40` 的
+  「沒帶 matchId ＝回全部」表達不了決策 ④ 的「只回全域」，要另立旗標。細節寫在 #372 留言。
+
+**C1（教練賽中借平板 30 秒看一眼）已分出去成 #379**（M7），獨立、不擋這張。
 與 #214 的「頁內選比賽下拉」有重疊面，兩張要對齊。
 
 ### 沒有 issue 在追、但需要知道的
