@@ -19,3 +19,67 @@ jobs:
       - run: pnpm exec prettier --check .
       - run: pnpm run typecheck
       - run: pnpm run test
+
+  # ── 動到 DB schema 就在 PR 上留一則提醒（issue #354）──
+  #
+  # 為什麼需要它：`render.yaml` 的 buildCommand **刻意沒有** `drizzle-kit push`。這是對的
+  # 決定——雲端 schema 變更必須是明確的人為動作，不能是「合併了一張 PR」的副作用（自動 push
+  # 意味著任何一次合併都可能靜靜刪掉正式資料庫的欄位）。代價是「合併前先手動對雲端跑一次
+  # push」變成一個只存在於文件裡、靠記性執行的步驟，忘了就是正式站 500（2026-08-08 發生過）。
+  #
+  # 上面那個 test job 結構上不可能抓到這件事：它跑的是 CI 自己的資料庫，看不到雲端的 schema
+  # 漂移，所以四道檢查全綠跟「正式站會不會 500」根本無關。
+  #
+  # 這裡**刻意不擋合併**（沒有 `needs:`、失敗與否不影響 test job）：維持這個專案「不設
+  # approve 關卡」的慣例，這是提醒不是門。也刻意不做「順便自動 push」——那需要把正式站的
+  # DATABASE_URL 放進 CI secrets，正好推翻了 render.yaml 當初不放 push 的理由。
+  db-schema-reminder:
+    runs-on: ubuntu-latest
+    # 只在同一個 repo 的分支上跑。fork 過來的 PR 拿到的是唯讀 token，留言會失敗。
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      # 預設的 GITHUB_TOKEN 在多數設定下是唯讀的，要留言必須明講。
+      pull-requests: write
+    steps:
+      # 不需要 checkout：改動了哪些檔案直接問 GitHub API 就好（`gh pr diff --name-only`），
+      # 比 `git diff origin/main...HEAD` 省一次完整 clone，也不用煩惱 base ref 有沒有被抓下來。
+      - name: 檢查是否動到 lib/db/src/schema/
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          if gh pr diff "$PR" --name-only | grep -q '^lib/db/src/schema/'; then
+            echo "touched=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "touched=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 留下（或跳過）提醒留言
+        if: steps.check.outputs.touched == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          # 每 push 一次 commit 這個 workflow 就會再跑一次，沒有防重就會洗版。用一個隱藏的
+          # HTML 註解當標記，留過就不再留（提醒的內容不會因為又推了一版而改變）。
+          MARKER='<!-- db-schema-push-reminder -->'
+          if gh pr view "$PR" --json comments --jq '.comments[].body' | grep -qF "$MARKER"; then
+            echo "已經留過提醒，跳過。"
+            exit 0
+          fi
+          gh pr comment "$PR" --body "$MARKER
+          ⚠️ 這張 PR 動到 \`lib/db/src/schema/\`。**合併後記得手動對雲端資料庫跑一次 schema push**，否則正式站的新程式會去查一個還不存在的欄位，按下去就 500。
+
+          \`\`\`sh
+          DATABASE_URL='<Neon 的 Direct 連線字串>' pnpm --filter @workspace/db run push
+          \`\`\`
+
+          兩個踩過的細節：
+
+          - Neon 要用 **Direct** 連線字串（主機名稱**沒有** \`-pooler\` 那段）。pooled 不會報錯，只會永遠卡在「Pulling schema from database…」。
+          - \`dotenv\` **不覆蓋**已存在的 \`process.env\`，所以在 shell 裡設的 \`DATABASE_URL\` 會蓋過 repo 的 \`.env\`——這是好事，但要知道，不然會以為指令沒吃到。
+
+          完整流程見 \`docs/deploy.md\`。這則留言只是提醒，不擋合併（issue #354）。"
