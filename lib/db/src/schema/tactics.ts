@@ -11,11 +11,13 @@ export const tacticsTable = pgTable("tactics", {
   // 切場後按「儲存」還會覆寫別場的存檔。加上 matchId 後，面板列表用它過濾，戰術庫就變成
   // per-match、不再跨場汙染。
   // 型別是 integer 不是 uuid —— matches.id 是 serial（自增整數），FK 型別必須跟被指的欄位一致。
-  // nullable：#119 之前存的舊戰術沒有 matchId，設 nullable 讓它們仍然合法（視為「未歸屬」），
-  // 是零痛的向後相容。
-  // onDelete: "cascade"：比照 tournamentId 的下沉決定 —— 戰術掛在某場比賽底下，刪掉比賽就該
-  // 連同它的戰術一起刪，不留孤兒。（跟 teamId 的 set null 相反：team 是可選標籤、match 是所屬容器。）
-  matchId: integer("match_id").references(() => matchesTable.id, { onDelete: "cascade" }),
+  // nullable 從一開始就是（#119 之前的舊戰術沒有 matchId），但語意變了：那時 null 是
+  // 「未歸屬的舊資料」，現在 null 是一級公民——**沒有比賽的全域戰術**（ADR-0007）。
+  // onDelete: "set null"（#372 從 "cascade" 改過來，理由見 ADR-0007）：戰術現在可以不經過
+  // 任何一場比賽就被建立，所以 match 不再是它的容器、只是一個可選標籤，比照 teamId。
+  // 維持 cascade 的話，刪掉一場舊比賽會**安靜地**連帶刪掉你從那場存下、之後一直在用的
+  // 通用戰術——不可逆而且沒有聲音。
+  matchId: integer("match_id").references(() => matchesTable.id, { onDelete: "set null" }),
   // 自由輸入的戰術名稱，對應前端的 projectSituation 欄位
   name: text("name").notNull(),
   // 整份 TacticsState 快照（roster、6 個輪次的 positions/markers/defenseRanges）
