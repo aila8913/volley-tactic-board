@@ -48,12 +48,9 @@ lives in git log + the issues named).
   **#348 把 4 場零碎比賽改成 1 場完整的**（範例球隊 vs 範例對手、烏野 12 人名單、三局 2:1、
   含換人／暫停／自由球員上下場），因為 4 場之中有 2 場湊不滿六個非自由球員、seed 不出 lineups，
   新使用者第一次點進去看到的反而是空盤子——**示範資料的價值在「完整走完一場」，不在場數**。
-- **正式站踩到的坑：merge 不會幫你 push schema（08-08）。** `render.yaml` 的 `buildCommand`
-  **刻意沒有** `drizzle-kit push`——雲端 schema 變更必須是明確的人為動作，不能是合併的副作用。
-  代價是合併了動 `lib/db/src/schema/` 的 PR 卻忘了 push，正式站的新程式就會查一個不存在的欄位、
-  當場 500，而**四道 CI 全綠**（CI 跑的是本機／CI 資料庫，看不到雲端的 schema 漂移）。
-  另外兩件當場學到的：Neon 要用 **Direct** 連線字串（pooled 會靜靜卡在「Pulling schema…」）；
-  dotenv **不覆蓋**已存在的 `process.env`，所以在 shell 裡設 `DATABASE_URL` 會蓋過 repo 的 `.env`。
+- **正式站踩到的坑：merge 不會幫你 push schema（08-08）。** 已升級成
+  [ADR-0006](adr/0006-no-schema-push-in-build.md)——決定、理由、Neon Direct 與 dotenv 兩個
+  操作坑都在那裡。動 `lib/db/src/schema/` 的 PR 合併後要人工 push，這是流程不是遺漏。
 - **「有幾格可以滑」已收斂成 `visibleSetCount()`（#352，08-10 交付 PR #363，M3.5 最後一張）。**
   前情是 #349「已完賽的比賽預設停在不存在的第 4 局」修了兩次才修完：病根是 #218 之後已完賽**沒有
   進行中的那一局**，但 UI 仍無條件 `completedSets.length + 1`，而這段算式有**兩份手寫拷貝**——
