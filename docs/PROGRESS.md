@@ -18,7 +18,8 @@
 \_Last updated: 2026-08-11 (aila) — **PROGRESS 大剪一次（830 → 約 340 行）**：判準與教訓各自歸位
 （新增 [ADR-0006](adr/0006-no-schema-push-in-build.md)，milestone 收件標準歸 `wrap-up/reference.md`，
 fixture 規則歸該檔檔頭），Known gaps 一批過期的 milestone 歸屬與已交付項目一併修正。
-同批交付 #370（視圖③ 得/失分結構）與 wrap-up 的 ADR 檢查步驟。tang 於 08-06 交付 PR #321
+同批交付 #370（視圖③ 得/失分結構）、wrap-up 的 ADR 檢查步驟、以及
+**`docs/usage-scenarios.md` 使用者情境盤點**（→ #372）。tang 於 08-06 交付 PR #321
 （設計系統背景層＋token＋一鍵記分），該區未動。\_
 
 ## Current state
@@ -102,6 +103,14 @@ Where the project actually stands right now（**只寫現在成立的事實**；
   `pnpm run db:reset` ＝ push ＋ 清空 ＋ 重灌，搭配另開一顆沙盒 DB 用。
   **兩道安全閘門都是白名單不是黑名單**（`assertSafeDatabaseHost` 只放行 localhost 那幾個、
   刪示範資料用 `and(eq(userId), eq(isDemo, true))`）。已知限制 → #341。
+- **有一份使用者情境盤點了：`docs/usage-scenarios.md`**（08-11，導覽討論的副產物）。
+  五大類使用者 × 十七個時機（A1–A5／B1–B6／C1–C3／D1／E1–E2），每個標裝置、身體約束、時間預算；
+  大類沿用 `product-vision.md` 已定義的 TA，不另立一套。**它存在的理由是導覽爭論會原地打轉，
+  因為每個人腦裡假設的情境不同、而那個假設沒被講出來**——有編號之後可以問「你說的是 B3 還是 A3」。
+  - 順帶照出兩個空白：**C1**（教練賽中借平板看一眼，30 秒）完全沒被設計過，現有分析頁全是為
+    A4（從容坐著找洞察）做的；**B5**（記錯了要改）沒出現在任何既有文件裡，但球經在壓力下記錯是必然。
+  - 這輪的判準被推翻兩次（各漏了一個時機）才收斂到「需不需要先指定一場比賽才有意義」，
+    過程記在 #372——**推翻的理由比結論有用**。
 - **部署：merge 不會幫你 push schema，這是刻意的** → [ADR-0006](adr/0006-no-schema-push-in-build.md)。
   動 `lib/db/src/schema/` 的 PR 合併後要**人工**跑一次 push；CI 全綠不代表正式站會動。
   提醒機制本身開成 #354。
@@ -227,6 +236,14 @@ gh issue list --milestone "$(gh api repos/:owner/:repo/milestones --jq 'map(sele
 **還沒決定、擋著 #21 實作的三題**（記在 #21／#51）：影片網址存哪（一場很可能有多段影片，
 `matches` 加一欄表達不了）、要不要同時支援本機檔案（系隊影片不一定會上 YouTube）、
 時間軸怎麼對齊（手動標錨點再靠 rally 順序推，還是每分都對）。
+
+### 導覽資訊架構要改，但卡一個決策（#372，M6）
+
+判準已定案（左欄只放「不需要先選比賽就有意義」的入口）。**擋著動工的是「戰術要脫離
+`tactics.matchId` 到什麼程度」**——最小改法是那一欄改可空，最徹底是換成自由標籤。沒有這一步，
+「戰」放進左欄只是換個地方灰掉；動 `lib/db/src/schema/` 要一次想清楚，且依協作規則要 heads-up
+@tangyi1025。**C1（教練賽中借平板 30 秒看一眼）是獨立的新題**，先定它要看什麼再決定浮層或頁面。
+與 #214 的「頁內選比賽下拉」有重疊面，兩張要對齊。
 
 ### 沒有 issue 在追、但需要知道的
 
