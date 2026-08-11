@@ -4,20 +4,12 @@
 > the "Current state" section each session and prunes anything older than roughly a week —
 > it does **not** append an ever-growing history.
 >
-> **Durable facts don't live here.** 每種事實只有一個家，完整對照表在
-> `.claude/skills/wrap-up/SKILL.md` 的「事實住哪裡」。判斷法一句話：
-> **問「這件事一週後還該留著嗎？」該留 → 家就不是這裡。** 常見的幾個：
+> **Durable facts don't live here.** 每種事實只有一個家，對照表在 `CLAUDE.md` 的
+> **「事實住哪裡」**一節（唯一一份，這裡不再抄——抄了就是那張表自己在示範的錯）。
+> 判斷法一句話：**問「這件事一週後還該留著嗎？」該留 → 家就不是這裡。**
 >
-> - 架構決策，而且不希望被改回去 → `docs/adr/`（有「不要重新提議」清單）
-> - 產品定位、做／不做的邊界 → `docs/product-vision.md`；官方用詞 → `CONTEXT.md`
-> - 某張票的來龍去脈、被否決的備案 → 該 issue 的留言
-> - _why_ code/schema changed → `git log` + commit messages；設計規格 → `docs/*-spec.md`
-> - 協作教訓／產品判斷 → auto-memory（`memory/`）
-> - repo 結構、指令、已知落差 → `CLAUDE.md`
-> - 還沒做的 backlog → GitHub Issues / Milestones，不是這裡
->
-> ⚠️ **寫成「刻意不做 X」「別改成 Y」的段落，就是 ADR 跑進了快照**——那種條目會永遠刪不掉
-> （刪了就沒別的地方有），正是這份檔案兩次肥大的機制。先開 ADR，這裡只留一行指過去。
+> ⚠️ **這份檔案很薄是刻意的，不是過期。** 判斷它 stale 的依據是「內容跟 `git log`／issue
+> 狀態衝突」，不是行數；**「這裡沒寫」＝「它的家在別處」**，不是「不存在」。
 >
 > **各自的進度分區寫，別跨區改**（#146）：`Current state` / `Recently closed` 都拆成
 > **開發進度 (aila)** 與 **設計進度 (tang)** 兩個子區塊。各自 wrap-up 時只改自己那區，

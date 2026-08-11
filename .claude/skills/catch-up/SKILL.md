@@ -19,7 +19,19 @@ agent to rebuild a mental model of the codebase from scratch every time.
 ## Steps
 
 1. **Read `docs/PROGRESS.md`** — the "Current state" and "Known gaps" sections are the
-   starting snapshot.
+   starting snapshot。**接著 `ls docs/adr/`**，把標題掃過一遍（標題本身就是結論，例如
+   「`tournaments` 是資料夾不是賽事實體」）；**要動到哪一塊，才讀那張的內文**。
+
+   ⚠️ **PROGRESS 很薄是刻意的，不是過期。** 它是 rolling 一週快照，durable 的東西一律被搬去
+   各自的家（對照表在 [`CLAUDE.md`](../../../CLAUDE.md) 的「事實住哪裡」，那裡是唯一一份）。
+   所以：**「PROGRESS 沒寫」≠「不存在」，也不是重掃全庫的理由**——它代表「這件事的家在別處」。
+   反過來用那張表就是這一步的找法：
+   - 「為什麼不能改成 X」 → `docs/adr/` 的「不要重新提議」段
+   - 「這個功能當初怎麼決定的」 → 該 issue 的留言、`docs/*-spec.md`
+   - 「這段程式為什麼長這樣」 → 該檔案自己的註解（這個 repo 註解密度刻意很高）
+   - 「這個詞到底指什麼」 → `CONTEXT.md`
+   - 「還沒做的有哪些」 → GitHub Issues／Milestones（下一步），**不是** PROGRESS
+
 2. **Check the backlog — it is time-ordered, not flat.** `gh issue list --state open
 --limit 100` for the full list, but the roadmap structure answers "what's next"
    directly: **Milestones M1–M7** are the phases (current phase = the lowest-numbered
@@ -96,9 +108,16 @@ agent to rebuild a mental model of the codebase from scratch every time.
 
 Only spawn an Explore agent or do a full codebase read if:
 
-- `docs/PROGRESS.md` doesn't exist yet or is clearly stale/empty, **or**
-- The user is asking about a part of the system the snapshot doesn't cover, **or**
+- `docs/PROGRESS.md` 不存在，或它描述的世界跟 `git log` 明顯對不上（**「短」不算**——見下），
+  **or**
+- The user is asking about a part of the system the snapshot doesn't cover **而且各自的家
+  （ADR／issue 留言／spec／程式註解）也查不到**, **or**
 - The user explicitly asks for a fresh deep-dive.
+
+⚠️ **PROGRESS 短不是 stale。** 它被設計成一週就該汰換的薄快照，durable 的東西都在別處
+（步驟 1 的對照表）。**判斷 stale 的依據是「內容跟 `git log`／issue 狀態衝突」，不是行數。**
+2026-08-11 它從 830 行剪到 343 行是刻意的，把那當成「快照壞了」而去重掃全庫，正好是這個
+skill 存在要避免的成本。
 
 Don't default to full re-exploration just because it feels thorough — that's the exact
 cost this skill exists to avoid.
