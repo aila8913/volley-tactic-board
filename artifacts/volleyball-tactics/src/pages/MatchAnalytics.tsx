@@ -18,7 +18,11 @@ import { Spinner } from "@/components/ui/spinner";
 import AppShell from "@/components/AppShell";
 import NavRail, { matchBackHref } from "@/components/NavRail";
 import AnalyticsRotationRail from "@/components/AnalyticsRotationRail";
-import { APP_BACKGROUND_STYLE, APP_SHELL_CLASS } from "@/lib/appChromeStyles";
+import {
+  APP_BACKGROUND_STYLE,
+  APP_SHELL_CLASS,
+  APP_STATUS_SCREEN_CLASS,
+} from "@/lib/appChromeStyles";
 import { countSetWins, setWinner, winsNeededFor } from "@/lib/matchOutcome";
 import { useMatchWithRoster } from "@/hooks/useMatches";
 import { useMatchRecording } from "@/hooks/useMatchRecording";
@@ -194,7 +198,7 @@ export default function MatchAnalytics() {
 
   if (id && (isMatchLoading || isRecordLoading)) {
     return (
-      <div className="flex min-h-screen w-full flex-col items-center justify-center gap-4 bg-[#0a0b07] px-4 text-center font-dash text-[#f5f5f0]">
+      <div className={APP_STATUS_SCREEN_CLASS}>
         <Spinner className="size-6" />
         <p className="text-[#a9b096]">載入比賽數據中…</p>
       </div>
@@ -203,7 +207,7 @@ export default function MatchAnalytics() {
 
   if (!match || !id) {
     return (
-      <div className="flex min-h-screen w-full flex-col items-center justify-center gap-4 bg-[#0a0b07] px-4 text-center font-dash text-[#f5f5f0]">
+      <div className={APP_STATUS_SCREEN_CLASS}>
         <p className="text-[#a9b096]">找不到這場比賽。</p>
         {/* 不用共用的 BackToMatchListButton：那顆元件走 shadcn Button 的淺色配色，是給
             還沒套用深色語言的頁面用的，這裡直接刻一顆跟這頁其他元素同一套語言的版本，

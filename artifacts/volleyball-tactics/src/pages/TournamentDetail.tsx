@@ -4,7 +4,11 @@ import BackToMatchListButton from "@/components/BackToMatchListButton";
 import { useMatchList, useDeleteMatch } from "@/hooks/useMatches";
 import { useTournamentList } from "@/hooks/useTournaments";
 import { useCrossMatchAnalysis } from "@/hooks/useCrossMatchAnalysis";
-import { APP_BACKGROUND_STYLE, APP_SHELL_CLASS } from "@/lib/appChromeStyles";
+import {
+  APP_BACKGROUND_STYLE,
+  APP_SHELL_CLASS,
+  APP_STATUS_SCREEN_CLASS,
+} from "@/lib/appChromeStyles";
 import ListItemCard from "@/components/ListItemCard";
 import ListScrollArea from "@/components/ListScrollArea";
 import MatchEntryLinks from "@/components/MatchEntryLinks";
@@ -109,15 +113,15 @@ export default function TournamentDetail() {
   // （當時中央列表區還留給 #175）；現在主要路徑也轉完，兩邊視覺一致。
   if (tournamentsLoading) {
     return (
-      <div className="flex min-h-screen w-full items-center justify-center bg-[#0a0b07] font-dash text-[#a9b096]">
-        載入中…
+      <div className={APP_STATUS_SCREEN_CLASS}>
+        <p className="text-[#a9b096]">載入中…</p>
       </div>
     );
   }
 
   if (!tournament) {
     return (
-      <div className="flex min-h-screen w-full flex-col items-center justify-center gap-4 bg-[#0a0b07] px-4 text-center font-dash text-[#f5f5f0]">
+      <div className={APP_STATUS_SCREEN_CLASS}>
         <p className="text-[#a9b096]">找不到這個資料夾。</p>
         {/* 不用共用的 BackToMatchListButton：見 MatchAnalytics.tsx 同名常數的說明。 */}
         <Link href="/" className={SECONDARY_BUTTON_CLASS}>
