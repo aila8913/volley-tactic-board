@@ -14,7 +14,12 @@ import UnsyncedWritesBadge from "@/components/UnsyncedWritesBadge";
 import { PlayAction, Side } from "@/types/scoresheet";
 import { isSetComplete, disabledActions, resolveScoringSide } from "@/lib/scoreSheetMapping";
 import { countSetWins, getMatchWinner, setWinner, winsNeededFor } from "@/lib/matchOutcome";
-import { APP_BACKGROUND_STYLE, APP_SHELL_CLASS, INFO_RAIL_BASE_CLASS } from "@/lib/appChromeStyles";
+import {
+  APP_BACKGROUND_STYLE,
+  APP_SHELL_CLASS,
+  APP_STATUS_SCREEN_CLASS,
+  INFO_RAIL_BASE_CLASS,
+} from "@/lib/appChromeStyles";
 import { filterLineupToRoster, isLineupFull, lineupToPositions } from "@/lib/rotationLogic";
 import { captureFromScoreSheet, captureBlank } from "@/lib/courtSnapshot";
 import { resolveLiberoOnRotation } from "@/lib/liberoRotation";
@@ -260,7 +265,7 @@ export default function ScoreSheet() {
   // 比賽本體或計分記錄還在載入/重建時，先顯示載入狀態，避免在資料到位前閃現「誰先發球？」。
   if (id && (isMatchLoading || isHydrating)) {
     return (
-      <div className="flex min-h-screen w-full flex-col items-center justify-center gap-4 bg-[#0a0b07] px-4 text-center font-dash text-[#f5f5f0]">
+      <div className={APP_STATUS_SCREEN_CLASS}>
         <p className="text-[#a9b096]">載入計分記錄中…</p>
       </div>
     );
@@ -268,7 +273,7 @@ export default function ScoreSheet() {
 
   if (!match || !id) {
     return (
-      <div className="flex min-h-screen w-full flex-col items-center justify-center gap-4 bg-[#0a0b07] px-4 text-center font-dash text-[#f5f5f0]">
+      <div className={APP_STATUS_SCREEN_CLASS}>
         <p className="text-[#a9b096]">找不到這場比賽。</p>
         {/* 不用共用的 BackToMatchListButton：那顆元件走 shadcn Button 的淺色配色，是給
             MatchAnalytics/TournamentDetail 這幾個還沒換膚的頁面用的，這裡直接刻一顆

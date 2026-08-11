@@ -16,9 +16,13 @@ export default function AuthGate({ children }: { children: ReactNode }) {
   // 載入中不要閃一下登入畫面又閃回正常畫面——那個畫面跳動比空白多等幾百毫秒更打擾。
   if (isLoading) return null;
 
+  // 背景用 `app-canvas`（製圖紙）而不是自己寫一個深色值：登入畫面在 AppShell 之外，拿不到
+  // APP_SHELL_CLASS 的背景，原本寫死的 `bg-[#0d0f0a]` 是全站第三個「差不多的黑」，登入完
+  // 進到主畫面看得出色差（#322）。這裡只借背景層、不套整份 APP_SHELL_CLASS——那還會帶進
+  // font-dash，登入畫面要不要換字體屬於視覺決策，不在這張修正票的範圍。
   if (!isAuthenticated) {
     return (
-      <div className="flex h-screen w-full flex-col items-center justify-center gap-6 bg-[#0d0f0a] text-[#f5f5f0]">
+      <div className="app-canvas flex h-screen w-full flex-col items-center justify-center gap-6 text-[#f5f5f0]">
         <div className="flex flex-col items-center gap-2 text-center">
           <h1 className="text-2xl font-bold">排球戰術板</h1>
           <p className="text-sm text-[#a9b096]">用 Google 帳號登入，開始記錄你的比賽</p>

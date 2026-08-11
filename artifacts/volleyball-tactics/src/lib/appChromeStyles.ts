@@ -29,6 +29,19 @@ export const APP_BACKGROUND_STYLE: CSSProperties = {};
 // 基準；app-canvas 帶進整頁背景層（見 index.css）。
 export const APP_SHELL_CLASS = "app-canvas font-dash text-[#f5f5f0]";
 
+// 「狀態畫面」的外殼：載入中／找不到資料／錯誤這幾種整頁佔位畫面共用（#322）。
+//
+// 為什麼需要它：這些畫面是 early return，走的不是 AppShell 那條路（骨架的三欄對一句
+// 「載入中…」沒有意義），所以拿不到 APP_SHELL_CLASS 帶進來的背景。它們原本各自寫死
+// `bg-[#0a0b07]`——那是製圖紙換上來之前的舊底色，於是進頁面時會先閃一片純黑、資料到位
+// 才切成製圖紙。這正是本檔案開頭那兩次教訓的第三次：同一種外殼材質複製在六個地方，
+// 背景一改就漏掉沒跟上的那幾份。
+//
+// 直接沿用 APP_SHELL_CLASS 而不是再抄一次 `app-canvas`：背景之後怎麼變，這裡自動跟上。
+export const APP_STATUS_SCREEN_CLASS =
+  "flex min-h-screen w-full flex-col items-center justify-center gap-4 px-4 text-center " +
+  APP_SHELL_CLASS;
+
 // 右側資訊欄（aside）的外殼：MatchInfoRail／AnalyticsRotationRail／ScoreSheet 右欄共用。
 //
 // 材質決定（tang 2026-07-30）：原本是實色 `bg-[#121310]`，在漸層背景上會變成一塊跟背景
