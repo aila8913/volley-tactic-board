@@ -698,11 +698,19 @@ export default function ScoreSheet() {
             onLineupChange={
               canEditLineup && !isFinished ? (next) => setLineupZones(id, next) : undefined
             }
-            // 第七格（#327）只在「還能排先發」時出現。開賽後這一格就不該再是入口：那時
-            // 換 L 上下場是**記錄**（走球場上那顆 L 鈕 → liberoSubstitution），不是改規劃。
-            showLiberoCell={canEditLineup && !isFinished}
-            liberoId={startingLiberoId}
-            liberoReplacesPlayerId={liberoReplacesPlayerId}
+            // 第七格（#327）在「還能排先發」時是**入口**；開賽後它不再是入口，但 #359 之後
+            // 變成**唯讀的顯示**——這一局凍結的先發現在真的記了 L，就該看得到誰是先發自由球員。
+            // 開賽後這一格不能再編輯的理由沒變：那時換 L 上下場是**記錄**（走球場上那顆 L 鈕
+            // → liberoSubstitution），不是改規劃；readOnly 已經由上面那條算好，這裡只管顯不顯示。
+            //
+            // 兩種來源要跟 lineup 那個 prop 走同一條分支（跟 MatchInfoRail 同一個判準）：
+            // 可編輯時讀共用現役指派，凍結後讀該局快照。混用會讓右欄的六格與第七格講不同時態
+            // ——六格是三天前那局、第七格是「我現在打算怎麼配」。
+            showLiberoCell={canEditLineup ? !isFinished : (activeLineup?.liberoId ?? null) !== null}
+            liberoId={canEditLineup ? startingLiberoId : (activeLineup?.liberoId ?? null)}
+            liberoReplacesPlayerId={
+              canEditLineup ? liberoReplacesPlayerId : (activeLineup?.replacesPlayerId ?? null)
+            }
             onLiberoChange={(nextLiberoId, replaces) =>
               setLiberoAssignment(id, nextLiberoId, replaces)
             }
