@@ -86,6 +86,59 @@ export async function playerBelongsToMatch(playerId: string, matchId: number): P
   return player !== undefined;
 }
 
+// ── events.playerId 的兩支：擋「把一球指到不屬於這場比賽的球員」（#385）────────────────
+//
+// 為什麼不是用 playerBelongsToUser（不存在，也不該存在）：player 沒有自己的 userId，它的
+// 擁有權繼承自 match。但這裡真正要擋的**比擁有權更嚴**——就算那名球員也是你自己的，只要
+// 他不在這場比賽的名單裡，把一球指給他就是錯的資料（他根本沒上場）。所以判準是
+// 「同一場比賽」而不是「同一個使用者」，前者自動蘊含後者（match 已經驗過擁有權）。
+//
+// 為什麼要兩支：PATCH /events/:eventId 路徑上只有 eventId，POST /rallies/:rallyId/events
+// 路徑上只有 rallyId，兩邊能拿來反推 matchId 的起點不同，join 的層數也就差一層。
+// 邏輯完全一樣：從那個起點往上追到 sets.matchId，再看目標 player 的 matchId 是不是同一個。
+
+// PATCH 用：從 event 往上追 events → rallies → sets 拿到 matchId，比對 player.matchId。
+export async function playerBelongsToEventMatch(
+  playerId: string,
+  eventId: string,
+): Promise<boolean> {
+  const [row] = await db
+    .select({ id: playersTable.id })
+    .from(eventsTable)
+    .innerJoin(ralliesTable, eq(eventsTable.rallyId, ralliesTable.id))
+    .innerJoin(setsTable, eq(ralliesTable.setId, setsTable.id))
+    // innerJoin 到 players 時直接把「同一場比賽」寫進 join 條件：對不上就沒有列，
+    // 不需要先查出 matchId 再發第二次查詢。
+    .innerJoin(
+      playersTable,
+      and(eq(playersTable.id, playerId), eq(playersTable.matchId, setsTable.matchId)),
+    )
+    .where(eq(eventsTable.id, eventId));
+
+  return row !== undefined;
+}
+
+// POST 用：從 rally 往上追 rallies → sets 拿到 matchId，比對 player.matchId。
+// 這支補的是一個既有的洞——POST /rallies/:rallyId/events 原本只驗 parent rally，
+// body.playerId 完全沒驗（events.ts 的 POST 註解寫著「維持遷移前的既有行為」）。
+// 只驗 PATCH 不驗 POST 沒有意義：想指到別場的球員，直接刪掉重新 POST 一次就繞過去了。
+export async function playerBelongsToRallyMatch(
+  playerId: string,
+  rallyId: string,
+): Promise<boolean> {
+  const [row] = await db
+    .select({ id: playersTable.id })
+    .from(ralliesTable)
+    .innerJoin(setsTable, eq(ralliesTable.setId, setsTable.id))
+    .innerJoin(
+      playersTable,
+      and(eq(playersTable.id, playerId), eq(playersTable.matchId, setsTable.matchId)),
+    )
+    .where(eq(ralliesTable.id, rallyId));
+
+  return row !== undefined;
+}
+
 // 越往下的巢狀層，擁有權檢查就要多 join 一層往上追到 match.userId。
 // set 在 match 底下：join sets → matches，比對 setId 與 userId。
 // innerJoin 的意思是「只保留兩張表都對得上的列」——如果這個 set 不存在、

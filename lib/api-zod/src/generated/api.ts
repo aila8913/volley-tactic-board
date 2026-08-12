@@ -93,6 +93,7 @@ export const UpdateMatchParams = zod.object({
 })
 
 export const UpdateMatchBody = zod.object({
+  "name": zod.string().nullish(),
   "opponent": zod.string().optional(),
   "date": zod.coerce.date().optional(),
   "location": zod.string().nullish(),
@@ -762,6 +763,7 @@ export const UpdateTacticParams = zod.object({
 })
 
 export const UpdateTacticBody = zod.object({
+  "matchId": zod.number().nullish(),
   "name": zod.string().optional(),
   "data": zod.record(zod.string(), zod.unknown()).optional()
 })
@@ -793,6 +795,8 @@ export const UpdateEventParams = zod.object({
 
 export const UpdateEventBody = zod.object({
   "side": zod.enum(['home', 'away']).optional(),
+  "playerId": zod.string().uuid().nullish(),
+  "source": zod.enum(['live', 'review']).optional(),
   "action": zod.enum(['serve', 'receive', 'set', 'attack', 'block', 'dig']).optional(),
   "ballType": zod.enum(['serve', 'spike', 'tip', 'chance']).optional(),
   "quality": zod.number().nullish(),

@@ -9,6 +9,7 @@ import type { UpdateMatchFormat } from './updateMatchFormat';
 import type { UpdateMatchStatus } from './updateMatchStatus';
 
 export interface UpdateMatch {
+  name?: string | null;
   opponent?: string;
   date?: Date;
   location?: string | null;

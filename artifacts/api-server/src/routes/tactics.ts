@@ -118,7 +118,13 @@ router.put(
     {
       params: UpdateTacticParams,
       body: UpdateTacticBody,
-      owns: ({ params, userId }) => tacticBelongsToUser(params.tacticId, userId),
+      owns: [
+        ({ params, userId }) => tacticBelongsToUser(params.tacticId, userId),
+        // PUT 開放改 matchId 之後（#385），這道就跟 POST /tactics 的那道完全同義：
+        // 外鍵只保證「這個 id 指到一列存在的比賽」，不保證「那是你的比賽」。少了它，
+        // 就是 #225 那個 IDOR 換一支端點重演——A 能把自己的戰術改掛到 B 的比賽底下。
+        ({ body, userId }) => body.matchId == null || matchBelongsToUser(body.matchId, userId),
+      ],
     },
     async ({ res, params, body, userId }) => {
       // 型別標註是 #368 的守衛：EveryColumnOnUpdate 讓 tactics 的每一欄都要在物件裡出現，
@@ -127,10 +133,11 @@ router.put(
         // id/userId 由路徑與 where 條件鎖定，不開放改。
         id: undefined,
         userId: undefined,
-        // matchId 是這次窮舉檢查照出來的合約缺口：UpdateTacticBody 根本沒有 matchId 這個
-        // 欄位，所以覆寫戰術時目前改不了它歸屬的比賽——是合約缺口不是實作缺口，
-        // 記在 #368 的留言。
-        matchId: undefined,
+        // matchId 是 #368 的窮舉檢查照出來的合約缺口，已於 #385 補上：可以把一份戰術改掛
+        // 到別場、或帶 null 改成全域戰術。ADR-0007 之後 matchId 是「可選標籤」而不是擁有
+        // 關係，改標籤因此是正當操作——沒有 matchId 的戰術是一級公民，不是待清理的孤兒。
+        // 新 matchId 的擁有權由上面的 owns 驗過（跟 POST /tactics 同一道檢查）。
+        matchId: body.matchId,
         name: body.name,
         data: body.data,
         // updatedAt 手動設定，因為 Postgres 不會自動更新——這欄無條件寫入，不是「body 有帶

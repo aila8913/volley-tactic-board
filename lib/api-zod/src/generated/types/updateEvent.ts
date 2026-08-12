@@ -9,9 +9,12 @@ import type { BallType } from './ballType';
 import type { EventAction } from './eventAction';
 import type { EventOutcome } from './eventOutcome';
 import type { EventSide } from './eventSide';
+import type { EventSource } from './eventSource';
 
 export interface UpdateEvent {
   side?: EventSide;
+  playerId?: string | null;
+  source?: EventSource;
   action?: EventAction;
   ballType?: BallType;
   quality?: number | null;
