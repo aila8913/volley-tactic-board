@@ -422,6 +422,8 @@ export interface Lineup {
   zone4PlayerId: string;
   zone5PlayerId: string;
   zone6PlayerId: string;
+  startingLiberoId: string | null;
+  liberoReplacesPlayerId: string | null;
 }
 
 export interface NewLineup {
@@ -431,6 +433,8 @@ export interface NewLineup {
   zone4PlayerId: string;
   zone5PlayerId: string;
   zone6PlayerId: string;
+  startingLiberoId?: string | null;
+  liberoReplacesPlayerId?: string | null;
 }
 
 export type BallType = typeof BallType[keyof typeof BallType];

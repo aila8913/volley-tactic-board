@@ -120,6 +120,11 @@ export function makeLineup(over: Partial<Lineup> = {}): Lineup {
     zone4PlayerId: "4",
     zone5PlayerId: "5",
     zone6PlayerId: "6",
+    // 預設「這局沒排自由球員」（#359）：這兩欄 nullable，多數 fixture 用不到，要測 L 的
+    // case 用 over 覆寫即可。明寫 null 而不是省略，是因為 DTO 上它們是必填的 nullable
+    // 欄位——省略就編不過，這正是 openapi 那邊刻意把讀取端設成 required 想要的效果。
+    startingLiberoId: null,
+    liberoReplacesPlayerId: null,
     ...over,
   };
 }

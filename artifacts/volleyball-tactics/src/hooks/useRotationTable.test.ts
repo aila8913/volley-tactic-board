@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { useRotationTable } from "./useRotationTable";
 import { getZoneCoords, BACK_ROW_ZONES, deriveRotation } from "../lib/rotationLogic";
 import type { MatchPlayer } from "../types/match";
-import type { LineupSnapshot } from "../types/scoresheet";
+import type { LineupZones } from "../types/scoresheet";
 
 // ── 這份是什麼、為什麼長這樣（issue #231 PR1 建立、PR3 改寫）─────────────────────
 //
@@ -11,7 +11,7 @@ import type { LineupSnapshot } from "../types/scoresheet";
 // （特徵化測試）：釘住「使用者觀察得到的行為」，好在重構時分辨「不小心改了行為」跟
 // 「原本就這樣」。
 //
-// PR3 動了 store 的**內部儲存形狀**（六輪座標陣列 → 一份 LineupSnapshot + L 各輪的號位），
+// PR3 動了 store 的**內部儲存形狀**（六輪座標陣列 → 一份 LineupZones + L 各輪的號位），
 // 所以這份測試跟著改了一件事、也只改了這件事：**怎麼把「這一輪誰站哪」讀出來**。
 // 以前是 `dataByMatch[A].rotations[0].positions`（直接撈存好的），現在是
 // `rotationOf(A, 0).positions`（用 deriveRotation 現算）。斷言本身——誰在哪個號位、有沒有
@@ -20,7 +20,7 @@ import type { LineupSnapshot } from "../types/scoresheet";
 // 有三條是真的改了行為，各自在原地標了「⚠️ 行為變更」並寫了理由：
 //   1. 一般球員拖到 L 站著的格子（原本會疊兩個人，現在只有一個）—— bug 修掉了
 //   2. 「重置站位」從只清一輪變成清全部
-//   3. setLineupFromSnapshot 不再需要「展開成六輪」
+//   3. setLineupZones 不再需要「展開成六輪」
 
 // 一個最小的 MatchPlayer（跟 useTacticsBoard.test.ts 的 player() 同款寫法）。
 // personId 給 null——這裡測的是輪轉表的站位邏輯，不看跨場身分對應。
@@ -441,7 +441,7 @@ describe("removePlayerFromCourt — 一般球員 vs 自由球員（#231 清單 8
   });
 });
 
-describe("setLineupFromSnapshot（#231 清單 9）", () => {
+describe("setLineupZones（#231 清單 9）", () => {
   it("⚠️ 行為變更（#327）：被頂替的人還在新先發裡，頂替關係就留著", () => {
     // 舊行為是無條件清空 liberoReplacesPlayerId。當時說得通——那時右欄面板沒有任何地方
     // 能指定 L，這支的呼叫端都是「教練剛動過六個號位」，清掉一個別處設的殘留值沒人察覺。
@@ -460,17 +460,17 @@ describe("setLineupFromSnapshot（#231 清單 9）", () => {
     }));
 
     // 新的先發裡 p1 還在（只是換了格），頂替關係沒有理由失效。
-    rt().setLineupFromSnapshot(A, { 5: "p1", 2: "p2" });
+    rt().setLineupZones(A, { 5: "p1", 2: "p2" });
     expect(rt().dataByMatch[A].liberoReplacesPlayerId).toBe("p1");
 
     // 反過來：新的先發裡沒有 p1 了，這次頂替就不成立（#326：系統不替教練猜下一個對象）。
-    rt().setLineupFromSnapshot(A, { 1: "p9" });
+    rt().setLineupZones(A, { 1: "p9" });
     expect(rt().dataByMatch[A].liberoReplacesPlayerId).toBeNull();
   });
 
   it("先發直接就是傳進來那一份", () => {
-    const lineup: LineupSnapshot = { 1: "p1", 2: "p2" };
-    rt().setLineupFromSnapshot(A, lineup);
+    const lineup: LineupZones = { 1: "p1", 2: "p2" };
+    rt().setLineupZones(A, lineup);
 
     // ⚠️ 行為變更（表述層面）：以前這個 action 要把號位快照「展開」成六輪座標寫進 state，
     // 現在 store 存的本來就是同一種格式，直接放進去即可——少掉的正是那層翻譯。
@@ -492,7 +492,7 @@ describe("setLineupFromSnapshot（#231 清單 9）", () => {
 describe("setLiberoAssignment — 第七格的寫入口（#327）", () => {
   const seed = () => {
     rt().setRoster(A, [player("p1"), player("p2"), player("l1", "L"), player("l2", "L")]);
-    rt().setLineupFromSnapshot(A, { 1: "p1", 4: "p2" });
+    rt().setLineupZones(A, { 1: "p1", 4: "p2" });
   };
 
   it("一次寫定「哪位 L」跟「頂替誰」", () => {

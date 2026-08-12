@@ -8,7 +8,7 @@ import {
   filterLineupToRoster,
 } from "../lib/rotationLogic";
 import type { MatchPlayer } from "../types/match";
-import type { LineupSnapshot } from "../types/scoresheet";
+import type { LineupZones } from "../types/scoresheet";
 
 // 一場比賽剛開始（還沒任何站位）的空白狀態。dataByMatch 裡某個 matchId 還不存在時，
 // 各 action 先用這個當基底再套上這次的改動——跟 useScoreSheet 的 getOrInitRecord 同一招。
@@ -86,10 +86,10 @@ interface RotationTableStore {
   // 保管一份副本（PO 決策：見本次任務說明）。
   //
   // #231 PR3 之後這個 action 幾乎變成一行賦值：以前它要把一份號位快照「展開」成六輪座標
-  // （兩種表示法之間的翻譯），現在 store 存的本來就是同一種 LineupSnapshot，不用翻譯了。
-  // LineupSnapshot 本來就不記自由球員（見 types/scoresheet.ts），所以這支只管六個號位；
+  // （兩種表示法之間的翻譯），現在 store 存的本來就是同一種 LineupZones，不用翻譯了。
+  // LineupZones 本來就不記自由球員（見 types/scoresheet.ts），所以這支只管六個號位；
   // 自由球員的頂替狀態只在「被頂替的人不在新先發裡」時才收掉（理由見實作處的 ⚠️）。
-  setLineupFromSnapshot: (matchId: string, lineup: LineupSnapshot) => void;
+  setLineupZones: (matchId: string, lineup: LineupZones) => void;
 
   // 註：舊的 loadRotationData（整批把存檔覆蓋回輪轉表）已在 #154 PR B 移除。載入已存戰術
   // 改成唯讀檢視、不再反向寫回輪轉表，所以輪轉表不需要、也刻意不提供這個「被別人整包覆蓋」
@@ -308,7 +308,7 @@ export const useRotationTable = create<RotationTableStore>()(
 
       resetAll: (matchId) => set((state) => updateMatch(state, matchId, () => emptyPerMatch())),
 
-      setLineupFromSnapshot: (matchId, lineup) =>
+      setLineupZones: (matchId, lineup) =>
         set((state) =>
           updateMatch(state, matchId, (m) => ({
             ...m,

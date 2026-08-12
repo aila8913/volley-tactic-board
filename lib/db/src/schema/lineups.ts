@@ -10,7 +10,7 @@ import { playersTable } from "./players";
 //
 // 只記我方：對手沒有名單可對應，`sets.firstServer` 已足夠推導對方發球狀態。
 // 自由球員（L）不出現在這六個號位：前端既有邏輯是「自由球員從場邊出發、換人上場」，
-// 不算進開局先發站位。
+// 不算進開局先發站位——但它另外有自己的兩欄（#359，見下面 startingLiberoId 的說明）。
 export const lineupsTable = pgTable("lineups", {
   id: serial("id").primaryKey(),
   // 一局一 row：setId 加 unique，讓「這一局已經記過先發」在 DB 層就擋得住重複寫入，
@@ -49,6 +49,29 @@ export const lineupsTable = pgTable("lineups", {
   zone6PlayerId: uuid("zone6_player_id")
     .notNull()
     .references(() => playersTable.id, { onDelete: "cascade" }),
+  // ── 自由球員先發（#359）─────────────────────────────────────────────────────────
+  //
+  // 為什麼 L 不能跟六個號位一樣記成第七欄「L 站幾號位」：六個號位不只是六個位子，它就是
+  // **輪轉序列本身**——每拿一次發球權六個人整組轉一格。自由球員不進輪轉，它是「上場頂替某個
+  // 後排球員」，被頂替者輪到前排時 L 就下場。所以「L 站幾號位」是會變的推導值，
+  // **「L 頂替誰」才是那個推不出來的原始事實**（#326 定的模型）。
+  //
+  // 兩欄都可為 null，而且是三種合法狀態而不是兩種：
+  //   (a) 兩欄都 null      → 這局沒排自由球員（很多隊記錄時根本不排 L）
+  //   (b) 只有 starting    → 指定了先發 L，但開局時他在場外（頂替的人還沒輪到後排）
+  //   (c) 兩欄都有         → 開局 L 就在場上，頂替 replaces 那個人
+  // 「只有 replaces 沒有 starting」是無效的（頂替總得有人來頂），這條 DB 表達不了，
+  // 由 PUT /sets/:setId/lineup 擋（跟「六人不得重複」同一個地方、同一個理由）。
+  //
+  // onDelete 用 "set null" 而不是六個號位那種 "cascade"：這兩欄本來就允許 null，球員被刪掉時
+  // 「這局沒有 L」是個完全合法的狀態，沒必要為此把整局的先發連坐刪掉。六個號位不能這樣做，
+  // 是因為那六欄 notNull、清成 null 會違反約束，只能整筆處理（見上面的說明）。
+  startingLiberoId: uuid("starting_libero_id").references(() => playersTable.id, {
+    onDelete: "set null",
+  }),
+  liberoReplacesPlayerId: uuid("libero_replaces_player_id").references(() => playersTable.id, {
+    onDelete: "set null",
+  }),
 });
 
 // 「六人不得重複」DB 層表達不了（沒有內建的「這六個欄位互不相等」約束），

@@ -306,25 +306,33 @@ export function reconstructTimeouts(timeouts: Timeout[]): TimeoutRecord[] {
 // 先發快照（號位 1~6 → 球員 id 字串）跟後端 lineups 表（zone1~6PlayerId 字串 uuid）之間的轉換。
 // 前後端球員 id 現在都是字串 uuid（見 lib/db/src/schema/players.ts 的改動），型別一致，
 // 這裡只是把「號位 → id」的物件形狀轉成 API 要的六個獨立欄位，不用再轉型別。
+// 自由球員兩欄（#359）也一起過這條轉換：前後端的模型是同一個（記「頂替誰」不是「站哪格」），
+// 所以這裡只是搬欄位，沒有任何翻譯。
 export function lineupSnapshotToApi(lineup: LineupSnapshot): NewLineup {
   return {
-    zone1PlayerId: lineup[1],
-    zone2PlayerId: lineup[2],
-    zone3PlayerId: lineup[3],
-    zone4PlayerId: lineup[4],
-    zone5PlayerId: lineup[5],
-    zone6PlayerId: lineup[6],
+    zone1PlayerId: lineup.zones[1],
+    zone2PlayerId: lineup.zones[2],
+    zone3PlayerId: lineup.zones[3],
+    zone4PlayerId: lineup.zones[4],
+    zone5PlayerId: lineup.zones[5],
+    zone6PlayerId: lineup.zones[6],
+    startingLiberoId: lineup.liberoId,
+    liberoReplacesPlayerId: lineup.replacesPlayerId,
   };
 }
 
 export function apiLineupToSnapshot(row: Lineup): LineupSnapshot {
   return {
-    1: row.zone1PlayerId,
-    2: row.zone2PlayerId,
-    3: row.zone3PlayerId,
-    4: row.zone4PlayerId,
-    5: row.zone5PlayerId,
-    6: row.zone6PlayerId,
+    zones: {
+      1: row.zone1PlayerId,
+      2: row.zone2PlayerId,
+      3: row.zone3PlayerId,
+      4: row.zone4PlayerId,
+      5: row.zone5PlayerId,
+      6: row.zone6PlayerId,
+    },
+    liberoId: row.startingLiberoId,
+    replacesPlayerId: row.liberoReplacesPlayerId,
   };
 }
 

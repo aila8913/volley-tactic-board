@@ -12,7 +12,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import RotationRailPanel from "./RotationRailPanel";
 import type { MatchPlayer } from "@/types/match";
-import type { LineupSnapshot } from "@/types/scoresheet";
+import type { LineupZones } from "@/types/scoresheet";
 
 const ROSTER: MatchPlayer[] = [
   { id: "p1", name: "日向翔陽", number: 10, role: "MB", personId: null },
@@ -21,7 +21,7 @@ const ROSTER: MatchPlayer[] = [
 ];
 
 // p1 在 1 號位（後排）、p2 在 4 號位（前排）——兩種位置各一個，第七格的兩種狀態才驗得到。
-const LINEUP: LineupSnapshot = { 1: "p1", 4: "p2" };
+const LINEUP: LineupZones = { 1: "p1", 4: "p2" };
 
 describe("RotationRailPanel 的球員清單", () => {
   it("列出每個人的背號、姓名與位置", () => {

@@ -752,9 +752,31 @@ const ZONE_COORDS: Record<1 | 2 | 3 | 4 | 5 | 6, { x: number; y: number }> = {
 async function seedLineupsAndTactics(
   exec: DbOrTx,
   userId: string,
-  match: { matchId: number; starters: RosterPlayerWithId[]; completedSetIds: string[] },
+  match: {
+    matchId: number;
+    starters: RosterPlayerWithId[];
+    libero: RosterPlayerWithId | undefined;
+    completedSetIds: string[];
+  },
 ): Promise<void> {
   const [z1, z2, z3, z4, z5, z6] = match.starters;
+
+  // ── 自由球員先發（#359）────────────────────────────────────────────────────
+  // 「L 頂替誰」＝開賽當下（rotation 0）站在後排的那位副攻。這條推導跟
+  // computeLiberoSubstitutions 開頭那段是**同一條規則**（自由球員只能站後排，所以他一開賽
+  // 就頂那位落在後排的副攻），所以兩邊算出來的人一定是同一個——lineups 裡凍結的先發
+  // 因此跟 substitutions 記的第一筆「L 上場」對得起來，不會出現「先發說頂月島、換人紀錄
+  // 說頂日向」這種自打嘴巴的示範資料。
+  //
+  // starters 的順序就是 Z1~Z6（見 STARTERS 常數），所以 index + 1 就是號位；rotation 0
+  // 時號位不用再轉，直接判斷在不在後排即可。
+  const replacedStarter = match.starters.find(
+    (p, idx) => p.role === "MB" && isBackRowZone(idx + 1),
+  );
+  // 兩欄同進同出：沒有自由球員（或推不出被頂替者）就兩欄都留 null，不寫半套
+  // ——「只有 replaces 沒有 starting」是後端明文擋掉的無效狀態。
+  const startingLiberoId = match.libero?.id ?? null;
+  const liberoReplacesPlayerId = startingLiberoId ? (replacedStarter?.id ?? null) : null;
 
   for (const setId of match.completedSetIds) {
     await exec.insert(lineupsTable).values({
@@ -765,6 +787,9 @@ async function seedLineupsAndTactics(
       zone4PlayerId: z4.id,
       zone5PlayerId: z5.id,
       zone6PlayerId: z6.id,
+      // 三局都一樣：先發站位三局固定不洗牌（見上方說明），L 的頂替對象自然也一樣。
+      startingLiberoId,
+      liberoReplacesPlayerId,
     });
   }
 
@@ -977,6 +1002,9 @@ export async function seedDemoData(
   await seedLineupsAndTactics(exec, userId, {
     matchId: match.id,
     starters,
+    // 這份示範名單只有一位自由球員（西谷夕，見 ROSTER）；用 role 找而不是寫死名字，
+    // 名單哪天換人也不會悄悄失效。
+    libero: ourRoster.find((p) => p.role === "L"),
     completedSetIds,
   });
 

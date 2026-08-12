@@ -4,7 +4,7 @@ import { useRotationTable } from "../hooks/useRotationTable";
 import { useTacticsBoard } from "../hooks/useTacticsBoard";
 import { findNearestZone, deriveRotation } from "../lib/rotationLogic";
 import type { MatchPlayer } from "../types/match";
-import type { LineupSnapshot } from "../types/scoresheet";
+import type { LineupZones } from "../types/scoresheet";
 import type { SnapshotPlayer } from "../types/courtSnapshot";
 import PlayerNode from "./PlayerNode";
 import Markers from "./Markers";
@@ -14,7 +14,7 @@ import { COURT_W, COURT_H, fromScreen, toNorm, rowOf } from "../lib/courtGeometr
 
 // 這一場還沒有分片資料時用的空白預設值（模組層、參照穩定，避免每 render 換新陣列造成重繪）。
 const EMPTY_ROSTER: MatchPlayer[] = [];
-const EMPTY_LINEUP: LineupSnapshot = {};
+const EMPTY_LINEUP: LineupZones = {};
 
 // 球場「真正比賽用」的座標範圍，永遠固定 0~100 / 0~200——格子吸附、界外判斷、
 // 6 個站位格全部都認這組數字，不會因為旁邊要多留 L 備位空間就跟著變動。

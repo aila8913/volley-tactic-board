@@ -2016,8 +2016,11 @@ components:
       required: [homeScore, awayScore, side]
 
     # 一局的起始先發：我方六個號位（1~6）各站哪個球員。詳見 lib/db/src/schema/lineups.ts。
-    # 自由球員（L）不出現在這六個號位——前端邏輯是 L 從場邊出發、換人上場，開局先發只有這 6 人。
-    # 「六人不得重複」DB 層表達不了，交給前端/route 檢查（跟 schema 註解一致）。
+    # 自由球員（L）不出現在這六個號位——前端邏輯是 L 從場邊出發、換人上場，開局先發只有這 6 人；
+    # L 另外用 startingLiberoId / liberoReplacesPlayerId 兩個可為 null 的欄位記（#359），
+    # 記的是「L 頂替誰」而不是「L 站幾號位」（站哪格是推導值，見 schema 的說明）。
+    # 「六人不得重複」與「有 replaces 就必須有 starting」DB 層都表達不了，交給 route 檢查
+    # （跟 schema 註解一致）。
     Lineup:
       type: object
       properties:
@@ -2046,6 +2049,16 @@ components:
         zone6PlayerId:
           type: string
           format: uuid
+        # 這兩欄 nullable 且**必填**（required 裡有它們）：讀回來時一定看得到這兩個 key，
+        # 「這局沒排 L」是明確的 null 而不是「欄位不見了」，前端不用分辨 undefined 與 null。
+        startingLiberoId:
+          type: string
+          format: uuid
+          nullable: true
+        liberoReplacesPlayerId:
+          type: string
+          format: uuid
+          nullable: true
       required:
         [
           id,
@@ -2056,6 +2069,8 @@ components:
           zone4PlayerId,
           zone5PlayerId,
           zone6PlayerId,
+          startingLiberoId,
+          liberoReplacesPlayerId,
         ]
 
     NewLineup:
@@ -2079,6 +2094,17 @@ components:
         zone6PlayerId:
           type: string
           format: uuid
+        # 寫入端這兩欄是**選填**（不在 required 裡）：PUT 是整份覆寫，沒帶就等於「這局沒有 L」，
+        # 會寫成 null。這跟讀取端刻意不對稱——讀的人需要一個永遠存在的 key，寫的人不該被逼著
+        # 為「我沒有自由球員」多打兩個 null。
+        startingLiberoId:
+          type: string
+          format: uuid
+          nullable: true
+        liberoReplacesPlayerId:
+          type: string
+          format: uuid
+          nullable: true
       required:
         [zone1PlayerId, zone2PlayerId, zone3PlayerId, zone4PlayerId, zone5PlayerId, zone6PlayerId]
 

@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq, getTableColumns } from "drizzle-orm";
 import { db, lineupsTable, setsTable } from "@workspace/db";
 import { requireAuth } from "../middleware/requireAuth";
-import { setBelongsToUser, matchBelongsToUser } from "../lib/ownership";
+import { setBelongsToUser, matchBelongsToUser, playerBelongsToSetMatch } from "../lib/ownership";
 import type { EveryColumnOnInsert } from "../lib/everyColumn";
 import { ListMatchLineupsParams, PutSetLineupParams, PutSetLineupBody } from "@workspace/api-zod";
 
@@ -68,6 +68,43 @@ router.put("/sets/:setId/lineup", async (req, res) => {
     return;
   }
 
+  // ── 自由球員兩欄的把關（#359）────────────────────────────────────────────────
+  // body 沒帶就是 null（＝這局沒排 L），`?? null` 讓「沒帶」與「明確傳 null」收斂成同一個值，
+  // 下面三道檢查與寫入都只要處理 null 一種「沒有」。
+  const startingLiberoId = body.startingLiberoId ?? null;
+  const liberoReplacesPlayerId = body.liberoReplacesPlayerId ?? null;
+
+  // (1) 頂替總得有人來頂：只有 replaces 沒有 starting 是無效狀態（見 schema 的三種合法組合）。
+  if (liberoReplacesPlayerId !== null && startingLiberoId === null) {
+    res.status(400).json({ error: "liberoReplacesPlayerId requires startingLiberoId" });
+    return;
+  }
+
+  // (2) 被頂替的人必須是這六個號位裡的其中一個，而 L 本人必須**不在**六個號位裡。
+  // 這兩條是同一件事的兩面：L 不佔號位、它是頂替某個佔號位的人上場。少了這道，
+  // 前端一個 bug 就能寫進「L 站在 3 號位」或「頂替一個根本沒上場的人」這種推導不出畫面的資料。
+  if (liberoReplacesPlayerId !== null && !ids.includes(liberoReplacesPlayerId)) {
+    res.status(400).json({ error: "liberoReplacesPlayerId must be one of the six zone players" });
+    return;
+  }
+  if (startingLiberoId !== null && ids.includes(startingLiberoId)) {
+    res.status(400).json({ error: "startingLiberoId must not occupy a zone" });
+    return;
+  }
+
+  // (3) 擁有權／脈絡合法性（ADR-0009）：body 帶進來的球員 id，驗的是「在不在這一局所屬比賽的
+  // 名單裡」，不是「是不是這個使用者的球員」。前者更嚴，而且自動蘊含後者（set 的擁有權上面
+  // 已經驗過）。回 404 而不是 400，跟其他擁有權失敗共用同一種回覆，不外洩「這個 id 存在」。
+  const bodyPlayerIds = [startingLiberoId, liberoReplacesPlayerId].filter(
+    (pid): pid is string => pid !== null,
+  );
+  for (const pid of bodyPlayerIds) {
+    if (!(await playerBelongsToSetMatch(pid, setId))) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+  }
+
   // 這個 values 物件同時餵給 insert 跟 onConflictDoUpdate 的 set（見下方）——兩種情境剛好
   // 都是「把六個號位整組寫成新的一份」，值完全相同，所以共用同一個物件沒有問題。
   // 型別標註用 EveryColumnOnInsert（而不是 OnUpdate）：insert 這邊的窮舉檢查較嚴格
@@ -82,6 +119,10 @@ router.put("/sets/:setId/lineup", async (req, res) => {
     zone4PlayerId: body.zone4PlayerId,
     zone5PlayerId: body.zone5PlayerId,
     zone6PlayerId: body.zone6PlayerId,
+    // #359：兩欄一律寫入（PUT 是整份覆寫），沒帶就寫 null——不能用「有帶才寫」的 patch 語意，
+    // 否則教練把 L 拿掉之後重存，舊的指派會留在 DB 裡，變成畫面說沒有、資料庫說有。
+    startingLiberoId,
+    liberoReplacesPlayerId,
   };
 
   const [saved] = await db

@@ -18,6 +18,7 @@ import {
   lineupSnapshotToApi,
   apiLineupToSnapshot,
 } from "./scoreSheetMapping";
+import { lineupFromZones } from "../types/scoresheet";
 import type { PointRecord, RegularSub, LineupSnapshot } from "../types/scoresheet";
 import type { MatchEvent } from "@workspace/api-client-react";
 import {
@@ -594,7 +595,9 @@ describe("reconstructRecording", () => {
     ];
 
     const state = reconstructRecording([set1], [set1Rallies], [], [], lineups);
-    expect(state.lineup).toEqual({ 1: "11", 2: "12", 3: "13", 4: "14", 5: "15", 6: "16" });
+    expect(state.lineup).toEqual(
+      lineupFromZones({ 1: "11", 2: "12", 3: "13", 4: "14", 5: "15", 6: "16" }),
+    );
   });
 
   it("does NOT carry a previous set's lineup into a trailing firstServer=null set (per-set lineup)", () => {
@@ -649,7 +652,9 @@ describe("reconstructRecording", () => {
     ];
 
     const state = reconstructRecording([set1, set2], [set1Rallies, set2Rallies], [], [], lineups);
-    expect(state.lineup).toEqual({ 1: "21", 2: "22", 3: "23", 4: "24", 5: "25", 6: "26" });
+    expect(state.lineup).toEqual(
+      lineupFromZones({ 1: "21", 2: "22", 3: "23", 4: "24", 5: "25", 6: "26" }),
+    );
   });
 
   it("leaves lineup null when no lineups are provided", () => {
@@ -663,25 +668,56 @@ describe("reconstructRecording", () => {
 // issue #115：先發快照（號位→字串 id）跟後端 lineups DTO（zone1~6PlayerId 整數）互轉，
 // 跟 regularSub 的 Number()/String() 是同一套慣例，round-trip 要對得回來。
 describe("lineup snapshot mapping", () => {
+  const ZONES = { 1: "11", 2: "12", 3: "13", 4: "14", 5: "15", 6: "16" };
+  const API_ZONES = {
+    zone1PlayerId: "11",
+    zone2PlayerId: "12",
+    zone3PlayerId: "13",
+    zone4PlayerId: "14",
+    zone5PlayerId: "15",
+    zone6PlayerId: "16",
+  };
+
   it("round-trips snapshot ↔ api", () => {
-    const snapshot: LineupSnapshot = { 1: "11", 2: "12", 3: "13", 4: "14", 5: "15", 6: "16" };
+    const snapshot: LineupSnapshot = lineupFromZones(ZONES);
     expect(lineupSnapshotToApi(snapshot)).toEqual({
-      zone1PlayerId: "11",
-      zone2PlayerId: "12",
-      zone3PlayerId: "13",
-      zone4PlayerId: "14",
-      zone5PlayerId: "15",
-      zone6PlayerId: "16",
+      ...API_ZONES,
+      startingLiberoId: null,
+      liberoReplacesPlayerId: null,
     });
-    const row = makeLineup({
-      zone1PlayerId: "11",
-      zone2PlayerId: "12",
-      zone3PlayerId: "13",
-      zone4PlayerId: "14",
-      zone5PlayerId: "15",
-      zone6PlayerId: "16",
+    expect(apiLineupToSnapshot(makeLineup(API_ZONES))).toEqual(snapshot);
+  });
+
+  // #359：L 兩欄也要 round-trip。這一則是這張票的核心保險——先發快照以前完全不帶自由球員，
+  // 所以「重整就沒了、歷史局永遠看不到 L」；只要這條轉換掉一欄，同樣的症狀就會原封不動回來。
+  it("round-trips the libero assignment too", () => {
+    const snapshot: LineupSnapshot = {
+      zones: ZONES,
+      liberoId: "l1",
+      // 頂替的必須是六個號位裡的人（後端也擋這條，見 routes/lineups.ts）。
+      replacesPlayerId: "15",
+    };
+    expect(lineupSnapshotToApi(snapshot)).toEqual({
+      ...API_ZONES,
+      startingLiberoId: "l1",
+      liberoReplacesPlayerId: "15",
     });
-    expect(apiLineupToSnapshot(row)).toEqual(snapshot);
+    expect(
+      apiLineupToSnapshot(
+        makeLineup({ ...API_ZONES, startingLiberoId: "l1", liberoReplacesPlayerId: "15" }),
+      ),
+    ).toEqual(snapshot);
+  });
+
+  // 「指定了 L 但開局他在場外」是合法狀態（被頂替的人這一輪剛好在前排），不是資料異常——
+  // 三種合法組合見 lib/db/src/schema/lineups.ts。
+  it("keeps a libero with no replacement target", () => {
+    const snapshot: LineupSnapshot = { zones: ZONES, liberoId: "l1", replacesPlayerId: null };
+    expect(lineupSnapshotToApi(snapshot)).toEqual({
+      ...API_ZONES,
+      startingLiberoId: "l1",
+      liberoReplacesPlayerId: null,
+    });
   });
 });
 

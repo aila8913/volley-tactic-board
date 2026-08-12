@@ -15,4 +15,6 @@ export interface Lineup {
   zone4PlayerId: string;
   zone5PlayerId: string;
   zone6PlayerId: string;
+  startingLiberoId: string | null;
+  liberoReplacesPlayerId: string | null;
 }

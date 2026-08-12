@@ -9,7 +9,7 @@
 import { z } from "zod";
 import type { PlayerPosition } from "../types/rotationTable";
 import type { MatchPlayer, PlayerRole } from "../types/match";
-import type { LineupSnapshot } from "../types/scoresheet";
+import type { LineupZones } from "../types/scoresheet";
 import type { Marker, DefenseRange } from "../types/tacticsBoard";
 import type { CourtSnapshot, SnapshotPlayer, SavedTacticDataV2 } from "../types/courtSnapshot";
 import { lineupToPositions } from "./rotationLogic";
@@ -50,11 +50,11 @@ export function captureFromRotation(
   };
 }
 
-// 從計分表的先發快照（LineupSnapshot：號位 1~6 → playerId）擷取一張快照。
+// 從計分表的先發快照（LineupZones：號位 1~6 → playerId）擷取一張快照。
 // 先用 lineupToPositions 把「號位→球員 id」換算成「第 rotation 輪時場上 6 個人的座標」
 // （這條換算公式跟輪轉表共用，見 rotationLogic.ts），再套用同一套 denormalize 邏輯。
 export function captureFromScoreSheet(
-  lineup: LineupSnapshot,
+  lineup: LineupZones,
   rotation: number,
   roster: MatchPlayer[],
   meta: { matchId: string | null },
