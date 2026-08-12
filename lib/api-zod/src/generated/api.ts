@@ -38,7 +38,6 @@ export const ListMatchesResponseItem = zod.object({
   "date": zod.coerce.date(),
   "opponent": zod.string(),
   "location": zod.string().nullish(),
-  "videoUrl": zod.string().nullish(),
   "tournamentId": zod.string().uuid().nullish(),
   "teamId": zod.number().nullish(),
   "format": zod.enum(['best_of_3', 'best_of_5']),
@@ -56,7 +55,6 @@ export const CreateMatchBody = zod.object({
   "date": zod.coerce.date(),
   "opponent": zod.string(),
   "location": zod.string().nullish(),
-  "videoUrl": zod.string().nullish(),
   "tournamentId": zod.string().uuid().nullish(),
   "teamId": zod.number().nullish(),
   "format": zod.enum(['best_of_3', 'best_of_5']).optional()
@@ -76,7 +74,6 @@ export const GetMatchResponse = zod.object({
   "date": zod.coerce.date(),
   "opponent": zod.string(),
   "location": zod.string().nullish(),
-  "videoUrl": zod.string().nullish(),
   "tournamentId": zod.string().uuid().nullish(),
   "teamId": zod.number().nullish(),
   "format": zod.enum(['best_of_3', 'best_of_5']),
@@ -86,7 +83,7 @@ export const GetMatchResponse = zod.object({
 
 
 /**
- * @summary Update a match (e.g. attach a video_url for post-game review)
+ * @summary Update a match (rename, move to another folder, mark finished)
  */
 export const UpdateMatchParams = zod.object({
   "matchId": zod.coerce.number()
@@ -97,7 +94,6 @@ export const UpdateMatchBody = zod.object({
   "opponent": zod.string().optional(),
   "date": zod.coerce.date().optional(),
   "location": zod.string().nullish(),
-  "videoUrl": zod.string().nullish(),
   "tournamentId": zod.string().uuid().nullish(),
   "teamId": zod.number().nullish(),
   "format": zod.enum(['best_of_3', 'best_of_5']).optional(),
@@ -110,7 +106,6 @@ export const UpdateMatchResponse = zod.object({
   "date": zod.coerce.date(),
   "opponent": zod.string(),
   "location": zod.string().nullish(),
-  "videoUrl": zod.string().nullish(),
   "tournamentId": zod.string().uuid().nullish(),
   "teamId": zod.number().nullish(),
   "format": zod.enum(['best_of_3', 'best_of_5']),
@@ -328,6 +323,46 @@ export const MergePeopleResponse = zod.object({
 
 
 /**
+ * @summary List the video segments of a match, in order
+ */
+export const ListMatchVideosParams = zod.object({
+  "matchId": zod.coerce.number()
+})
+
+export const ListMatchVideosResponseItem = zod.object({
+  "id": zod.string().uuid(),
+  "matchId": zod.number(),
+  "url": zod.string(),
+  "sequence": zod.number(),
+  "label": zod.string().nullish()
+})
+export const ListMatchVideosResponse = zod.array(ListMatchVideosResponseItem)
+
+
+/**
+ * @summary Attach one video segment to a match
+ */
+export const CreateMatchVideoParams = zod.object({
+  "matchId": zod.coerce.number()
+})
+
+export const CreateMatchVideoBody = zod.object({
+  "id": zod.string().uuid().optional(),
+  "url": zod.string(),
+  "sequence": zod.number(),
+  "label": zod.string().nullish()
+})
+
+
+/**
+ * @summary Delete a video segment (rallies anchored to it keep their data, losing only the anchor)
+ */
+export const DeleteMatchVideoParams = zod.object({
+  "videoId": zod.coerce.string().uuid()
+})
+
+
+/**
  * @summary List players for a match
  */
 export const ListPlayersParams = zod.object({
@@ -459,7 +494,8 @@ export const ListMatchEventsResponseItem = zod.object({
   "side": zod.enum(['home', 'away']),
   "playerId": zod.string().uuid().nullish(),
   "action": zod.enum(['serve', 'receive', 'set', 'attack', 'block', 'dig']),
-  "ballType": zod.enum(['serve', 'spike', 'tip', 'chance']).optional(),
+  "ballType": zod.enum(['serve', 'spike', 'tip', 'chance', 'cover']).optional(),
+  "serveType": zod.enum(['jump', 'float', 'jump_float']).nullish(),
   "quality": zod.number().nullish(),
   "fromX": zod.number().nullish(),
   "fromY": zod.number().nullish(),
@@ -489,7 +525,9 @@ export const ListRalliesResponseItem = zod.object({
   "awayScore": zod.number(),
   "homeRotation": zod.number(),
   "awayRotation": zod.number(),
-  "winner": zod.enum(['home', 'away'])
+  "winner": zod.enum(['home', 'away']),
+  "videoId": zod.string().uuid().nullish(),
+  "videoTimestamp": zod.number().nullish()
 })
 export const ListRalliesResponse = zod.array(ListRalliesResponseItem)
 
@@ -508,7 +546,9 @@ export const CreateRallyBody = zod.object({
   "awayScore": zod.number(),
   "homeRotation": zod.number(),
   "awayRotation": zod.number(),
-  "winner": zod.enum(['home', 'away'])
+  "winner": zod.enum(['home', 'away']),
+  "videoId": zod.string().uuid().nullish(),
+  "videoTimestamp": zod.number().nullish()
 })
 
 
@@ -526,7 +566,8 @@ export const ListEventsResponseItem = zod.object({
   "side": zod.enum(['home', 'away']),
   "playerId": zod.string().uuid().nullish(),
   "action": zod.enum(['serve', 'receive', 'set', 'attack', 'block', 'dig']),
-  "ballType": zod.enum(['serve', 'spike', 'tip', 'chance']).optional(),
+  "ballType": zod.enum(['serve', 'spike', 'tip', 'chance', 'cover']).optional(),
+  "serveType": zod.enum(['jump', 'float', 'jump_float']).nullish(),
   "quality": zod.number().nullish(),
   "fromX": zod.number().nullish(),
   "fromY": zod.number().nullish(),
@@ -554,7 +595,8 @@ export const CreateEventBody = zod.object({
   "side": zod.enum(['home', 'away']),
   "playerId": zod.string().uuid().nullish(),
   "action": zod.enum(['serve', 'receive', 'set', 'attack', 'block', 'dig']),
-  "ballType": zod.enum(['serve', 'spike', 'tip', 'chance']).optional(),
+  "ballType": zod.enum(['serve', 'spike', 'tip', 'chance', 'cover']).optional(),
+  "serveType": zod.enum(['jump', 'float', 'jump_float']).nullish(),
   "quality": zod.number().nullish(),
   "fromX": zod.number().nullish(),
   "fromY": zod.number().nullish(),
@@ -565,6 +607,32 @@ export const CreateEventBody = zod.object({
   "videoTimestamp": zod.number().nullish(),
   "source": zod.enum(['live', 'review']),
   "outcome": zod.enum(['point', 'loss', 'in_play']).nullish()
+})
+
+
+/**
+ * @summary Update a rally (e.g. anchor it to a video segment + timestamp for review backfill)
+ */
+export const UpdateRallyParams = zod.object({
+  "rallyId": zod.coerce.string().uuid()
+})
+
+export const UpdateRallyBody = zod.object({
+  "videoId": zod.string().uuid().nullish(),
+  "videoTimestamp": zod.number().nullish()
+})
+
+export const UpdateRallyResponse = zod.object({
+  "id": zod.string().uuid(),
+  "setId": zod.string().uuid(),
+  "rallyNumber": zod.number(),
+  "homeScore": zod.number(),
+  "awayScore": zod.number(),
+  "homeRotation": zod.number(),
+  "awayRotation": zod.number(),
+  "winner": zod.enum(['home', 'away']),
+  "videoId": zod.string().uuid().nullish(),
+  "videoTimestamp": zod.number().nullish()
 })
 
 
@@ -798,7 +866,8 @@ export const UpdateEventBody = zod.object({
   "playerId": zod.string().uuid().nullish(),
   "source": zod.enum(['live', 'review']).optional(),
   "action": zod.enum(['serve', 'receive', 'set', 'attack', 'block', 'dig']).optional(),
-  "ballType": zod.enum(['serve', 'spike', 'tip', 'chance']).optional(),
+  "ballType": zod.enum(['serve', 'spike', 'tip', 'chance', 'cover']).optional(),
+  "serveType": zod.enum(['jump', 'float', 'jump_float']).nullish(),
   "quality": zod.number().nullish(),
   "fromX": zod.number().optional(),
   "fromY": zod.number().optional(),
@@ -817,7 +886,8 @@ export const UpdateEventResponse = zod.object({
   "side": zod.enum(['home', 'away']),
   "playerId": zod.string().uuid().nullish(),
   "action": zod.enum(['serve', 'receive', 'set', 'attack', 'block', 'dig']),
-  "ballType": zod.enum(['serve', 'spike', 'tip', 'chance']).optional(),
+  "ballType": zod.enum(['serve', 'spike', 'tip', 'chance', 'cover']).optional(),
+  "serveType": zod.enum(['jump', 'float', 'jump_float']).nullish(),
   "quality": zod.number().nullish(),
   "fromX": zod.number().nullish(),
   "fromY": zod.number().nullish(),

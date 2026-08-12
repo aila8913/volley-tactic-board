@@ -10,6 +10,7 @@ import type { EventAction } from './eventAction';
 import type { EventOutcome } from './eventOutcome';
 import type { EventSide } from './eventSide';
 import type { EventSource } from './eventSource';
+import type { ServeType } from './serveType';
 
 export interface NewEvent {
   id?: string;
@@ -18,6 +19,7 @@ export interface NewEvent {
   playerId?: string | null;
   action: EventAction;
   ballType?: BallType;
+  serveType?: ServeType | null;
   quality?: number | null;
   fromX?: number | null;
   fromY?: number | null;

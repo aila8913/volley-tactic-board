@@ -11,8 +11,12 @@
 GET    /matches                                列出所有比賽
 POST   /matches                                建立比賽
 GET    /matches/{matchId}                      取得單場比賽
-PATCH  /matches/{matchId}                       更新比賽（例如補上 videoUrl 開啟賽後補填模式）
+PATCH  /matches/{matchId}                       更新比賽（改名稱/日期、搬資料夾、標記完賽）
 DELETE /matches/{matchId}                       刪除整場比賽（FK cascade 連帶清名單/局/分/球）
+
+GET    /matches/{matchId}/videos                列出這場比賽的影片段落（依 sequence）
+POST   /matches/{matchId}/videos                掛一段影片到這場比賽（#390，取代舊的 videoUrl 欄）
+DELETE /videos/{videoId}                        拿掉一段影片（錨在它上面的分只失去錨點，資料不刪）
 
 GET    /matches/{matchId}/players               列出球員名單
 POST   /matches/{matchId}/players               新增球員
@@ -28,6 +32,7 @@ POST   /sets/{setId}/substitutions              記錄一次換人（一般 / �
 
 GET    /sets/{setId}/rallies                    列出這局的所有分
 POST   /sets/{setId}/rallies                    記錄新的一分
+PATCH  /rallies/{rallyId}                       把一分錨到某段影片的第幾秒（進階版補填用）
 DELETE /rallies/{rallyId}                       刪除一分（undo 用；events FK cascade）
 
 GET    /rallies/{rallyId}/events                列出這一分裡的所有球

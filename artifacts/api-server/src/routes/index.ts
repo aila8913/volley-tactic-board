@@ -6,6 +6,7 @@ import tournamentsRouter from "./tournaments";
 import teamsRouter from "./teams";
 import peopleRouter from "./people";
 import matchesRouter from "./matches";
+import matchVideosRouter from "./matchVideos";
 import playersRouter from "./players";
 import setsRouter from "./sets";
 import ralliesRouter from "./rallies";
@@ -30,6 +31,7 @@ router.use(peopleRouter);
 // 比賽紀錄相關路由。每個檔案都自己定義完整路徑（如 /matches/:matchId/players），
 // 所以在這裡平掛在同一層就好，不需要用 mergeParams 做巢狀掛載。
 router.use(matchesRouter);
+router.use(matchVideosRouter);
 router.use(playersRouter);
 router.use(setsRouter);
 router.use(ralliesRouter);

@@ -24,13 +24,14 @@ Tactics (戰術板存檔)  ← 獨立那條線，比賽紀錄之前就存在
 
 | 資料表          | 檔案                                 | 對應到                                                                                         |
 | --------------- | ------------------------------------ | ---------------------------------------------------------------------------------------------- |
-| `matches`       | `lib/db/src/schema/matches.ts`       | 一場比賽，含 `video_url`（YouTube 連結，可空）、`teamId`（可空 FK → `teams`）                  |
+| `matches`       | `lib/db/src/schema/matches.ts`       | 一場比賽，含 `teamId`（可空 FK → `teams`）；影片連結**不在這裡**，見 `match_videos`            |
+| `match_videos`  | `lib/db/src/schema/matchVideos.ts`   | 一場比賽的一段影片（`url`/`sequence`/`label`）——一場可能有好幾段（#390，取代舊的 `video_url`） |
 | `players`       | `lib/db/src/schema/players.ts`       | 一場比賽的名單列，角色同前端 `PLAYER_ROLES`（S/OH/MB/OPP/L）；`personId`（可空 FK → `people`） |
 | `sets`          | `lib/db/src/schema/sets.ts`          | 局（最多 5 局），含 `firstServer`（home/away，重播輪轉的唯一種子）                             |
 | `lineups`       | `lib/db/src/schema/lineups.ts`       | 一局的起始先發，**一局一 row**（`setId` unique），六個 `zone{1..6}PlayerId` notNull FK         |
 | `substitutions` | `lib/db/src/schema/substitutions.ts` | 一次換人，`kind` = regular/libero；**時機**存 homeScore/awayScore，非 rallyId                  |
 | `timeouts`      | `lib/db/src/schema/timeouts.ts`      | 一次暫停，只記哪一局/哪一方/**時機**（同上），不記時長                                         |
-| `rallies`       | `lib/db/src/schema/rallies.ts`       | 一分；記錄的是該分**開始前**的比分                                                             |
+| `rallies`       | `lib/db/src/schema/rallies.ts`       | 一分；記錄的是該分**開始前**的比分；`videoId`/`videoTimestamp` 錨定它在影片的哪一段第幾秒      |
 | `events`        | `lib/db/src/schema/events.ts`        | 一球；`side`(home/away)、`outcome`(得/失/球續，可空)、座標對前端 viewBox (0~100 x 0~200)       |
 | `people`        | `lib/db/src/schema/people.ts`        | 跨場跨隊的唯一「人」身分（`id`/`userId`/`name`）——把散落各場的名單列串成同一個人               |
 | `teams`         | `lib/db/src/schema/teams.ts`         | 球隊 / 分組標籤（`id`/`userId`/`name`）——讓統計可以按隊切片                                    |

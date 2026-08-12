@@ -2,6 +2,7 @@ import { pgTable, uuid, integer, pgEnum } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { setsTable } from "./sets";
+import { matchVideosTable } from "./matchVideos";
 
 export const rallyWinnerEnum = pgEnum("rally_winner", ["home", "away"]);
 
@@ -23,6 +24,20 @@ export const ralliesTable = pgTable("rallies", {
   homeRotation: integer("home_rotation").notNull(),
   awayRotation: integer("away_rotation").notNull(),
   winner: rallyWinnerEnum("winner").notNull(),
+  // ── 影片錨定（#390）：這一分在影片的哪裡 ───────────────────────────────────────
+  // 為什麼掛在 rally 而不是 event：進階版補填的操作單位就是「一分」——使用者把影片停在
+  // 某一分開始的地方，然後把那一分的每一觸記完。「這一分從影片第幾秒開始」因此是 rally
+  // 的屬性。逐觸的秒數另有 events.videoTimestamp 可用，但這一輪不填（見 ADR-0010 決定 5）。
+  //
+  // 兩欄都 nullable：簡易版當下記的 rally 沒有影片可指，補填之後才會有值。
+  // onDelete: "set null"：使用者刪掉一段影片（例如貼錯網址）時，只是讓那些 rally 失去
+  // 錨點，不該把已經記好的比賽紀錄一起刪掉——比賽資料遠比影片連結重要。這跟 matchId 的
+  // cascade 是刻意相反的取捨，同 matches.teamId（標籤）vs matches.tournamentId（容器）。
+  videoId: uuid("video_id").references(() => matchVideosTable.id, { onDelete: "set null" }),
+  // 這一分在那段影片的第幾秒（整數秒，跟 events.videoTimestamp 同單位）。
+  // ⚠️ 這個值不需要使用者做「對齊」這個動作：補填某一分時影片本來就已經停在那了，
+  // 前端在該分的第一個手勢發生時自動擷取當下播放秒數寫進來即可（見 #392／#393）。
+  videoTimestamp: integer("video_timestamp"),
 });
 
 // 不再 .omit({ id: true })：理由同 sets.ts / players.ts——id 是 uuid + defaultRandom()，

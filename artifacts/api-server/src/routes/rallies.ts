@@ -2,14 +2,16 @@ import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
 import { db, ralliesTable } from "@workspace/db";
 import { requireAuth } from "../middleware/requireAuth";
-import { setBelongsToUser, rallyBelongsToUser } from "../lib/ownership";
+import { setBelongsToUser, rallyBelongsToUser, videoBelongsToRallyMatch } from "../lib/ownership";
 import { handler } from "../lib/handler";
 import { insertIdempotent } from "../lib/insertIdempotent";
-import type { EveryColumnOnInsert } from "../lib/everyColumn";
+import type { EveryColumnOnInsert, EveryColumnOnUpdate } from "../lib/everyColumn";
 import {
   ListRalliesParams,
   CreateRallyParams,
   CreateRallyBody,
+  UpdateRallyParams,
+  UpdateRallyBody,
   DeleteRallyParams,
 } from "@workspace/api-zod";
 
@@ -69,6 +71,10 @@ router.post(
         homeRotation: body.homeRotation,
         awayRotation: body.awayRotation,
         winner: body.winner,
+        // 影片錨定（#390）：從空白開始補填時可以建立當下就帶上；簡易版計分不會帶，
+        // 那時還沒有影片可指，之後用 PATCH 補（見下面那支）。
+        videoId: body.videoId ?? null,
+        videoTimestamp: body.videoTimestamp ?? null,
       };
 
       // 冪等寫入 + 重送回既有列（#64 PR3）：做法與理由見 lib/insertIdempotent.ts。
@@ -84,6 +90,58 @@ router.post(
       }
 
       res.status(201).json(row);
+    },
+  ),
+);
+
+// PATCH /rallies/:rallyId — 把一分錨到「哪一段影片的第幾秒」（#390，進階版補填用）。
+//
+// 為什麼是 PATCH 既有的 rally 而不是另外建一筆：那一分在簡易版計分時就已經存在了，補填
+// 是在同一列上補欄位——跟 ADR-0010 決定 3「補填是就地升級、不是並存」同一個道理。
+//
+// owns 是兩道：先驗這一分是不是這個使用者的，再驗 body 帶的 videoId 是不是「這一分所屬
+// 那場比賽」的影片（ADR-0009：外鍵的範圍是比賽，不是使用者）。`== null` 一次涵蓋
+// undefined（沒帶）與 null（明確清掉錨點）兩種「沒有東西可驗」的情況。
+router.patch(
+  "/rallies/:rallyId",
+  handler(
+    {
+      params: UpdateRallyParams,
+      body: UpdateRallyBody,
+      owns: [
+        ({ params, userId }) => rallyBelongsToUser(params.rallyId, userId),
+        ({ params, body }) =>
+          body.videoId == null || videoBelongsToRallyMatch(body.videoId, params.rallyId),
+      ],
+    },
+    async ({ res, params, body }) => {
+      // 型別標註是 #368／ADR-0008 的守衛：EveryColumnOnUpdate 讓 rallies 的每一欄都要在
+      // 物件裡出現，「這欄不開放 PATCH」要明寫 undefined（見 lib/everyColumn.ts）。
+      const patch: EveryColumnOnUpdate<typeof ralliesTable> = {
+        // id 是主鍵、setId 決定這分屬於哪一局，都不是補填的對象。
+        id: undefined,
+        setId: undefined,
+        // 這一分的比分／輪次／誰得分是計分時就定案的事實，補填只補影片錨點，不改它們。
+        // 要改分數是另一件事（改比分會牽動後面每一分的快照），不從這支走。
+        rallyNumber: undefined,
+        homeScore: undefined,
+        awayScore: undefined,
+        homeRotation: undefined,
+        awayRotation: undefined,
+        winner: undefined,
+        // 沒帶的欄位值是 undefined，drizzle 的 mapUpdateSet 會濾掉、維持原值；
+        // 帶 null 就是明確把錨點清掉。
+        videoId: body.videoId,
+        videoTimestamp: body.videoTimestamp,
+      };
+
+      const [updated] = await db
+        .update(ralliesTable)
+        .set(patch)
+        .where(eq(ralliesTable.id, params.rallyId))
+        .returning();
+
+      res.json(updated);
     },
   ),
 );

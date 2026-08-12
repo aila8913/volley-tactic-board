@@ -14,4 +14,5 @@ export const BallType = {
   spike: 'spike',
   tip: 'tip',
   chance: 'chance',
+  cover: 'cover',
 } as const;

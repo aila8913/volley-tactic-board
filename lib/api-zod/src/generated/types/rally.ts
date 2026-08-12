@@ -16,4 +16,6 @@ export interface Rally {
   homeRotation: number;
   awayRotation: number;
   winner: RallyWinner;
+  videoId?: string | null;
+  videoTimestamp?: number | null;
 }

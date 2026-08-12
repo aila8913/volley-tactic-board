@@ -117,6 +117,8 @@ router.post(
         playerId: body.playerId ?? null,
         action: body.action,
         ballType: body.ballType ?? null,
+        // 發球種類（#51）：只有 action = serve 的進階版補填才會帶，簡易版一律 null。
+        serveType: body.serveType ?? null,
         quality: body.quality ?? null,
         fromX: body.fromX ?? null,
         fromY: body.fromY ?? null,
@@ -191,6 +193,7 @@ router.patch(
         side: body.side,
         action: body.action,
         ballType: body.ballType,
+        serveType: body.serveType,
         quality: body.quality,
         fromX: body.fromX,
         fromY: body.fromY,

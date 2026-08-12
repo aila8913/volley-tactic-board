@@ -150,7 +150,6 @@ export interface Match {
   date: string;
   opponent: string;
   location?: string | null;
-  videoUrl?: string | null;
   tournamentId?: string | null;
   teamId?: number | null;
   format: MatchFormat;
@@ -171,7 +170,6 @@ export interface NewMatch {
   date: string;
   opponent: string;
   location?: string | null;
-  videoUrl?: string | null;
   tournamentId?: string | null;
   teamId?: number | null;
   format?: NewMatchFormat;
@@ -198,7 +196,6 @@ export interface UpdateMatch {
   opponent?: string;
   date?: string;
   location?: string | null;
-  videoUrl?: string | null;
   tournamentId?: string | null;
   teamId?: number | null;
   format?: UpdateMatchFormat;
@@ -254,6 +251,8 @@ export interface Rally {
   homeRotation: number;
   awayRotation: number;
   winner: RallyWinner;
+  videoId?: string | null;
+  videoTimestamp?: number | null;
 }
 
 export interface NewRally {
@@ -264,6 +263,28 @@ export interface NewRally {
   homeRotation: number;
   awayRotation: number;
   winner: RallyWinner;
+  videoId?: string | null;
+  videoTimestamp?: number | null;
+}
+
+export interface UpdateRally {
+  videoId?: string | null;
+  videoTimestamp?: number | null;
+}
+
+export interface MatchVideo {
+  id: string;
+  matchId: number;
+  url: string;
+  sequence: number;
+  label?: string | null;
+}
+
+export interface NewMatchVideo {
+  id?: string;
+  url: string;
+  sequence: number;
+  label?: string | null;
 }
 
 export interface RotationStat {
@@ -420,6 +441,16 @@ export const BallType = {
   spike: 'spike',
   tip: 'tip',
   chance: 'chance',
+  cover: 'cover',
+} as const;
+
+export type ServeType = typeof ServeType[keyof typeof ServeType];
+
+
+export const ServeType = {
+  jump: 'jump',
+  float: 'float',
+  jump_float: 'jump_float',
 } as const;
 
 export type EventSource = typeof EventSource[keyof typeof EventSource];
@@ -455,6 +486,7 @@ export interface MatchEvent {
   playerId?: string | null;
   action: EventAction;
   ballType?: BallType;
+  serveType?: ServeType | null;
   quality?: number | null;
   fromX?: number | null;
   fromY?: number | null;
@@ -474,6 +506,7 @@ export interface NewEvent {
   playerId?: string | null;
   action: EventAction;
   ballType?: BallType;
+  serveType?: ServeType | null;
   quality?: number | null;
   fromX?: number | null;
   fromY?: number | null;
@@ -519,6 +552,7 @@ export interface UpdateEvent {
   source?: EventSource;
   action?: EventAction;
   ballType?: BallType;
+  serveType?: ServeType | null;
   quality?: number | null;
   fromX?: number;
   fromY?: number;

@@ -7,6 +7,9 @@ export * from "./players";
 export * from "./sets";
 export * from "./rallies";
 export * from "./events";
+// match_videos 掛在 match 底下（一場比賽可以有好幾段影片），不參與
+// Set→Rally→Event 那條計分巢狀鏈，所以列在它們後面單獨一行。見 #390。
+export * from "./matchVideos";
 export * from "./lineups";
 export * from "./substitutions";
 export * from "./timeouts";
