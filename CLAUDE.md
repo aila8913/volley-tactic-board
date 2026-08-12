@@ -46,7 +46,12 @@ docs/        specs and decision records
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate `api-client-react` + `api-zod` from
   `openapi.yaml`, then re-typechecks libs. Run this any time `openapi.yaml` changes.
 - `pnpm --filter @workspace/db run push` — push Drizzle schema changes straight to the DB (dev only, no
-  migration files are generated)
+  migration files are generated). Unlike the dev servers, this one does **not** read `.env` by itself —
+  `drizzle.config.ts` reads `process.env.DATABASE_URL` directly, so PowerShell needs it in the environment
+  first: `$env:DATABASE_URL='<the value from .env>'; pnpm --filter @workspace/db run push`. Paste the real
+  connection string from `.env` at the prompt — **never into this file**: CLAUDE.md is tracked and this
+  repo is public, so a password written here is one `git add -A` away from being published (and it also
+  gets loaded into every Claude session's context). `.env` is gitignored; that is where secrets live.
 - `pnpm run test` — runs `vitest` for `@workspace/volleyball-tactics` and `@workspace/api-server`
 
 ## Required env vars
