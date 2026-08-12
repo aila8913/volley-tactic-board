@@ -194,6 +194,7 @@ export const UpdateMatchStatus = {
 } as const;
 
 export interface UpdateMatch {
+  name?: string | null;
   opponent?: string;
   date?: string;
   location?: string | null;
@@ -507,12 +508,15 @@ export interface NewTactic {
 export type UpdateTacticData = { [key: string]: unknown };
 
 export interface UpdateTactic {
+  matchId?: number | null;
   name?: string;
   data?: UpdateTacticData;
 }
 
 export interface UpdateEvent {
   side?: EventSide;
+  playerId?: string | null;
+  source?: EventSource;
   action?: EventAction;
   ballType?: BallType;
   quality?: number | null;

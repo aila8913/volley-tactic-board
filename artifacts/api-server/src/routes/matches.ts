@@ -148,9 +148,10 @@ router.patch(
         // id 是主鍵、userId 由 where 條件鎖定（不是 PATCH 的對象），兩者都不開放改。
         id: undefined,
         userId: undefined,
-        // name 是這次窮舉檢查照出來的合約缺口：UpdateMatchBody 根本沒有 name 這個欄位，
-        // 所以 PATCH 目前改不了它——是合約缺口不是實作缺口，記在 #368 的留言。
-        name: undefined,
+        // name 是 #368 的窮舉檢查照出來的合約缺口，已於 #385 補上：NewMatch 有 name、
+        // UpdateMatch 沒有，等於建立時設得了、之後改不了。目前前端拿對手名稱當標題、
+        // 沒有在寫這一欄（見 lib/db 的 schema 註解），所以這是把合約補齊、不是新功能。
+        name: body.name,
         // body 沒帶的欄位直接給 body.x，值是 undefined（drizzle 的 mapUpdateSet 會濾掉，
         // 維持原值）；帶了就是新值。跟舊寫法的條件展開完全等價，見 lib/everyColumn.ts。
         opponent: body.opponent,

@@ -8,6 +8,7 @@
 import type { UpdateTacticData } from './updateTacticData';
 
 export interface UpdateTactic {
+  matchId?: number | null;
   name?: string;
   data?: UpdateTacticData;
 }

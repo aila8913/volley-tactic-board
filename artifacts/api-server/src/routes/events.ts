@@ -2,7 +2,13 @@ import { Router, type IRouter } from "express";
 import { eq, getTableColumns } from "drizzle-orm";
 import { db, eventsTable, ralliesTable, setsTable } from "@workspace/db";
 import { requireAuth } from "../middleware/requireAuth";
-import { rallyBelongsToUser, eventBelongsToUser, matchBelongsToUser } from "../lib/ownership";
+import {
+  rallyBelongsToUser,
+  eventBelongsToUser,
+  matchBelongsToUser,
+  playerBelongsToEventMatch,
+  playerBelongsToRallyMatch,
+} from "../lib/ownership";
 import { handler } from "../lib/handler";
 import { insertIdempotent } from "../lib/insertIdempotent";
 import type { EveryColumnOnInsert, EveryColumnOnUpdate } from "../lib/everyColumn";
@@ -76,15 +82,22 @@ router.get(
 // POST /rallies/:rallyId/events — 記錄一球。
 // 同一個 endpoint 兩用：source = 'live'（比賽當下即時記）或 'review'（賽後看影片補記），
 // 差別只在 body 帶不帶座標 / videoTimestamp，路由邏輯一樣。
-// owns 只驗 parent rally——body.playerId 目前沒有另外驗擁有權（維持遷移前的既有行為，
-// 不在這次順便加新的檢查）。
+// owns 兩道：parent rally 的擁有權，加上 body.playerId 必須是「這場比賽名單裡的人」（#385）。
+// 第二道是這次補上的——在此之前 playerId 完全沒驗（「維持遷移前的既有行為」）。
+// 補的理由不是為了對稱：只驗 PATCH 不驗 POST 等於沒驗，刪掉重新 POST 一次就繞過去了。
 router.post(
   "/rallies/:rallyId/events",
   handler(
     {
       params: CreateEventParams,
       body: CreateEventBody,
-      owns: ({ params, userId }) => rallyBelongsToUser(params.rallyId, userId),
+      owns: [
+        ({ params, userId }) => rallyBelongsToUser(params.rallyId, userId),
+        // `== null` 同時涵蓋沒帶（undefined）與明寫 null 兩種「不指定球員」，兩者都合法、
+        // 直接放行不查 DB；只有真的帶了 uuid 才付一次查詢的代價。
+        ({ params, body }) =>
+          body.playerId == null || playerBelongsToRallyMatch(body.playerId, params.rallyId),
+      ],
     },
     async ({ res, params, body }) => {
       // rallyId 來自路徑（已驗擁有權）。其餘欄位大多是 nullable：簡易版只記「誰做了什麼動作」，
@@ -145,7 +158,13 @@ router.patch(
     {
       params: UpdateEventParams,
       body: UpdateEventBody,
-      owns: ({ params, userId }) => eventBelongsToUser(params.eventId, userId),
+      owns: [
+        ({ params, userId }) => eventBelongsToUser(params.eventId, userId),
+        // 改指球員時，那名球員必須在這球所屬比賽的名單裡（#385）。判準是「同一場比賽」
+        // 不是「同一個使用者」——理由見 lib/ownership.ts 那兩支的檔內說明。
+        ({ params, body }) =>
+          body.playerId == null || playerBelongsToEventMatch(body.playerId, params.eventId),
+      ],
     },
     async ({ res, params, body }) => {
       // 「body 有帶的才改、沒帶的維持原值」。舊寫法是一串條件展開
@@ -160,12 +179,12 @@ router.patch(
         id: undefined,
         rallyId: undefined,
         sequence: undefined,
-        // 這兩欄是被這次窮舉檢查「照出來」的，不是刻意設計：openapi 的 UpdateEventBody
-        // 根本沒有 playerId 和 source，所以 PATCH 改不了它們。賽後看影片補記時想把一球
-        // 從「對手(全體)」改指到某位球員，目前做不到——這是合約缺口不是實作缺口，補它要
-        // 動 openapi + codegen + 前端，不塞進這張純守衛的 PR，另外記在 #368 的留言。
-        playerId: undefined,
-        source: undefined,
+        // 這兩欄是被 #368 的窮舉檢查「照出來」的合約缺口，已於 #385 補上：
+        // playerId ＝賽後補記時把一球從「對手(全體)」改指到某位球員，
+        // source ＝把一球從 live 補成 review。兩者都是進階版「賽後補填」的直接需求。
+        // playerId 另有一道「必須是這場比賽名單裡的人」的檢查，見上面的 owns。
+        playerId: body.playerId,
+        source: body.source,
         // 底下這些是真的可以改的。值直接給 body.x：沒帶就是 undefined（濾掉、維持原值），
         // 帶了 null 就是「想清空」——這個區別正是舊寫法用 `!== undefined` 而不是 truthy
         // 判斷的原因，現在由 mapUpdateSet 自己處理，不用再手寫一次。

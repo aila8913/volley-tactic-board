@@ -1419,6 +1419,12 @@ components:
     UpdateMatch:
       type: object
       properties:
+        # NewMatch 有 name 而這裡沒有，是建立時設得了、之後改不了的不對稱（#385，由 #368
+        # 的窮舉檢查照出來）。nullable 沿用 NewMatch：帶字串＝改標題，帶 null＝清空回「用
+        # 對手名稱當標題」，完全不帶＝不動它——三種狀態都要能表達。
+        name:
+          type: string
+          nullable: true
         opponent:
           type: string
         # 編輯比賽時可改日期時間（前端編輯表單有 datetime-local 欄位）。
@@ -2119,6 +2125,13 @@ components:
     UpdateTactic:
       type: object
       properties:
+        # 把一份存檔戰術改掛到別場、或改成全域（#385）。ADR-0007 之後 matchId 已經是
+        # 「可選標籤」而不是擁有關係，改標籤因此是正當操作，不是資料搬遷。
+        # nullable 的三種狀態同 NewTactic：帶整數＝改掛那場、帶 null＝變成全域戰術、
+        # 完全不帶＝不動它。
+        matchId:
+          type: integer
+          nullable: true
         name:
           type: string
         data:
@@ -2130,6 +2143,18 @@ components:
       properties:
         side:
           $ref: "#/components/schemas/EventSide"
+        # 賽後看影片補記時，把一球從「對手(全體)」改指到某位球員（#385）。這是進階版
+        # 「賽後補填」定位的直接需求：簡易版比賽當下對手側沒有球員可指，歸屬本來就該事後補。
+        # nullable：帶 uuid＝改指那個人、帶 null＝改回「不指定球員」、不帶＝不動它。
+        # ⚠️ 後端會另外驗「那名球員屬不屬於這球所在的那場比賽」，見 routes/events.ts。
+        playerId:
+          type: string
+          format: uuid
+          nullable: true
+        # 一球從 live 補成 review（或反過來）。跟 playerId 同一個情境：這球是當下記的還是
+        # 事後補的，補記完之後才知道要改。
+        source:
+          $ref: "#/components/schemas/EventSource"
         action:
           $ref: "#/components/schemas/EventAction"
         ballType:
