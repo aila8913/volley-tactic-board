@@ -15,7 +15,7 @@
 > **開發進度 (aila)** 與 **設計進度 (tang)** 兩個子區塊。各自 wrap-up 時只改自己那區，
 > 平行 PR 就落在不同行段、git 幾乎都能自動合併。上面的 `_Last updated_` 是**共用一行**摘要。
 
-\_Last updated: 2026-08-12 (aila) — 只做了 backlog 衛生：Project #4 上 9 張沒有 Status 的 open issue 全數補齊（#385／#375／#359 進 Todo，其餘 Backlog），另校正本檔兩處（M4 現在是四張、補記 PR #382）。沒有程式改動。前一次：2026-08-11 (aila) — #372 五個決策全數拍板（含 [ADR-0007](adr/0007-tactics-match-is-optional-tag.md)＋PR #378），C1 分出去成 #379；另清掉 #322／#324、兩張 infra 守衛票 #341／#354，以及 #368（逐欄列舉補上編譯期守衛，24 個寫入點全掃 → ADR-0008，照出的合約缺口成 #385）。\_
+\_Last updated: 2026-08-12 (aila) — #385 三處 PATCH 合約缺口補齊，判準寫成 [ADR-0009](adr/0009-foreign-key-scope-is-the-match-not-the-user.md)（外鍵驗的範圍是「同一場比賽」不是「同一個使用者」），本檔那條「會復發的判準」因此改成一行指路。同日另做了 backlog 衛生：Project #4 上 9 張沒有 Status 的 open issue 全數補齊（#385／#375／#359 進 Todo，其餘 Backlog）。前一次：2026-08-11 (aila) — #372 五個決策全數拍板（含 [ADR-0007](adr/0007-tactics-match-is-optional-tag.md)＋PR #378），C1 分出去成 #379；另清掉 #322／#324、兩張 infra 守衛票 #341／#354，以及 #368（逐欄列舉補上編譯期守衛，24 個寫入點全掃 → ADR-0008，照出的合約缺口成 #385）。\_
 
 ## Current state
 
@@ -275,11 +275,13 @@ M4 的，不在那組相依裡——它卡的是自己的維度定義與少樣�
 
 ### 一條會復發的判準
 
-**外鍵保證 referential integrity（uuid 指得到一列），不保證 ownership（那列是不是你的）**——
-兩者很容易被當成同一件事。`lib/ownership.ts` 的 `tournamentBelongsToUser`／`teamBelongsToUser`
-就是這條的落點。**它已經復發過一次**（#225：`tactics.ts` 是當初唯一沒 import `ownership` 的路由檔），
-所以真正的解法不是把判準寫下來，是 #228 的 handler 儀式收斂——**判準擋不住復發，因為新檔案不會
-自動知道它；把約定寫進 CI 或型別才可靠**（同 #154 把單向依賴焊進 eslint、#310 把字級 token 焊進 eslint）。
+外鍵與擁有權那條判準（**外鍵保證 uuid 指得到一列，不保證那列是你的**）已經有長期的家了：
+**[ADR-0009](adr/0009-foreign-key-scope-is-the-match-not-the-user.md)**，含它更嚴的續集
+——驗的範圍是「同一場比賽」而不是「同一個使用者」。這裡只留指路，不再抄一份。
+
+**它已經復發過一次**（#225），所以真正的解法不是把判準寫下來，是 #228 的 handler 儀式收斂
+——**判準擋不住復發，因為新檔案不會自動知道它；把約定寫進 CI 或型別才可靠**
+（同 #154 把單向依賴焊進 eslint、#310 把字級 token 焊進 eslint、#368 把窮舉焊進型別）。
 
 ## Recently closed (past ~week)
 
@@ -287,6 +289,12 @@ M4 的，不在那組相依裡——它卡的是自己的維度定義與少樣�
 
 ### 開發 (aila)
 
+- **#385**（08-12）#368 照出的三個合約缺口補齊：`PATCH /events` 的 `playerId`／`source`、
+  `PATCH /matches` 的 `name`、`PUT /tactics` 的 `matchId`。真正的產出是判準而不是欄位 →
+  **[ADR-0009](adr/0009-foreign-key-scope-is-the-match-not-the-user.md)**：body 帶進來的外鍵，
+  驗的是「這個 id 在這筆資料的脈絡裡合不合法」而不是「屬不屬於這個使用者」。順帶關掉
+  `POST /rallies/:rallyId/events` 的既有缺口（只驗 PATCH 不驗 POST 等於沒驗）。
+  前端還沒有消費者——`events.playerId` 的入口屬於進階版賽後補填（#51／#21）。
 - **PR #382**（08-11，無對應 issue）戰術板右欄拿掉「新手提示 (Tips)」，空間還給名單與按鈕（PO 當場決定）。
   只動 `RotationTable.tsx`／`TacticsRosterPanel.tsx` 兩個檔。**它跟 #331 是同一個症狀家族**——
   右欄塞不下，差別只在這次是把最不重要的東西拿掉、#331 要處理的是硬壓高度那四處。

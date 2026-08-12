@@ -88,6 +88,9 @@ export async function playerBelongsToMatch(playerId: string, matchId: number): P
 
 // ── events.playerId 的兩支：擋「把一球指到不屬於這場比賽的球員」（#385）────────────────
 //
+// 判準本身寫成了 ADR-0009（docs/adr/0009-foreign-key-scope-is-the-match-not-the-user.md），
+// 含「不要重新提議」四條——想把這兩支收斂成一支、或只驗 PATCH 不驗 POST 之前先讀它。
+//
 // 為什麼不是用 playerBelongsToUser（不存在，也不該存在）：player 沒有自己的 userId，它的
 // 擁有權繼承自 match。但這裡真正要擋的**比擁有權更嚴**——就算那名球員也是你自己的，只要
 // 他不在這場比賽的名單裡，把一球指給他就是錯的資料（他根本沒上場）。所以判準是
