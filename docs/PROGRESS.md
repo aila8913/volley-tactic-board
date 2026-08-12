@@ -15,7 +15,7 @@
 > **開發進度 (aila)** 與 **設計進度 (tang)** 兩個子區塊。各自 wrap-up 時只改自己那區，
 > 平行 PR 就落在不同行段、git 幾乎都能自動合併。上面的 `_Last updated_` 是**共用一行**摘要。
 
-\_Last updated: 2026-08-12 (aila) — #385 三處 PATCH 合約缺口補齊，判準寫成 [ADR-0009](adr/0009-foreign-key-scope-is-the-match-not-the-user.md)（外鍵驗的範圍是「同一場比賽」不是「同一個使用者」），本檔那條「會復發的判準」因此改成一行指路。同日另做了 backlog 衛生：Project #4 上 9 張沒有 Status 的 open issue 全數補齊（#385／#375／#359 進 Todo，其餘 Backlog）。前一次：2026-08-11 (aila) — #372 五個決策全數拍板（含 [ADR-0007](adr/0007-tactics-match-is-optional-tag.md)＋PR #378），C1 分出去成 #379；另清掉 #322／#324、兩張 infra 守衛票 #341／#354，以及 #368（逐欄列舉補上編譯期守衛，24 個寫入點全掃 → ADR-0008，照出的合約缺口成 #385）。\_
+\_Last updated: 2026-08-12 (aila) — **M4 進階版補填的機制設計拍板**：#21／#51 兩張傘票關閉，拆成 #390–#397 八張執行票（依序：schema 地基 → 膠囊＋內嵌 YouTube → 補填手勢 → 寫入 → 唯讀表格 → **球線分布＝wow 點** → 表格可編輯 → 子分類）。手勢三態、折線座標、就地升級、影片載體等決定與六條「不要重新提議」寫進 [ADR-0010](adr/0010-advanced-recording-gesture-and-trajectory-model.md)（PR #398）。#99 保持 open、零相依可插隊。同日稍早：#385 三處 PATCH 合約缺口補齊，判準寫成 [ADR-0009](adr/0009-foreign-key-scope-is-the-match-not-the-user.md)（外鍵驗的範圍是「同一場比賽」不是「同一個使用者」），本檔那條「會復發的判準」因此改成一行指路。同日另做了 backlog 衛生：Project #4 上 9 張沒有 Status 的 open issue 全數補齊（#385／#375／#359 進 Todo，其餘 Backlog）。前一次：2026-08-11 (aila) — #372 五個決策全數拍板（含 [ADR-0007](adr/0007-tactics-match-is-optional-tag.md)＋PR #378），C1 分出去成 #379；另清掉 #322／#324、兩張 infra 守衛票 #341／#354，以及 #368（逐欄列舉補上編譯期守衛，24 個寫入點全掃 → ADR-0008，照出的合約缺口成 #385）。\_
 
 ## Current state
 
