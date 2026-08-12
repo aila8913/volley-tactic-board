@@ -15,7 +15,7 @@
 > **開發進度 (aila)** 與 **設計進度 (tang)** 兩個子區塊。各自 wrap-up 時只改自己那區，
 > 平行 PR 就落在不同行段、git 幾乎都能自動合併。上面的 `_Last updated_` 是**共用一行**摘要。
 
-\_Last updated: 2026-08-11 (aila) — #372 五個決策全數拍板（含 [ADR-0007](adr/0007-tactics-match-is-optional-tag.md)＋PR #378），C1 分出去成 #379；另清掉 #322／#324、兩張 infra 守衛票 #341／#354，以及 #368（逐欄列舉補上編譯期守衛，24 個寫入點全掃 → ADR-0008，照出的合約缺口成 #385）。tang 區只改了一句過期的待調（#322 已交付）。\_
+\_Last updated: 2026-08-12 (aila) — 只做了 backlog 衛生：Project #4 上 9 張沒有 Status 的 open issue 全數補齊（#385／#375／#359 進 Todo，其餘 Backlog），另校正本檔兩處（M4 現在是四張、補記 PR #382）。沒有程式改動。前一次：2026-08-11 (aila) — #372 五個決策全數拍板（含 [ADR-0007](adr/0007-tactics-match-is-optional-tag.md)＋PR #378），C1 分出去成 #379；另清掉 #322／#324、兩張 infra 守衛票 #341／#354，以及 #368（逐欄列舉補上編譯期守衛，24 個寫入點全掃 → ADR-0008，照出的合約缺口成 #385）。\_
 
 ## Current state
 
@@ -229,10 +229,14 @@ gh issue list --milestone "$(gh api repos/:owner/:repo/milestones --jq 'map(sele
 各 milestone 的**收件標準**（包含「名字裡有『雜項』的 milestone 會變成垃圾桶」那條教訓）
 寫在 `.claude/skills/wrap-up/reference.md`，不在這裡。
 
-### M4：三張刻意一起設計，不單張開工
+### M4：三張刻意一起設計，不單張開工（＋後來歸進來的 #375）
 
 #51 動作子分類決定 #21 記得出什麼、#21 的球線分布是產品定位裡的 wow 點、#99 站位快照同屬 advanced tier。
 **地基已先落一塊**：`events.outcome` 的寫入（#365）與呈現（#370）都已交付，不必等設計會。
+
+⚠️ **milestone 現在有四張，但「一起設計」只指前三張。** #375（個人能力雷達圖）是 08-11 另開後歸進
+M4 的，不在那組相依裡——它卡的是自己的維度定義與少樣本失真，不必等 #21／#51 的設計會。
+（別看到 milestone 有四張就以為要一起開工。）
 
 **已拍板**：進階版的影片載體＝**內嵌 YouTube 播放器**。這題之前完全懸空——整套進階版的可行性
 建立在「可暫停倒帶的影片」上，而 `videoTimestamp` 從 schema 到 API 都通了卻沒有任何前端在寫它。
@@ -283,6 +287,9 @@ gh issue list --milestone "$(gh api repos/:owner/:repo/milestones --jq 'map(sele
 
 ### 開發 (aila)
 
+- **PR #382**（08-11，無對應 issue）戰術板右欄拿掉「新手提示 (Tips)」，空間還給名單與按鈕（PO 當場決定）。
+  只動 `RotationTable.tsx`／`TacticsRosterPanel.tsx` 兩個檔。**它跟 #331 是同一個症狀家族**——
+  右欄塞不下，差別只在這次是把最不重要的東西拿掉、#331 要處理的是硬壓高度那四處。
 - **#368**（08-11）逐欄列舉漏欄位變成編譯錯誤 → **[ADR-0008](adr/0008-exhaustive-column-lists-on-writes.md)**
   （含「不要重新提議」四條）。三個備選裡選了**型別層窮舉**，因為只有它做得到
   **執行期與送出的 SQL 一個位元都沒變**。24 個寫入點全掃。副產物：窮舉檢查**照出三個合約缺口**
