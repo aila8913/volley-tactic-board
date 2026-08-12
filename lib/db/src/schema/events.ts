@@ -15,7 +15,16 @@ export const eventActionEnum = pgEnum("event_action", [
 
 // ballType 只在「接球」類動作（receive/dig）才有意義，用來把一傳/防守細分成
 // 接發 / 接扣(S) / 嗆司 / 接吊(T) 四類做統計（見 docs/product-spec.md 的防守數據分析章節）。
-export const ballTypeEnum = pgEnum("ball_type", ["serve", "spike", "tip", "chance"]);
+// cover（掩護）＝ 攔網後的防守，是 #51 談出來的第四類（docs/event-grammar-spec.md 對照表 D7）。
+// pgEnum「加值」是相容的異動（既有資料照舊、舊值都還在），所以可以放心 additive 加；
+// 反過來「刪值」不可逆（存過那個值的列會變成非法），這就是下面 serveType 只先鎖三個值的理由。
+export const ballTypeEnum = pgEnum("ball_type", ["serve", "spike", "tip", "chance", "cover"]);
+
+// 發球種類（#51／event-grammar-spec 決策 6）：純進階版欄位，簡易版不分類。
+// 值用英文 snake_case 跟本 repo 其他 enum 一致；中文對照是
+// jump = 跳發、float = 飄球、jump_float = 跳飄。
+// 先只鎖這三個值：加值相容、刪值不可逆，所以「先窄後寬」永遠是安全的一邊。
+export const serveTypeEnum = pgEnum("serve_type", ["jump", "float", "jump_float"]);
 
 export const eventSourceEnum = pgEnum("event_source", ["live", "review"]);
 
@@ -60,6 +69,9 @@ export const eventsTable = pgTable("events", {
   playerId: uuid("player_id").references(() => playersTable.id, { onDelete: "set null" }),
   action: eventActionEnum("action").notNull(),
   ballType: ballTypeEnum("ball_type"), // nullable：只有接球動作才需要填
+  // 發球種類。nullable：只有 action = "serve" 且是進階版補填時才會有值——簡易版記發球
+  // 不分跳發/飄球（停下來分類會打斷計分節奏，見 event-grammar-spec 決策 8）。
+  serveType: serveTypeEnum("serve_type"),
   // 0~3 的品質評分，沿用排球記錄的慣例刻度：0 分 = 直接失誤、3 分 = 完美到位（舉球員可以自由選戰術）。
   // nullable 是因為不是每種動作都需要評分（例如單純記錄一次攻擊落點，不一定要評分）。
   quality: integer("quality"),

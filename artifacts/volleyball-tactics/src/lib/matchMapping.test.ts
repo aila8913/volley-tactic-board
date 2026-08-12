@@ -75,7 +75,6 @@ describe("server → domain mapping", () => {
         date: iso,
         opponent: "台大",
         location: null,
-        videoUrl: null,
         tournamentId: null,
         createdAt: iso,
         format: "best_of_3",

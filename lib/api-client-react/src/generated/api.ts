@@ -29,12 +29,14 @@ import type {
   MatchAnalysisSummary,
   MatchEvent,
   MatchSet,
+  MatchVideo,
   MergeCandidateGroup,
   MergePeopleRequest,
   MergePeopleResult,
   NewEvent,
   NewLineup,
   NewMatch,
+  NewMatchVideo,
   NewPerson,
   NewPlayer,
   NewRally,
@@ -60,6 +62,7 @@ import type {
   UpdateMatch,
   UpdatePerson,
   UpdatePlayer,
+  UpdateRally,
   UpdateSet,
   UpdateTactic,
   UpdateTeam,
@@ -539,7 +542,7 @@ export const getUpdateMatchUrl = (matchId: number,) => {
 }
 
 /**
- * @summary Update a match (e.g. attach a video_url for post-game review)
+ * @summary Update a match (rename, move to another folder, mark finished)
  */
 export const updateMatch = async (matchId: number,
     updateMatch: UpdateMatch, options?: RequestInit): Promise<Match> => {
@@ -589,7 +592,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type UpdateMatchMutationError = ErrorType<unknown>
 
     /**
- * @summary Update a match (e.g. attach a video_url for post-game review)
+ * @summary Update a match (rename, move to another folder, mark finished)
  */
 export const useUpdateMatch = <TError = ErrorType<unknown>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateMatch>>, TError,{matchId: number;data: BodyType<UpdateMatch>}, TContext>, request?: SecondParameter<typeof customFetch>}
@@ -1985,6 +1988,225 @@ export const useMergePeople = <TError = ErrorType<unknown>,
       return useMutation(getMergePeopleMutationOptions(options));
     }
 
+export const getListMatchVideosUrl = (matchId: number,) => {
+
+
+
+
+  return `/api/matches/${matchId}/videos`
+}
+
+/**
+ * @summary List the video segments of a match, in order
+ */
+export const listMatchVideos = async (matchId: number, options?: RequestInit): Promise<MatchVideo[]> => {
+
+  return customFetch<MatchVideo[]>(getListMatchVideosUrl(matchId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListMatchVideosQueryKey = (matchId: number,) => {
+    return [
+    `/api/matches/${matchId}/videos`
+    ] as const;
+    }
+
+
+export const getListMatchVideosQueryOptions = <TData = Awaited<ReturnType<typeof listMatchVideos>>, TError = ErrorType<unknown>>(matchId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMatchVideos>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListMatchVideosQueryKey(matchId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listMatchVideos>>> = ({ signal }) => listMatchVideos(matchId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(matchId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listMatchVideos>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListMatchVideosQueryResult = NonNullable<Awaited<ReturnType<typeof listMatchVideos>>>
+export type ListMatchVideosQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List the video segments of a match, in order
+ */
+
+export function useListMatchVideos<TData = Awaited<ReturnType<typeof listMatchVideos>>, TError = ErrorType<unknown>>(
+ matchId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMatchVideos>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListMatchVideosQueryOptions(matchId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getCreateMatchVideoUrl = (matchId: number,) => {
+
+
+
+
+  return `/api/matches/${matchId}/videos`
+}
+
+/**
+ * @summary Attach one video segment to a match
+ */
+export const createMatchVideo = async (matchId: number,
+    newMatchVideo: NewMatchVideo, options?: RequestInit): Promise<MatchVideo> => {
+
+  return customFetch<MatchVideo>(getCreateMatchVideoUrl(matchId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      newMatchVideo,)
+  }
+);}
+
+
+
+
+export const getCreateMatchVideoMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createMatchVideo>>, TError,{matchId: number;data: BodyType<NewMatchVideo>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createMatchVideo>>, TError,{matchId: number;data: BodyType<NewMatchVideo>}, TContext> => {
+
+const mutationKey = ['createMatchVideo'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createMatchVideo>>, {matchId: number;data: BodyType<NewMatchVideo>}> = (props) => {
+          const {matchId,data} = props ?? {};
+
+          return  createMatchVideo(matchId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateMatchVideoMutationResult = NonNullable<Awaited<ReturnType<typeof createMatchVideo>>>
+    export type CreateMatchVideoMutationBody = BodyType<NewMatchVideo>
+    export type CreateMatchVideoMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Attach one video segment to a match
+ */
+export const useCreateMatchVideo = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createMatchVideo>>, TError,{matchId: number;data: BodyType<NewMatchVideo>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createMatchVideo>>,
+        TError,
+        {matchId: number;data: BodyType<NewMatchVideo>},
+        TContext
+      > => {
+      return useMutation(getCreateMatchVideoMutationOptions(options));
+    }
+
+export const getDeleteMatchVideoUrl = (videoId: string,) => {
+
+
+
+
+  return `/api/videos/${videoId}`
+}
+
+/**
+ * @summary Delete a video segment (rallies anchored to it keep their data, losing only the anchor)
+ */
+export const deleteMatchVideo = async (videoId: string, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteMatchVideoUrl(videoId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteMatchVideoMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteMatchVideo>>, TError,{videoId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteMatchVideo>>, TError,{videoId: string}, TContext> => {
+
+const mutationKey = ['deleteMatchVideo'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteMatchVideo>>, {videoId: string}> = (props) => {
+          const {videoId} = props ?? {};
+
+          return  deleteMatchVideo(videoId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteMatchVideoMutationResult = NonNullable<Awaited<ReturnType<typeof deleteMatchVideo>>>
+
+    export type DeleteMatchVideoMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Delete a video segment (rallies anchored to it keep their data, losing only the anchor)
+ */
+export const useDeleteMatchVideo = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteMatchVideo>>, TError,{videoId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteMatchVideo>>,
+        TError,
+        {videoId: string},
+        TContext
+      > => {
+      return useMutation(getDeleteMatchVideoMutationOptions(options));
+    }
+
 export const getListPlayersUrl = (matchId: number,) => {
 
 
@@ -2876,6 +3098,78 @@ export const useCreateEvent = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getCreateEventMutationOptions(options));
+    }
+
+export const getUpdateRallyUrl = (rallyId: string,) => {
+
+
+
+
+  return `/api/rallies/${rallyId}`
+}
+
+/**
+ * @summary Update a rally (e.g. anchor it to a video segment + timestamp for review backfill)
+ */
+export const updateRally = async (rallyId: string,
+    updateRally: UpdateRally, options?: RequestInit): Promise<Rally> => {
+
+  return customFetch<Rally>(getUpdateRallyUrl(rallyId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updateRally,)
+  }
+);}
+
+
+
+
+export const getUpdateRallyMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateRally>>, TError,{rallyId: string;data: BodyType<UpdateRally>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateRally>>, TError,{rallyId: string;data: BodyType<UpdateRally>}, TContext> => {
+
+const mutationKey = ['updateRally'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateRally>>, {rallyId: string;data: BodyType<UpdateRally>}> = (props) => {
+          const {rallyId,data} = props ?? {};
+
+          return  updateRally(rallyId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateRallyMutationResult = NonNullable<Awaited<ReturnType<typeof updateRally>>>
+    export type UpdateRallyMutationBody = BodyType<UpdateRally>
+    export type UpdateRallyMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Update a rally (e.g. anchor it to a video segment + timestamp for review backfill)
+ */
+export const useUpdateRally = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateRally>>, TError,{rallyId: string;data: BodyType<UpdateRally>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateRally>>,
+        TError,
+        {rallyId: string;data: BodyType<UpdateRally>},
+        TContext
+      > => {
+      return useMutation(getUpdateRallyMutationOptions(options));
     }
 
 export const getDeleteRallyUrl = (rallyId: string,) => {

@@ -111,7 +111,7 @@ paths:
     patch:
       operationId: updateMatch
       tags: [matches]
-      summary: Update a match (e.g. attach a video_url for post-game review)
+      summary: Update a match (rename, move to another folder, mark finished)
       requestBody:
         required: true
         content:
@@ -425,6 +425,56 @@ paths:
               schema:
                 $ref: "#/components/schemas/MergePeopleResult"
 
+  # 一場比賽的影片段落（#390）。取代原本 matches.videoUrl 那一欄——一場比賽可能有好幾段
+  # 影片（一局一段、錄到滿、換電池），一個欄位表達不了。讀寫都掛在 /matches/{matchId} 底下
+  # （先驗 match 擁有權）；刪除走 /videos/{videoId}，跟 timeouts/substitutions 同一種形狀。
+  /matches/{matchId}/videos:
+    parameters:
+      - $ref: "#/components/parameters/MatchId"
+    get:
+      operationId: listMatchVideos
+      tags: [matches]
+      summary: List the video segments of a match, in order
+      responses:
+        "200":
+          description: List of video segments, ordered by sequence
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MatchVideo"
+    post:
+      operationId: createMatchVideo
+      tags: [matches]
+      summary: Attach one video segment to a match
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewMatchVideo"
+      responses:
+        "201":
+          description: Created video segment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MatchVideo"
+
+  /videos/{videoId}:
+    parameters:
+      - $ref: "#/components/parameters/MatchVideoId"
+    # 刪掉一段影片（例如網址貼錯）。rallies.videoId 是 onDelete: "set null"，所以錨在這段
+    # 影片上的那些分會失去錨點、但紀錄本身完好——比賽資料比影片連結重要得多。
+    delete:
+      operationId: deleteMatchVideo
+      tags: [matches]
+      summary: Delete a video segment (rallies anchored to it keep their data, losing only the anchor)
+      responses:
+        "204":
+          description: Deleted
+
   /matches/{matchId}/players:
     parameters:
       - $ref: "#/components/parameters/MatchId"
@@ -636,6 +686,26 @@ paths:
   /rallies/{rallyId}:
     parameters:
       - $ref: "#/components/parameters/RallyId"
+    # 進階版補填用（#390）：把一分錨到「哪一段影片的第幾秒」。
+    # 為什麼是 PATCH 既有的 rally 而不是建立新資料：那一分在簡易版記錄時就已經存在了，
+    # 補填是在同一列上補欄位——這跟 ADR-0010 決定 3「補填是就地升級、不是並存」同一個道理。
+    patch:
+      operationId: updateRally
+      tags: [matches]
+      summary: Update a rally (e.g. anchor it to a video segment + timestamp for review backfill)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateRally"
+      responses:
+        "200":
+          description: Updated rally
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Rally"
     delete:
       operationId: deleteRally
       tags: [matches]
@@ -1005,6 +1075,13 @@ components:
       schema:
         type: string
         format: uuid
+    MatchVideoId:
+      name: videoId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
     EventId:
       name: eventId
       in: path
@@ -1354,10 +1431,8 @@ components:
         location:
           type: string
           nullable: true
-        # YouTube 連結；有值時前端會顯示影片播放器並啟用「賽後補填」模式。
-        videoUrl:
-          type: string
-          nullable: true
+        # ⚠️ 影片連結不在這裡：原本的 videoUrl 已於 #390 移除，改用 GET/POST
+        # /matches/{matchId}/videos（一場比賽可以有好幾段影片）。
         # 這場比賽所屬資料夾（Tournament）的 id。#117 後資料夾進了 DB，這是指向 tournaments 表
         # 的 uuid 外鍵。null 代表放在最上層、沒歸到任何資料夾。
         tournamentId:
@@ -1400,9 +1475,6 @@ components:
         location:
           type: string
           nullable: true
-        videoUrl:
-          type: string
-          nullable: true
         tournamentId:
           type: string
           format: uuid
@@ -1432,9 +1504,6 @@ components:
           type: string
           format: date-time
         location:
-          type: string
-          nullable: true
-        videoUrl:
           type: string
           nullable: true
         tournamentId:
@@ -1553,6 +1622,16 @@ components:
           type: integer
         winner:
           $ref: "#/components/schemas/RallyWinner"
+        # 影片錨定（#390）：這一分在哪一段影片的第幾秒。nullable——簡易版當下記的那一分
+        # 沒有影片可指，補填之後才會有值。掛在 rally 而不是 event 的理由見
+        # lib/db/src/schema/rallies.ts。
+        videoId:
+          type: string
+          format: uuid
+          nullable: true
+        videoTimestamp:
+          type: integer
+          nullable: true
       required: [id, setId, rallyNumber, homeScore, awayScore, homeRotation, awayRotation, winner]
 
     NewRally:
@@ -1574,7 +1653,68 @@ components:
           type: integer
         winner:
           $ref: "#/components/schemas/RallyWinner"
+        # 選填：從空白開始補填時（沒有簡易版資料）建立這一分，可以直接帶上影片錨點，
+        # 不用建完再 PATCH 一次。
+        videoId:
+          type: string
+          format: uuid
+          nullable: true
+        videoTimestamp:
+          type: integer
+          nullable: true
       required: [rallyNumber, homeScore, awayScore, homeRotation, awayRotation, winner]
+
+    UpdateRally:
+      type: object
+      properties:
+        # 影片錨定（#390）：這一分對應「哪一段影片的第幾秒」。兩欄都是 nullable，
+        # 三種狀態要能分開表達：帶值＝設定錨點、帶 null＝清掉錨點、完全不帶＝不動它。
+        videoId:
+          type: string
+          format: uuid
+          nullable: true
+        videoTimestamp:
+          type: integer
+          nullable: true
+
+    # 一場比賽的一段影片（#390）。取代原本 matches.videoUrl 那一欄，理由見
+    # lib/db/src/schema/matchVideos.ts。
+    MatchVideo:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        # matches.id 是 serial 整數，所以這裡是 integer 不是 uuid。
+        matchId:
+          type: integer
+        url:
+          type: string
+        # 這是這場比賽的第幾段（從 1 開始）。用明確的順序欄位，不靠建立時間排序——
+        # 使用者可能事後才補貼漏掉的中間那一段。
+        sequence:
+          type: integer
+        # 人看的標籤（例如「第一局」）；null 就由前端顯示「第 N 段」。
+        label:
+          type: string
+          nullable: true
+      required: [id, matchId, url, sequence]
+
+    NewMatchVideo:
+      type: object
+      properties:
+        # 選填的 client-mintable 主鍵，理由同 NewSet.id（#64 PR2）。
+        id:
+          type: string
+          format: uuid
+        url:
+          type: string
+        sequence:
+          type: integer
+        label:
+          type: string
+          nullable: true
+      required: [url, sequence]
 
     # GET /analysis/matches/{matchId}/rotations 的一列：我方在某個輪次時的得失分彙總。
     # rotation 沿用 rallies.homeRotation 的語意——從先發起算的第幾輪（0–5），不是場上號位。
@@ -1947,9 +2087,16 @@ components:
       enum: [serve, receive, set, attack, block, dig]
 
     # 只在 receive/dig 動作才有意義，用來把一傳/防守細分成接發/接扣(S)/嗆司/接吊(T)四類做統計。
+    # cover（掩護）＝ 攔網後的防守，是 #51 加的第四類（event-grammar-spec 對照表 D7）。
     BallType:
       type: string
-      enum: [serve, spike, tip, chance]
+      enum: [serve, spike, tip, chance, cover]
+
+    # 發球種類（#51／event-grammar-spec 決策 6）：純進階版欄位，簡易版不分類。
+    # jump = 跳發、float = 飄球、jump_float = 跳飄。
+    ServeType:
+      type: string
+      enum: [jump, float, jump_float]
 
     EventSource:
       type: string
@@ -1994,6 +2141,10 @@ components:
           $ref: "#/components/schemas/EventAction"
         ballType:
           $ref: "#/components/schemas/BallType"
+        # 發球種類，只有 action = serve 且是進階版補填時才有值（#51）。
+        serveType:
+          $ref: "#/components/schemas/ServeType"
+          nullable: true
         # 0~3 品質評分，0 = 直接失誤，3 = 完美到位。用來算「到位率」。
         quality:
           type: integer
@@ -2050,6 +2201,9 @@ components:
           $ref: "#/components/schemas/EventAction"
         ballType:
           $ref: "#/components/schemas/BallType"
+        serveType:
+          $ref: "#/components/schemas/ServeType"
+          nullable: true
         quality:
           type: integer
           nullable: true
@@ -2159,6 +2313,10 @@ components:
           $ref: "#/components/schemas/EventAction"
         ballType:
           $ref: "#/components/schemas/BallType"
+        # 補填時把一顆發球分類成跳發/飄球/跳飄（#51）。nullable：帶 null＝改回未分類。
+        serveType:
+          $ref: "#/components/schemas/ServeType"
+          nullable: true
         quality:
           type: integer
           nullable: true

@@ -36,7 +36,7 @@ router.get(
 );
 
 // POST /matches — 建立新比賽。userId 由後端從 auth 注入，不是 client 送的，
-// 所以 body 只驗 name/date/opponent/location/videoUrl（見 CreateMatchBody）。
+// 所以 body 只驗 name/date/opponent/location（見 CreateMatchBody）。
 // owns 檢查：要放進某個資料夾、或標成某支球隊的話，先確認那個資料夾／球隊是
 // 「這個使用者的」（#127）。body.tournamentId / body.teamId 都是 nullish（可不帶＝
 // 沒有資料夾／球隊可驗、可為 null＝明確不分類），`!= null` 這個寬鬆比較剛好一次涵蓋
@@ -67,7 +67,6 @@ router.post(
         date: body.date,
         opponent: body.opponent,
         location: body.location ?? null,
-        videoUrl: body.videoUrl ?? null,
         // 資料夾 id（可為 null＝放最上層）。擁有權已在上面的 owns 檢查驗過，這裡才敢直接存。
         tournamentId: body.tournamentId ?? null,
         // 球隊標籤 id（可為 null＝未分類）。擁有權同樣已在上面驗過。
@@ -121,7 +120,8 @@ router.get(
   ),
 );
 
-// PATCH /matches/:matchId — 部分更新（例如補上 videoUrl 開啟賽後補填模式）。
+// PATCH /matches/:matchId — 部分更新（改對手名稱、搬資料夾、標記完賽…）。
+// 影片連結不在這裡：#390 之後改用 POST /matches/:matchId/videos，見 routes/matchVideos.ts。
 // 只更新 body 有帶的欄位，沒帶的維持原值。
 // owns 陣列：先驗這場比賽是不是這個使用者的，再同 POST 驗要搬進去的資料夾／要標的球隊
 // 是不是這個使用者的（`== null` 一次涵蓋 undefined＝沒帶 與 null＝明確清空，兩者都沒有
@@ -158,7 +158,6 @@ router.patch(
         // UpdateMatchBody 的 date 是 zod.coerce.date()，parse 後已是 Date 物件，timestamp 欄位直接吃。
         date: body.date,
         location: body.location,
-        videoUrl: body.videoUrl,
         tournamentId: body.tournamentId,
         teamId: body.teamId,
         // 賽制（#215）：沒帶就不動這一欄，維持原本的賽制不變。

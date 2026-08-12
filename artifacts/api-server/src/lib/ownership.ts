@@ -12,6 +12,7 @@ import {
   teamsTable,
   peopleTable,
   tacticsTable,
+  matchVideosTable,
 } from "@workspace/db";
 
 // 巢狀資源（players/sets/rallies/events）自己沒有存 userId，它們的擁有權是「繼承」自所屬的 match。
@@ -195,6 +196,38 @@ export async function timeoutBelongsToUser(timeoutId: string, userId: string): P
     .innerJoin(setsTable, eq(timeoutsTable.setId, setsTable.id))
     .innerJoin(matchesTable, eq(setsTable.matchId, matchesTable.id))
     .where(and(eq(timeoutsTable.id, timeoutId), eq(matchesTable.userId, userId)));
+
+  return row !== undefined;
+}
+
+// 影片段落（#390）掛在 match 底下、自己沒存 userId，所以擁有權要 join 一層
+// （match_videos → matches）追到 match.userId。DELETE /videos/:videoId 路徑上只有 videoId，
+// 只能靠這條 join 鏈反推它屬不屬於這個 user，跟 timeoutBelongsToUser 同一種形狀（只是少一層）。
+export async function matchVideoBelongsToUser(videoId: string, userId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: matchVideosTable.id })
+    .from(matchVideosTable)
+    .innerJoin(matchesTable, eq(matchVideosTable.matchId, matchesTable.id))
+    .where(and(eq(matchVideosTable.id, videoId), eq(matchesTable.userId, userId)));
+
+  return row !== undefined;
+}
+
+// PATCH /rallies/:rallyId 用（#390）：body 帶的 videoId 是不是「這一分所屬那場比賽」的影片。
+// 判準是同一場比賽而不是同一個使用者，理由完全同 playerBelongsToEventMatch（ADR-0009）：
+// 就算那段影片也是你自己的，把 A 場的分錨到 B 場的影片就是錯的資料。外鍵只保證「這個 uuid
+// 指得到一列影片」，指到哪一場它管不著。
+export async function videoBelongsToRallyMatch(videoId: string, rallyId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: matchVideosTable.id })
+    .from(ralliesTable)
+    .innerJoin(setsTable, eq(ralliesTable.setId, setsTable.id))
+    // 「同一場比賽」直接寫進 join 條件：對不上就沒有列，不用先查出 matchId 再發第二次查詢。
+    .innerJoin(
+      matchVideosTable,
+      and(eq(matchVideosTable.id, videoId), eq(matchVideosTable.matchId, setsTable.matchId)),
+    )
+    .where(eq(ralliesTable.id, rallyId));
 
   return row !== undefined;
 }

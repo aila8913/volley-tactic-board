@@ -34,7 +34,10 @@ export const matchFormatEnum = pgEnum("match_format", ["best_of_3", "best_of_5"]
 // 值即可（pgEnum 加值是相容的異動，既有資料不受影響）。
 export const matchStatusEnum = pgEnum("match_status", ["in_progress", "finished"]);
 
-// 一場比賽。videoUrl 留空代表目前還沒有可以做「賽後補填」的影片連結。
+// 一場比賽。
+// ⚠️ 影片連結不在這張表：原本的 `videoUrl` 欄位已於 #390 刪除，改成獨立的 match_videos 表
+// （一場比賽可能有好幾段影片）。理由與「不要加回來」的說明見 lib/db/src/schema/matchVideos.ts
+// 與 docs/adr/0010-advanced-recording-gesture-and-trajectory-model.md 決定 5。
 export const matchesTable = pgTable("matches", {
   id: serial("id").primaryKey(),
   // 擁有這場比賽的使用者。跟 tactics 表一樣，mock auth 階段固定是 "mock-user-001"，
@@ -48,7 +51,6 @@ export const matchesTable = pgTable("matches", {
   date: timestamp("date", { withTimezone: true }).notNull(),
   opponent: text("opponent").notNull(),
   location: text("location"),
-  videoUrl: text("video_url"),
   // 比賽所屬的資料夾（Tournament）。#117 前這裡是不帶 FK 的 text、只存前端 localStorage 資料夾的
   // 不透明字串；現在資料夾進了 DB（tournaments 表），這裡改成真正的 uuid 外鍵指過去。
   // nullable：null 代表這場比賽放在最上層、沒歸到任何資料夾。

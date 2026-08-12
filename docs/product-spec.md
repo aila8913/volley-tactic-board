@@ -26,7 +26,9 @@
 
 跟賽中記錄是**同一個畫面**，不是分開的頁面。差別只在於：
 
-- 比賽建立時可以貼上 YouTube 連結（`video_url`）。
+- 可以貼上 YouTube 連結。一場比賽能貼**好幾段**（一局一段、錄到滿、換電池），存在
+  `match_videos` 表；每一分再用 `rallies.videoId` / `rallies.videoTimestamp` 錨到
+  「哪一段的第幾秒」（#390 之前這裡是 `matches.video_url` 一欄，表達不了多段）。
 - 有連結時，畫面上會出現 YouTube 播放器；點擊球場記錄球路時，系統自動抓當前播放秒數存成
   `video_timestamp`，方便回頭核對。
 - 沒有連結時，這部分區域不顯示，記錄方式跟賽中模式完全一樣。
