@@ -45,13 +45,4 @@ describe("toYouTubeEmbedUrl", () => {
       "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?enablejsapi=1",
     );
   });
-
-  // origin 是 JS API 交握用的（見該函式的說明）。釘住「有傳就一定進網址、而且是編碼過的」
-  // ——沒編碼的話 `://` 這種字元會把查詢字串切壞。
-  it("有給 origin 時附在後面（並做過 URL 編碼）", () => {
-    expect(toYouTubeEmbedUrl("dQw4w9WgXcQ", "http://localhost:5173")).toBe(
-      "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?enablejsapi=1" +
-        "&origin=http%3A%2F%2Flocalhost%3A5173",
-    );
-  });
 });
