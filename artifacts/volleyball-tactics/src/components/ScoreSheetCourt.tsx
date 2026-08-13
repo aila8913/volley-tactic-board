@@ -6,6 +6,16 @@ import type { MatchPlayer } from "../types/match";
 import type { PlayerPosition } from "../types/rotationTable";
 import { CourtGradientDefs, CourtSurface, CourtBorder, CourtLines } from "../lib/courtTheme";
 import { toSvg, fromScreen, toScreen, rowOf } from "../lib/courtGeometry";
+// 手勢常數與命中判定數學共用來源（issue #392）：跟進階版補填球場
+// （AdvancedRecordingCourt.tsx）用同一組數字，理由見 courtGesture.ts 開頭的說明。
+// 這裡只是把原本寫死在這個檔案裡的定義換成 import，行為不變。
+import {
+  HIT_RADIUS,
+  LONG_PRESS_MS,
+  MOVE_CANCEL_SVG,
+  MOVE_CANCEL_SCREEN,
+  dist,
+} from "../lib/courtGesture";
 import PlayerMarker from "./PlayerMarker";
 
 export interface TouchedTarget {
@@ -55,15 +65,6 @@ interface ScoreSheetCourtProps {
   //（scope 到 matchId）。
   selectedLiberoId?: string | null;
   onSelectLibero?: (playerId: string) => void;
-}
-
-const HIT_RADIUS = 11;
-// 長按判定的等待時間。跟 OS 層級的長按手勢（通常 500ms 上下）抓同一個量級，
-// 使用者不用重新學一套「這個 app 的長按比較快/比較慢」的手感。
-const LONG_PRESS_MS = 500;
-
-function dist(ax: number, ay: number, bx: number, by: number) {
-  return Math.hypot(ax - bx, ay - by);
 }
 
 export default function ScoreSheetCourt({
@@ -286,7 +287,10 @@ export default function ScoreSheetCourt({
     setDragCurrent(pt);
     // 手指移動超過一點點就不算「按住不動」，取消長按判定——這樣畫線手勢（本來就要移動）
     // 不會被長按邏輯誤判打斷；閾值故意抓比 HIT_RADIUS 小很多，一點點手抖不該取消長按。
-    if (longPressTimerRef.current !== null && dist(dragStart.x, dragStart.y, pt.x, pt.y) > 3) {
+    if (
+      longPressTimerRef.current !== null &&
+      dist(dragStart.x, dragStart.y, pt.x, pt.y) > MOVE_CANCEL_SVG
+    ) {
       clearLongPressTimer();
     }
   };
@@ -387,7 +391,10 @@ export default function ScoreSheetCourt({
     if (
       liberoLongPressTimerRef.current !== null &&
       start &&
-      dist(start.x, start.y, e.clientX, e.clientY) > 3
+      // 這裡比的是螢幕像素（clientX/clientY），不是球場 SVG 座標——這顆鈕是球場 SVG 外面的
+      // HTML 元素，沒有 SVG 座標可用。用 MOVE_CANCEL_SCREEN 而不是 MOVE_CANCEL_SVG，
+      // 兩者數值目前相同但單位不同，理由見 courtGesture.ts 那兩個常數的說明。
+      dist(start.x, start.y, e.clientX, e.clientY) > MOVE_CANCEL_SCREEN
     ) {
       clearLiberoLongPressTimer();
     }

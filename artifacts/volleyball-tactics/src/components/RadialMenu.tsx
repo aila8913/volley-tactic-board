@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
+import { radialOptionOffsets, RADIAL_DEAD_ZONE } from "@/lib/courtGesture";
 
 export interface RadialMenuOption<T extends string> {
   value: T;
@@ -22,15 +24,19 @@ interface RadialMenuProps<T extends string> {
   // 例如 2 個選項搭配 startAngle=180，會落在左（180°）／右（0°），可以做出
   // 舊版「寫死 left/right」一樣的排版，同時 6 個選項也不用另外設計版面。
   startAngle?: number;
+  // 目前手指懸在哪個選項上，該顆要做高亮（issue #392）。簡易版是點擊型選單，滑鼠移動有
+  // 原生 hover 可用；進階版補填是「按下就彈出、滑進去、放開才選中」的拖曳型選單，拖曳中
+  // 沒有 hover 事件（pointer capture 通常握在球場元件手上，不會落在這顆選項按鈕上），
+  // 所以需要外部（拖曳邏輯所在的球場元件）算好「現在離哪個選項最近」，用這個 prop 告訴
+  // 選單該亮哪一顆——不然使用者滑到一半完全看不出放開會選到誰。
+  // 預設 undefined（沒有任何選項高亮），簡易版所有呼叫端不傳這個 prop，視覺輸出不受影響。
+  highlightedValue?: T;
+  // 在圓心畫出「死區」——一個半徑 RADIAL_DEAD_ZONE 的圈，中間一個 ✕，代表「放開在這裡＝
+  // 取消」（issue #392，PO 2026-08-13 定案）。只有拖曳型選單（進階版補填）才需要：點擊型
+  // 選單（簡易版）的取消方式是點半透明背景，圓心那塊反而是使用者按下去的地方，畫個 ✕ 上去
+  // 只會擋住視線。所以做成 opt-in 而不是無條件畫，預設 false ＝ 簡易版視覺完全不變。
+  showDeadZoneCancel?: boolean;
 }
-
-// px，選項按鈕離中心點的距離。原本是固定 56——選項數固定 6 顆時夠用，但計分頁的動作
-// 選單現在會視情境多一顆「沒看到」變成 7 顆（見 pages/ScoreSheet.tsx），同一個半徑塞
-// 7 顆會比 6 顆擠（弧長變短）。改成隨選項數等比例放大：以 6 顆的弧長當基準，維持每顆
-// 按鈕之間的弧長大致不變，options.length ≤ 6 時（目前只有得/失分 2 顆、動作 6 顆兩種）
-// 算出來的半徑不會小於原本的 56，不影響既有選單。
-const BASE_OFFSET = 56;
-const BASE_OPTION_COUNT = 6;
 
 // 比賽期間快速操作用的圓形彈出選單：點在球場上的球員，選項會繞著他彈出來，
 // 不用開選單、不用捲動列表，單手點一下就能記一球（見 pages/ScoreSheet.tsx 的
@@ -41,11 +47,14 @@ export default function RadialMenu<T extends string>({
   onSelect,
   onCancel,
   startAngle = -90,
+  highlightedValue,
+  showDeadZoneCancel = false,
 }: RadialMenuProps<T>) {
-  const step = 360 / options.length;
-  // Math.max 卡下限：選項比基準少（例如得/失分只有 2 顆）時維持原本的 56，不會縮水，
-  // 只有超過基準（例如動作選單多出「沒看到」變 7 顆）才會等比例放大。
-  const offset = Math.max(BASE_OFFSET, (BASE_OFFSET * options.length) / BASE_OPTION_COUNT);
+  // 選項方位數學（半徑隨選項數等比例放大、每顆的 dx/dy）收在 lib/courtGesture.ts 的
+  // radialOptionOffsets，理由見那支函式開頭的說明：進階版的拖曳選取要用同一份座標
+  // 判斷「放開時離哪個選項最近」，兩邊各寫一份會漂走。這裡只是把原本直接寫在這個檔案裡
+  // 的算式換成呼叫共用函式，畫面輸出不變。
+  const offsets = radialOptionOffsets(options.length, startAngle);
 
   // 進場彈出動畫：選單一開，所有按鈕先疊在中心點（transform 只有置中、opacity:0），
   // 下一影格才把 mounted 翻成 true、transform 換成各自的最終方位——CSS transition
@@ -58,7 +67,19 @@ export default function RadialMenu<T extends string>({
     return () => cancelAnimationFrame(raf);
   }, []);
 
-  return (
+  // ⚠️ 一定要 portal 到 document.body，不能就地 render（issue #392 實機回報的第一個災情：
+  // 「選單沒有圍在球員身邊」）。
+  //
+  // 原因是 CSS 的一條規則：`position: fixed` 平常以視窗為基準定位，但**只要任何一個祖先
+  // 元素身上有 transform（或 filter / perspective），它就改以那個祖先的方框為基準**。
+  // 進階版的球場被包在一個帶 `-translate-x-8` 的容器裡（pages/ScoreSheet.tsx 的版面決定：
+  // 右欄翻成影片後球場要往左挪），那就是一個 transform——於是 `left: center.x`（螢幕座標）
+  // 被當成「相對球場容器左上角」來解讀，整組選項平移了一整個容器的位移量。
+  // 簡易版沒有那個 class，所以同一支元件在簡易版看起來是好的，純粹是碰巧沒踩到。
+  //
+  // portal 到 body 之後，選單的 DOM 位置在任何 transform 祖先之外，`fixed` 恢復成
+  // 以視窗為基準——也就是 center 這個 prop 一直以來宣稱的那個座標系（見 props 的說明）。
+  return createPortal(
     // bg-black/40：計分表換成深色球場背景後，選單彈出時要跟底下忙碌的球場拉開視覺
     // 焦距，原本淺色主題用的 bg-black/10 太淡，深色底幾乎看不出「選單開著」的感覺。
     <div
@@ -66,10 +87,43 @@ export default function RadialMenu<T extends string>({
       style={{ opacity: mounted ? 1 : 0 }}
       onPointerDown={onCancel}
     >
+      {/* 死區的 ✕：手指還在這個圈裡就是「還沒選」，放開＝取消。highlightedValue 是
+          undefined 代表拖曳邏輯算出來的結果是「落在死區」（見 courtGesture.ts 的
+          radialSelection 回傳 null），所以 ✕ 亮起來的條件正好是「沒有任何選項亮著」——
+          兩者是同一件事的一體兩面，不需要再多傳一個 prop 來說明。 */}
+      {showDeadZoneCancel && (
+        <div
+          className={cn(
+            "pointer-events-none absolute flex items-center justify-center rounded-full border font-bold transition-colors",
+            highlightedValue === undefined
+              ? "border-[#f87171] bg-[#f87171]/20 text-[#f87171]"
+              : "border-white/20 bg-black/30 text-white/35",
+          )}
+          style={{
+            left: center.x,
+            top: center.y,
+            width: RADIAL_DEAD_ZONE * 2,
+            height: RADIAL_DEAD_ZONE * 2,
+            transform: "translate(-50%, -50%)",
+            opacity: mounted ? 1 : 0,
+            transition: "opacity 200ms ease-out, color 150ms, background-color 150ms",
+          }}
+        >
+          {/* 用 SVG 畫兩條線而不是打「✕」這個字：字型會影響叉叉的粗細跟置中，
+              兩條線在任何裝置上都一樣。 */}
+          <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
+            <path
+              d="M6 6 L18 18 M18 6 L6 18"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+            />
+          </svg>
+        </div>
+      )}
       {options.map((opt, i) => {
-        const angle = ((startAngle + i * step) * Math.PI) / 180;
-        const dx = offset * Math.cos(angle);
-        const dy = offset * Math.sin(angle);
+        const { dx, dy } = offsets[i];
+        const isHighlighted = !opt.disabled && opt.value === highlightedValue;
         // spring 感的 easing：CSS 沒有真的物理彈簧曲線，這條 cubic-bezier 最後一段會
         // 略為超出終點再彈回來，視覺上接近彈簧回彈；每顆鈕的 transition-delay 依 index
         // 錯開 20ms，六顆鈕會依序「爆」出去，而不是同時瞬間到位。
@@ -109,7 +163,12 @@ export default function RadialMenu<T extends string>({
                 "block rounded-full px-3 py-2 text-sm font-bold backdrop-blur-md transition-transform group-active:scale-95",
                 opt.disabled
                   ? "cursor-not-allowed border border-white/[0.08] bg-white/[0.03] text-white/25"
-                  : "border border-white/[0.26] bg-white/[0.11] text-[#f5f5f0] shadow-lg shadow-black/30 hover:border-[#c6f135] hover:bg-[#c6f135]/20 hover:text-[#c6f135]",
+                  : // 拖曳高亮跟滑鼠 hover 套用同一組萊姆綠語彙（border-[#c6f135] +
+                    // bg-[#c6f135]/20 + text-[#c6f135]）——highlightedValue 是「拖曳版的
+                    // hover」，兩者代表同一件事（「放開會選到這顆」），理應長一樣。
+                    isHighlighted
+                    ? "border border-[#c6f135] bg-[#c6f135]/20 text-[#c6f135] shadow-lg shadow-black/30"
+                    : "border border-white/[0.26] bg-white/[0.11] text-[#f5f5f0] shadow-lg shadow-black/30 hover:border-[#c6f135] hover:bg-[#c6f135]/20 hover:text-[#c6f135]",
               )}
             >
               {opt.label}
@@ -117,6 +176,7 @@ export default function RadialMenu<T extends string>({
           </button>
         );
       })}
-    </div>
+    </div>,
+    document.body,
   );
 }

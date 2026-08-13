@@ -7,6 +7,8 @@ import { useMatchWithRoster } from "@/hooks/useMatches";
 import { useRotationTable } from "@/hooks/useRotationTable";
 import { useScoreSheet, useScoreSheetController } from "@/hooks/useScoreSheet";
 import ScoreSheetCourt, { TouchedTarget } from "@/components/ScoreSheetCourt";
+import AdvancedRecordingCourt, { actionLabel } from "@/components/AdvancedRecordingCourt";
+import { useAdvancedRecording, type DraftEvent } from "@/hooks/useAdvancedRecording";
 import RadialMenu, { RadialMenuOption } from "@/components/RadialMenu";
 import ScoreSheetStats from "@/components/ScoreSheetStats";
 import RotationRailPanel from "@/components/RotationRailPanel";
@@ -197,6 +199,18 @@ export default function ScoreSheet() {
   };
   const isAdvanced = mode === "advanced";
 
+  // ── 進階版補填：目前半完成的那一球（issue #392）──
+  // 只用來組這一頁球場上方那條提示列的文案（跟簡易版共用同一個「插槽」，見下面
+  // scoreDisplay 附近球場區塊的 JSX）。真正的手勢狀態機、命中判定全部關在
+  // AdvancedRecordingCourt 自己的元件裡——這裡只是「讀出來顯示成一句話」。
+  const advancedCurrentBall = useAdvancedRecording((state) =>
+    id ? (state.chainsByMatch[id]?.current ?? null) : null,
+  );
+  // 提示列那顆「取消這一球」鈕要呼叫的 store 動作。取消鈕住在這裡（球場外面）而不是球場
+  // 元件裡，正是把補填狀態放進 store 換來的好處：球場以外的元件同樣讀得到、也改得動。
+  const cancelAdvancedBall = useAdvancedRecording((state) => state.cancelCurrentBall);
+  const clearAdvancedRally = useAdvancedRecording((state) => state.clearRally);
+
   // ── 自由球員替換 ──
   // useRef 讓 useEffect 讀到最新值，避免陳舊閉包（stale closure）。
   //
@@ -338,6 +352,20 @@ export default function ScoreSheet() {
   // 球場要畫的「這一輪我方 6 人座標」，從快照即時換算（不再讀全域 rotations）。
   const ourPositions =
     activeLineup && currentSet ? lineupToPositions(activeLineup, currentSet.ourRotation) : [];
+
+  // 進階版球場上方的提示列文案（issue #392，沿用簡易版同一條提示列的插槽——見下面球場區塊）：
+  // 還沒滑出任何半完成的球時給操作說明；滑完、正等 tap 補落點時，換成「是誰、做了什麼」，
+  // 讓使用者一眼確認剛剛選的沒有選錯，再去點落點。
+  const advancedHintText = advancedCurrentBall
+    ? `${
+        advancedCurrentBall.playerId
+          ? (match.players.find((p) => p.id === advancedCurrentBall.playerId)?.name ??
+            "（找不到球員）")
+          : "對手"
+      }・${actionLabel(advancedCurrentBall.action)} —— 點落點，按住 1 秒可以直接收尾這一分`
+    : // 文案要跟球場的手勢一致：收尾這一分＝在球場上按住不動 1 秒（PO 2026-08-13），
+      // 不是長按某個特定的點。
+      "按住球員/對手滑向動作，再點球場選落點；球場上按住 1 秒左右滑，收尾這一分";
   const completedSets = record?.completedSets ?? [];
   // 換人「次數」要用原始計數 subCount，不能用 regularSubs.length（issue #289）：後者是淨疊加，
   // 連鎖換人／換回先發會讓兩個數字對不上，教練靠這個數字判斷還能不能換人，必須是原始次數。
@@ -450,6 +478,32 @@ export default function ScoreSheet() {
       },
     });
     setGesture(null);
+  };
+
+  // 進階版補填收尾一分（issue #392）。球場元件只負責看懂手勢、判斷勝方，加分這件事一定要
+  // 回到這裡走 score()——跟簡易版 handleOutcomeSelect 完全同一支函式，因為「加一分」不只是
+  // 數字加一：還有輪轉、發球權、undo 快照、背景寫進後端 rallies/events。PO 回報「用得失分
+  // 沒有計分」就是這條線本來根本沒接上：球場只把勝方寫進補填用的暫存 store，那份資料沒有
+  // 任何人在讀。
+  //
+  // 最後一球的動作/球員順帶當成這一分的 meta 記進去（跟簡易版手勢記的是同一個形狀），
+  // 對手側沒有 playerId（那一側沒有名單，見 PointRecord.touchedBy 的說明）。
+  //
+  // 加完分要 clearRally：那份草稿是「這一分」的暫存，這一分結束了，球場就該空出來給下一分。
+  // ⚠️ 已知落差（#393 的範圍）：草稿裡逐球的資料（誰、什麼動作、落點）目前只有最後一球會
+  // 以 meta 的形式進到記錄裡，其餘的球隨著 clearRally 消失——把整條球鏈寫進 events 表是
+  // #393 在做的事，這張票（#392）只做手勢本身。
+  const handleAdvancedRallyFinish = (winner: Side, lastBall: DraftEvent | null) => {
+    score(
+      winner,
+      lastBall
+        ? {
+            action: lastBall.action,
+            touchedBy: { side: lastBall.side, playerId: lastBall.playerId ?? undefined },
+          }
+        : undefined,
+    );
+    clearAdvancedRally(id);
   };
 
   const handleLiberoSubstitute = (targetPlayerId: string) => {
@@ -917,9 +971,40 @@ export default function ScoreSheet() {
               // 比賽進行中：往左右發展——球場放左邊（吃滿剩餘寬度、放大），比分＋操作按鈕收在
               // 右邊一直欄（使用者要求：不要把功能都擠成上下一長條）。
               <>
-                {/* ── 左：球場 ── */}
+                {/* ── 左：球場 ──
+                  isAdvanced 時整塊換成進階版補填球場（issue #392）：提示列文案跟球場元件
+                  本身都換，但簡易版那條路徑（下面 else 分支的 ScoreSheetCourt 與它的 props）
+                  一行都不動——只是被包進這個三元判斷式，理由見 AdvancedRecordingCourt.tsx
+                  檔頭「為什麼不共用 ScoreSheetCourt」的說明。 */}
                 <div className="flex min-w-0 flex-col gap-2 p-4">
-                  {selectedBenchPlayer ? (
+                  {isAdvanced ? (
+                    advancedCurrentBall ? (
+                      // 有一球滑完、正在等落點：提示列升級成「有取消鈕」的橫幅，用的是簡易版
+                      // 「換人模式」橫幅同一套語彙（左邊說明現在在等什麼、右邊一顆文字取消鈕）
+                      // ——兩者是同一種東西：**一個進行到一半、可以反悔的模式**，長一樣才不用
+                      // 學兩次。只有配色換成萊姆綠（這是進階版補填的主色，藍色在簡易版已經
+                      // 專指換人模式）。
+                      //
+                      // 為什麼取消要做成看得見的鈕，而不是某個手勢（PO 2026-08-13 定案）：
+                      // 手勢版的取消一定要在球場上劃出一塊「點下去不是落點」的區域，而落點
+                      // 可能真的落在那裡（防守把球救成高球，球就落在自己頭上）。看得見的鈕
+                      // 不佔用球場任何一塊面積，也不用使用者猜「點哪裡算取消」。
+                      <div className="flex w-full items-center justify-between rounded-lg border border-[#c6f135]/40 bg-[#c6f135]/10 px-3 py-1.5 text-sm">
+                        <span className="font-semibold text-[#c6f135]">{advancedHintText}</span>
+                        <button
+                          type="button"
+                          onClick={() => cancelAdvancedBall(id)}
+                          className="text-xs text-[#c6f135] underline"
+                        >
+                          取消這一球
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="shrink-0 text-center text-xs text-[#a9b096]">
+                        {advancedHintText}
+                      </p>
+                    )
+                  ) : selectedBenchPlayer ? (
                     <div className="flex w-full items-center justify-between rounded-lg border border-[#3b82f6]/40 bg-[#3b82f6]/15 px-3 py-1.5 text-sm">
                       <span className="font-semibold text-[#93c5fd]">
                         換人模式：點球場上的球員換下
@@ -938,22 +1023,32 @@ export default function ScoreSheet() {
                   )}
 
                   <div className="flex min-h-0 w-full flex-1 items-center justify-center">
-                    <ScoreSheetCourt
-                      ourPositions={ourPositions}
-                      roster={match.players}
-                      opponentRotation={currentSet.opponentRotation}
-                      serving={currentSet.serving}
-                      interactive={gesture === null}
-                      onPlayerTouch={handlePlayerTouch}
-                      onLiberoSubstitute={handleLiberoSubstitute}
-                      regularSubs={regularSubs}
-                      selectedBenchPlayer={selectedBenchPlayer}
-                      onBenchPlayerSelect={setSelectedBenchPlayer}
-                      onRegularSub={handleRegularSub}
-                      liberoSubstitution={liberoSubstitution}
-                      selectedLiberoId={selectedLiberoId}
-                      onSelectLibero={handleSelectLibero}
-                    />
+                    {isAdvanced ? (
+                      <AdvancedRecordingCourt
+                        matchId={id}
+                        ourPositions={ourPositions}
+                        roster={match.players}
+                        opponentRotation={currentSet.opponentRotation}
+                        onFinishRally={handleAdvancedRallyFinish}
+                      />
+                    ) : (
+                      <ScoreSheetCourt
+                        ourPositions={ourPositions}
+                        roster={match.players}
+                        opponentRotation={currentSet.opponentRotation}
+                        serving={currentSet.serving}
+                        interactive={gesture === null}
+                        onPlayerTouch={handlePlayerTouch}
+                        onLiberoSubstitute={handleLiberoSubstitute}
+                        regularSubs={regularSubs}
+                        selectedBenchPlayer={selectedBenchPlayer}
+                        onBenchPlayerSelect={setSelectedBenchPlayer}
+                        onRegularSub={handleRegularSub}
+                        liberoSubstitution={liberoSubstitution}
+                        selectedLiberoId={selectedLiberoId}
+                        onSelectLibero={handleSelectLibero}
+                      />
+                    )}
                   </div>
                 </div>
 
