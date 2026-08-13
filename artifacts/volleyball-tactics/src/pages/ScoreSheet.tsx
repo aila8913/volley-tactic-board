@@ -8,15 +8,20 @@ import { useRotationTable } from "@/hooks/useRotationTable";
 import { useScoreSheet, useScoreSheetController } from "@/hooks/useScoreSheet";
 import ScoreSheetCourt, { TouchedTarget } from "@/components/ScoreSheetCourt";
 import AdvancedRecordingCourt, { actionLabel } from "@/components/AdvancedRecordingCourt";
-import { useAdvancedRecording, type DraftEvent } from "@/hooks/useAdvancedRecording";
+import { useAdvancedRecording } from "@/hooks/useAdvancedRecording";
 import RadialMenu, { RadialMenuOption } from "@/components/RadialMenu";
 import ScoreSheetStats from "@/components/ScoreSheetStats";
 import RotationRailPanel from "@/components/RotationRailPanel";
 import UnsyncedWritesBadge from "@/components/UnsyncedWritesBadge";
 import RecordingModeToggle, { type RecordingMode } from "@/components/RecordingModeToggle";
 import MatchVideoRail from "@/components/MatchVideoRail";
-import { PlayAction, Side } from "@/types/scoresheet";
-import { isSetComplete, disabledActions, resolveScoringSide } from "@/lib/scoreSheetMapping";
+import { PlayAction, Side, type DraftEvent } from "@/types/scoresheet";
+import {
+  isSetComplete,
+  disabledActions,
+  resolveScoringSide,
+  draftChainToEvents,
+} from "@/lib/scoreSheetMapping";
 import { countSetWins, getMatchWinner, setWinner, winsNeededFor } from "@/lib/matchOutcome";
 import {
   APP_BACKGROUND_STYLE,
@@ -210,6 +215,13 @@ export default function ScoreSheet() {
   // 元件裡，正是把補填狀態放進 store 換來的好處：球場以外的元件同樣讀得到、也改得動。
   const cancelAdvancedBall = useAdvancedRecording((state) => state.cancelCurrentBall);
   const clearAdvancedRally = useAdvancedRecording((state) => state.clearRally);
+
+  // 讀「播放器現在播到第幾秒」的函式（#393）。用 ref 而不是 state 裝它，是因為這個值
+  // **不驅動任何畫面**——它只在使用者做手勢的那一瞬間被讀一次（見下面 readVideoPosition
+  // 傳給 AdvancedRecordingCourt 的用法），不是要拿來 render 成文字或條件式的東西。如果放
+  // state，MatchVideoRail 的播放器一就緒（onPlayerReady 觸發）就會讓整頁多重繪一次
+  // ——這裡的 setter 只是把值收好，不需要通知 React 有東西變了。
+  const videoPositionRef = useRef<(() => { videoId: string; seconds: number } | null) | null>(null);
 
   // ── 自由球員替換 ──
   // useRef 讓 useEffect 讀到最新值，避免陳舊閉包（stale closure）。
@@ -480,20 +492,26 @@ export default function ScoreSheet() {
     setGesture(null);
   };
 
-  // 進階版補填收尾一分（issue #392）。球場元件只負責看懂手勢、判斷勝方，加分這件事一定要
-  // 回到這裡走 score()——跟簡易版 handleOutcomeSelect 完全同一支函式，因為「加一分」不只是
-  // 數字加一：還有輪轉、發球權、undo 快照、背景寫進後端 rallies/events。PO 回報「用得失分
-  // 沒有計分」就是這條線本來根本沒接上：球場只把勝方寫進補填用的暫存 store，那份資料沒有
-  // 任何人在讀。
+  // 進階版補填收尾一分（issue #392／#393）。球場元件只負責看懂手勢、判斷勝方，加分這件事
+  // 一定要回到這裡走 score()——跟簡易版 handleOutcomeSelect 完全同一支函式，因為「加一分」
+  // 不只是數字加一：還有輪轉、發球權、undo 快照、背景寫進後端 rallies/events。PO 回報「用
+  // 得失分沒有計分」就是這條線本來根本沒接上：球場只把勝方寫進補填用的暫存 store，那份資料
+  // 沒有任何人在讀（#392 只做到這裡）。
   //
   // 最後一球的動作/球員順帶當成這一分的 meta 記進去（跟簡易版手勢記的是同一個形狀），
   // 對手側沒有 playerId（那一側沒有名單，見 PointRecord.touchedBy 的說明）。
   //
+  // #393：現在把整條鏈也一起交出去。draft 要從 store 直接 getState() 讀（不是 hook 訂閱），
+  // 因為這個函式是事件處理器、不是渲染流程——它只在「使用者做出收尾手勢」那一瞬間需要
+  // 讀一次「這一分目前記了什麼」，不需要（也不該）讓這個元件對整份草稿的每一次變動都重繪。
+  // draftChainToEvents 把 balls 轉成後端要的 NewEvent[]（見該函式的說明：sequence／
+  // from-chain／outcome／source 全部在那裡決定），videoAnchor 沿用同一份 draft 的 anchor
+  // （第一個手勢時擷取的播放秒數，見 useAdvancedRecording.ts 的說明）。
+  //
   // 加完分要 clearRally：那份草稿是「這一分」的暫存，這一分結束了，球場就該空出來給下一分。
-  // ⚠️ 已知落差（#393 的範圍）：草稿裡逐球的資料（誰、什麼動作、落點）目前只有最後一球會
-  // 以 meta 的形式進到記錄裡，其餘的球隨著 clearRally 消失——把整條球鏈寫進 events 表是
-  // #393 在做的事，這張票（#392）只做手勢本身。
   const handleAdvancedRallyFinish = (winner: Side, lastBall: DraftEvent | null) => {
+    const draft = id ? useAdvancedRecording.getState().chainsByMatch[id] : undefined;
+    const events = draftChainToEvents(draft?.balls ?? [], winner);
     score(
       winner,
       lastBall
@@ -502,6 +520,7 @@ export default function ScoreSheet() {
             touchedBy: { side: lastBall.side, playerId: lastBall.playerId ?? undefined },
           }
         : undefined,
+      { events, videoAnchor: draft?.anchor ?? null },
     );
     clearAdvancedRally(id);
   };
@@ -844,7 +863,14 @@ export default function ScoreSheet() {
               className={`absolute inset-0 [backface-visibility:hidden] [transform:rotateY(180deg)] ${INFO_RAIL_BASE_CLASS}`}
               aria-hidden={!isAdvanced}
             >
-              <MatchVideoRail matchId={Number(id)} />
+              <MatchVideoRail
+                matchId={Number(id)}
+                // #393：把播放器就緒後的「讀秒數」函式收進 ref（見上面 videoPositionRef 的
+                // 說明），球場那邊做手勢時再從 ref 讀出來用，不放進 state。
+                onPlayerReady={(read) => {
+                  videoPositionRef.current = read;
+                }}
+              />
             </div>
           </div>
         </div>
@@ -1030,6 +1056,7 @@ export default function ScoreSheet() {
                         roster={match.players}
                         opponentRotation={currentSet.opponentRotation}
                         onFinishRally={handleAdvancedRallyFinish}
+                        readVideoPosition={() => videoPositionRef.current?.() ?? null}
                       />
                     ) : (
                       <ScoreSheetCourt

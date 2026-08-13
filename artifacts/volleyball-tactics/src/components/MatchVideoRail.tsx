@@ -1,12 +1,16 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMatchVideos } from "@/hooks/useMatchVideos";
 import { parseYouTubeVideoId, toYouTubeEmbedUrl } from "@/lib/youtube";
+import { createPlayer, type YouTubePlayerHandle } from "@/lib/youtubePlayer";
 
-// 進階模式下右欄翻過來那一面：這場比賽的影片（#391，拆自 #21）。
+// 進階模式下右欄翻過來那一面：這場比賽的影片（#391，拆自 #21；#393 加上讀秒數）。
 //
-// 這一張票的範圍就是「載體」——把影片掛上去、播得出來、重整還在。**這裡不記任何東西**：
-// 沒有「把這一球錨到現在的秒數」那類按鈕，那是 M4-2a／2b 的事。刻意講明是因為看到播放器
-// 的第一反應通常是「順便做個標記鈕」，而那條路要先有補填流程的資料模型（ADR-0010）才走得動。
+// #391 的範圍是「載體」——把影片掛上去、播得出來、重整還在。**這裡仍然不記任何東西**：
+// 沒有「把這一球錨到現在的秒數」那類按鈕，那個決定（哪一球該用哪一秒）住在球場那邊的
+// 手勢裡（AdvancedRecordingCourt.tsx／useAdvancedRecording.ts）。這個元件唯一多做的事
+// 是透過 onPlayerReady 往上**曝露**「現在播到第幾秒」這個讀取函式，讓 #393 的呼叫端
+// （ScoreSheet.tsx）在使用者做手勢的當下去問；記錄本身、要不要記、記在哪一分，全部不是
+// 這個檔案的責任。
 //
 // 為什麼影片放右欄、不是蓋在球場上：右欄本來就是「這一頁的第二視角」（站位／統計），
 // 影片是賽後補填時的第二視角，位置語意一致；蓋在球場上則會擋住主要操作區。
@@ -28,9 +32,13 @@ const GHOST_SM_BUTTON_CLASS =
 type Props = {
   // 路由參數還沒到手時是 null——hook 會據此關掉查詢（見 useMatchVideos）。
   matchId: number | null;
+  // 播放器就緒（或不再就緒）時通知呼叫端（#393）。傳進來的 read 函式回傳「現在播到第幾秒」；
+  // 沒有影片、或播放器還沒建好時傳 null，呼叫端要能容忍讀不到。這個 prop 選填，因為不是
+  // 每個用到 MatchVideoRail 的地方都需要讀秒數（目前只有計分頁的補填流程需要）。
+  onPlayerReady?: (read: (() => { videoId: string; seconds: number } | null) | null) => void;
 };
 
-export default function MatchVideoRail({ matchId }: Props) {
+export default function MatchVideoRail({ matchId, onPlayerReady }: Props) {
   const { video, isLoading, attachVideo, detachVideo, isSaving } = useMatchVideos(matchId);
   // 輸入框的內容是純 UI 暫存（還沒送出的草稿），不進 store 也不進後端——送出成功後
   // 真相就是後端回來的那一列，草稿清空。
@@ -41,6 +49,59 @@ export default function MatchVideoRail({ matchId }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   const videoId = video ? parseYouTubeVideoId(video.url) : null;
+
+  // ── 播放器控制代碼（#393）──
+  // iframe 節點本身要有 ref 才能餵給 createPlayer（YT.Player 建構子要吃真的 DOM 節點）。
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  // 這個 effect 綁的 key 是 videoId（YouTube 11 碼 id，不是 MatchVideo row 的 uuid）——
+  // 跟下面 <iframe key={videoId}> 用同一個值是刻意的：videoId 換了代表 iframe 整個被 React
+  // 換掉重建（見下面 JSX 的註解），舊的 YT.Player 實例已經綁在一個消失的 DOM 節點上，
+  // 這裡也要跟著重新對一個新節點建一個新的 player，不能沿用舊的。
+  useEffect(() => {
+    if (!videoId || !iframeRef.current) {
+      // 沒有影片可播：通知呼叫端「現在讀不到秒數」，不留著上一支影片的 reader。
+      onPlayerReady?.(null);
+      return;
+    }
+
+    let cancelled = false;
+    let handle: YouTubePlayerHandle | null = null;
+    // matchVideoRowId 在 effect 開始時就先讀出來存進閉包，而不是在 reader 裡才讀
+    // `video?.id`——effect 觸發之後、reader 真正被呼叫之前，video 這個 prop 有可能已經
+    // 換過幾輪（例如使用者手速很快、連續換了兩次影片），reader 若晚讀 video.id 就可能
+    // 回報一個跟目前這個 player 實例對不上的 MatchVideo id。這裡讀的是 effect 這一輪
+    // 綁定當下的值，天然對齊「這個 player 到底是哪一支影片的」。
+    const matchVideoRowId = video?.id;
+    createPlayer(iframeRef.current).then((created) => {
+      if (cancelled || !matchVideoRowId) {
+        // effect 已經被清掉（例如使用者又換了一次影片）：player 建好了但已經來不及用，
+        // 直接銷毀，不要餵給呼叫端一個過期的 reader。
+        created.destroy();
+        return;
+      }
+      handle = created;
+      onPlayerReady?.(() => {
+        // ⚠️ 這裡回傳的 videoId 是 MatchVideo 這一列的 uuid（rallies.videoId 的 FK 目標），
+        // **不是**上面 effect 依賴的那個 YouTube 11 碼 videoId——兩者名字很容易搞混但
+        // 指向完全不同的東西：一個是「YouTube 認得的影片」，一個是「我們資料庫裡代表
+        // 「這場比賽掛了這支影片」這件事的那一列」。錨點要存進 rallies.videoId，FK
+        // 指向的是後者，用錯會直接是外鍵違反。
+        const seconds = handle?.getCurrentSeconds();
+        return seconds != null ? { videoId: matchVideoRowId, seconds } : null;
+      });
+    });
+
+    return () => {
+      cancelled = true;
+      handle?.destroy();
+      onPlayerReady?.(null);
+    };
+    // video?.id 沒放進依賴：換了同一支影片的 url 大小寫或查詢參數不會改變 videoId
+    // （解析出來的 YouTube id 相同），這種情況不需要重建 player；真正該觸發重建的只有
+    // videoId 變了（換了一支不同的影片）。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [videoId]);
 
   const handleAttach = async () => {
     const parsed = parseYouTubeVideoId(draftUrl);
@@ -84,8 +145,11 @@ export default function MatchVideoRail({ matchId }: Props) {
               <iframe
                 // key 綁 videoId：換影片時強制重建 iframe。不換 key 的話 React 會沿用同一個
                 // iframe 節點、只改 src，某些瀏覽器會把它記進上一頁的歷史，使用者按上一頁
-                // 會變成「播放器退回上一支影片」而不是離開這一頁。
+                // 會變成「播放器退回上一支影片」而不是離開這一頁。這同時也是為什麼上面
+                // createPlayer 的 effect 依賴要跟這裡用同一個 key：iframe 重建時舊的
+                // YT.Player 實例已經沒有意義了（綁在一個已經被換掉的 DOM 節點上）。
                 key={videoId}
+                ref={iframeRef}
                 src={toYouTubeEmbedUrl(videoId)}
                 title="比賽影片"
                 className="h-full w-full"
