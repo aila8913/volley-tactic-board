@@ -16,6 +16,32 @@ export type Side = "us" | "opponent";
 export const PLAY_ACTIONS = ["serve", "receive", "set", "attack", "block", "dig"] as const;
 export type PlayAction = (typeof PLAY_ACTIONS)[number];
 
+// 進階版補填（賽後對著影片逐球記錄）中，一球的中繼狀態（issue #392 開始記，#393 開始寫進
+// 後端）。原本定義在 hooks/useAdvancedRecording.ts——那裡是它「活著」的地方（滑＋tap 兩下
+// 手勢組出這個物件），但 lib/scoreSheetMapping.ts（#393）也要把它轉成 NewEvent[] 寫進後端，
+// 而 lib 目錄（共用工具層）反過來 import hooks 目錄（React 狀態層）是一個倒過來的依賴方向
+// ——domain 型別本來就該放在 types/，不該跟著「誰先用到它」搬家。
+export interface DraftEvent {
+  // client-mintable uuid：#393 直接拿它當 events.id。跟 lib/writeLog.ts 的 newRowId 是
+  // 同一套「離線也要能決定主鍵」的做法（sets/rallies/events 的 id 都是這樣鑄出來的）。
+  id: string;
+  // 前端沿用 types/scoresheet.ts 既有的 "us" | "opponent"，不是 events 表的 home/away——
+  // 對 home/away 的轉換（跟先發方是誰、我方是不是 home 有關）留在寫入層，#393 再做，
+  // 跟簡易版的 PointRecord 目前的作法一致（見 lib/scoreSheetMapping.ts 的 sideToApi）。
+  side: Side;
+  // 對手側沒有名單可指，一律 null（跟 events.playerId nullable 對齊）。
+  playerId: string | null;
+  action: PlayAction;
+  // 落點；滑完、還沒 tap 時是 null——這正是「半完成」狀態的判準（見 useAdvancedRecording.ts
+  // 的 RallyDraft.current 說明）。
+  toX: number | null;
+  toY: number | null;
+  // 這裡刻意不存 from（起點）。ADR-0010 決定 2：一球的起點＝上一球的落點，是渲染時從
+  // 相鄰兩球現算的衍生值，不是存下來的欄位——「能推導就不存」。真的寫進 events.from_x/
+  // from_y 是 lib/scoreSheetMapping.ts 的 draftChainToEvents 在寫入當下才複製一份進去
+  // （見該函式），DraftEvent 這個中繼型別故意不長 from 欄位。
+}
+
 // 紀錄每一分發生時的狀況，用來支援「復原上一球」：
 // wasSideOut 代表這一分是不是從對方手上把發球權贏回來（side-out），
 // 只有 side-out 才會讓贏球的那一方輪轉一個位置。

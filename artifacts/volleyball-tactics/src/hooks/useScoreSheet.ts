@@ -26,6 +26,7 @@ import {
 } from "@workspace/api-client-react";
 import type { MatchCompletionStatus } from "../lib/matchOutcome";
 import { ScoreSheetState, PointRecord, Side, UndoEntry, LineupSnapshot } from "../types/scoresheet";
+import type { NewEvent } from "@workspace/api-client-react";
 import {
   sideToApi,
   pointRecordToRally,
@@ -694,8 +695,29 @@ export function useScoreSheetController(matchId: string) {
     [matchId, append],
   );
 
+  // score()：記一分。issue #392/#393 之前這裡只服務簡易版（最多一顆 event）；#393 讓它
+  // 也接住進階版補填收尾一分時整條觸球鏈（options.events）跟影片錨點（options.videoAnchor）。
+  //
+  // ── 為什麼進階版不另開一條寫入路徑、而是走同一支 score() ──
+  // 「加一分」從來就不只是數字加一：這裡同時處理輪轉、發球權、undo 快照、rally 這一列本身
+  // 的建立——這些邏輯只寫一份、兩種模式共用，才不會發生「改了計分規則、只改到其中一條路」
+  // 這種事（跟簡易版 handleOutcomeSelect / 進階版 handleAdvancedRallyFinish 兩邊都呼叫同一支
+  // score() 是同一個理由，見 ScoreSheet.tsx 的說明）。options.events/videoAnchor 只是讓這支
+  // 既有函式多接兩份「進階版才有」的資料，不是另開一支平行的 scoreAdvanced()。
+  //
+  // ── 為什麼有 options.events 時要整段跳過 pointRecordToEvent ──
+  // pointRecordToEvent 只看 meta（最後一球的動作/球員），會產生**一筆** source='live' 的
+  // event，跟 outcome 標記為 point/loss。但 draftChainToEvents 產生的鏈裡，最後一顆已經是
+  // 帶著同樣 outcome 的那一球（source='review'）——如果兩條路都跑，同一個 rally 就會有
+  // 兩球被標成 point/loss，直接違反 lib/db/src/schema/events.ts:31 那條不變量（一個 rally
+  // 剛好一球是 point/loss，其餘 in_play）。所以「有鏈就不要再跑 pointRecordToEvent」是
+  // 必要條件，不是效能優化。
   const score = useCallback(
-    (side: Side, meta?: Pick<PointRecord, "action" | "touchedBy">) => {
+    (
+      side: Side,
+      meta?: Pick<PointRecord, "action" | "touchedBy">,
+      options?: { events?: NewEvent[]; videoAnchor?: { videoId: string; seconds: number } | null },
+    ) => {
       const pre = useScoreSheet.getState().recordingsByMatch[matchId]?.currentSet;
       if (!pre || pre.serving === null) return;
 
@@ -717,13 +739,18 @@ export function useScoreSheetController(matchId: string) {
       const rallyId = newRowId();
 
       // 0) 先存一份「記這分之前」的快照，讓之後「復原」能整包退回這一球（issue #41）。
+      //    undo 退這一分時，events（不管是簡易版那一顆還是進階版整條鏈）都不用另外處理——
+      //    它們一律用 rallyId 當外鍵，rally 被 delete 時靠 FK cascade 自動一起消失
+      //    （events.ts 的 rallyId 設了 onDelete: "cascade"），見下面 undo() 的說明。
       useScoreSheet.getState().snapshotForUndo(matchId, { table: "rallies", id: rallyId });
 
       // 1) 本地即時更新（畫面零延遲）
       useScoreSheet.getState().scorePoint(matchId, side, meta);
 
-      // 2) 背景持久化：一筆 rally；有動作/球員才順帶一筆 event（掛在同一個 rallyId 底下，
-      //    log 的順序保證 event 不會早於 rally 送出）。
+      // 2) 背景持久化：一筆 rally（錨點跟著這個 POST 一起送，見 pointRecordToRally 的說明）；
+      //    有整條鏈就把整條鏈都寫進去，否則沿用簡易版「有動作/球員才順帶一筆 event」的舊行為
+      //    ——後者要跟原本行為 byte-for-byte 一致，簡易版不能因為這次改動而有任何差異。
+      const anchor = options?.videoAnchor ?? null;
       append({
         kind: "create",
         table: "rallies",
@@ -738,19 +765,49 @@ export function useScoreSheetController(matchId: string) {
             awayScoreBefore,
             homeRotationBefore,
             awayRotationBefore,
+            anchor?.videoId ?? null,
+            anchor?.seconds ?? null,
           ),
         },
       });
-      const newEvent = pointRecordToEvent(point, 1);
-      if (newEvent) {
-        const eventId = newRowId();
-        append({
-          kind: "create",
-          table: "events",
-          id: eventId,
-          parentId: rallyId,
-          payload: { id: eventId, ...newEvent },
-        });
+
+      const chain = options?.events;
+      if (chain && chain.length > 0) {
+        // 進階版整條鏈：每一觸各自 append 一筆 create/events entry，依 sequence 順序——
+        // write log 保證這些 entry 會排在剛剛那筆 rally 的 create 之後（log 內部是嚴格
+        // 依 append 順序序列化送出的，見 writeLog.ts 開頭的說明），events.rallyId 這個
+        // 外鍵才不會打到一筆還不存在的 rally。
+        //
+        // 票面明講「就地升級」（把已有的 source='live' event 接進鏈、改它的 sequence 跟
+        // 座標）這次刻意不做：#392 建好的流程一律是「從零記一分 → 收尾 → 建新 rally」，
+        // 這裡永遠遇不到「這個 rally 已經有一筆 live event」的情況（rally 都還沒建，何來
+        // 已存在的 event）。真正會踩到「升級一筆既有 event」的入口是 #394（表格點一列）跟
+        // #396（表格可編輯）——那時候才需要 write log 長出 patch/events 這種 entry（目前
+        // writeLog.ts 的 WriteOp 只定義了 events 的 create，沒有 patch）。規則本身寫在
+        // ADR-0010 決定 3 與 #393 票面，不在這裡重抄一份。
+        for (const event of chain) {
+          const eventId = newRowId();
+          append({
+            kind: "create",
+            table: "events",
+            id: eventId,
+            parentId: rallyId,
+            payload: { id: eventId, ...event },
+          });
+        }
+      } else {
+        // 簡易版舊路徑，一行都沒動：最多一顆 event，從 meta 轉出來。
+        const newEvent = pointRecordToEvent(point, 1);
+        if (newEvent) {
+          const eventId = newRowId();
+          append({
+            kind: "create",
+            table: "events",
+            id: eventId,
+            parentId: rallyId,
+            payload: { id: eventId, ...newEvent },
+          });
+        }
       }
     },
     [matchId, append],

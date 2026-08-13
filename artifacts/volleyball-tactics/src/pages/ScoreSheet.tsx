@@ -7,12 +7,21 @@ import { useMatchWithRoster } from "@/hooks/useMatches";
 import { useRotationTable } from "@/hooks/useRotationTable";
 import { useScoreSheet, useScoreSheetController } from "@/hooks/useScoreSheet";
 import ScoreSheetCourt, { TouchedTarget } from "@/components/ScoreSheetCourt";
+import AdvancedRecordingCourt, { actionLabel } from "@/components/AdvancedRecordingCourt";
+import { useAdvancedRecording } from "@/hooks/useAdvancedRecording";
 import RadialMenu, { RadialMenuOption } from "@/components/RadialMenu";
 import ScoreSheetStats from "@/components/ScoreSheetStats";
 import RotationRailPanel from "@/components/RotationRailPanel";
 import UnsyncedWritesBadge from "@/components/UnsyncedWritesBadge";
-import { PlayAction, Side, type LineupSnapshot } from "@/types/scoresheet";
-import { isSetComplete, disabledActions, resolveScoringSide } from "@/lib/scoreSheetMapping";
+import RecordingModeToggle, { type RecordingMode } from "@/components/RecordingModeToggle";
+import MatchVideoRail from "@/components/MatchVideoRail";
+import { PlayAction, Side, type DraftEvent, type LineupSnapshot } from "@/types/scoresheet";
+import {
+  isSetComplete,
+  disabledActions,
+  resolveScoringSide,
+  draftChainToEvents,
+} from "@/lib/scoreSheetMapping";
 import { countSetWins, getMatchWinner, setWinner, winsNeededFor } from "@/lib/matchOutcome";
 import {
   APP_BACKGROUND_STYLE,
@@ -167,6 +176,52 @@ export default function ScoreSheet() {
   // 變成強調樣式，彈不彈由記錄者決定。理由是誤判風險：記錯一球就被彈窗打斷，比「忘記按」
   // 更惱人，而忘記按的成本很低（回列表隨時能再進來按）。
   const [showFinishConfirm, setShowFinishConfirm] = useState(false);
+
+  // ── 記錄模式：簡易 ↔ 進階（#391）──
+  // 這是**畫面偏好**，不是這場比賽的紀錄：切模式不會動到任何已記的球，兩邊看的是同一場
+  // 比賽的同一份資料。所以它不走 controller／後端那條路（那條是給真的要記錄的動作用的），
+  // 跟 selectedLiberoId 一樣用 localStorage、key 帶 matchId 避免跟別場比賽互相污染。
+  //
+  // 為什麼要撐過重新整理：賽後補填是一段長時間的工作，中途重整（或隔天再開）如果每次都
+  // 掉回簡易模式，使用者得先想起「喔要先按進階」才看得到影片——模式是他當下的工作情境，
+  // 不是每次開頁都該重設的東西。
+  const [mode, setModeState] = useState<RecordingMode>(() =>
+    id && window.localStorage.getItem(`recording-mode:${id}`) === "advanced"
+      ? "advanced"
+      : "simple",
+  );
+  // 換場時重新從那一場自己的 key 讀（理由同下面 selectedLiberoId 的 effect，issue #119）。
+  useEffect(() => {
+    setModeState(
+      id && window.localStorage.getItem(`recording-mode:${id}`) === "advanced"
+        ? "advanced"
+        : "simple",
+    );
+  }, [id]);
+  const handleModeChange = (next: RecordingMode) => {
+    setModeState(next);
+    if (id) window.localStorage.setItem(`recording-mode:${id}`, next);
+  };
+  const isAdvanced = mode === "advanced";
+
+  // ── 進階版補填：目前半完成的那一球（issue #392）──
+  // 只用來組這一頁球場上方那條提示列的文案（跟簡易版共用同一個「插槽」，見下面
+  // scoreDisplay 附近球場區塊的 JSX）。真正的手勢狀態機、命中判定全部關在
+  // AdvancedRecordingCourt 自己的元件裡——這裡只是「讀出來顯示成一句話」。
+  const advancedCurrentBall = useAdvancedRecording((state) =>
+    id ? (state.chainsByMatch[id]?.current ?? null) : null,
+  );
+  // 提示列那顆「取消這一球」鈕要呼叫的 store 動作。取消鈕住在這裡（球場外面）而不是球場
+  // 元件裡，正是把補填狀態放進 store 換來的好處：球場以外的元件同樣讀得到、也改得動。
+  const cancelAdvancedBall = useAdvancedRecording((state) => state.cancelCurrentBall);
+  const clearAdvancedRally = useAdvancedRecording((state) => state.clearRally);
+
+  // 讀「播放器現在播到第幾秒」的函式（#393）。用 ref 而不是 state 裝它，是因為這個值
+  // **不驅動任何畫面**——它只在使用者做手勢的那一瞬間被讀一次（見下面 readVideoPosition
+  // 傳給 AdvancedRecordingCourt 的用法），不是要拿來 render 成文字或條件式的東西。如果放
+  // state，MatchVideoRail 的播放器一就緒（onPlayerReady 觸發）就會讓整頁多重繪一次
+  // ——這裡的 setter 只是把值收好，不需要通知 React 有東西變了。
+  const videoPositionRef = useRef<(() => { videoId: string; seconds: number } | null) | null>(null);
 
   // ── 自由球員替換 ──
   // useRef 讓 useEffect 讀到最新值，避免陳舊閉包（stale closure）。
@@ -326,6 +381,21 @@ export default function ScoreSheet() {
   // 球場要畫的「這一輪我方 6 人座標」，從快照即時換算（不再讀全域 rotations）。
   const ourPositions =
     activeZones && currentSet ? lineupToPositions(activeZones, currentSet.ourRotation) : [];
+
+  // 進階版球場上方的提示列文案（issue #392，沿用簡易版同一條提示列的插槽——見下面球場區塊）：
+  // 還沒滑出任何半完成的球時給操作說明；滑完、正等 tap 補落點時，換成「是誰、做了什麼」，
+  // 讓使用者一眼確認剛剛選的沒有選錯，再去點落點。
+  const advancedHintText = advancedCurrentBall
+    ? `${
+        advancedCurrentBall.playerId
+          ? (match.players.find((p) => p.id === advancedCurrentBall.playerId)?.name ??
+            "（找不到球員）")
+          : "對手"
+      }・${actionLabel(advancedCurrentBall.action)} —— 點落點，按住 1 秒可以直接收尾這一分`
+    : // 文案要跟球場的手勢一致：收尾這一分＝在球場上按住不動 1 秒（PO 2026-08-13），
+      // 不是長按某個特定的點。
+      "按住球員/對手滑向動作，再點球場選落點；球場上按住 1 秒左右滑，收尾這一分";
+
   const completedSets = record?.completedSets ?? [];
   // 換人「次數」要用原始計數 subCount，不能用 regularSubs.length（issue #289）：後者是淨疊加，
   // 連鎖換人／換回先發會讓兩個數字對不上，教練靠這個數字判斷還能不能換人，必須是原始次數。
@@ -438,6 +508,39 @@ export default function ScoreSheet() {
       },
     });
     setGesture(null);
+  };
+
+  // 進階版補填收尾一分（issue #392／#393）。球場元件只負責看懂手勢、判斷勝方，加分這件事
+  // 一定要回到這裡走 score()——跟簡易版 handleOutcomeSelect 完全同一支函式，因為「加一分」
+  // 不只是數字加一：還有輪轉、發球權、undo 快照、背景寫進後端 rallies/events。PO 回報「用
+  // 得失分沒有計分」就是這條線本來根本沒接上：球場只把勝方寫進補填用的暫存 store，那份資料
+  // 沒有任何人在讀（#392 只做到這裡）。
+  //
+  // 最後一球的動作/球員順帶當成這一分的 meta 記進去（跟簡易版手勢記的是同一個形狀），
+  // 對手側沒有 playerId（那一側沒有名單，見 PointRecord.touchedBy 的說明）。
+  //
+  // #393：現在把整條鏈也一起交出去。draft 要從 store 直接 getState() 讀（不是 hook 訂閱），
+  // 因為這個函式是事件處理器、不是渲染流程——它只在「使用者做出收尾手勢」那一瞬間需要
+  // 讀一次「這一分目前記了什麼」，不需要（也不該）讓這個元件對整份草稿的每一次變動都重繪。
+  // draftChainToEvents 把 balls 轉成後端要的 NewEvent[]（見該函式的說明：sequence／
+  // from-chain／outcome／source 全部在那裡決定），videoAnchor 沿用同一份 draft 的 anchor
+  // （第一個手勢時擷取的播放秒數，見 useAdvancedRecording.ts 的說明）。
+  //
+  // 加完分要 clearRally：那份草稿是「這一分」的暫存，這一分結束了，球場就該空出來給下一分。
+  const handleAdvancedRallyFinish = (winner: Side, lastBall: DraftEvent | null) => {
+    const draft = id ? useAdvancedRecording.getState().chainsByMatch[id] : undefined;
+    const events = draftChainToEvents(draft?.balls ?? [], winner);
+    score(
+      winner,
+      lastBall
+        ? {
+            action: lastBall.action,
+            touchedBy: { side: lastBall.side, playerId: lastBall.playerId ?? undefined },
+          }
+        : undefined,
+      { events, videoAnchor: draft?.anchor ?? null },
+    );
+    clearAdvancedRally(id);
   };
 
   const handleLiberoSubstitute = (targetPlayerId: string) => {
@@ -672,12 +775,35 @@ export default function ScoreSheet() {
         </div>
       }
       aside={
-        // ── 右欄：站位／統計／快速戰術板（深色玻璃，跟中間計分區切開） ──
-        // 外殼 class 收斂到 lib/appChromeStyles（原本這裡跟另外兩個右欄各寫一份字面相同的字串，
-        // 見那個檔案的說明）。寬度（原本 w-72 flex-none）由 AppShell 的 ASIDE_WIDTH 負責，
-        // 這裡只多加 `relative z-10` 疊在 .tb-beam 之上。
-        <div className={`relative z-10 ${INFO_RAIL_BASE_CLASS}`}>
-          {/* ── 站位面板（issue #120，共用真相版）──
+        // ── 右欄：一塊板子的兩面（#391）──
+        // 簡易模式看到的是正面（站位／統計），切到進階模式整塊板子沿垂直軸翻過去，背面是
+        // 這場比賽的影片。翻頁而不是「把統計換成影片」的理由跟膠囊切換同一條：這是同一頁的
+        // 兩張臉，翻面這個動作本身就在告訴使用者「東西沒有不見，只是翻到背面了」。
+        //
+        // 3D 翻頁的三個必要條件（少一個就只會看到平面的鏡像，不是翻轉）：
+        //   1. 外層要有 perspective（透視距離）：沒有它，rotateY 只是把元素壓扁再拉開，
+        //      看不出「往內轉」的立體感。1600px 是個「有立體感但不誇張」的距離。
+        //   2. 旋轉的那一層要 transform-style: preserve-3d，子元素才會活在同一個 3D 空間裡；
+        //      預設值 flat 會把兩個面先壓平成一張圖再旋轉。
+        //   3. 兩個面各自 backface-visibility: hidden，背對鏡頭時整面消失——否則翻到一半
+        //      會看到反寫的字疊在一起。這同時也順手解決了「看不見的那一面還吃得到點擊」的
+        //      問題（隱藏的背面不接收事件）。
+        // 這三個都用 Tailwind 的任意屬性語法（方括號）直接寫 CSS，不依賴各版本 Tailwind 有
+        // 沒有內建對應的工具類別。
+        <div className="relative z-10 h-full [perspective:1600px]">
+          <div
+            className={`relative h-full transition-transform duration-500 [transform-style:preserve-3d] motion-reduce:transition-none ${
+              isAdvanced ? "[transform:rotateY(180deg)]" : ""
+            }`}
+          >
+            {/* 正面：原本的右欄，內容完全沒動。 */}
+            <div
+              className={`absolute inset-0 [backface-visibility:hidden] ${INFO_RAIL_BASE_CLASS}`}
+              // aria-hidden：翻到背面時，正面雖然看不見，DOM 還在——不標記的話螢幕閱讀器
+              // 會照樣把站位跟統計唸出來，使用者聽到的跟看到的對不上。
+              aria-hidden={isAdvanced}
+            >
+              {/* ── 站位面板（issue #120，共用真相版）──
             開賽前（canEditLineup）：lineup 讀的是 activeLineup，此時等於
             capturableLineup——輪轉表當下的共用真相，可以直接編輯；onLineupChange
             呼叫 setLineupZones 把改動寫回 useRotationTable，跟戰術板讀的是
@@ -685,73 +811,93 @@ export default function ScoreSheet() {
             開賽後：record.lineup 已經凍結（開局凍結，見 hooks/useScoreSheet.ts 的
             start()），這時 activeLineup 讀到的就是那份凍結快照，readOnly 鎖住不給改——
             已經記進去的球是綁著這份站位算的，中途改會讓歷史跟站位對不上。 */}
-          <RotationRailPanel
-            // 可編輯時顯示 editableLineup（排幾個顯示幾個），唯讀時顯示 activeLineup
-            // （該局凍結的完整快照）。理由見上方 editableLineup 的宣告處。
-            lineup={canEditLineup ? editableLineup : activeZones}
-            roster={match.players}
-            rotation={currentSet?.ourRotation ?? 0}
-            // 完賽後一律唯讀（#218）：完賽時 record.lineup 是 null（沒有「目前這一局」），
-            // canEditLineup 會算成 true，右欄就會變回可編輯的開賽前樣子——但這場比賽已經打完，
-            // 這裡沒有任何「下一局的先發」要排，讓它可編輯只會讓人以為改了會影響什麼。
-            readOnly={!canEditLineup || isFinished}
-            onLineupChange={
-              canEditLineup && !isFinished ? (next) => setLineupZones(id, next) : undefined
-            }
-            // 第七格（#327）在「還能排先發」時是**入口**；開賽後它不再是入口，但 #359 之後
-            // 變成**唯讀的顯示**——這一局凍結的先發現在真的記了 L，就該看得到誰是先發自由球員。
-            // 開賽後這一格不能再編輯的理由沒變：那時換 L 上下場是**記錄**（走球場上那顆 L 鈕
-            // → liberoSubstitution），不是改規劃；readOnly 已經由上面那條算好，這裡只管顯不顯示。
-            //
-            // 兩種來源要跟 lineup 那個 prop 走同一條分支（跟 MatchInfoRail 同一個判準）：
-            // 可編輯時讀共用現役指派，凍結後讀該局快照。混用會讓右欄的六格與第七格講不同時態
-            // ——六格是三天前那局、第七格是「我現在打算怎麼配」。
-            showLiberoCell={canEditLineup ? !isFinished : (activeLineup?.liberoId ?? null) !== null}
-            liberoId={canEditLineup ? startingLiberoId : (activeLineup?.liberoId ?? null)}
-            liberoReplacesPlayerId={
-              canEditLineup ? liberoReplacesPlayerId : (activeLineup?.replacesPlayerId ?? null)
-            }
-            onLiberoChange={(nextLiberoId, replaces) =>
-              setLiberoAssignment(id, nextLiberoId, replaces)
-            }
-          />
+              <RotationRailPanel
+                // 可編輯時顯示 editableLineup（排幾個顯示幾個），唯讀時顯示 activeLineup
+                // （該局凍結的完整快照）。理由見上方 editableLineup 的宣告處。
+                lineup={canEditLineup ? editableLineup : activeZones}
+                roster={match.players}
+                rotation={currentSet?.ourRotation ?? 0}
+                // 完賽後一律唯讀（#218）：完賽時 record.lineup 是 null（沒有「目前這一局」），
+                // canEditLineup 會算成 true，右欄就會變回可編輯的開賽前樣子——但這場比賽已經打完，
+                // 這裡沒有任何「下一局的先發」要排，讓它可編輯只會讓人以為改了會影響什麼。
+                readOnly={!canEditLineup || isFinished}
+                onLineupChange={
+                  canEditLineup && !isFinished ? (next) => setLineupZones(id, next) : undefined
+                }
+                // 第七格（#327）在「還能排先發」時是**入口**；開賽後它不再是入口，但 #359 之後
+                // 變成**唯讀的顯示**——這一局凍結的先發現在真的記了 L，就該看得到誰是先發自由球員。
+                // 開賽後這一格不能再編輯的理由沒變：那時換 L 上下場是**記錄**（走球場上那顆 L 鈕
+                // → liberoSubstitution），不是改規劃；readOnly 已經由上面那條算好，這裡只管顯不顯示。
+                //
+                // 兩種來源要跟 lineup 那個 prop 走同一條分支（跟 MatchInfoRail 同一個判準）：
+                // 可編輯時讀共用現役指派，凍結後讀該局快照。混用會讓右欄的六格與第七格講不同時態
+                // ——六格是三天前那局、第七格是「我現在打算怎麼配」。
+                showLiberoCell={
+                  canEditLineup ? !isFinished : (activeLineup?.liberoId ?? null) !== null
+                }
+                liberoId={canEditLineup ? startingLiberoId : (activeLineup?.liberoId ?? null)}
+                liberoReplacesPlayerId={
+                  canEditLineup ? liberoReplacesPlayerId : (activeLineup?.replacesPlayerId ?? null)
+                }
+                onLiberoChange={(nextLiberoId, replaces) =>
+                  setLiberoAssignment(id, nextLiberoId, replaces)
+                }
+              />
 
-          <div className="flex shrink-0 items-center justify-between border-b border-white/[0.10] px-3 py-2 text-xs font-bold text-[#9AA08C]">
-            <span>比賽統計</span>
-            {statsMatches.length > 1 && (
-              <span className="font-normal text-[#9AA08C]/70">← 滑動看其他場</span>
-            )}
-          </div>
+              <div className="flex shrink-0 items-center justify-between border-b border-white/[0.10] px-3 py-2 text-xs font-bold text-[#9AA08C]">
+                <span>比賽統計</span>
+                {statsMatches.length > 1 && (
+                  <span className="font-normal text-[#9AA08C]/70">← 滑動看其他場</span>
+                )}
+              </div>
 
-          {/* 每個 snap pane 是一場比賽的統計；CSS scroll-snap 不需要任何 JS */}
-          <div className="flex min-h-0 flex-1 snap-x snap-mandatory overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {statsMatches.map((m) => (
-              // 這一格以前寫死 `w-72`，意思其實是「跟右欄一樣寬」——現在右欄多寬只由
-              // AppShell 的 ASIDE_WIDTH 一處決定，這裡改成 w-full 直接吃滿父層（也就是
-              // aside 插槽）給的寬度，不用在第二個地方重複寫一次同一個數字。如果以後只改
-              // AppShell 的常數、忘記回來改這裡，w-72 寫死的話畫面就會悄悄跟右欄實際寬度
-              // 不一致（scroll-snap 的每一格可能露出下一格一小角）——改成 w-full 之後這種
-              // 情況不可能發生。
-              <div key={m.id} className="flex min-h-0 w-full flex-none snap-center flex-col">
-                {/* 這裡原本有一條「vs {對手} / 本場 / i+1/length」的分頁小標題，跟頁面最上面
+              {/* 每個 snap pane 是一場比賽的統計；CSS scroll-snap 不需要任何 JS */}
+              <div className="flex min-h-0 flex-1 snap-x snap-mandatory overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                {statsMatches.map((m) => (
+                  // 這一格以前寫死 `w-72`，意思其實是「跟右欄一樣寬」——現在右欄多寬只由
+                  // AppShell 的 ASIDE_WIDTH 一處決定，這裡改成 w-full 直接吃滿父層（也就是
+                  // aside 插槽）給的寬度，不用在第二個地方重複寫一次同一個數字。如果以後只改
+                  // AppShell 的常數、忘記回來改這裡，w-72 寫死的話畫面就會悄悄跟右欄實際寬度
+                  // 不一致（scroll-snap 的每一格可能露出下一格一小角）——改成 w-full 之後這種
+                  // 情況不可能發生。
+                  <div key={m.id} className="flex min-h-0 w-full flex-none snap-center flex-col">
+                    {/* 這裡原本有一條「vs {對手} / 本場 / i+1/length」的分頁小標題，跟頁面最上面
                   的 <h1>vs {match.opponent}</h1> 重複——而且 statsMatches 目前是寫死的單一
                   元素陣列（見上面 statsMatches 宣告處的註解：跨場統計要等 Phase 3b-ii），
                   「i+1/length」永遠是「1/1」，不是現在真的有用的分頁資訊，純粹佔右欄空間、
                   逼使用者多滑一段才看得到下面的統計。刪掉，省下的高度用來讓比賽統計不用
                   捲軸就看得到。等 Phase 3b-ii 真的做多場統計時，那時候的人可以照那個功能
                   的實際形狀決定要不要重新加標題，不必現在先猜。 */}
-                <div className="flex-1 overflow-y-auto">
-                  <ScoreSheetStats
-                    players={m.players}
-                    record={m.id === id ? record : undefined}
-                    currentSetSubCount={m.id === id ? currentSubCount : undefined}
-                    totalSubCount={m.id === id ? totalSubCount : undefined}
-                    currentSetTimeoutCount={m.id === id ? currentTimeoutCount : undefined}
-                    totalTimeoutCount={m.id === id ? totalTimeoutCount : undefined}
-                  />
-                </div>
+                    <div className="flex-1 overflow-y-auto">
+                      <ScoreSheetStats
+                        players={m.players}
+                        record={m.id === id ? record : undefined}
+                        currentSetSubCount={m.id === id ? currentSubCount : undefined}
+                        totalSubCount={m.id === id ? totalSubCount : undefined}
+                        currentSetTimeoutCount={m.id === id ? currentTimeoutCount : undefined}
+                        totalTimeoutCount={m.id === id ? totalTimeoutCount : undefined}
+                      />
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
+            </div>
+
+            {/* 背面：影片。預先轉了 180 度——它跟正面疊在同一個位置，外層轉 180 度時，
+            它剛好被轉回正對鏡頭（180 + 180 = 360）。 */}
+            <div
+              className={`absolute inset-0 [backface-visibility:hidden] [transform:rotateY(180deg)] ${INFO_RAIL_BASE_CLASS}`}
+              aria-hidden={!isAdvanced}
+            >
+              <MatchVideoRail
+                matchId={Number(id)}
+                // #393：把播放器就緒後的「讀秒數」函式收進 ref（見上面 videoPositionRef 的
+                // 說明），球場那邊做手勢時再從 ref 讀出來用，不放進 state。
+                onPlayerReady={(read) => {
+                  videoPositionRef.current = read;
+                }}
+              />
+            </div>
           </div>
         </div>
       }
@@ -762,198 +908,277 @@ export default function ScoreSheet() {
             跳動。把徽章抬出文件流就沒有這個問題——它有沒有出現都不影響標題的位置。 */}
         <header className="relative flex shrink-0 items-center justify-center border-b border-white/[0.08] bg-white/[0.02] px-4 py-3 backdrop-blur-sm">
           <h1 className="text-lg font-bold">vs {match.opponent}</h1>
+          {/* 模式膠囊（#391）跟同步徽章一樣絕對定位、抬出文件流，理由同上：標題要維持
+              置中於整條標題列，膠囊擺左邊、徽章擺右邊，兩邊都不推擠中間的標題。 */}
+          <div className="absolute left-4 top-1/2 -translate-y-1/2">
+            <RecordingModeToggle mode={mode} onChange={handleModeChange} />
+          </div>
           <div className="absolute right-4 top-1/2 -translate-y-1/2">
             <UnsyncedWritesBadge count={pendingWrites} onRetry={retryWrites} />
           </div>
         </header>
 
-        <div className="flex flex-1 min-h-0 justify-center">
-          {isFinished ? (
-            // ── 完賽態（#218）──
-            // PO 決策：結束後**可逆、且不藏起來**——這一頁照樣進得來，只是不能再記分
-            //（沒有球場、沒有比分卡、沒有暫停/換人/下一局），並且提供「重新開啟比賽」把
-            // status 改回 in_progress 繼續補記。記錄者事後對帳是常態，鎖死只會逼人去砍掉重記。
-            //
-            // 為什麼這個分支要放在最前面：完賽後 record.currentSet 是一個空的佔位局
-            //（serving/lineup 都是 null，見 reconstructRecording），如果讓它往下掉，就會落進
-            // 下面「這局由誰先發球？」的分支——一場已經打完的比賽卻在問誰發球，明顯是錯的。
-            <div className="flex flex-1 flex-col items-center justify-center gap-5 px-4 text-center">
-              <p className="text-sm font-bold tracking-widest text-[#a9b096]">這場比賽已結束</p>
-              {/* 最終局比數。用跟計分板同一套語彙（font-score 大數字＋我方萊姆綠／對手紅），
+        {/* 進階模式的中央主區是「可以往下捲」的（#391 版面決策：球場在上，往下滑是完整的
+            紀錄表格）；簡易模式維持原本一屏到底、不捲動。所以捲動能力綁在模式上，而不是
+            無條件打開——賽中記分時頁面會捲是災難（點球員時手指一滑，球場就跑掉了）。 */}
+        <div className={`flex min-h-0 flex-1 flex-col ${isAdvanced ? "overflow-y-auto" : ""}`}>
+          <div
+            className={`flex min-h-0 justify-center transition-transform duration-500 motion-reduce:transition-none ${
+              isAdvanced
+                ? // 球場「稍微往左移」（PO 已定的版面）：右欄翻成影片之後，視覺重心整個
+                  // 被拉到右邊，中央維持置中會顯得偏右。往左挪一小段就平衡回來。
+                  // shrink-0 + min-h：進階模式下這一塊不再被壓縮去遷就下面的表格，
+                  // 而是佔滿差不多一屏、讓表格自然落在「往下滑才看得到」的位置。
+                  "min-h-[calc(100vh-8rem)] shrink-0 -translate-x-8"
+                : "flex-1"
+            }`}
+          >
+            {isFinished ? (
+              // ── 完賽態（#218）──
+              // PO 決策：結束後**可逆、且不藏起來**——這一頁照樣進得來，只是不能再記分
+              //（沒有球場、沒有比分卡、沒有暫停/換人/下一局），並且提供「重新開啟比賽」把
+              // status 改回 in_progress 繼續補記。記錄者事後對帳是常態，鎖死只會逼人去砍掉重記。
+              //
+              // 為什麼這個分支要放在最前面：完賽後 record.currentSet 是一個空的佔位局
+              //（serving/lineup 都是 null，見 reconstructRecording），如果讓它往下掉，就會落進
+              // 下面「這局由誰先發球？」的分支——一場已經打完的比賽卻在問誰發球，明顯是錯的。
+              <div className="flex flex-1 flex-col items-center justify-center gap-5 px-4 text-center">
+                <p className="text-sm font-bold tracking-widest text-[#a9b096]">這場比賽已結束</p>
+                {/* 最終局比數。用跟計分板同一套語彙（font-score 大數字＋我方萊姆綠／對手紅），
                 讓「最後結果」在視覺上就是這一頁的主角。 */}
-              <div className="flex items-end gap-4">
-                <div className="flex flex-col items-center gap-1">
-                  <span className="font-score text-6xl tabular-nums text-[#C6F135]">
-                    {ourSetsWon}
-                  </span>
-                  <span className="text-caption font-semibold text-[#a9b096]">我方</span>
+                <div className="flex items-end gap-4">
+                  <div className="flex flex-col items-center gap-1">
+                    <span className="font-score text-6xl tabular-nums text-[#C6F135]">
+                      {ourSetsWon}
+                    </span>
+                    <span className="text-caption font-semibold text-[#a9b096]">我方</span>
+                  </div>
+                  <span className="pb-6 font-score text-3xl text-[#a9b096]">:</span>
+                  <div className="flex flex-col items-center gap-1">
+                    <span className="font-score text-6xl tabular-nums text-[#F0776C]">
+                      {opponentSetsWon}
+                    </span>
+                    <span className="text-caption font-semibold text-[#a9b096]">
+                      {match.opponent}
+                    </span>
+                  </div>
                 </div>
-                <span className="pb-6 font-score text-3xl text-[#a9b096]">:</span>
-                <div className="flex flex-col items-center gap-1">
-                  <span className="font-score text-6xl tabular-nums text-[#F0776C]">
-                    {opponentSetsWon}
-                  </span>
-                  <span className="text-caption font-semibold text-[#a9b096]">
-                    {match.opponent}
-                  </span>
-                </div>
-              </div>
-              {/* 各局比分不在這裡重畫一份——右欄的 ScoreSheetStats 本來就有一張完整的
+                {/* 各局比分不在這裡重畫一份——右欄的 ScoreSheetStats 本來就有一張完整的
                 「各局比分」表，完賽後每一局都在 completedSets 裡，那張表自然就是完整的。 */}
-              <p className="text-xs text-[#a9b096]">各局比分在右欄「比賽統計」。</p>
-              <div className="mt-2 flex gap-3">
-                <Link href={`/matches/${id}/analytics`} className={PRIMARY_BUTTON_CLASS}>
-                  查看分析
-                </Link>
-                <button className={SECONDARY_BUTTON_CLASS} onClick={() => void reopenMatch()}>
-                  重新開啟比賽
-                </button>
+                <p className="text-xs text-[#a9b096]">各局比分在右欄「比賽統計」。</p>
+                <div className="mt-2 flex gap-3">
+                  <Link href={`/matches/${id}/analytics`} className={PRIMARY_BUTTON_CLASS}>
+                    查看分析
+                  </Link>
+                  <button className={SECONDARY_BUTTON_CLASS} onClick={() => void reopenMatch()}>
+                    重新開啟比賽
+                  </button>
+                </div>
+                <p className="max-w-xs text-xs text-[#a9b096]">
+                  記錯了？「重新開啟比賽」會回到最後一局繼續記，已記的球不會消失。
+                </p>
               </div>
-              <p className="max-w-xs text-xs text-[#a9b096]">
-                記錯了？「重新開啟比賽」會回到最後一局繼續記，已記的球不會消失。
-              </p>
-            </div>
-          ) : !hasLineup ? (
-            // 這場還沒有先發。以前這裡是一顆「前往戰術板」把使用者踢出計分頁，現在右欄的
-            // 站位面板在開賽前本來就是可編輯的（不用另外切換模式），所以這裡只留一句指路，
-            // 不再提供離開這一頁的入口（PO 指示），也不連去戰術板——戰術板現在是唯讀的白板，
-            // 不是排先發的地方（issue #154）。
-            <div className="flex flex-1 flex-col items-center justify-center gap-2 px-4 text-center">
-              <p className="text-[#f5f5f0]">還沒排先發。</p>
-              <p className="text-sm text-[#a9b096]">
-                在右邊的「場上站位」點號位、再點球員，湊滿 6 人就能開始記錄。
-              </p>
-            </div>
-          ) : !lineup || !currentSet ? (
-            // 開賽前／殘缺 set 自癒（aila 在 main 修的死結，見 canEditLineup 的說明）：
-            // 判準看「有沒有凍結先發」（lineup）而非 serving——serving 已被寫過、但 lineup
-            // 還是 null 時，也要落到這個分支「再問一次」發球方，讓教練重排滿 6 人後重選，
-            // start() 這次就能把先發真正凍結＋補寫後端。還沒有球場可畫，比分區＋「這局誰
-            // 先發球」置中就好，不用左右分欄。
-            <div className="flex flex-1 flex-col items-center justify-center gap-4 px-4 text-center">
-              {scoreDisplay}
-              <p className="text-sm font-bold text-[#f5f5f0]">這局由誰先發球？</p>
-              <div className="flex gap-3">
-                <button className={PRIMARY_BUTTON_CLASS} onClick={() => start("us", activeLineup)}>
-                  我方先發
-                </button>
-                <button
-                  className={SECONDARY_BUTTON_CLASS}
-                  onClick={() => start("opponent", activeLineup)}
-                >
-                  對手先發
-                </button>
+            ) : !hasLineup ? (
+              // 這場還沒有先發。以前這裡是一顆「前往戰術板」把使用者踢出計分頁，現在右欄的
+              // 站位面板在開賽前本來就是可編輯的（不用另外切換模式），所以這裡只留一句指路，
+              // 不再提供離開這一頁的入口（PO 指示），也不連去戰術板——戰術板現在是唯讀的白板，
+              // 不是排先發的地方（issue #154）。
+              <div className="flex flex-1 flex-col items-center justify-center gap-2 px-4 text-center">
+                <p className="text-[#f5f5f0]">還沒排先發。</p>
+                <p className="text-sm text-[#a9b096]">
+                  在右邊的「場上站位」點號位、再點球員，湊滿 6 人就能開始記錄。
+                </p>
               </div>
-              {/* 先發是「每局可不同」的（issue #115）：選先發方那一刻，會把當下的站位凍結成
+            ) : !lineup || !currentSet ? (
+              // 開賽前／殘缺 set 自癒（aila 在 main 修的死結，見 canEditLineup 的說明）：
+              // 判準看「有沒有凍結先發」（lineup）而非 serving——serving 已被寫過、但 lineup
+              // 還是 null 時，也要落到這個分支「再問一次」發球方，讓教練重排滿 6 人後重選，
+              // start() 這次就能把先發真正凍結＋補寫後端。還沒有球場可畫，比分區＋「這局誰
+              // 先發球」置中就好，不用左右分欄。
+              <div className="flex flex-1 flex-col items-center justify-center gap-4 px-4 text-center">
+                {scoreDisplay}
+                <p className="text-sm font-bold text-[#f5f5f0]">這局由誰先發球？</p>
+                <div className="flex gap-3">
+                  <button
+                    className={PRIMARY_BUTTON_CLASS}
+                    onClick={() => start("us", activeLineup)}
+                  >
+                    我方先發
+                  </button>
+                  <button
+                    className={SECONDARY_BUTTON_CLASS}
+                    onClick={() => start("opponent", activeLineup)}
+                  >
+                    對手先發
+                  </button>
+                </div>
+                {/* 先發是「每局可不同」的（issue #115）：選先發方那一刻，會把當下的站位凍結成
                 這一局的先發（開局凍結）。開賽前右欄的站位面板本來就是可以直接編輯的——
                 不用另外按「改」切換模式，改了立刻生效。 */}
-              <p className="mt-1 max-w-xs text-center text-xs text-[#a9b096]">
-                這一局會用右欄目前的站位，隨時可以直接在右欄改。
-              </p>
-            </div>
-          ) : (
-            // 比賽進行中：往左右發展——球場放左邊（吃滿剩餘寬度、放大），比分＋操作按鈕收在
-            // 右邊一直欄（使用者要求：不要把功能都擠成上下一長條）。
-            <>
-              {/* ── 左：球場 ── */}
-              <div className="flex min-w-0 flex-col gap-2 p-4">
-                {selectedBenchPlayer ? (
-                  <div className="flex w-full items-center justify-between rounded-lg border border-[#3b82f6]/40 bg-[#3b82f6]/15 px-3 py-1.5 text-sm">
-                    <span className="font-semibold text-[#93c5fd]">
-                      換人模式：點球場上的球員換下
-                    </span>
-                    <button
-                      onClick={() => setSelectedBenchPlayer(null)}
-                      className="text-xs text-[#93c5fd] underline"
-                    >
-                      取消
-                    </button>
-                  </div>
-                ) : (
-                  <p className="shrink-0 text-center text-xs text-[#a9b096]">
-                    在球場上畫線連到球員記一球，長按球員可以換人
-                  </p>
-                )}
-
-                <div className="flex min-h-0 w-full flex-1 items-center justify-center">
-                  <ScoreSheetCourt
-                    ourPositions={ourPositions}
-                    roster={match.players}
-                    opponentRotation={currentSet.opponentRotation}
-                    serving={currentSet.serving}
-                    interactive={gesture === null}
-                    onPlayerTouch={handlePlayerTouch}
-                    onLiberoSubstitute={handleLiberoSubstitute}
-                    regularSubs={regularSubs}
-                    selectedBenchPlayer={selectedBenchPlayer}
-                    onBenchPlayerSelect={setSelectedBenchPlayer}
-                    onRegularSub={handleRegularSub}
-                    liberoSubstitution={liberoSubstitution}
-                    selectedLiberoId={selectedLiberoId}
-                    onSelectLibero={handleSelectLibero}
-                  />
-                </div>
+                <p className="mt-1 max-w-xs text-center text-xs text-[#a9b096]">
+                  這一局會用右欄目前的站位，隨時可以直接在右欄改。
+                </p>
               </div>
+            ) : (
+              // 比賽進行中：往左右發展——球場放左邊（吃滿剩餘寬度、放大），比分＋操作按鈕收在
+              // 右邊一直欄（使用者要求：不要把功能都擠成上下一長條）。
+              <>
+                {/* ── 左：球場 ──
+                  isAdvanced 時整塊換成進階版補填球場（issue #392）：提示列文案跟球場元件
+                  本身都換，但簡易版那條路徑（下面 else 分支的 ScoreSheetCourt 與它的 props）
+                  一行都不動——只是被包進這個三元判斷式，理由見 AdvancedRecordingCourt.tsx
+                  檔頭「為什麼不共用 ScoreSheetCourt」的說明。 */}
+                <div className="flex min-w-0 flex-col gap-2 p-4">
+                  {isAdvanced ? (
+                    advancedCurrentBall ? (
+                      // 有一球滑完、正在等落點：提示列升級成「有取消鈕」的橫幅，用的是簡易版
+                      // 「換人模式」橫幅同一套語彙（左邊說明現在在等什麼、右邊一顆文字取消鈕）
+                      // ——兩者是同一種東西：**一個進行到一半、可以反悔的模式**，長一樣才不用
+                      // 學兩次。只有配色換成萊姆綠（這是進階版補填的主色，藍色在簡易版已經
+                      // 專指換人模式）。
+                      //
+                      // 為什麼取消要做成看得見的鈕，而不是某個手勢（PO 2026-08-13 定案）：
+                      // 手勢版的取消一定要在球場上劃出一塊「點下去不是落點」的區域，而落點
+                      // 可能真的落在那裡（防守把球救成高球，球就落在自己頭上）。看得見的鈕
+                      // 不佔用球場任何一塊面積，也不用使用者猜「點哪裡算取消」。
+                      <div className="flex w-full items-center justify-between rounded-lg border border-[#c6f135]/40 bg-[#c6f135]/10 px-3 py-1.5 text-sm">
+                        <span className="font-semibold text-[#c6f135]">{advancedHintText}</span>
+                        <button
+                          type="button"
+                          onClick={() => cancelAdvancedBall(id)}
+                          className="text-xs text-[#c6f135] underline"
+                        >
+                          取消這一球
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="shrink-0 text-center text-xs text-[#a9b096]">
+                        {advancedHintText}
+                      </p>
+                    )
+                  ) : selectedBenchPlayer ? (
+                    <div className="flex w-full items-center justify-between rounded-lg border border-[#3b82f6]/40 bg-[#3b82f6]/15 px-3 py-1.5 text-sm">
+                      <span className="font-semibold text-[#93c5fd]">
+                        換人模式：點球場上的球員換下
+                      </span>
+                      <button
+                        onClick={() => setSelectedBenchPlayer(null)}
+                        className="text-xs text-[#93c5fd] underline"
+                      >
+                        取消
+                      </button>
+                    </div>
+                  ) : (
+                    <p className="shrink-0 text-center text-xs text-[#a9b096]">
+                      在球場上畫線連到球員記一球，長按球員可以換人
+                    </p>
+                  )}
 
-              {/* ── 右：比分 + 操作按鈕（直欄） ──
+                  <div className="flex min-h-0 w-full flex-1 items-center justify-center">
+                    {isAdvanced ? (
+                      <AdvancedRecordingCourt
+                        matchId={id}
+                        ourPositions={ourPositions}
+                        roster={match.players}
+                        opponentRotation={currentSet.opponentRotation}
+                        onFinishRally={handleAdvancedRallyFinish}
+                        readVideoPosition={() => videoPositionRef.current?.() ?? null}
+                      />
+                    ) : (
+                      <ScoreSheetCourt
+                        ourPositions={ourPositions}
+                        roster={match.players}
+                        opponentRotation={currentSet.opponentRotation}
+                        serving={currentSet.serving}
+                        interactive={gesture === null}
+                        onPlayerTouch={handlePlayerTouch}
+                        onLiberoSubstitute={handleLiberoSubstitute}
+                        regularSubs={regularSubs}
+                        selectedBenchPlayer={selectedBenchPlayer}
+                        onBenchPlayerSelect={setSelectedBenchPlayer}
+                        onRegularSub={handleRegularSub}
+                        liberoSubstitution={liberoSubstitution}
+                        selectedLiberoId={selectedLiberoId}
+                        onSelectLibero={handleSelectLibero}
+                      />
+                    )}
+                  </div>
+                </div>
+
+                {/* ── 右：比分 + 操作按鈕（直欄） ──
                   垂直置中（justify-center）、不加分隔線——跟左邊球場之間單純靠留白區隔，
                   不需要一條實體邊框線。 */}
-              <div className="flex w-[280px] shrink-0 flex-col items-center justify-center gap-6 overflow-y-auto p-5">
-                {scoreDisplay}
+                <div className="flex w-[280px] shrink-0 flex-col items-center justify-center gap-6 overflow-y-auto p-5">
+                  {scoreDisplay}
 
-                {/* 暫停（issue #44）：每一方一顆鈕，標籤帶「已用/上限」，達到 2 次就反灰
+                  {/* 暫停（issue #44）：每一方一顆鈕，標籤帶「已用/上限」，達到 2 次就反灰
                   （MAX_TIMEOUTS_PER_SET，理由見常數註解）。叫暫停跟得分/換人一樣走
                   controller 的 callTimeout：本地即時記一筆、背景寫進後端、可被「復原」退掉。 */}
-                <div className="flex w-full gap-2">
-                  <button
-                    className={`${SECONDARY_SM_BUTTON_CLASS} flex-1`}
-                    disabled={ourTimeoutCount >= MAX_TIMEOUTS_PER_SET}
-                    onClick={() => callTimeout("us")}
-                  >
-                    我方暫停 {ourTimeoutCount}/{MAX_TIMEOUTS_PER_SET}
-                  </button>
-                  <button
-                    className={`${SECONDARY_SM_BUTTON_CLASS} flex-1`}
-                    disabled={opponentTimeoutCount >= MAX_TIMEOUTS_PER_SET}
-                    onClick={() => callTimeout("opponent")}
-                  >
-                    對手暫停 {opponentTimeoutCount}/{MAX_TIMEOUTS_PER_SET}
-                  </button>
-                </div>
+                  <div className="flex w-full gap-2">
+                    <button
+                      className={`${SECONDARY_SM_BUTTON_CLASS} flex-1`}
+                      disabled={ourTimeoutCount >= MAX_TIMEOUTS_PER_SET}
+                      onClick={() => callTimeout("us")}
+                    >
+                      我方暫停 {ourTimeoutCount}/{MAX_TIMEOUTS_PER_SET}
+                    </button>
+                    <button
+                      className={`${SECONDARY_SM_BUTTON_CLASS} flex-1`}
+                      disabled={opponentTimeoutCount >= MAX_TIMEOUTS_PER_SET}
+                      onClick={() => callTimeout("opponent")}
+                    >
+                      對手暫停 {opponentTimeoutCount}/{MAX_TIMEOUTS_PER_SET}
+                    </button>
+                  </div>
 
-                {/* 復原/下一局/結束比賽：原本 2×2 還有一顆「沒看到」，現在併進球場改成
+                  {/* 復原/下一局/結束比賽：原本 2×2 還有一顆「沒看到」，現在併進球場改成
                   「我方(全體)」（跟「對手(全體)」對稱的虛線框，走一模一樣的選動作／選得失分
                   流程，見 ScoreSheetCourt.tsx 的 hitTargets 說明），剩三顆排成一列。 */}
-                <div className="grid w-full grid-cols-3 gap-2">
-                  {/* 一顆「復原」鈕，一次退最近一個動作（得分／一般換人／手動 libero／暫停），
+                  <div className="grid w-full grid-cols-3 gap-2">
+                    {/* 一顆「復原」鈕，一次退最近一個動作（得分／一般換人／手動 libero／暫停），
                     連按就一路往回（issue #41）。可用與否看復原堆疊深度，不是只看記了幾顆球
                     ——這樣剛換完人、還沒記下一球時也退得掉那次換人。 */}
-                  <button
-                    className={GHOST_BUTTON_CLASS}
-                    disabled={undoDepth === 0}
-                    onClick={handleUndo}
-                  >
-                    復原
-                  </button>
-                  <button className={GHOST_BUTTON_CLASS} onClick={handleNextSet}>
-                    下一局
-                  </button>
-                  {/* 結束比賽（issue #20 → #218 改寫）：以前這裡是一顆 <Link>，按下去只是
+                    <button
+                      className={GHOST_BUTTON_CLASS}
+                      disabled={undoDepth === 0}
+                      onClick={handleUndo}
+                    >
+                      復原
+                    </button>
+                    <button className={GHOST_BUTTON_CLASS} onClick={handleNextSet}>
+                      下一局
+                    </button>
+                    {/* 結束比賽（issue #20 → #218 改寫）：以前這裡是一顆 <Link>，按下去只是
                     導去分析頁——資料上完全沒有「這場打完了」這件事，最後一局也因此永遠被
                     當成進行中而不算數。現在它是一個**真正的動作**：開確認視窗 → 寫
                     matches.status = finished → 才導去分析頁。
                     樣式（#218 PO 決策 2「提示但不強制」）：勝局條件一達成就從 GHOST 換成
                     PRIMARY（萊姆綠實心），讓記錄者一眼看到「可以收尾了」，但畫面不會被彈窗
                     打斷、也還能繼續記分——記錯一球被強制中斷，比忘記按更惱人。 */}
-                  <button
-                    className={`whitespace-nowrap ${matchDecided ? PRIMARY_BUTTON_CLASS : GHOST_BUTTON_CLASS}`}
-                    onClick={() => setShowFinishConfirm(true)}
-                  >
-                    結束比賽
-                  </button>
+                    <button
+                      className={`whitespace-nowrap ${matchDecided ? PRIMARY_BUTTON_CLASS : GHOST_BUTTON_CLASS}`}
+                      onClick={() => setShowFinishConfirm(true)}
+                    >
+                      結束比賽
+                    </button>
+                  </div>
                 </div>
+              </>
+            )}
+          </div>
+
+          {/* ── 完整紀錄表格的位置（M4-3）──
+            #391 只做載體，表格本身是下一張票。這裡先把「它會長在哪裡」佔起來，是因為
+            版面決策（球場在上、往下滑是表格）是這張票的一部分——先確定捲動關係成立，
+            下一張票才只需要把內容填進來，不用再回頭動一次版面。
+            佔位塊刻意做得像「還沒蓋好的地基」（虛線框、灰字），不做成假表格：假表格會讓
+            實機驗收的人以為功能壞了（怎麼都是空的），虛線框則一眼看得出是還沒做。 */}
+          {isAdvanced && (
+            <div className="shrink-0 px-8 pb-8">
+              <div className="flex h-48 items-center justify-center rounded-2xl border border-dashed border-white/[0.14] text-sm text-[#6d7361]">
+                完整紀錄表格（下一張票）
               </div>
-            </>
+            </div>
           )}
         </div>
 

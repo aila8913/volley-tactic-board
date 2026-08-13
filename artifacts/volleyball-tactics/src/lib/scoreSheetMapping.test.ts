@@ -4,6 +4,7 @@ import {
   apiToSide,
   pointRecordToRally,
   pointRecordToEvent,
+  draftChainToEvents,
   eventToMeta,
   reconstructSetFromRallies,
   isSetComplete,
@@ -19,7 +20,7 @@ import {
   apiLineupToSnapshot,
 } from "./scoreSheetMapping";
 import { lineupFromZones } from "../types/scoresheet";
-import type { PointRecord, RegularSub, LineupSnapshot } from "../types/scoresheet";
+import type { PointRecord, RegularSub, LineupSnapshot, DraftEvent } from "../types/scoresheet";
 import type { MatchEvent } from "@workspace/api-client-react";
 import {
   makeSet,
@@ -123,7 +124,91 @@ describe("pointRecordToRally", () => {
       homeRotation: 2,
       awayRotation: 1,
       winner: "home",
+      videoId: null,
+      videoTimestamp: null,
     });
+  });
+
+  // 影片錨點（#393，實作 ADR-0010 決定 5）：預設不傳就是 null（簡易版沿用舊行為），
+  // 進階版補填有錨點時才傳這兩個額外參數。
+  it("emits videoId/videoTimestamp when the caller passes an anchor", () => {
+    const point: PointRecord = { side: "us", wasSideOut: true };
+    expect(pointRecordToRally(point, 5, 4, 3, 2, 1, "video-1", 42)).toMatchObject({
+      videoId: "video-1",
+      videoTimestamp: 42,
+    });
+  });
+});
+
+describe("draftChainToEvents（#393，實作 ADR-0010 決定 1／2／5）", () => {
+  // 造一顆最普通的 DraftEvent，測試呼叫時只覆寫自己在意的欄位——跟 __fixtures__/scoreSheet.ts
+  // 的 makeXxx builder 同一套規則，只是這個型別只在這個 describe 用得到，不值得另外開檔案。
+  const ball = (over: Partial<DraftEvent> = {}): DraftEvent => ({
+    id: "ball-1",
+    side: "us",
+    playerId: "player-1",
+    action: "attack",
+    toX: 10,
+    toY: 20,
+    ...over,
+  });
+
+  it("empty balls → empty events", () => {
+    expect(draftChainToEvents([], "us")).toEqual([]);
+  });
+
+  it("sequence 是 1-based，依陣列順序編號", () => {
+    const events = draftChainToEvents(
+      [ball({ id: "b1" }), ball({ id: "b2" }), ball({ id: "b3" })],
+      "us",
+    );
+    expect(events.map((e) => e.sequence)).toEqual([1, 2, 3]);
+  });
+
+  it("from 鏈接前一球的 to；第一球沒有前一觸，from 是 null/null", () => {
+    const events = draftChainToEvents(
+      [
+        ball({ id: "b1", toX: 10, toY: 20 }),
+        ball({ id: "b2", toX: 30, toY: 40 }),
+        ball({ id: "b3", toX: 50, toY: 60 }),
+      ],
+      "us",
+    );
+    expect(events[0]).toMatchObject({ fromX: null, fromY: null, toX: 10, toY: 20 });
+    expect(events[1]).toMatchObject({ fromX: 10, fromY: 20, toX: 30, toY: 40 });
+    expect(events[2]).toMatchObject({ fromX: 30, fromY: 40, toX: 50, toY: 60 });
+  });
+
+  it("最後一球 side===winner → outcome point；其餘一律 in_play", () => {
+    const events = draftChainToEvents(
+      [ball({ id: "b1", side: "opponent" }), ball({ id: "b2", side: "us" })],
+      "us",
+    );
+    expect(events[0].outcome).toBe("in_play");
+    expect(events[1].outcome).toBe("point");
+  });
+
+  it("最後一球 side!==winner → outcome loss", () => {
+    const events = draftChainToEvents([ball({ id: "b1", side: "us" })], "opponent");
+    expect(events[0].outcome).toBe("loss");
+  });
+
+  it("source 一律是 review（跟簡易版的 live 對照）", () => {
+    const events = draftChainToEvents([ball(), ball({ id: "b2" })], "us");
+    for (const e of events) expect(e.source).toBe("review");
+  });
+
+  it("對手側的球：side 轉成 away，playerId 一律 null", () => {
+    const events = draftChainToEvents(
+      [ball({ id: "b1", side: "opponent", playerId: null })],
+      "opponent",
+    );
+    expect(events[0]).toMatchObject({ side: "away", playerId: null });
+  });
+
+  it("videoTimestamp 這一輪不填，一律 null（見 ADR-0010 決定 5）", () => {
+    const events = draftChainToEvents([ball()], "us");
+    expect(events[0].videoTimestamp).toBeNull();
   });
 });
 
@@ -351,7 +436,38 @@ describe("reconstructSetFromRallies", () => {
     expect(state.history[1].touchedBy).toBeUndefined();
   });
 
-  it("picks the first event (lowest sequence) when a rally has several", () => {
+  it("當一個 rally 有多顆 event（進階版整條鏈）時，取 outcome 是 point/loss 的那一顆（決定球），不是 sequence 最小的那顆", () => {
+    const rallies = [rally(1, "home", "100")];
+    const eventsByRallyId = new Map<string, MatchEvent[]>([
+      [
+        "100",
+        [
+          // sequence 1（發球）不是決定球——舊寫法「取 sequence 最小」會錯挑到這一顆。
+          makeEvent({
+            rallyId: "100",
+            sequence: 1,
+            side: "home",
+            playerId: "3",
+            action: "serve",
+            outcome: "in_play",
+          }),
+          // sequence 2 才是這一分真正的決定球（outcome=point）。
+          makeEvent({
+            rallyId: "100",
+            sequence: 2,
+            side: "home",
+            playerId: "9",
+            action: "attack",
+            outcome: "point",
+          }),
+        ],
+      ],
+    ]);
+    const state = reconstructSetFromRallies(set, rallies, eventsByRallyId);
+    expect(state.history[0]).toMatchObject({ action: "attack", touchedBy: { playerId: "9" } });
+  });
+
+  it("整條鏈裡沒有任何一顆 outcome 是 point/loss（例如舊資料 outcome 全是 null）時，落回 events[0]", () => {
     const rallies = [rally(1, "home", "100")];
     const eventsByRallyId = new Map<string, MatchEvent[]>([
       [
@@ -363,8 +479,16 @@ describe("reconstructSetFromRallies", () => {
             side: "home",
             playerId: "3",
             action: "receive",
+            outcome: null,
           }),
-          makeEvent({ rallyId: "100", sequence: 2, side: "home", playerId: "9", action: "attack" }),
+          makeEvent({
+            rallyId: "100",
+            sequence: 2,
+            side: "home",
+            playerId: "9",
+            action: "attack",
+            outcome: null,
+          }),
         ],
       ],
     ]);

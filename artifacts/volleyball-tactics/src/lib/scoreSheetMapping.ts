@@ -31,6 +31,7 @@ import type {
   ScoreSheetState,
   CompletedSet,
   LineupSnapshot,
+  DraftEvent,
 } from "../types/scoresheet";
 import { applyRally, applyRegularSub, splitCompletedAndCurrent } from "./volleyballRules";
 
@@ -93,6 +94,14 @@ export function resolveScoringSide(actorSide: Side, outcome: "win" | "lose"): Si
 // 一個 PointRecord 就是一分 = 一個 rally。homeScore/awayScore 存的是「這分開始前」的比分
 // （後端設計，見 lib/db/src/schema/rallies.ts），所以呼叫端要把記這分之前的比分傳進來。
 // homeRotation/awayRotation 同理，存的也是「這分開始前」的輪次快照，不是加分/輪轉後的值。
+//
+// videoId/videoTimestamp（#393，實作 ADR-0010 決定 5）：這一分在影片上的錨點。掛在 rally
+// 而不是另外走一趟 PATCH 的理由——錨點在使用者做「這一分」的第一個手勢時就已經知道了
+// （見 useAdvancedRecording.ts 的 RallyDraft.anchor），而 rally 這一列本來就是要到收尾
+// （這一分結束）那一刻才建立、POST 出去——兩件事天生同時發生，直接把錨點一起塞進同一個
+// POST 的 body，不需要多開一種「先建 rally、再 PATCH 補錨點」的 write log entry。
+// 兩個參數都選填、預設 null：簡易版記的 rally 沒有影片可指（呼叫端沿用舊行為，不用
+// 額外傳這兩個參數），只有進階版補填、且這場比賽真的掛了影片時才會有值。
 export function pointRecordToRally(
   point: PointRecord,
   rallyNumber: number,
@@ -100,6 +109,8 @@ export function pointRecordToRally(
   awayScoreBefore: number,
   homeRotationBefore: number,
   awayRotationBefore: number,
+  videoId: string | null = null,
+  videoTimestamp: number | null = null,
 ): NewRally {
   return {
     rallyNumber,
@@ -108,6 +119,8 @@ export function pointRecordToRally(
     homeRotation: homeRotationBefore,
     awayRotation: awayRotationBefore,
     winner: sideToApi(point.side),
+    videoId,
+    videoTimestamp,
   };
 }
 
@@ -119,14 +132,24 @@ export function pointRecordToRally(
 // ballType/quality/座標都是進階版（賽後精確記）才填，簡易版一律留空。
 //
 // outcome（#51 第一塊、docs/event-grammar-spec.md 決策 7）：以「執行這球的一方」為基準，不是
-// 以我方為基準——point.touchedBy.side 是誰做了這顆決定球，point.side 是這分誰贏。兩者相同代表
-// 「動作方自己贏了這分」→ point；不同代表「動作方輸了這分」（可能是被得分、也可能是自己失誤）
-// → loss。這跟上面的 resolveScoringSide()（從「動作方＋win/lose」反推「這分算誰的」）互為反函式：
+// 以我方為基準——actorSide 是誰做了這顆球，winnerSide 是這分誰贏。兩者相同代表「動作方自己
+// 贏了這分」→ point；不同代表「動作方輸了這分」（可能是被得分、也可能是自己失誤）→ loss。
+//
+// 抽成獨立的小函式（不是留在 resolveOutcome 裡面），是因為 #393 的 draftChainToEvents 也要
+// 判斷同一件事（進階版鏈上最後一球的 outcome）。這條規則被複製成兩三份、然後各自漂走
+// 正是這個 repo 反覆踩過的坑（#350／#365／#370——同一條「誰贏這分」判斷散在好幾個地方，
+// 改一處忘了改另一處，CI 全綠但數字默默是錯的）。這裡讓進階版跟簡易版共用同一支手寫的
+// 判斷式，不是各自寫一份「看起來一樣」的版本。
+function outcomeFor(actorSide: Side, winnerSide: Side): "point" | "loss" {
+  return actorSide === winnerSide ? "point" : "loss";
+}
+
+// 這跟上面的 resolveScoringSide()（從「動作方＋win/lose」反推「這分算誰的」）互為反函式：
 // resolveScoringSide 是 UI 收得分/失分選擇時「往前」推出 rally.winner，這裡是「往後」用已知的
 // touchedBy.side/point.side 重新比對出 outcome，兩者的比較邏輯一體兩面。
 function resolveOutcome(point: PointRecord): "point" | "loss" | null {
   if (!point.touchedBy) return null;
-  return point.touchedBy.side === point.side ? "point" : "loss";
+  return outcomeFor(point.touchedBy.side, point.side);
 }
 
 export function pointRecordToEvent(point: PointRecord, sequence: number): NewEvent | null {
@@ -139,6 +162,56 @@ export function pointRecordToEvent(point: PointRecord, sequence: number): NewEve
     source: "live",
     outcome: resolveOutcome(point),
   };
+}
+
+// ── 進階版補填的整條觸球鏈 → events[]（#393，實作 ADR-0010 決定 1／2／5）──
+// 跟上面 pointRecordToEvent 是同一件事的兩種規模：簡易版一分最多一球（sequence 固定 1，
+// 一次轉一顆），進階版一分是一整條鏈（每一觸都記，sequence 依序編號）。呼叫端
+// （useScoreSheet.ts 的 score()）在有這條鏈時整包呼叫這支函式，取代掉 pointRecordToEvent
+// 那條路——見 score() 的說明，兩者不會同時跑，否則一分裡會有兩球被標成決定球。
+export function draftChainToEvents(balls: DraftEvent[], winner: Side): NewEvent[] {
+  return balls.map((ball, i) => {
+    const isLast = i === balls.length - 1;
+    // sequence 是 1-based，對齊 events.sequence「這個 rally 裡的第幾球，從 1 開始」。
+    const sequence = i + 1;
+
+    // from：複製「前一球的 to」，寫入時展開成獨立欄位（ADR-0010 決定 2：折線只存 to，
+    // from 在寫入的當下從前一觸複製一份，不是渲染時才現算）。第一球沒有前一觸，留 null——
+    // 這是 #393 自己的決定：唯一的替代方案是拿球員站位（zone）當起點，但發球員的站位是
+    // 「輪轉號位」，不是他實際發球那一點（拋球、揮臂點都在站位之外幾十公分）；對手側的球
+    // 連 zone 都沒進 DraftEvent（見該型別的說明，HitTarget.zone 只是畫面比對用，故意不進
+    // store）。把猜測寫進所有球線統計的地基，正是 ADR-0010「別把文法/位置拿來幫使用者猜」
+    // 那條決定要擋掉的路（見決定 4 與「不要重新提議」段落）——鏈中斷處留 null 本來就是
+    // ADR-0010 決定 2 已經定好的表示法，第一球的起點只是「鏈從這裡開始」的另一種中斷。
+    const prev = i > 0 ? balls[i - 1] : null;
+    const fromX = prev ? prev.toX : null;
+    const fromY = prev ? prev.toY : null;
+
+    return {
+      sequence,
+      side: sideToApi(ball.side),
+      playerId: ball.playerId ?? null,
+      action: ball.action,
+      // 補填一定是賽後對著影片做的，不會有「這球是現場記的」這種情況——跟 pointRecordToEvent
+      // 固定填 "live" 是同一種「這個轉換函式只服務一種來源」的寫法，不是猜出來的預設值。
+      source: "review",
+      // 最後一球的 outcome 由「這一球是誰打的」對上「這一分誰贏」決定（outcomeFor，跟簡易版
+      // 共用同一條規則）；其餘每一球都是 in_play。這是 in_play 第一次真的有生產路徑
+      // （ADR-0010 後果段落）：這裡**沒有**另外寫一道「檢查整條鏈剛好一球 point/loss」的
+      // 應用層檢查，因為那個不變量是手勢本身保證的——「長按滑」是一分唯一的收尾動作，
+      // 呼叫端（AdvancedRecordingCourt.tsx）本來就只有在使用者做出那個手勢時才會呼叫
+      // onFinishRally，這裡收到的 balls 因此不可能有兩顆同時想當決定球。
+      outcome: isLast ? outcomeFor(ball.side, winner) : "in_play",
+      fromX,
+      fromY,
+      toX: ball.toX,
+      toY: ball.toY,
+      // 逐觸秒數這一輪不填（ADR-0010 決定 5：影片錨定的粒度是「一分」，掛在 rally 上，見
+      // pointRecordToRally；events.videoTimestamp 這個欄位留著給之後真的需要逐觸秒數時用，
+      // 現在寫 null 不是漏填，是這一輪的範圍就到「一分」為止）。
+      videoTimestamp: null,
+    };
+  });
 }
 
 // ── event → PointRecord 的動作資訊（pointRecordToEvent 的反向）──
@@ -164,7 +237,9 @@ export function eventToMeta(event: MatchEvent): Pick<PointRecord, "action" | "to
 //     發球方自己續分只加分不輪轉。我方、對手各自獨立輪轉。（跟 useScoreSheet.scorePoint 同一套規則。）
 //   - eventsByRallyId 帶進來時（3b-ii），每個 rally 若有 event 就把 action/touchedBy 補回 PointRecord，
 //     reload / 跨場後球員統計才正確；不帶（或某 rally 沒 event，例如「沒看到」）就只重建
-//     { side, wasSideOut, serverId }。簡易版一分最多一球，取 sequence 最小的那顆（呼叫端已排序）。
+//     { side, wasSideOut, serverId }。挑哪一顆 event 當這一分的代表：找 outcome 是 point/loss
+//     的那一顆（見下面迴圈內的說明）——簡易版一分只有一球，兩種挑法答案相同；進階版一分是
+//     整條鏈，只有那一顆才是「這一分的決定球」，也就是 PointRecord 要的那顆。
 export function reconstructSetFromRallies(
   apiSet: MatchSet,
   rallies: Rally[],
@@ -201,7 +276,18 @@ export function reconstructSetFromRallies(
     const { state: nextRuleState, wasSideOut } = applyRally(ruleState, winnerSide);
 
     const events = eventsByRallyId?.get(rally.id);
-    const meta = events && events.length > 0 ? eventToMeta(events[0]) : undefined;
+    // 「這一分的決定球」＝ outcome 是 point 或 loss 的那一顆（draftChainToEvents 保證整條鏈
+    // 剛好有一顆是這樣，見該函式的說明）。簡易版一分只記一球，那一球本身就是決定球，
+    // find 跟原本「取 sequence 最小的那顆」在簡易版資料上答案相同；進階版才會真的用到
+    // 「不是第一顆」這件事——events[0] 是 sequence 1（發球），不是決定球，若沿用舊寫法，
+    // reload 後 PointRecord 的 action/touchedBy 會變成「發球」，球員決定球矩陣的統計就錯了。
+    //
+    // fallback 到 events[0]：outcome 可能是 null（見 events 表 eventOutcomeEnum 的註解，
+    // 那個欄位保留給「還沒補填/目前不確定」的中繼狀態），這種資料 find 會找不到任何一顆、
+    // 落到 events[0] 維持原本的行為，不讓這批舊資料在重建時整段消失。
+    const decisive =
+      events?.find((e) => e.outcome === "point" || e.outcome === "loss") ?? events?.[0];
+    const meta = decisive ? eventToMeta(decisive) : undefined;
     history.push({ side: winnerSide, wasSideOut, serverId: rally.id, ...meta });
 
     ruleState = nextRuleState;
