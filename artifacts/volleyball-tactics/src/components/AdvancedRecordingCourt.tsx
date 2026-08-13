@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getZoneLayout } from "../lib/rotationLogic";
-import type { Side, PlayAction } from "../types/scoresheet";
+import type { Side, PlayAction, DraftEvent } from "../types/scoresheet";
 import type { MatchPlayer } from "../types/match";
 import type { PlayerPosition } from "../types/rotationTable";
 import { CourtGradientDefs, CourtSurface, CourtBorder, CourtLines } from "../lib/courtTheme";
@@ -16,7 +16,7 @@ import {
 import PlayerMarker from "./PlayerMarker";
 import RadialMenu, { RadialMenuOption } from "./RadialMenu";
 import { resolveScoringSide } from "../lib/scoreSheetMapping";
-import { useAdvancedRecording, type DraftEvent } from "../hooks/useAdvancedRecording";
+import { useAdvancedRecording } from "../hooks/useAdvancedRecording";
 
 // 進階版補填專用的球場（issue #392）。**刻意不**在 ScoreSheetCourt.tsx 裡加一個
 // `advanced` 分支，理由跟 ADR-0010 一致，寫在這裡而不是只留在 issue 討論裡：
@@ -48,6 +48,12 @@ interface AdvancedRecordingCourtProps {
   // 這是刻意的分工，不是懶得接：同一個結論（誰得這一分）必須跟簡易版走**同一條**加分路徑，
   // 兩邊各接一次的話，之後只要有人改了記分流程（例如加一道賽末點判斷），一定會有一邊沒改到。
   onFinishRally: (winner: Side, lastBall: DraftEvent | null) => void;
+  // 讀「播放器現在播到第幾秒」的函式（#393，實作 ADR-0010 決定 5）。由頁面（ScoreSheet.tsx）
+  // 從 MatchVideoRail 的 onPlayerReady 接住、轉手傳進來——這個元件不知道播放器怎麼建立、
+  // 也不需要知道，只在滑手勢完成的那一刻呼叫一次去問「現在幾秒」。選填：這場比賽還沒掛
+  // 影片、或播放器還沒就緒時是 undefined／回傳 null，那一分就記不到錨點（畫面不需要因此
+  // 擋住記錄——沒有影片一樣能補填動作與落點，只是少了「點一下跳去那一秒」的功能）。
+  readVideoPosition?: () => { videoId: string; seconds: number } | null;
 }
 
 // 動作選單的 6 顆選項。刻意不共用 ScoreSheet.tsx（頁面）裡那份 ACTION_OPTIONS——那份混了
@@ -115,6 +121,7 @@ export default function AdvancedRecordingCourt({
   roster,
   opponentRotation,
   onFinishRally,
+  readVideoPosition,
 }: AdvancedRecordingCourtProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const screenToSvg = (clientX: number, clientY: number) =>
@@ -398,7 +405,17 @@ export default function AdvancedRecordingCourt({
       // "cancel" ＝ 明確滑到第 7 格取消。分開寫是為了讓 TypeScript 逼我們處理 "cancel"，
       // 但結果一樣什麼都不做——所以下面 startBall 收到的一定是真正的 PlayAction。
       if (picked !== null && picked !== "cancel") {
-        startBall(matchId, gesture.target.side, gesture.target.playerId, picked);
+        // 只在這裡呼叫一次 readVideoPosition：store 的 startBall 自己會擋掉「這一分已經有
+        // 錨點就不覆寫」（第一個手勢贏，見 useAdvancedRecording.ts 的說明），所以這個元件
+        // 不用自己判斷「這是不是第一球」——每一球都呼叫、把判斷邏輯留給 store 一個地方管，
+        // 呼叫本身零成本（沒有錨點要採用時 store 直接忽略這個值）。
+        startBall(
+          matchId,
+          gesture.target.side,
+          gesture.target.playerId,
+          picked,
+          readVideoPosition?.() ?? null,
+        );
         setHalfCompleteTarget(gesture.target);
       }
       setMenu(null);

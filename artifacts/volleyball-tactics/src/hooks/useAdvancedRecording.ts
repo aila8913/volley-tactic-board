@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { PlayAction, Side } from "../types/scoresheet";
+import type { DraftEvent, PlayAction, Side } from "../types/scoresheet";
 import { newRowId } from "../lib/writeLog";
 
 // 進階版補填（賽後對著影片逐球記錄）中繼狀態的 store（issue #392）。
@@ -21,28 +21,6 @@ import { newRowId } from "../lib/writeLog";
 // `chainsByMatch[matchId]` 分片而不是 store 頂層單一份，理由完全一樣——沒有分片的話，
 // 使用者從 A 場切到 B 場，B 場的球場會先閃一下 A 場記到一半的球線。
 
-// 補填中的一球。欄位名對齊 lib/db/src/schema/events.ts（見該檔案的 eventsTable），
-// #393 真的寫進後端時才不用重新翻譯一次欄位名。
-export interface DraftEvent {
-  // client-mintable uuid：#393 直接拿它當 events.id。跟 lib/writeLog.ts 的 newRowId 是
-  // 同一套「離線也要能決定主鍵」的做法（sets/rallies/events 的 id 都是這樣鑄出來的）。
-  id: string;
-  // 前端沿用 types/scoresheet.ts 既有的 "us" | "opponent"，不是 events 表的 home/away——
-  // 對 home/away 的轉換（跟先發方是誰、我方是不是 home 有關）留在寫入層，#393 再做，
-  // 跟簡易版的 PointRecord 目前的作法一致（見 lib/scoreSheetMapping.ts 的 sideToApi）。
-  side: Side;
-  // 對手側沒有名單可指，一律 null（跟 events.playerId nullable 對齊）。
-  playerId: string | null;
-  action: PlayAction;
-  // 落點；滑完、還沒 tap 時是 null——這正是「半完成」狀態的判準（見 currentBall 的說明）。
-  toX: number | null;
-  toY: number | null;
-  // 這裡刻意不存 from（起點）。ADR-0010 決定 2：一球的起點＝上一球的落點，是渲染時從
-  // 相鄰兩球現算的衍生值，不是存下來的欄位——「能推導就不存」。DB 層要不要在寫入當下把
-  // from 複製進 events.from_x/from_y 是 #393 的事，這裡的 DraftEvent 型別故意不長這個
-  // 欄位，避免在還沒有使用者（沒有任何程式碼會讀它）之前就先猜一個形狀出來。
-}
-
 // 一分（rally）補填到目前為止的狀態：空（balls=[]、current=null）→ 記了幾球（balls 有內容、
 // current 可能還有一顆在等落點）。
 //
@@ -59,9 +37,17 @@ interface RallyDraft {
   // 目前正在補的那一球：滑完成（有 playerId/action）、但還沒 tap（toX/toY 皆為 null）。
   // null 代表沒有半完成中的球——可能是還沒開始、或上一球剛 tap 完自動收進 balls。
   current: DraftEvent | null;
+  // 這一分錨在影片的哪裡（#393，實作 ADR-0010 決定 5）。null＝還沒錨定，可能是這一分還沒
+  // 記任何一球、或這場比賽根本沒掛影片（見 startBall 的說明：讀不到播放器位置時傳 null 進來，
+  // 這裡就維持 null，畫面上沒有錨點可顯示、寫進後端的 rallies.videoId/videoTimestamp 也是 null）。
+  //
+  // 「第一個手勢發生時自動擷取當下播放秒數」——這正是 ADR-0010 決定 5 明講的「不做對齊這個
+  // 獨立步驟」：補填某一分時，使用者早就已經把影片停在那一分開始的地方了，不需要再多按一次
+  // 「對齊」，第一個手勢的當下就是這一分在影片上的位置。
+  anchor: { videoId: string; seconds: number } | null;
 }
 
-const emptyRallyDraft = (): RallyDraft => ({ balls: [], current: null });
+const emptyRallyDraft = (): RallyDraft => ({ balls: [], current: null, anchor: null });
 
 interface AdvancedRecordingStore {
   chainsByMatch: Record<string, RallyDraft>;
@@ -69,7 +55,18 @@ interface AdvancedRecordingStore {
   // 滑完成：記下這一球是誰、做了什麼動作，落點留白（半完成）。
   // 如果目前已經有一顆半完成的球（使用者滑錯了、想重選），這裡直接覆蓋掉，不用先手動取消
   // ——重新滑一次本來就是「我要換一個」最自然的操作，不用逼使用者多按一次取消。
-  startBall: (matchId: string, side: Side, playerId: string | null, action: PlayAction) => void;
+  //
+  // anchor 參數：呼叫端（AdvancedRecordingCourt.tsx）每次滑完都會傳「現在播放器在哪」進來，
+  // 但這支動作只在這一分**還沒有錨點**時才真的採用它——第一個手勢贏，之後的球不覆寫
+  // （見 RallyDraft.anchor 的說明：後面的球傳進來的秒數是使用者記完好幾球之後才按的，
+  // 拿它當這一分的錨點會把時間點推到這一分早就結束之後）。
+  startBall: (
+    matchId: string,
+    side: Side,
+    playerId: string | null,
+    action: PlayAction,
+    anchor: { videoId: string; seconds: number } | null,
+  ) => void;
   // 補上落點：把目前半完成的球填上 toX/toY，正式收進 balls 鏈裡，current 清空。
   // 沒有半完成的球時是 no-op——沒有東西可以補落點（不猜使用者想幹嘛）。
   setLandingPoint: (matchId: string, toX: number, toY: number) => void;
@@ -86,7 +83,7 @@ const getOrInit = (byMatch: Record<string, RallyDraft>, matchId: string): RallyD
 export const useAdvancedRecording = create<AdvancedRecordingStore>()((set) => ({
   chainsByMatch: {},
 
-  startBall: (matchId, side, playerId, action) =>
+  startBall: (matchId, side, playerId, action, anchor) =>
     set((state) => {
       const draft = getOrInit(state.chainsByMatch, matchId);
       const current: DraftEvent = {
@@ -97,7 +94,17 @@ export const useAdvancedRecording = create<AdvancedRecordingStore>()((set) => ({
         toX: null,
         toY: null,
       };
-      return { chainsByMatch: { ...state.chainsByMatch, [matchId]: { ...draft, current } } };
+      return {
+        chainsByMatch: {
+          ...state.chainsByMatch,
+          [matchId]: {
+            ...draft,
+            current,
+            // 只在這一分還沒有錨點時才採用（第一個手勢贏），見上面 startBall 型別旁的說明。
+            anchor: draft.anchor ?? anchor,
+          },
+        },
+      };
     }),
 
   setLandingPoint: (matchId, toX, toY) =>
