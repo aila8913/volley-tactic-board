@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { DragEvent as ReactDragEvent, ReactNode } from "react";
 import { assignPlayerToZone, removePlayerFromZone, BACK_ROW_ZONES } from "@/lib/rotationLogic";
 import type { MatchPlayer } from "@/types/match";
-import type { LineupSnapshot } from "@/types/scoresheet";
+import type { LineupZones } from "@/types/scoresheet";
 
 // ── 右欄共用的「場上站位」面板（issue #120）──
 //
@@ -23,7 +23,7 @@ import type { LineupSnapshot } from "@/types/scoresheet";
 interface RotationRailPanelProps {
   // 6 個號位（1~6）→ 球員 id 的先發快照。null 代表這個資料源還沒有完整先發
   // （例如計分表 hasLineup 為 false，或戰術板這場還沒排過站位）。
-  lineup: LineupSnapshot | null;
+  lineup: LineupZones | null;
   roster: MatchPlayer[];
   // 目前第幾輪／第幾局，0-indexed（顯示時 +1，跟 RotationSwitcher「第 N 輪」的慣例一致）。
   // 這個數字代表什麼由 axis 決定（見下方）。
@@ -40,7 +40,7 @@ interface RotationRailPanelProps {
   // 編輯模式下，選好球員指派到號位後，整份新快照透過這裡即時交出去——見下方
   // 「為什麼沒有 draft/確定鈕」的說明。readOnly 時不會用到，但呼叫端必須在 !readOnly
   // 時提供，否則點了球員也沒有任何效果。
-  onLineupChange?: (next: LineupSnapshot) => void;
+  onLineupChange?: (next: LineupZones) => void;
   // 標題列數字旁的 stepper（layout-spec §4.2）的「按了上/下」回呼，delta 是 -1（往前一輪/局）
   // 或 +1（往後一輪/局）。**只有傳了這個 prop 才會渲染 stepper**——見下方 GRID_ZONES 下方
   // 原本「刻意不做 stepper」那段註解已經過期，這裡補充為什麼現在可以加回來了。
@@ -244,7 +244,7 @@ export default function RotationRailPanel({
   // 版位、只換單位字，不用整段複製一份。
   const unitLabel = axis === "set" ? "局" : "輪";
 
-  // 自由球員（role "L"）不列進這六個號位——LineupSnapshot 定義上就只記非自由球員，
+  // 自由球員（role "L"）不列進這六個號位——LineupZones 定義上就只記非自由球員，
   // 自由球員是從場邊靠換人上場的（見 types/scoresheet.ts）。
   const assignablePlayers = roster.filter((p) => p.role !== "L");
   // ⚠️ 行為變更（#327）：清單以前用一個 includeLibero 開關決定要不要列出自由球員，預設

@@ -14,7 +14,7 @@ import {
   isLineupFull,
 } from "./rotationLogic";
 import type { MatchPlayer } from "../types/match";
-import type { LineupSnapshot } from "../types/scoresheet";
+import type { LineupZones } from "../types/scoresheet";
 
 // isBackRowPosition 是自由球員「能不能上這個位置」的共用判定，輪轉表跟計分表都靠它，
 // 所以規則要釘死（issue #43：以前計分表自己寫 y<=0.75，跟輪轉表的 BACK_ROW_ZONES 各判各的）。
@@ -75,7 +75,7 @@ describe("lineupToPositions", () => {
 // 最適合用單元測試把「搬 key 不搬 value」這條行為釘住——這條規則很容易在之後改動時
 // 不小心寫反（例如誤把 value 搬來搬去，變成搬錯人），測試能第一時間抓到。
 describe("rotateLineup", () => {
-  const LINEUP: LineupSnapshot = { 1: "p1", 2: "p2", 3: "p3", 4: "p4", 5: "p5", 6: "p6" };
+  const LINEUP: LineupZones = { 1: "p1", 2: "p2", 3: "p3", 4: "p4", 5: "p5", 6: "p6" };
 
   it("轉 6 格（一整圈）等於原樣，因為排球輪轉是 6 格一個循環", () => {
     expect(rotateLineup(LINEUP, 6)).toEqual(LINEUP);
@@ -108,7 +108,7 @@ describe("rotateLineup", () => {
 // SetLineupDialog 元件裡，抽到這裡才有辦法在沒有 @testing-library/react（issue #168）
 // 的情況下測到——「難測的程式碼通常是放錯地方」的典型例子。
 describe("assignPlayerToZone", () => {
-  const LINEUP: LineupSnapshot = { 1: "p1", 2: "p2", 3: "p3", 4: "p4", 5: "p5", 6: "p6" };
+  const LINEUP: LineupZones = { 1: "p1", 2: "p2", 3: "p3", 4: "p4", 5: "p5", 6: "p6" };
 
   it("把場上球員指派到別的號位＝兩人互換，不會留下空格", () => {
     const next = assignPlayerToZone(LINEUP, 3, "p1");
@@ -132,7 +132,7 @@ describe("assignPlayerToZone", () => {
 
   it("目標號位是空的時候，場上球員換過去要清掉原號位、不留假資料", () => {
     // 五人的中途狀態（3 號位空著）：p1 換到 3 號位之後，1 號位必須真的空掉。
-    const partial: LineupSnapshot = { 1: "p1", 2: "p2", 4: "p4", 5: "p5", 6: "p6" };
+    const partial: LineupZones = { 1: "p1", 2: "p2", 4: "p4", 5: "p5", 6: "p6" };
     const next = assignPlayerToZone(partial, 3, "p1");
     expect(next[3]).toBe("p1");
     expect(next[1]).toBeUndefined();
@@ -151,7 +151,7 @@ describe("assignPlayerToZone", () => {
 describe("removePlayerFromZone", () => {
   // 各個 describe 各自宣告一份滿編快照（跟上面幾個 block 的慣例一致）：測試之間不共用
   // 可變資料，才不會有「上一個 it 改到它、下一個 it 就莫名其妙掛掉」的順序相依。
-  const LINEUP: LineupSnapshot = { 1: "p1", 2: "p2", 3: "p3", 4: "p4", 5: "p5", 6: "p6" };
+  const LINEUP: LineupZones = { 1: "p1", 2: "p2", 3: "p3", 4: "p4", 5: "p5", 6: "p6" };
 
   it("把該號位清空，其他人原地不動", () => {
     const next = removePlayerFromZone(LINEUP, 3);
@@ -177,7 +177,7 @@ describe("removePlayerFromZone", () => {
 });
 
 describe("deriveRotation（#231 PR3a 建立；#326 第三個參數改成「L 頂替誰」）", () => {
-  const LINEUP: LineupSnapshot = { 1: "p1", 2: "p2", 3: "p3", 4: "p4", 5: "p5", 6: "p6" };
+  const LINEUP: LineupZones = { 1: "p1", 2: "p2", 3: "p3", 4: "p4", 5: "p5", 6: "p6" };
 
   it("沒派 L 時＝lineupToPositions 的結果，liberoReplacement 為 null", () => {
     const rot = deriveRotation(LINEUP, null, null, 0);
@@ -250,7 +250,7 @@ describe("filterLineupToRoster（#231 PR3a：幽靈站位清理）", () => {
     // 這條是無限重繪防線：setRoster 會被 effect 反覆呼叫，沒清到東西卻換了參照，
     // 訂閱端就會重繪 → effect 再呼叫 → Maximum update depth exceeded（#69→#70）。
     // toEqual 測不出這件事——內容一樣就會過；只有 toBe 驗得出參照有沒有換。
-    const lineup: LineupSnapshot = { 1: "p1", 2: "p2" };
+    const lineup: LineupZones = { 1: "p1", 2: "p2" };
     expect(filterLineupToRoster(lineup, roster)).toBe(lineup);
   });
 
@@ -260,7 +260,7 @@ describe("filterLineupToRoster（#231 PR3a：幽靈站位清理）", () => {
 });
 
 // isLineupFull 是「可不可以開賽」這道門檻的唯一定義（issue #37 收斂、#231 PR3 換成吃
-// LineupSnapshot）。這組測試是 #231 PR4 補的：舊的 captureLineupFromRotations 靠「不滿六人
+// LineupZones）。這組測試是 #231 PR4 補的：舊的 captureLineupFromRotations 靠「不滿六人
 // 回 null」內建了同一道門檻，它的測試連帶把門檻釘住；PR4 刪掉那支函式時，如果不把門檻的
 // 測試搬過來，就會在「刪死碼」的名義下悄悄少掉一條覆蓋——刪 code 可以，刪保護不行。
 describe("isLineupFull（#231 PR4：從 captureLineupFromRotations 接手的開賽門檻）", () => {

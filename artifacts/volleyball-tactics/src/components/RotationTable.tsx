@@ -4,7 +4,7 @@ import { useRosterEditor } from "../hooks/useRosterEditor";
 import { useRotationStepper } from "../hooks/useRotationStepper";
 import { MatchPlayer } from "../types/match";
 import { filterLineupToRoster, isLineupFull } from "../lib/rotationLogic";
-import type { LineupSnapshot } from "../types/scoresheet";
+import type { LineupZones } from "../types/scoresheet";
 import RotationRailPanel from "./RotationRailPanel";
 import RosterEditDialog from "./RosterEditDialog";
 import RotationControlsFooter from "./RotationControlsFooter";
@@ -13,7 +13,7 @@ import RotationControlsFooter from "./RotationControlsFooter";
 // 參照穩定：roster/lineup 是 useMemo/依賴陣列跟 zustand selector 會比對的值，每 render
 // 換一個新物件會造成不必要的重繪，甚至跟 effect 互踩成迴圈。
 const EMPTY_ROSTER: MatchPlayer[] = [];
-const EMPTY_LINEUP: LineupSnapshot = {};
+const EMPTY_LINEUP: LineupZones = {};
 
 // 小按鈕共用樣式（編輯/重置站位/清除畫筆），跟比賽列表那邊的次要按鈕是同一套語言，
 // 只是尺寸縮小配合這裡的資訊密度。

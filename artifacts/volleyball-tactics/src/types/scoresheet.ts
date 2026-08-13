@@ -161,9 +161,33 @@ export interface UndoEntry {
 // 是同一場比賽在不同頁看到不同站位。#115 原本要擋的幽靈站位仍由 filterLineupToRoster
 // 的名單過濾擋著，跟解耦與否無關。詳見 #115 的作廢留言與 #120。）
 //
-// 只記 6 個非自由球員：L 在計分表裡是「從場邊出發、換人上場」，不列入開局的六個號位
-// （跟後端 lineups 表的設計一致，見 lib/db/src/schema/lineups.ts）。
-export type LineupSnapshot = Record<number, string>;
+// 「六個號位 → 球員 id」這張表本身（key 是號位 1~6）。它是輪轉數學唯一吃得下的東西：
+// rotateLineup / lineupToPositions / isLineupFull 這些純函式全都只認這張表，因為**六個號位
+// 就是輪轉序列本身**。自由球員不進輪轉，所以它不在這裡（見下面 LineupSnapshot 的說明）。
+export type LineupZones = Record<number, string>;
+
+// 一局的完整先發：六個號位 ＋ 自由球員指派（#359）。
+//
+// 為什麼 L 不是「第七個號位」而要另外兩欄：六個號位是輪轉序列，每得一次發球權整組轉一格。
+// 自由球員不進輪轉——它是上場頂替某個後排球員，被頂替者輪到前排時 L 就下場。所以
+// 「L 站幾號位」是跟著被頂替者跑的**推導值**，「L 頂替誰」才是推不出來的原始事實
+// （#326 定的模型）。真把 L 塞成 zones 的第七個 key，rotateLineup 會連它一起轉、
+// isLineupFull 的「滿六人」會壞、推導站位會讓 L 永遠在場上。
+//
+// 三種合法狀態（跟後端 lineups 表同一組，見 lib/db/src/schema/lineups.ts）：
+//   兩個都 null＝這局沒排 L；只有 liberoId＝排了但開局在場外；兩個都有＝開局就在場上。
+export interface LineupSnapshot {
+  zones: LineupZones;
+  liberoId: string | null;
+  replacesPlayerId: string | null;
+}
+
+// 沒有自由球員的先發（絕大多數呼叫端的情況）：只有 zones 要填。抽成一支小工廠而不是讓
+// 每個呼叫端手打 `{ zones, liberoId: null, replacesPlayerId: null }`——那三個字面量抄十幾份，
+// 以後 LineupSnapshot 多一個欄位就要改十幾個地方。
+export function lineupFromZones(zones: LineupZones): LineupSnapshot {
+  return { zones, liberoId: null, replacesPlayerId: null };
+}
 
 export interface ScoreSheetState {
   currentSet: SetRecordingState;

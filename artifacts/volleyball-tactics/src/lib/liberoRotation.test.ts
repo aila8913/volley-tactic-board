@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { resolveLiberoOnRotation } from "./liberoRotation";
 import { lineupToPositions } from "./rotationLogic";
-import type { LineupSnapshot } from "../types/scoresheet";
+import type { LineupZones } from "../types/scoresheet";
 
 // 這整支測試就是 issue #303 的目的：這段規則原本鎖在 ScoreSheet.tsx 的 useEffect 裡，
 // 沒有 @testing-library/react（#168）就碰不到，抽成純函式之後才寫得出下面這些斷言。
@@ -15,7 +15,7 @@ import type { LineupSnapshot } from "../types/scoresheet";
 
 // 一份固定的先發快照：號位 1~6 各站一個人，名字直接對應「起始號位」方便閱讀。
 // 號位 1/5/6 是後排、2/3/4 是前排（BACK_ROW_ZONES）。
-const lineup: LineupSnapshot = {
+const lineup: LineupZones = {
   1: "p1",
   2: "p2",
   3: "p3",

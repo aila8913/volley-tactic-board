@@ -745,7 +745,9 @@ export const ListMatchLineupsResponseItem = zod.object({
   "zone3PlayerId": zod.string().uuid(),
   "zone4PlayerId": zod.string().uuid(),
   "zone5PlayerId": zod.string().uuid(),
-  "zone6PlayerId": zod.string().uuid()
+  "zone6PlayerId": zod.string().uuid(),
+  "startingLiberoId": zod.string().uuid().nullable(),
+  "liberoReplacesPlayerId": zod.string().uuid().nullable()
 })
 export const ListMatchLineupsResponse = zod.array(ListMatchLineupsResponseItem)
 
@@ -763,7 +765,9 @@ export const PutSetLineupBody = zod.object({
   "zone3PlayerId": zod.string().uuid(),
   "zone4PlayerId": zod.string().uuid(),
   "zone5PlayerId": zod.string().uuid(),
-  "zone6PlayerId": zod.string().uuid()
+  "zone6PlayerId": zod.string().uuid(),
+  "startingLiberoId": zod.string().uuid().nullish(),
+  "liberoReplacesPlayerId": zod.string().uuid().nullish()
 })
 
 export const PutSetLineupResponse = zod.object({
@@ -774,7 +778,9 @@ export const PutSetLineupResponse = zod.object({
   "zone3PlayerId": zod.string().uuid(),
   "zone4PlayerId": zod.string().uuid(),
   "zone5PlayerId": zod.string().uuid(),
-  "zone6PlayerId": zod.string().uuid()
+  "zone6PlayerId": zod.string().uuid(),
+  "startingLiberoId": zod.string().uuid().nullable(),
+  "liberoReplacesPlayerId": zod.string().uuid().nullable()
 })
 
 

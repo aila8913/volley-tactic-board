@@ -15,7 +15,7 @@ import RotationRailPanel from "@/components/RotationRailPanel";
 import UnsyncedWritesBadge from "@/components/UnsyncedWritesBadge";
 import RecordingModeToggle, { type RecordingMode } from "@/components/RecordingModeToggle";
 import MatchVideoRail from "@/components/MatchVideoRail";
-import { PlayAction, Side, type DraftEvent } from "@/types/scoresheet";
+import { PlayAction, Side, type DraftEvent, type LineupSnapshot } from "@/types/scoresheet";
 import {
   isSetComplete,
   disabledActions,
@@ -116,7 +116,7 @@ export default function ScoreSheet() {
   );
   // 開局前，右欄的先發編輯就是直接改這份共用真相（PO 決策：輪轉/先發是跨頁共用的一份，
   // 不是計分頁自己再存一份副本）——教練在計分頁排先發，戰術板也要立刻看到同一份結果。
-  const setLineupFromSnapshot = useRotationTable((state) => state.setLineupFromSnapshot);
+  const setLineupZones = useRotationTable((state) => state.setLineupZones);
   // 自由球員先發（#327）：跟先發同一份分片、同一條「跨頁共用一份真相」的規矩。
   // 注意這跟下面的 liberoSubstitution 是**兩件不同的事**：這裡是「開賽前排的先發 L」
   //（規劃，存在輪轉表），liberoSubstitution 是「這一局進行中 L 實際頂替著誰」（紀錄，
@@ -275,9 +275,26 @@ export default function ScoreSheet() {
     [match, storedLineup],
   );
   // 還沒凍結前，「能不能從當下站位擷取出一份完整先發」——湊滿 6 個號位才算數，否則 null。
-  const capturableLineup = editableLineup && isLineupFull(editableLineup) ? editableLineup : null;
-  // activeLineup：優先用已凍結的，其次用可擷取的——球場渲染、開賽擷取都以它為準。
+  // 門檻只看六個號位：自由球員是選配（很多隊根本不排 L），不該擋著教練開賽。
+  const capturableZones = editableLineup && isLineupFull(editableLineup) ? editableLineup : null;
+  // 開賽那一刻要凍結進這一局的完整先發（#359 之後含 L 指派）。六個號位來自共用站位真相，
+  // L 兩欄同樣來自共用真相——「誰先發、L 頂替誰」本來就是同一份站位的兩半（見
+  // useRotationTable 的分片），凍結時當然要一起帶走，不然重整後那局的 L 就永遠消失了。
+  const capturableLineup: LineupSnapshot | null = useMemo(
+    () =>
+      capturableZones === null
+        ? null
+        : {
+            zones: capturableZones,
+            liberoId: startingLiberoId,
+            replacesPlayerId: liberoReplacesPlayerId,
+          },
+    [capturableZones, startingLiberoId, liberoReplacesPlayerId],
+  );
+  // activeLineup：優先用已凍結的，其次用可擷取的——開賽擷取以它為準。
   const activeLineup = lineup ?? capturableLineup;
+  // 球場渲染／戰術擷取只吃六個號位（輪轉數學不認 L，見 types/scoresheet.ts）。
+  const activeZones = activeLineup?.zones ?? null;
 
   // ── 把這場的名單種進輪轉表分片 ──
   // 戰術板（TacticsBoard.tsx）跟比賽列表右欄（MatchInfoRail.tsx）進頁時都做這件事，計分頁
@@ -303,10 +320,10 @@ export default function ScoreSheet() {
   const currentSet = record?.currentSet;
   useEffect(() => {
     const libSub = liberoSubRef.current;
-    if (!currentSet || currentSet.serving === null || !libSub || !id || !activeLineup) return;
+    if (!currentSet || currentSet.serving === null || !libSub || !id || !activeZones) return;
 
     // 從計分表自己的先發快照算出「這一輪」場上 6 人的座標（不再讀全域 rotations）。
-    const positions = lineupToPositions(activeLineup, currentSet.ourRotation);
+    const positions = lineupToPositions(activeZones, currentSet.ourRotation);
     const next = resolveLiberoOnRotation(libSub, positions);
     // 沒事發生時回傳的就是傳進去的那個 id，值比對即可跳過寫入（少一輪 render，也避免把
     // 相同的值重新灌進 store）。#326 之前這裡比的是物件參照，靠純函式那端刻意不換參照來
@@ -349,7 +366,7 @@ export default function ScoreSheet() {
   const hasLineup = activeLineup !== null;
   // 先發只有在「這一局還沒開打」時能改（開局凍結，見 hooks/useScoreSheet.ts 的 start()）：
   // 開賽前右欄顯示的是共用真相（capturableLineup），可以直接編輯、每一次改動都即時生效
-  // （setLineupFromSnapshot 直接寫回 useRotationTable）；開賽後已經記進去的球是綁著
+  // （setLineupZones 直接寫回 useRotationTable）；開賽後已經記進去的球是綁著
   // record.lineup 這份凍結快照的，這時候改站位會讓歷史對不上，所以只能看不能改，
   // 要動陣容得走換人。
   //
@@ -363,7 +380,7 @@ export default function ScoreSheet() {
   const canEditLineup = lineup === null;
   // 球場要畫的「這一輪我方 6 人座標」，從快照即時換算（不再讀全域 rotations）。
   const ourPositions =
-    activeLineup && currentSet ? lineupToPositions(activeLineup, currentSet.ourRotation) : [];
+    activeZones && currentSet ? lineupToPositions(activeZones, currentSet.ourRotation) : [];
 
   // 進階版球場上方的提示列文案（issue #392，沿用簡易版同一條提示列的插槽——見下面球場區塊）：
   // 還沒滑出任何半完成的球時給操作說明；滑完、正等 tap 補落點時，換成「是誰、做了什麼」，
@@ -378,6 +395,7 @@ export default function ScoreSheet() {
     : // 文案要跟球場的手勢一致：收尾這一分＝在球場上按住不動 1 秒（PO 2026-08-13），
       // 不是長按某個特定的點。
       "按住球員/對手滑向動作，再點球場選落點；球場上按住 1 秒左右滑，收尾這一分";
+
   const completedSets = record?.completedSets ?? [];
   // 換人「次數」要用原始計數 subCount，不能用 regularSubs.length（issue #289）：後者是淨疊加，
   // 連鎖換人／換回先發會讓兩個數字對不上，教練靠這個數字判斷還能不能換人，必須是原始次數。
@@ -583,14 +601,14 @@ export default function ScoreSheet() {
   // 的分岔，而戰術板要的是「計分頁此刻畫面上那一份」——第 3 局進行中時，共用站位可能已經
   // 被改成第 4 局的先發了，直接讀 store 會抓到未來的陣容。
   const captureCurrentForBoard = () => {
-    if (!activeLineup || !currentSet) {
+    if (!activeZones || !currentSet) {
       // 理論上不會被呼叫到——NavRail 在 captureDisabled 為真時，會把「擷取
       // 目前站位」這個選項停用，使用者按不到這裡。但 captureCurrent 的型別要求永遠回傳一張
       // CourtSnapshot（不能是 null/undefined），所以保底給一張空站位，純粹滿足型別、不會
       // 真的被用到。
       return captureBlank({ matchId: id });
     }
-    return captureFromScoreSheet(activeLineup, currentSet.ourRotation, match.players, {
+    return captureFromScoreSheet(activeZones, currentSet.ourRotation, match.players, {
       matchId: id,
     });
   };
@@ -752,7 +770,7 @@ export default function ScoreSheet() {
             // 因頁而異的邏輯傳進去。
             captureCurrent={captureCurrentForBoard}
             captureLabel="擷取目前計分站位"
-            captureDisabled={!activeLineup || !currentSet}
+            captureDisabled={!activeZones || !currentSet}
           />
         </div>
       }
@@ -788,7 +806,7 @@ export default function ScoreSheet() {
               {/* ── 站位面板（issue #120，共用真相版）──
             開賽前（canEditLineup）：lineup 讀的是 activeLineup，此時等於
             capturableLineup——輪轉表當下的共用真相，可以直接編輯；onLineupChange
-            呼叫 setLineupFromSnapshot 把改動寫回 useRotationTable，跟戰術板讀的是
+            呼叫 setLineupZones 把改動寫回 useRotationTable，跟戰術板讀的是
             同一份資料，改這裡戰術板也會立刻看到。
             開賽後：record.lineup 已經凍結（開局凍結，見 hooks/useScoreSheet.ts 的
             start()），這時 activeLineup 讀到的就是那份凍結快照，readOnly 鎖住不給改——
@@ -796,7 +814,7 @@ export default function ScoreSheet() {
               <RotationRailPanel
                 // 可編輯時顯示 editableLineup（排幾個顯示幾個），唯讀時顯示 activeLineup
                 // （該局凍結的完整快照）。理由見上方 editableLineup 的宣告處。
-                lineup={canEditLineup ? editableLineup : activeLineup}
+                lineup={canEditLineup ? editableLineup : activeZones}
                 roster={match.players}
                 rotation={currentSet?.ourRotation ?? 0}
                 // 完賽後一律唯讀（#218）：完賽時 record.lineup 是 null（沒有「目前這一局」），
@@ -804,15 +822,23 @@ export default function ScoreSheet() {
                 // 這裡沒有任何「下一局的先發」要排，讓它可編輯只會讓人以為改了會影響什麼。
                 readOnly={!canEditLineup || isFinished}
                 onLineupChange={
-                  canEditLineup && !isFinished
-                    ? (next) => setLineupFromSnapshot(id, next)
-                    : undefined
+                  canEditLineup && !isFinished ? (next) => setLineupZones(id, next) : undefined
                 }
-                // 第七格（#327）只在「還能排先發」時出現。開賽後這一格就不該再是入口：那時
-                // 換 L 上下場是**記錄**（走球場上那顆 L 鈕 → liberoSubstitution），不是改規劃。
-                showLiberoCell={canEditLineup && !isFinished}
-                liberoId={startingLiberoId}
-                liberoReplacesPlayerId={liberoReplacesPlayerId}
+                // 第七格（#327）在「還能排先發」時是**入口**；開賽後它不再是入口，但 #359 之後
+                // 變成**唯讀的顯示**——這一局凍結的先發現在真的記了 L，就該看得到誰是先發自由球員。
+                // 開賽後這一格不能再編輯的理由沒變：那時換 L 上下場是**記錄**（走球場上那顆 L 鈕
+                // → liberoSubstitution），不是改規劃；readOnly 已經由上面那條算好，這裡只管顯不顯示。
+                //
+                // 兩種來源要跟 lineup 那個 prop 走同一條分支（跟 MatchInfoRail 同一個判準）：
+                // 可編輯時讀共用現役指派，凍結後讀該局快照。混用會讓右欄的六格與第七格講不同時態
+                // ——六格是三天前那局、第七格是「我現在打算怎麼配」。
+                showLiberoCell={
+                  canEditLineup ? !isFinished : (activeLineup?.liberoId ?? null) !== null
+                }
+                liberoId={canEditLineup ? startingLiberoId : (activeLineup?.liberoId ?? null)}
+                liberoReplacesPlayerId={
+                  canEditLineup ? liberoReplacesPlayerId : (activeLineup?.replacesPlayerId ?? null)
+                }
                 onLiberoChange={(nextLiberoId, replaces) =>
                   setLiberoAssignment(id, nextLiberoId, replaces)
                 }

@@ -109,7 +109,13 @@ export default function AnalyticsRotationRail({
       <RotationRailPanel
         readOnly
         axis="set"
-        lineup={lineup}
+        lineup={lineup?.zones ?? null}
+        // 第七格（#359）：分析頁是純唯讀的回顧視圖，所以判準跟 MatchInfoRail 的唯讀分支
+        // 完全一樣——那一局的封存快照裡真的排了 L 才畫，沒排（含 #359 之前的舊資料，讀回來
+        // 是 null）就整格不出現，不對舊資料宣稱「這局沒有自由球員」。
+        showLiberoCell={lineup?.liberoId != null}
+        liberoId={lineup?.liberoId ?? null}
+        liberoReplacesPlayerId={lineup?.replacesPlayerId ?? null}
         roster={roster}
         rotation={clampedIndex}
         setStatus={setStatus}

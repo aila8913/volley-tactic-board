@@ -1,5 +1,5 @@
 import type { MatchPlayer } from "./match";
-import type { LineupSnapshot } from "./scoresheet";
+import type { LineupZones } from "./scoresheet";
 
 // 圈圈裡面要顯示哪種資訊，三選一（不是像 labelToggles 那樣可以同時勾多個）。
 // 放在這裡（而不是戰術板的型別檔）是因為輪轉表跟戰術板都要用同一份規則顯示球員，
@@ -57,7 +57,7 @@ export interface PerMatchRotationState {
   // 用「不滿六人就不算數」去表示編輯中的資料，就是 #174 那個「點了放不上去」死結的成因。
   // 「可不可以開賽」是另一個問題，由 isLineupFull 這道獨立的門檻回答。
   // 不含自由球員：L 走下面的 liberoReplacesPlayerId（他不參與輪轉，見那裡的說明）。
-  lineup: LineupSnapshot;
+  lineup: LineupZones;
 
   // 自由球員頂替的是**哪一個球員**（先發裡的 playerId），null＝目前沒派 L 上場。
   //

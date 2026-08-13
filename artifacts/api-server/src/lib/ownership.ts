@@ -143,6 +143,24 @@ export async function playerBelongsToRallyMatch(
   return row !== undefined;
 }
 
+// 第三支同型的：PUT /sets/:setId/lineup 用（#359 的自由球員兩欄）。判準跟上面兩支一模一樣，
+// 只是起點換成 set——sets 自己就有 matchId，所以連 join 都不用往上追，一層就到。
+// 六個號位不需要這道檢查，因為它們有外鍵 + notNull 且前端只從該場名單挑；但 ADR-0009 說得很
+// 明白：外鍵只保證「這個 uuid 指得到一列球員」，不保證「那名球員在這場比賽的名單裡」——
+// 兩欄是 body 帶進來的，所以照同一條判準驗（此處六欄未一併補驗是既有範圍，不在 #359 內）。
+export async function playerBelongsToSetMatch(playerId: string, setId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: playersTable.id })
+    .from(setsTable)
+    .innerJoin(
+      playersTable,
+      and(eq(playersTable.id, playerId), eq(playersTable.matchId, setsTable.matchId)),
+    )
+    .where(eq(setsTable.id, setId));
+
+  return row !== undefined;
+}
+
 // 越往下的巢狀層，擁有權檢查就要多 join 一層往上追到 match.userId。
 // set 在 match 底下：join sets → matches，比對 setId 與 userId。
 // innerJoin 的意思是「只保留兩張表都對得上的列」——如果這個 set 不存在、

@@ -14,7 +14,7 @@ import { getMatchWinner, setWinner, winsNeededFor, type MatchStatus } from "@/li
 import { visibleSetCount } from "@/lib/volleyballRules";
 import { INFO_RAIL_BASE_CLASS } from "@/lib/appChromeStyles";
 import { computeTournamentStats, type TournamentMatchResult } from "@/lib/tournamentSummary";
-import type { LineupSnapshot } from "@/types/scoresheet";
+import type { LineupSnapshot, LineupZones } from "@/types/scoresheet";
 import type { Match } from "@/types/match";
 
 // 比賽列表（MatchList）／資料夾內頁（TournamentDetail）共用的「選取」語意（issue #174）。
@@ -172,7 +172,7 @@ function MatchDetailSection({
 
   const setRoster = useRotationTable((state) => state.setRoster);
   const storedLineup = useRotationTable((state) => state.dataByMatch[matchId]?.lineup);
-  const setLineupFromSnapshot = useRotationTable((state) => state.setLineupFromSnapshot);
+  const setLineupZones = useRotationTable((state) => state.setLineupZones);
   // 自由球員先發（#327）跟 lineup 存在同一份分片裡——「誰先發、L 頂替誰」本來就是同一
   // 份站位真相的兩半，分開存就會出現「先發換人了但 L 還頂著已經下場的人」這種狀態。
   const startingLiberoId = useRotationTable(
@@ -241,16 +241,28 @@ function MatchDetailSection({
   // 是 null 時預設看最新一局。
   const clampedIndex = Math.min(Math.max(manualSetIndex ?? totalSets - 1, 0), totalSets - 1);
 
-  let lineup: LineupSnapshot | null;
+  // 六個號位（面板只吃這張表，L 不在裡面——見 types/scoresheet.ts）。
+  let lineup: LineupZones | null;
   let readOnly: boolean;
-  let onLineupChange: ((next: LineupSnapshot) => void) | undefined;
+  let onLineupChange: ((next: LineupZones) => void) | undefined;
+  // 第七格顯示用的 L 指派（#359）。跟 lineup 一樣沿著同一串 if/else 算：唯讀的局讀那一局
+  // **封存快照裡的** L，可編輯的局讀共用現役真相（useRotationTable）。以前這兩個值無視分支、
+  // 一律讀共用真相，所以 #359 之前只能在「還沒開賽」那一支顯示——把現在的 L 指派畫在三天前
+  // 打完的局旁邊等於憑空宣稱那局是這樣配的。現在快照裡有這份資料了，才敢在歷史局顯示。
+  let liberoId: string | null = null;
+  let liberoReplaces: string | null = null;
   // #191/#192：跟 lineup/readOnly 一樣，狀態小藥丸跟比分要沿著同一條 if/else 分支算，
   // 不能另外重寫一份判斷式——不然兩份規則遲早會飄開（例如未來改了「已打完」的判定條件，
   // 卻只記得改 lineup 那一支，藥丸跟著顯示錯誤的狀態）。
   let setStatus: "historical" | "live" | "upcoming";
   let score: { our: number; opponent: number } | null;
-  // 第七格（#327）預設不出現，只有「還沒開賽的那一局」才打開——理由見那一支分支。
+  // 第七格（#327）預設不出現。#359 之前只有「還沒開賽的那一局」打得開；現在只要那一局的
+  // 封存快照裡真的有排 L，歷史局／進行中的局也會打開（唯讀）。
   let showLiberoCell = false;
+
+  // 三個唯讀分支各自讀到的那一局封存快照。收在一個變數裡，L 指派在整串 if/else 跑完之後
+  // 統一取（見下方），不用在三個分支各抄一次同樣的三行。
+  let frozenLineup: LineupSnapshot | null = null;
 
   // ⚠️ issue #329 的紅線：下面這串 if/else 是**站位**的領域規則（歷史局／局中凍結一律唯讀，
   // 只有還沒開賽的局才排得了先發），跟新的「編輯模式」是兩回事。`editing` 刻意完全不參與
@@ -260,7 +272,8 @@ function MatchDetailSection({
   if (clampedIndex < completedSets.length) {
     // 滑到「已經打完的某一局」：讀那一局封存當下的先發快照，純粹看歷史、不能改
     // （改了也沒意義——那一局早就打完了，改站位不會讓已經發生的比賽重新來過）。
-    lineup = completedSets[clampedIndex].lineup;
+    frozenLineup = completedSets[clampedIndex].lineup;
+    lineup = frozenLineup?.zones ?? null;
     readOnly = true;
     setStatus = "historical";
     score = {
@@ -271,7 +284,8 @@ function MatchDetailSection({
     // 整場已經打完，而且滑到的是「目前這局」。正常情況下只有那局真的記過分才滑得到這裡
     //（見 visibleSetCount() 的 hasCurrentSetData 例外）；例外是完賽卻連一局都沒有的資料異常，那時
     // 這格是唯一的一格。一律唯讀：比賽結束了，不該再從這裡改任何站位。
-    lineup = record?.lineup ?? null;
+    frozenLineup = record?.lineup ?? null;
+    lineup = frozenLineup?.zones ?? null;
     readOnly = true;
     setStatus = "historical";
     // 這局可能根本沒開球過（見上面註解的「空局」情況），這時 currentSet.serving 是 null，
@@ -284,7 +298,8 @@ function MatchDetailSection({
     // 目前這局已經開賽（局中凍結，跟 ScoreSheet.tsx 的 activeLineup 是同一條規則）：
     // 已經開始記分的局，站位要跟開賽當下凍結的那一份綁在一起，中途改會讓歷史跟站位對不上，
     // 要調整陣容得走換人，不能直接在這裡動先發。
-    lineup = record.lineup;
+    frozenLineup = record.lineup;
+    lineup = frozenLineup.zones;
     readOnly = true;
     setStatus = "live";
     // record.lineup 存在代表這局已經選過先發方、正在進行，理論上 currentSet.serving
@@ -305,14 +320,27 @@ function MatchDetailSection({
     // isLineupFull 註解。filterLineupToRoster 只負責濾掉已不在名單上的幽靈站位。
     lineup = filterLineupToRoster(storedLineup ?? {}, match?.players ?? []);
     readOnly = false;
-    onLineupChange = (next) => setLineupFromSnapshot(matchId, next);
+    onLineupChange = (next) => setLineupZones(matchId, next);
     setStatus = "upcoming";
     score = null; // 還沒開賽，沒有分可看。
-    // 自由球員先發格（#327）只在這一支分支出現，而且理由跟 lineup 是同一條：它顯示的是
-    // 「現役」的 L 指派（useRotationTable，跟先發同一份真相）。已打完/進行中的局讀的是
-    // 那一局封存的 lineup 快照，而封存的快照裡**沒有**自由球員資料——把現在的 L 指派畫在
-    // 一局三天前打完的站位旁邊，等於憑空宣稱那局是這樣配的。寧可不顯示。
+    // 自由球員先發格（#327）：這一支顯示的是「現役」的 L 指派（useRotationTable，跟先發
+    // 同一份真相），而且是全 app 唯一排得了 L 先發的地方，所以無條件打開——即使還沒排任何
+    // L（空的第七格＝「這裡可以排 L」的入口），跟唯讀分支「沒排就不畫」的判準相反。
+    liberoId = startingLiberoId ?? null;
+    liberoReplaces = liberoReplacesPlayerId ?? null;
     showLiberoCell = true;
+  }
+
+  // 唯讀的三支：L 指派一律讀**那一局封存的快照**（#359 之後快照裡才有這份資料），不是讀
+  // 共用的現役指派——後者是「現在打算怎麼配」，跟三天前那局實際怎麼配是兩回事。
+  //
+  // 為什麼「快照裡沒排 L 就整格不畫」而不是畫一個空格：#359 之前寫進 DB 的 lineup 通通沒有
+  // 這兩欄（讀回來是 null），畫一個空的第七格等於對那些舊資料宣稱「這局沒有自由球員」——
+  // 但事實是「不知道」。不畫只是少講一件事，不會講錯。
+  if (readOnly) {
+    liberoId = frozenLineup?.liberoId ?? null;
+    liberoReplaces = frozenLineup?.replacesPlayerId ?? null;
+    showLiberoCell = liberoId !== null;
   }
 
   // 站位面板在唯讀/編輯兩種模式下是**同一組 props**，只有球員清單的呈現方式不同
@@ -337,8 +365,8 @@ function MatchDetailSection({
       score={score}
       rosterList={rosterList}
       showLiberoCell={showLiberoCell}
-      liberoId={startingLiberoId ?? null}
-      liberoReplacesPlayerId={liberoReplacesPlayerId ?? null}
+      liberoId={liberoId}
+      liberoReplacesPlayerId={liberoReplaces}
       onLiberoChange={(nextLiberoId, replaces) =>
         setLiberoAssignment(matchId, nextLiberoId, replaces)
       }

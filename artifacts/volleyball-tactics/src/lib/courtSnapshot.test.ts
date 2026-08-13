@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { captureFromRotation, captureFromScoreSheet, parseSavedTactic } from "./courtSnapshot";
 import type { MatchPlayer } from "../types/match";
 import type { PlayerPosition } from "../types/rotationTable";
-import type { LineupSnapshot } from "../types/scoresheet";
+import type { LineupZones } from "../types/scoresheet";
 import type { SavedTacticDataV2 } from "../types/courtSnapshot";
 
 // 這些函式都是純函式（不碰 store），跟 matchMapping.test.ts 一樣直接餵資料進去斷言輸出。
@@ -54,9 +54,9 @@ describe("captureFromRotation", () => {
 });
 
 describe("captureFromScoreSheet", () => {
-  it("denormalizes a LineupSnapshot (zone -> playerId) into named players", () => {
-    // LineupSnapshot 是 Record<number, string>：號位 1~6 各對應一個 playerId。
-    const lineup: LineupSnapshot = {
+  it("denormalizes a LineupZones (zone -> playerId) into named players", () => {
+    // LineupZones 是 Record<number, string>：號位 1~6 各對應一個 playerId。
+    const lineup: LineupZones = {
       1: "p1",
       2: "p2",
       3: "p1",

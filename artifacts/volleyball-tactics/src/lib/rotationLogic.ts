@@ -1,12 +1,12 @@
 import type { RotationPositions, PlayerPosition } from "../types/rotationTable";
 import type { MatchPlayer } from "../types/match";
-import type { LineupSnapshot } from "../types/scoresheet";
+import type { LineupZones } from "../types/scoresheet";
 
 // 把先發快照（rotation 0 的號位→球員）換算成「第 rotation 輪」時場上 6 個人的座標，
 // 給計分表球場渲染用。排球輪轉：起始號位 z 的人，轉了 rotation 次後落在 rotateZone(z, rotation)，
 // 取那個號位的座標。這跟 useRotationTable.placePlayerOnCourt 推算其他輪次是同一條公式，只是這裡
 // 的基準固定是 rotation 0（先發那一輪），且資料來源是計分表自己的快照、不是全域 store。
-export function lineupToPositions(lineup: LineupSnapshot, rotation: number): PlayerPosition[] {
+export function lineupToPositions(lineup: LineupZones, rotation: number): PlayerPosition[] {
   return Object.entries(lineup).map(([zoneStr, playerId]) => {
     const startZone = Number(zoneStr);
     const coords = getZoneCoords(rotateZone(startZone, rotation));
@@ -57,7 +57,7 @@ export function getZoneCoords(zone: number): { x: number; y: number } {
 
 // 換局換輪視窗（issue #120）用：把一整組先發快照整個轉 step 格，回傳一份新的快照。
 //
-// 為什麼是「搬 key」而不是「搬 value」：LineupSnapshot 的 key 是「起始號位」——這一局
+// 為什麼是「搬 key」而不是「搬 value」：LineupZones 的 key 是「起始號位」——這一局
 // 第一顆球開始時，某個球員站在哪個號位。轉一格的意思是「每個人的起始號位都往後移一格」，
 // 例如原本在 1 號位發球的人，轉一輪之後應該變成從 6 號位開局（照 rotateZone 的
 // 1→6→5→4→3→2→1 逆時針規則）。所以要動的是「這個人記在哪一個 key 底下」，人（value）
@@ -66,8 +66,8 @@ export function getZoneCoords(zone: number): { x: number; y: number } {
 // 不用自己另外處理 step 是負數的情況（例如「上一輪」會傳 -1）：rotateZone 內部已經用
 // `((currentIndex + rotation) % 6 + 6) % 6` 處理過負數取模，這裡把 step 原封不動丟給它、
 // 讓它負責「轉出界要怎麼繞回來」即可，不用在這裡重複寫一次取模邏輯。
-export function rotateLineup(lineup: LineupSnapshot, step: number): LineupSnapshot {
-  const result: LineupSnapshot = {};
+export function rotateLineup(lineup: LineupZones, step: number): LineupZones {
+  const result: LineupZones = {};
   for (const [zoneStr, playerId] of Object.entries(lineup)) {
     const startZone = Number(zoneStr);
     result[rotateZone(startZone, step)] = playerId;
@@ -84,15 +84,15 @@ export function rotateLineup(lineup: LineupSnapshot, step: number): LineupSnapsh
 // 測試釘死；元件那層的測試（RotationRailPanel.test.tsx）則只需要驗「有沒有正確接上這支」。
 //
 // 為什麼「這個人原本在別的號位」要用**互換**而不是「把他從原位移除、留一個空格」：
-// LineupSnapshot 永遠是六人滿編（六個號位、六個不同的人），互換能天然維持這個不變條件，
+// LineupZones 永遠是六人滿編（六個號位、六個不同的人），互換能天然維持這個不變條件，
 // 不會在畫面上留下「這格沒人」的破洞讓教練還得再補一次；而且「把 A、B 兩人對調」是實際
 // 排陣最常見的操作，互換讓它只要點兩下就完成。
 export function assignPlayerToZone(
-  lineup: LineupSnapshot,
+  lineup: LineupZones,
   zone: number,
   playerId: string,
-): LineupSnapshot {
-  const next: LineupSnapshot = { ...lineup };
+): LineupZones {
+  const next: LineupZones = { ...lineup };
   const fromEntry = Object.entries(next).find(([, pid]) => pid === playerId);
 
   if (fromEntry) {
@@ -128,8 +128,8 @@ export function assignPlayerToZone(
 // 自然生效——使用者拿掉一個人之後本來就該補人，不該被系統偷偷補完。
 //
 // 傳入號位本來就沒人時原樣回傳一份新快照，呼叫端不用先檢查。
-export function removePlayerFromZone(lineup: LineupSnapshot, zone: number): LineupSnapshot {
-  const next: LineupSnapshot = { ...lineup };
+export function removePlayerFromZone(lineup: LineupZones, zone: number): LineupZones {
+  const next: LineupZones = { ...lineup };
   delete next[zone];
   return next;
 }
@@ -160,7 +160,7 @@ export function removePlayerFromZone(lineup: LineupSnapshot, zone: number): Line
 // 回傳型別刻意仍是 RotationPositions（positions + liberoReplacement），這樣呼叫端（Court.tsx
 // 畫球場、擷取戰術快照）拿到的答案格式沒變。
 export function deriveRotation(
-  lineup: LineupSnapshot,
+  lineup: LineupZones,
   liberoId: string | null,
   replacedPlayerId: string | null,
   rotation: number,
@@ -196,10 +196,7 @@ export function deriveRotation(
 // 正確性：setRoster 會被 TacticsBoard 的 effect 反覆呼叫，若每次都換新參照，訂閱 lineup 的
 // 元件就會重繪 → effect 再呼叫 setRoster → 無限迴圈（Maximum update depth exceeded，
 // issue #69→#70 踩過）。這條規則有測試用 toBe 釘住。
-export function filterLineupToRoster(
-  lineup: LineupSnapshot,
-  roster: MatchPlayer[],
-): LineupSnapshot {
+export function filterLineupToRoster(lineup: LineupZones, roster: MatchPlayer[]): LineupZones {
   const validIds = new Set(roster.map((p) => p.id));
   const entries = Object.entries(lineup);
   const kept = entries.filter(([, playerId]) => validIds.has(playerId));
@@ -208,7 +205,7 @@ export function filterLineupToRoster(
 }
 
 // 「先發排好了沒／可不可以開賽」這道門檻的唯一定義（issue #37 收斂、#231 PR3 換成吃
-// LineupSnapshot）。六個號位都各站一個人才算滿——LineupSnapshot 的 key 天生就是號位，
+// LineupZones）。六個號位都各站一個人才算滿——LineupZones 的 key 天生就是號位，
 // 所以「六個不同號位」直接等於 Object.keys 有六個，不需要另外檢查有沒有人重複站同一格。
 //
 // 為什麼「滿不滿」要跟「現在排了誰」分成兩件事：它們回答的是不同問題。lineup 本身照實
@@ -217,7 +214,7 @@ export function filterLineupToRoster(
 // 排第一個人就讀回 null 整個變空——「要看到第 1 個人得先有 6 個人」的死結（#174）。
 //
 // 也不必特別檢查有沒有派自由球員：L 是替換上場的，不佔六個號位（跟後端 lineups 表一致）。
-export function isLineupFull(lineup: LineupSnapshot): boolean {
+export function isLineupFull(lineup: LineupZones): boolean {
   return Object.keys(lineup).length === 6;
 }
 

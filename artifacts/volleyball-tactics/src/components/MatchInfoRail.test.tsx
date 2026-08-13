@@ -6,6 +6,7 @@ import { useScoreSheet } from "@/hooks/useScoreSheet";
 import { useRotationTable } from "@/hooks/useRotationTable";
 import MatchInfoRail from "./MatchInfoRail";
 import type { Match } from "@/types/match";
+import { lineupFromZones } from "@/types/scoresheet";
 import type { CompletedSet, ScoreSheetState, SetRecordingState } from "@/types/scoresheet";
 
 // issue #168：這支測試補的是 #352 收尾時明講「還測不到」的那一塊。
@@ -57,7 +58,13 @@ vi.mock("@/hooks/useScoreSheet", async (importOriginal) => {
 });
 
 function completedSet(setNumber: number, ourScore: number, opponentScore: number): CompletedSet {
-  return { setNumber, ourScore, opponentScore, history: [], lineup: { 1: "p1", 4: "p2" } };
+  return {
+    setNumber,
+    ourScore,
+    opponentScore,
+    history: [],
+    lineup: lineupFromZones({ 1: "p1", 4: "p2" }),
+  };
 }
 
 // 「目前這一局」。serving 是不是 null 就是 hasCurrentSetData 的判準（#351 修正的那個判準：
@@ -129,7 +136,7 @@ describe("MatchInfoRail 的局軸格數（#352 的接線，#349／#351 的回歸
     seedRecording({
       completedSets: [completedSet(1, 25, 20), completedSet(2, 25, 22)],
       currentSet: currentSet(3, "us", 7),
-      lineup: { 1: "p1", 4: "p2" },
+      lineup: lineupFromZones({ 1: "p1", 4: "p2" }),
     });
 
     renderWithProviders(<MatchInfoRail {...NOOP_PROPS} />);
@@ -191,7 +198,7 @@ describe("MatchInfoRail 局軸的唯讀／可編輯分支（#329 的紅線）", 
     seedRecording({
       completedSets: [],
       currentSet: currentSet(1, "us", 12),
-      lineup: { 1: "p1", 4: "p2" },
+      lineup: lineupFromZones({ 1: "p1", 4: "p2" }),
     });
 
     renderWithProviders(<MatchInfoRail {...NOOP_PROPS} />);
