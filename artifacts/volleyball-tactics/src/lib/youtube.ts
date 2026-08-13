@@ -88,11 +88,17 @@ function normalizeId(raw: string): string | null {
  * 播放之前不會種追蹤 cookie。對我們沒有任何損失（這一頁不需要 YouTube 的個人化資料），
  * 對使用者是實質的隱私差別，所以預設選它。
  *
- * enablejsapi=1 現在還沒有人用——這一張票（#391）明講「只做載體、不記任何東西」。留著它是
- * 因為下一張票（M4-2 補填流程）要用 YouTube 的 JS API 讀「現在播到第幾秒」把 rally 錨上去，
- * 而這個參數必須在 iframe 建立的當下就帶著、事後補不上（改 src 會讓播放器整個重載、跳回
- * 影片開頭）。
+ * enablejsapi=1 讓 YouTube 的 JS API 可以跟這個播放器對話（#393 用它讀「現在播到第幾秒」、
+ * #394 用它跳到某一秒）。這個參數必須在 iframe 建立的當下就帶著、事後補不上（改 src 會讓
+ * 播放器整個重載、跳回影片開頭）。
+ *
+ * origin（選填，實際上呼叫端一定會傳）＝ 我們這一頁的 origin。YouTube 的文件明講：用
+ * enablejsapi 時應該一併帶上它，播放器才知道「合法的對話對象是誰」，並用它驗證父頁送來的
+ * postMessage。做成選填參數而不是在函式裡直接讀 window.location.origin，是為了讓這支函式
+ * 保持純函式（同樣的輸入永遠得到同樣的輸出）——不然它的結果會跟著跑在哪個網域而變，
+ * 測試就得去 mock window。
  */
-export function toYouTubeEmbedUrl(videoId: string): string {
-  return `https://www.youtube-nocookie.com/embed/${videoId}?enablejsapi=1`;
+export function toYouTubeEmbedUrl(videoId: string, origin?: string): string {
+  const base = `https://www.youtube-nocookie.com/embed/${videoId}?enablejsapi=1`;
+  return origin ? `${base}&origin=${encodeURIComponent(origin)}` : base;
 }

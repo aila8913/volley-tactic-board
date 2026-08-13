@@ -62,13 +62,39 @@ export default function MatchVideoRail({ matchId, onPlayerReady }: Props) {
   // iframe 節點本身要有 ref 才能餵給 createPlayer（YT.Player 建構子要吃真的 DOM 節點）。
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
+  // 「這支影片的 iframe 已經真的把 YouTube 的頁面載進來了」——記的是**哪一支**載完了，
+  // 不是一個 boolean，這樣換影片時舊的 true 不會被誤用（新的 iframe 還沒載完，
+  // loadedVideoId 仍停在舊的 id，下面的條件自然不成立）。
+  //
+  // ⚠️ 為什麼非等不可（這是 #393 交付後 PO 回報「按播放轉一下就沒反應」的原因）──
+  // useEffect 是在 React commit 之後**同步**跑的，那個瞬間 iframe 節點雖然存在，
+  // 但它的 src 只是剛送出網路請求，裡面還是空的 about:blank——而 about:blank 會繼承
+  // 父頁的 origin。這時候呼叫 new YT.Player(iframe)，API 會對著那個視窗發 postMessage、
+  // targetOrigin 填 youtube-nocookie.com，瀏覽器一比對發現收件視窗其實是 localhost，
+  // 整個訊息被擋掉：
+  //   Failed to execute 'postMessage'... target origin ('https://www.youtube-nocookie.com')
+  //   does not match the recipient window's origin ('http://localhost:5173')
+  // 握手失敗的後果不只是「讀不到秒數」而已——因為網址帶著 enablejsapi=1，播放器會等父頁
+  // 的 API 完成交握，使用者按播放就永遠卡在轉圈。也就是說，這個時序沒顧好會讓「播放」
+  // 這個最基本的功能壞掉，不是只有補填的錨點功能失效。
+  //
+  // 為什麼用 <iframe onLoad>（React 的 prop）而不是在 effect 裡 addEventListener('load')：
+  // effect 裡才掛監聽有「載入已經完成、事件早就發過了」的漏接風險（load 不會補發）；
+  // 寫成 React 的 prop，監聽器是 React 建立這個 DOM 節點的當下就掛上去的，
+  // 一定早於瀏覽器開始載入它的內容，接不到的情況不存在。
+  const [loadedVideoId, setLoadedVideoId] = useState<string | null>(null);
+
   // 這個 effect 綁的 key 是 videoId（YouTube 11 碼 id，不是 MatchVideo row 的 uuid）——
   // 跟下面 <iframe key={videoId}> 用同一個值是刻意的：videoId 換了代表 iframe 整個被 React
   // 換掉重建（見下面 JSX 的註解），舊的 YT.Player 實例已經綁在一個消失的 DOM 節點上，
   // 這裡也要跟著重新對一個新節點建一個新的 player，不能沿用舊的。
   useEffect(() => {
-    if (!videoId || !iframeRef.current) {
-      // 沒有影片可播：通知呼叫端「現在讀不到秒數」，不留著上一支影片的 reader。
+    // loadedVideoId !== videoId：這支影片的 iframe 還沒載完（或現在顯示的根本是另一支），
+    // 還不能接 JS API——理由見上面 loadedVideoId 的說明。等 onLoad 觸發後這個 effect 會
+    // 因為 loadedVideoId 變了而重跑一次，那時才真的建立播放器。
+    if (!videoId || loadedVideoId !== videoId || !iframeRef.current) {
+      // 沒有影片可播（或還沒載完）：通知呼叫端「現在讀不到秒數、也 seek 不了」，
+      // 不留著上一支影片的控制代碼。
       onPlayerReady?.(null);
       return;
     }
@@ -120,9 +146,9 @@ export default function MatchVideoRail({ matchId, onPlayerReady }: Props) {
     };
     // video?.id 沒放進依賴：換了同一支影片的 url 大小寫或查詢參數不會改變 videoId
     // （解析出來的 YouTube id 相同），這種情況不需要重建 player；真正該觸發重建的只有
-    // videoId 變了（換了一支不同的影片）。
+    // videoId 變了（換了一支不同的影片）、或這支影片的 iframe 剛載完（loadedVideoId）。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [videoId]);
+  }, [videoId, loadedVideoId]);
 
   const handleAttach = async () => {
     const parsed = parseYouTubeVideoId(draftUrl);
@@ -171,7 +197,13 @@ export default function MatchVideoRail({ matchId, onPlayerReady }: Props) {
                 // YT.Player 實例已經沒有意義了（綁在一個已經被換掉的 DOM 節點上）。
                 key={videoId}
                 ref={iframeRef}
-                src={toYouTubeEmbedUrl(videoId)}
+                // 帶上 origin：YouTube 文件對 enablejsapi 的建議，讓播放器知道合法的對話
+                // 對象是誰（見 toYouTubeEmbedUrl 的說明）。
+                src={toYouTubeEmbedUrl(videoId, window.location.origin)}
+                // 這一行就是「什麼時候才能接 JS API」的答案（見上面 loadedVideoId 的說明）：
+                // load 事件代表 iframe 裡面真的已經是 YouTube 的頁面了，這時候 postMessage
+                // 的收件視窗才會是 youtube-nocookie.com，交握才成立。
+                onLoad={() => setLoadedVideoId(videoId)}
                 title="比賽影片"
                 className="h-full w-full"
                 // allowFullScreen：不寫的話 YouTube 播放器的全螢幕鈕會是灰的。看球需要放大。

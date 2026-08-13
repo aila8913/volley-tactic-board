@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { screen } from "@testing-library/react";
+import { act, fireEvent, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test/renderWithProviders";
 import MatchVideoRail from "./MatchVideoRail";
@@ -28,9 +28,18 @@ vi.mock("@/hooks/useMatchVideos", () => ({
   }),
 }));
 
+// youtubePlayer 也 mock 掉：真的那支會往 document.head 塞 YouTube 的 <script>，jsdom 不會
+// 執行它，promise 永遠不 resolve——那對「有沒有在正確的時機呼叫 createPlayer」這件事完全
+// 測不到。mock 成一個 spy 之後，時序本身就變成可以斷言的東西。
+const createPlayer = vi.fn(() => new Promise<never>(() => {}));
+vi.mock("@/lib/youtubePlayer", () => ({
+  createPlayer: (...args: unknown[]) => createPlayer(...(args as [])),
+}));
+
 beforeEach(() => {
   attachVideo.mockClear();
   detachVideo.mockClear();
+  createPlayer.mockClear();
   mockVideo = null;
 });
 
@@ -70,5 +79,32 @@ describe("MatchVideoRail", () => {
 
     const iframe = container.querySelector("iframe");
     expect(iframe?.getAttribute("src")).toContain("/embed/dQw4w9WgXcQ");
+  });
+
+  // ── 迴歸測試：iframe 載完之前不准接 JS API ──
+  // PO 回報「按播放轉一下就沒反應」的那個 bug（#393 帶進來的）：effect 在 React commit 後
+  // 同步執行，那時 iframe 裡還是空的 about:blank（origin 繼承父頁），對它 postMessage 會被
+  // 瀏覽器擋下、交握失敗，而 enablejsapi=1 的播放器會一直等那個交握 → 按播放永遠轉圈。
+  // 這條測試釘的就是時序本身：load 之前不呼叫 createPlayer，load 之後才呼叫。
+  it("iframe 載完（load）之後才建立 YT 播放器", () => {
+    mockVideo = { id: "v1", matchId: 1, url: "https://youtu.be/dQw4w9WgXcQ", sequence: 1 };
+    const { container } = renderWithProviders(<MatchVideoRail matchId={1} />);
+
+    expect(createPlayer).not.toHaveBeenCalled();
+
+    const iframe = container.querySelector("iframe")!;
+    act(() => {
+      fireEvent.load(iframe);
+    });
+
+    expect(createPlayer).toHaveBeenCalledTimes(1);
+    expect(createPlayer).toHaveBeenCalledWith(iframe);
+  });
+
+  it("嵌入網址帶著 origin（JS API 交握用）", () => {
+    mockVideo = { id: "v1", matchId: 1, url: "https://youtu.be/dQw4w9WgXcQ", sequence: 1 };
+    const { container } = renderWithProviders(<MatchVideoRail matchId={1} />);
+
+    expect(container.querySelector("iframe")?.getAttribute("src")).toContain("&origin=");
   });
 });
