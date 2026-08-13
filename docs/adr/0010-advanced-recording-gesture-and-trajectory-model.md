@@ -2,6 +2,10 @@
 
 狀態：Accepted（2026-08-12，#21／#51 的 M4 設計討論，拆出 #390–#397）
 
+⚠️ **「後果」段落的「刻意不改簡易版」那一條已被
+[ADR-0011](0011-shared-radial-slide-gesture-across-modes.md) 取代**（2026-08-13）：兩個模式改成
+共用同一套滑選手勢。其餘決定全部仍然成立。內文原樣保留（Accepted 的 ADR 不改寫、只 supersede）。
+
 ## 背景
 
 M4 的 wow 點是「球線分布」。要畫出球線，得先有人把每一觸球的座標記進來——而 `docs/recording-cost-budget.md`
