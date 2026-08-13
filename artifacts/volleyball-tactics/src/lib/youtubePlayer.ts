@@ -29,6 +29,12 @@
 // 為了十幾行的型別去多裝一個套件不划算，所以自己宣告一個最小型別就好。
 interface YTPlayerInstance {
   getCurrentTime: () => number;
+  // seekTo 的第二個參數 allowSeekAhead：true 讓播放器在目標秒數還沒被瀏覽器緩衝時，
+  // 直接跟 YouTube 的伺服器要那一段（等於重新起播那一段），而不是傻傻地卡在最近一個
+  // 已緩衝的關鍵影格。#394 這裡要跳的是使用者在表格上點的任意一分，通常都在目前緩衝
+  // 範圍之外，所以固定傳 true——傳 false 只適合「使用者正在拖曳同一段進度條」那種
+  // 目標多半已經緩衝好的情境，不是這裡的用法。
+  seekTo: (seconds: number, allowSeekAhead: boolean) => void;
   destroy: () => void;
 }
 
@@ -93,6 +99,11 @@ export function loadYouTubeIframeApi(): Promise<void> {
 // （例如 Vimeo）也不用動呼叫端的型別。
 export interface YouTubePlayerHandle {
   getCurrentSeconds: () => number | null;
+  // #394：表格點一列要能把播放器「推」到那一秒，跟 getCurrentSeconds（讀）方向相反。
+  // 同樣包一層 try/catch 吞掉例外——理由跟 getCurrentSeconds 一樣，這是一個「錦上添花」
+  // 的輔助功能（跳到那一秒方便使用者核對），不該讓呼叫端因為播放器剛好在奇怪的狀態
+  // （例如正在切換影片）而整個炸掉。呼叫端不需要知道有沒有成功，seek 不到就當作沒點。
+  seekTo: (seconds: number) => void;
   destroy: () => void;
 }
 
@@ -121,6 +132,15 @@ export function createPlayer(iframe: HTMLIFrameElement): Promise<YouTubePlayerHa
                     return Math.floor(target.getCurrentTime());
                   } catch {
                     return null;
+                  }
+                },
+                seekTo: (seconds) => {
+                  try {
+                    // allowSeekAhead: true，理由見上面 YTPlayerInstance.seekTo 的註解。
+                    target.seekTo(seconds, true);
+                  } catch {
+                    // 讀不到秒數會回 null 讓呼叫端自己決定要不要跳過；seek 是「做了就好」
+                    // 的動作，沒有回傳值可以吞，失敗就單純沒反應。
                   }
                 },
                 destroy: () => target.destroy(),

@@ -288,7 +288,24 @@ export function reconstructSetFromRallies(
     const decisive =
       events?.find((e) => e.outcome === "point" || e.outcome === "loss") ?? events?.[0];
     const meta = decisive ? eventToMeta(decisive) : undefined;
-    history.push({ side: winnerSide, wasSideOut, serverId: rally.id, ...meta });
+
+    // 影片錨點還原（#394）：rally.videoId/videoTimestamp 是進階版補填當下寫進 rally 那一列
+    // 的（見 pointRecordToRally），reload 後要把它讀回 PointRecord.videoAnchor，補填表格的
+    // 「跳到那一秒」才不會在重整頁面後失效——沒有這一段，資料明明在 DB 裡，畫面卻讀不到它。
+    // 兩欄都非 null 才算數：只有秒數沒有 videoId（或反過來）沒辦法拿去 seek 任何影片，
+    // 那種殘缺組合沒有意義，一律當作沒有錨點處理。
+    const videoAnchor =
+      rally.videoId != null && rally.videoTimestamp != null
+        ? { videoId: rally.videoId, seconds: rally.videoTimestamp }
+        : undefined;
+
+    history.push({
+      side: winnerSide,
+      wasSideOut,
+      serverId: rally.id,
+      ...meta,
+      ...(videoAnchor ? { videoAnchor } : {}),
+    });
 
     ruleState = nextRuleState;
   }

@@ -76,7 +76,9 @@ interface ScoreSheetStore {
   scorePoint: (
     matchId: string,
     side: Side,
-    meta?: Pick<PointRecord, "action" | "touchedBy">,
+    // #394：meta 加寬到含 videoAnchor，讓本地紀錄（record.currentSet.history）跟送去後端的
+    // rally 從同一份呼叫端資料組出來（見下方 score() 的說明），不用另外開一條路徑寫本地。
+    meta?: Pick<PointRecord, "action" | "touchedBy" | "videoAnchor">,
   ) => void;
   // 復原最近一個動作：pop 堆疊最上面那筆快照、整包還原三個可變欄位（比分/輪轉/發球方、
   // 一般換人清單、libero 替補）。後端要補刪什麼由 controller 依那筆的 backendRef 決定。
@@ -731,6 +733,10 @@ export function useScoreSheetController(matchId: string) {
       const awayRotationBefore = pre.opponentRotation;
       const point: PointRecord = { side, wasSideOut: side !== pre.serving, ...meta };
 
+      // #394：本地紀錄（record.currentSet.history，補填表格要讀的那份）跟下面 POST 給
+      // 後端的 rally 用同一個 anchor 來源，兩邊才不會有一份有錨點、一份沒有的落差。
+      const anchor = options?.videoAnchor ?? null;
+
       const setId = currentSetIdRef.current;
       if (setId === undefined) return; // 理論上 start 一定先跑過；防呆
 
@@ -744,13 +750,17 @@ export function useScoreSheetController(matchId: string) {
       //    （events.ts 的 rallyId 設了 onDelete: "cascade"），見下面 undo() 的說明。
       useScoreSheet.getState().snapshotForUndo(matchId, { table: "rallies", id: rallyId });
 
-      // 1) 本地即時更新（畫面零延遲）
-      useScoreSheet.getState().scorePoint(matchId, side, meta);
+      // 1) 本地即時更新（畫面零延遲）。有錨點才多帶 videoAnchor 一個欄位——簡易版
+      //    （anchor 永遠是 null）這裡傳出去的 meta 要跟原本一模一樣，不能多一個
+      //    `videoAnchor: undefined` 的 key（雖然實務上不影響物件相等判斷，但這裡刻意用
+      //    展開的方式避免多寫一個沒有意義的欄位）。
+      useScoreSheet
+        .getState()
+        .scorePoint(matchId, side, { ...meta, ...(anchor ? { videoAnchor: anchor } : {}) });
 
       // 2) 背景持久化：一筆 rally（錨點跟著這個 POST 一起送，見 pointRecordToRally 的說明）；
       //    有整條鏈就把整條鏈都寫進去，否則沿用簡易版「有動作/球員才順帶一筆 event」的舊行為
       //    ——後者要跟原本行為 byte-for-byte 一致，簡易版不能因為這次改動而有任何差異。
-      const anchor = options?.videoAnchor ?? null;
       append({
         kind: "create",
         table: "rallies",
