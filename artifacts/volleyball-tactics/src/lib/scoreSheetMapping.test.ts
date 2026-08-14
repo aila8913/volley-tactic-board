@@ -495,6 +495,55 @@ describe("reconstructSetFromRallies", () => {
     const state = reconstructSetFromRallies(set, rallies, eventsByRallyId);
     expect(state.history[0]).toMatchObject({ action: "receive", touchedBy: { playerId: "3" } });
   });
+
+  // #394：補填表格「跳到那一秒」的資料來源就是這裡重建出來的 videoAnchor，reload 後不還原
+  // 這一段，表格點了會沒反應（資料明明在 DB 裡，畫面卻讀不到）。
+  describe("videoAnchor 還原（#394）", () => {
+    it("rally 同時有 videoId 跟 videoTimestamp 時，還原出 videoAnchor", () => {
+      const rallies = [
+        makeRally({
+          id: "100",
+          setId: "9",
+          rallyNumber: 1,
+          winner: "home",
+          videoId: "video-1",
+          videoTimestamp: 42,
+        }),
+      ];
+      const state = reconstructSetFromRallies(set, rallies);
+      expect(state.history[0].videoAnchor).toEqual({ videoId: "video-1", seconds: 42 });
+    });
+
+    it("只有其中一欄有值（另一欄是 null）時，videoAnchor 留 undefined", () => {
+      const rallies = [
+        makeRally({
+          id: "100",
+          setId: "9",
+          rallyNumber: 1,
+          winner: "home",
+          videoId: "video-1",
+          videoTimestamp: null,
+        }),
+        makeRally({
+          id: "200",
+          setId: "9",
+          rallyNumber: 2,
+          winner: "home",
+          videoId: null,
+          videoTimestamp: 10,
+        }),
+      ];
+      const state = reconstructSetFromRallies(set, rallies);
+      expect(state.history[0].videoAnchor).toBeUndefined();
+      expect(state.history[1].videoAnchor).toBeUndefined();
+    });
+
+    it("兩欄都沒有值（簡易版記的分）時，videoAnchor 留 undefined", () => {
+      const rallies = [makeRally({ id: "100", setId: "9", rallyNumber: 1, winner: "home" })];
+      const state = reconstructSetFromRallies(set, rallies);
+      expect(state.history[0].videoAnchor).toBeUndefined();
+    });
+  });
 });
 
 describe("regularSubToApi", () => {

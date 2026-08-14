@@ -14,7 +14,8 @@ import ScoreSheetStats from "@/components/ScoreSheetStats";
 import RotationRailPanel from "@/components/RotationRailPanel";
 import UnsyncedWritesBadge from "@/components/UnsyncedWritesBadge";
 import RecordingModeToggle, { type RecordingMode } from "@/components/RecordingModeToggle";
-import MatchVideoRail from "@/components/MatchVideoRail";
+import MatchVideoRail, { type VideoPlayerControls } from "@/components/MatchVideoRail";
+import AdvancedRecordingTable from "@/components/AdvancedRecordingTable";
 import { PlayAction, Side, type DraftEvent, type LineupSnapshot } from "@/types/scoresheet";
 import {
   isSetComplete,
@@ -216,12 +217,12 @@ export default function ScoreSheet() {
   const cancelAdvancedBall = useAdvancedRecording((state) => state.cancelCurrentBall);
   const clearAdvancedRally = useAdvancedRecording((state) => state.clearRally);
 
-  // 讀「播放器現在播到第幾秒」的函式（#393）。用 ref 而不是 state 裝它，是因為這個值
+  // 播放器控制代碼（#393 讀秒數；#394 加上 seekTo）。用 ref 而不是 state 裝它，是因為這個值
   // **不驅動任何畫面**——它只在使用者做手勢的那一瞬間被讀一次（見下面 readVideoPosition
-  // 傳給 AdvancedRecordingCourt 的用法），不是要拿來 render 成文字或條件式的東西。如果放
-  // state，MatchVideoRail 的播放器一就緒（onPlayerReady 觸發）就會讓整頁多重繪一次
-  // ——這裡的 setter 只是把值收好，不需要通知 React 有東西變了。
-  const videoPositionRef = useRef<(() => { videoId: string; seconds: number } | null) | null>(null);
+  // 傳給 AdvancedRecordingCourt 的用法）、或使用者點紀錄表格一列時才被呼叫一次，不是要拿來
+  // render 成文字或條件式的東西。如果放 state，MatchVideoRail 的播放器一就緒（onPlayerReady
+  // 觸發）就會讓整頁多重繪一次——這裡的 setter 只是把值收好，不需要通知 React 有東西變了。
+  const videoControlsRef = useRef<VideoPlayerControls | null>(null);
 
   // ── 自由球員替換 ──
   // useRef 讓 useEffect 讀到最新值，避免陳舊閉包（stale closure）。
@@ -891,10 +892,11 @@ export default function ScoreSheet() {
             >
               <MatchVideoRail
                 matchId={Number(id)}
-                // #393：把播放器就緒後的「讀秒數」函式收進 ref（見上面 videoPositionRef 的
-                // 說明），球場那邊做手勢時再從 ref 讀出來用，不放進 state。
-                onPlayerReady={(read) => {
-                  videoPositionRef.current = read;
+                // #393/#394：把播放器就緒後的控制代碼（讀秒數＋跳去某一秒）收進 ref（見上面
+                // videoControlsRef 的說明），球場手勢跟紀錄表格點列時再從 ref 讀出來用，
+                // 不放進 state。
+                onPlayerReady={(controls) => {
+                  videoControlsRef.current = controls;
                 }}
               />
             </div>
@@ -1082,7 +1084,7 @@ export default function ScoreSheet() {
                         roster={match.players}
                         opponentRotation={currentSet.opponentRotation}
                         onFinishRally={handleAdvancedRallyFinish}
-                        readVideoPosition={() => videoPositionRef.current?.() ?? null}
+                        readVideoPosition={() => videoControlsRef.current?.readPosition() ?? null}
                       />
                     ) : (
                       <ScoreSheetCourt
@@ -1167,17 +1169,27 @@ export default function ScoreSheet() {
             )}
           </div>
 
-          {/* ── 完整紀錄表格的位置（M4-3）──
-            #391 只做載體，表格本身是下一張票。這裡先把「它會長在哪裡」佔起來，是因為
-            版面決策（球場在上、往下滑是表格）是這張票的一部分——先確定捲動關係成立，
-            下一張票才只需要把內容填進來，不用再回頭動一次版面。
-            佔位塊刻意做得像「還沒蓋好的地基」（虛線框、灰字），不做成假表格：假表格會讓
-            實機驗收的人以為功能壞了（怎麼都是空的），虛線框則一眼看得出是還沒做。 */}
+          {/* ── 完整紀錄表格（#394）──
+            版面決策（球場在上、往下滑是表格）在 #391 就先定了（見下面 shrink-0 的位置）。
+            這裡是唯讀表格，點一列（有影片錨點的話）跳去那一秒；可編輯是 #396 的範圍，
+            這個元件完全不碰任何寫入路徑。 */}
           {isAdvanced && (
             <div className="shrink-0 px-8 pb-8">
-              <div className="flex h-48 items-center justify-center rounded-2xl border border-dashed border-white/[0.14] text-sm text-[#6d7361]">
-                完整紀錄表格（下一張票）
-              </div>
+              <AdvancedRecordingTable
+                // currentSet 理論上這裡一定有值（isHydrating 已經在上面把「還沒重建完」的
+                // 情況擋掉了，見該 guard），但它的型別仍是 SetRecordingState | undefined
+                // （record?.currentSet 那行沒有 fallback）——用 `currentSet ? [...] : []`
+                // 讓 TypeScript 收斂型別，而不是非空斷言，這樣萬一真的遇到極端情況
+                // （例如 record 意外是 undefined），表格會安靜地少列最後一局，不會直接炸頁面。
+                sets={[...completedSets, ...(currentSet ? [currentSet] : [])].map((s) => ({
+                  setNumber: s.setNumber,
+                  history: s.history,
+                }))}
+                roster={match.players}
+                onSeek={(anchor) =>
+                  videoControlsRef.current?.seekTo(anchor.videoId, anchor.seconds)
+                }
+              />
             </div>
           )}
         </div>

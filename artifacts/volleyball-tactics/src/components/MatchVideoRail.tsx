@@ -29,13 +29,21 @@ const GHOST_SM_BUTTON_CLASS =
   "inline-flex items-center justify-center rounded-full px-3 py-1 text-xs font-bold " +
   "text-[#a9b096] transition hover:text-[#c6f135] disabled:pointer-events-none disabled:opacity-30";
 
+// 播放器就緒後往上曝露的控制代碼（#393 只有 readPosition，#394 補上 seekTo）。
+export type VideoPlayerControls = {
+  readPosition: () => { videoId: string; seconds: number } | null;
+  // videoId 是 MatchVideo 這一列的 uuid（跟 readPosition 回傳的同一種 id），不是 YouTube
+  // 11 碼 id——這個區分咬過人一次（見下面 effect 內的閉包註解），這裡再提醒一次。
+  seekTo: (videoId: string, seconds: number) => void;
+};
+
 type Props = {
   // 路由參數還沒到手時是 null——hook 會據此關掉查詢（見 useMatchVideos）。
   matchId: number | null;
-  // 播放器就緒（或不再就緒）時通知呼叫端（#393）。傳進來的 read 函式回傳「現在播到第幾秒」；
-  // 沒有影片、或播放器還沒建好時傳 null，呼叫端要能容忍讀不到。這個 prop 選填，因為不是
-  // 每個用到 MatchVideoRail 的地方都需要讀秒數（目前只有計分頁的補填流程需要）。
-  onPlayerReady?: (read: (() => { videoId: string; seconds: number } | null) | null) => void;
+  // 播放器就緒（或不再就緒）時通知呼叫端（#393；#394 把單一 read 函式擴成整組控制代碼）。
+  // 沒有影片、或播放器還沒建好時傳 null，呼叫端要能容忍讀不到/seek 不了。這個 prop 選填，
+  // 因為不是每個用到 MatchVideoRail 的地方都需要（目前只有計分頁的補填流程需要）。
+  onPlayerReady?: (controls: VideoPlayerControls | null) => void;
 };
 
 export default function MatchVideoRail({ matchId, onPlayerReady }: Props) {
@@ -81,14 +89,27 @@ export default function MatchVideoRail({ matchId, onPlayerReady }: Props) {
         return;
       }
       handle = created;
-      onPlayerReady?.(() => {
-        // ⚠️ 這裡回傳的 videoId 是 MatchVideo 這一列的 uuid（rallies.videoId 的 FK 目標），
-        // **不是**上面 effect 依賴的那個 YouTube 11 碼 videoId——兩者名字很容易搞混但
-        // 指向完全不同的東西：一個是「YouTube 認得的影片」，一個是「我們資料庫裡代表
-        // 「這場比賽掛了這支影片」這件事的那一列」。錨點要存進 rallies.videoId，FK
-        // 指向的是後者，用錯會直接是外鍵違反。
-        const seconds = handle?.getCurrentSeconds();
-        return seconds != null ? { videoId: matchVideoRowId, seconds } : null;
+      onPlayerReady?.({
+        readPosition: () => {
+          // ⚠️ 這裡回傳的 videoId 是 MatchVideo 這一列的 uuid（rallies.videoId 的 FK 目標），
+          // **不是**上面 effect 依賴的那個 YouTube 11 碼 videoId——兩者名字很容易搞混但
+          // 指向完全不同的東西：一個是「YouTube 認得的影片」，一個是「我們資料庫裡代表
+          // 「這場比賽掛了這支影片」這件事的那一列」。錨點要存進 rallies.videoId，FK
+          // 指向的是後者，用錯會直接是外鍵違反。
+          const seconds = handle?.getCurrentSeconds();
+          return seconds != null ? { videoId: matchVideoRowId, seconds } : null;
+        },
+        // #394：表格點一列要跳去那一秒。videoId 這個參數是呼叫端從 PointRecord.videoAnchor
+        // 讀出來的「那一分當初錨在哪支影片」——這裡要跟 effect 綁定當下的 matchVideoRowId
+        // 比對，不吻合就整個不做事。為什麼要擋：這個 player 實例是綁在「目前這支影片」上的，
+        // 如果使用者後來換了一支影片（見上面 handleDetach/handleAttach），舊 rally 錨的還是
+        // 「換掉之前那支」的秒數——把那個秒數 seek 到新影片上，畫面會停在完全不相干的地方，
+        // 而且使用者通常不會意識到「影片換過了」，看到的秒數會像是對的、內容卻是錯的，比
+        // 「按了沒反應」更容易誤導人。
+        seekTo: (videoId, seconds) => {
+          if (videoId !== matchVideoRowId) return;
+          handle?.seekTo(seconds);
+        },
       });
     });
 

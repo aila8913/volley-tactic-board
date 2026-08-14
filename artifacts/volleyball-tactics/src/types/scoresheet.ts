@@ -57,6 +57,11 @@ export interface PointRecord {
     playerId?: string;
     zone?: number;
   };
+  // 這一分錨在影片的哪裡（#394，配合 ADR-0010 決定 5）：videoId 是 match_videos 那一列的
+  // uuid（不是 YouTube 11 碼 id，見 MatchVideoRail.tsx 的說明），seconds 是補填當下讀到的
+  // 播放秒數。只有進階版補填、且這場比賽真的掛了影片時才有值——optional 是因為簡易版記的
+  // 分跟舊的 localStorage 資料完全沒有這個概念，不能假設一定存在。
+  videoAnchor?: { videoId: string; seconds: number };
   // 這一分在後端 rallies 表對應的 id（一個 PointRecord = 一個 rally）。持久化記帳用：
   // 「復原上一球」要靠它打 DELETE /rallies/:id、補記 event 也要掛在這個 rally 底下。
   // 只在已成功寫進後端後才有值；純本地（還沒 flush）或舊資料是 undefined。
