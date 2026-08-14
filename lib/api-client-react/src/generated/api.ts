@@ -3845,7 +3845,7 @@ export const getListTacticsUrl = (params?: ListTacticsParams,) => {
 }
 
 /**
- * @summary List all saved tactics for the current user
+ * @summary List saved tactics for the current user, filtered by matchId / scope, newest-updated first
  */
 export const listTactics = async (params?: ListTacticsParams, options?: RequestInit): Promise<Tactic[]> => {
 
@@ -3892,7 +3892,7 @@ export type ListTacticsQueryError = ErrorType<unknown>
 
 
 /**
- * @summary List all saved tactics for the current user
+ * @summary List saved tactics for the current user, filtered by matchId / scope, newest-updated first
  */
 
 export function useListTactics<TData = Awaited<ReturnType<typeof listTactics>>, TError = ErrorType<unknown>>(

@@ -1,11 +1,13 @@
 import React, { useRef, useState, useEffect, useMemo } from "react";
 import { useParams } from "wouter";
+import { v4 as uuidv4 } from "uuid";
 import { useRotationTable } from "../hooks/useRotationTable";
 import { useTacticsBoard } from "../hooks/useTacticsBoard";
 import { findNearestZone, deriveRotation } from "../lib/rotationLogic";
-import type { MatchPlayer } from "../types/match";
+import { PLAYER_ROLES, type MatchPlayer, type PlayerRole } from "../types/match";
 import type { LineupZones } from "../types/scoresheet";
 import type { SnapshotPlayer } from "../types/courtSnapshot";
+import { DND_ANON_ROLE } from "../lib/dndProtocols";
 import PlayerNode from "./PlayerNode";
 import Markers from "./Markers";
 import DefenseRange from "./DefenseRange";
@@ -123,8 +125,11 @@ export default function Court() {
   // 每次 render 呼叫的 hook 數量與順序都相同，如果 hook 排在條件 return 後面，
   // 某次 render 提早離開時 hook 數量就對不上，React 內部的 hook 對應表會整個錯位
   //（這正是 eslint react-hooks/rules-of-hooks 抓到的錯誤）。
+  // #372：這裡原本第一行是 `if (!matchId) return;`。那是「戰術板只存在於 /matches/:id/board」
+  // 年代留下來的殘留——undo/redo 動的是白板 session 的歷史堆疊（useTacticsBoard），跟「現在
+  // 是哪一場比賽」沒有任何關係。空板（/board，沒有 matchId）進來時那道 guard 會讓整組快捷鍵
+  // 安靜地不掛載，使用者畫了東西按 Ctrl+Z 卻毫無反應，而且沒有任何錯誤訊息可以追。
   useEffect(() => {
-    if (!matchId) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "z") {
         e.preventDefault();
@@ -137,7 +142,7 @@ export default function Court() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [matchId, undo, redo]);
+  }, [undo, redo]);
 
   // 這一輪誰站哪：#231 PR3 之後不再從 store 撈現成的座標陣列，而是從「一份先發 + L 頂替誰」
   // 現算（deriveRotation）。用 useMemo 包起來是因為下面 map 出來的 PlayerNode 會吃這些物件，
@@ -152,8 +157,12 @@ export default function Court() {
   // 這裡只是把目前這個 SVG 元素的 ref 帶進去）。
   const getSvgPoint = (e: React.PointerEvent) => fromScreen(e.clientX, e.clientY, courtRef.current);
 
+  // #372：這三支指標事件（down/move/up）原本第一行都是 `if (!matchId) return;`，理由跟上面
+  // Ctrl+Z 那個 effect 一樣，是「戰術板只能從某一場比賽進去」年代的殘留。它們動到的東西
+  // ——選取狀態、畫筆標記、防守範圍——全都住在白板 session 裡，沒有一項需要知道是哪一場
+  // 比賽。留著那道 guard 的實際後果是：空板（/board）上所有繪圖工具都點不動，而且是安靜地
+  // 不動（沒有 toast、沒有錯誤），最難查的那一種。
   const handlePointerDown = (e: React.PointerEvent) => {
-    if (!matchId) return;
     // Only process if clicking on the court background/svg directly
     // （球場外圍那圈白板空間沒有畫任何形狀，點在那裡會直接落在 svg 根元素上，
     // 跟點在 court-bg 上一樣都算「點空白處」）
@@ -219,7 +228,6 @@ export default function Court() {
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
-    if (!matchId) return;
     if (drawingMarkerId === "drawing") {
       const pt = getSvgPoint(e);
       // We assume the last marker added is the one being drawn.
@@ -260,6 +268,48 @@ export default function Court() {
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
+    if (!courtRef.current) return;
+
+    // #372 決策②：位置調色盤（PositionPalette.tsx）拖進來的「匿名角色」，刻意排在
+    // **最前面**、在下面「沒有比賽就整段擋掉」的 `!matchId` 判斷之前處理——調色盤本來就是
+    // 設計給「還沒選比賽」的空板一個能放球員的入口，如果沿用舊有「先擋 !matchId」的順序，
+    // 空板永遠走不到這個分支，調色盤拖上去會被最上面那道關卡直接吃掉、什麼事都不會發生
+    // （這正是這一環要修的問題本身，不是理論上的邊角案例）。只在戰術視圖、而且真的有
+    // session（正在編輯／佈陣中，不是唯讀檢視）時接受——跟下面既有的球員拖曳分支要求
+    // 的前提一致：唯讀檢視不接受任何拖曳。
+    if (courtView === "tactics" && session) {
+      const anonRole = e.dataTransfer.getData(DND_ANON_ROLE);
+      // (PLAYER_ROLES as readonly string[]).includes(...) 而不是直接斷言：dataTransfer 拿到
+      // 的是任意字串（理論上可以被瀏覽器擴充功能之類的東西塞進奇怪的值），先用 includes
+      // 縮小範圍再斷言型別，跟這個檔案上面 handlePointerDown 判斷 activeTool 是同一招。
+      if (anonRole && (PLAYER_ROLES as readonly string[]).includes(anonRole)) {
+        const role = anonRole as PlayerRole;
+        const { x: rawX, y: rawY } = fromScreen(e.clientX, e.clientY, courtRef.current);
+        const norm = toNorm({ x: rawX, y: rawY });
+        const anonPlayer: SnapshotPlayer = {
+          // 每次拖曳都鑄一個全新的合成 id，是「拖出去一個、原位還留一個」這個決策唯一
+          // 需要動腦筋的地方：placeSessionPlayer 是用 sourcePlayerId **upsert**（同一個 id
+          // 再放一次＝原地覆蓋，不是新增一筆），如果整排 OH 共用同一個固定 id（例如都叫
+          // "anon-oh"），拖第二個 OH 上場只會把第一個 OH 的位置改掉——場上永遠只有一個
+          // OH，跟 PO 要的「無限供應、可以同時有兩個 OH」正好相反。uuidv4() 保證每次都是
+          // 獨一無二的身分，兩個 OH 才能真的同時存在、各自能被拖曳/刪除而不影響對方。
+          sourcePlayerId: `anon-${role.toLowerCase()}-${uuidv4()}`,
+          // 沒有真名字，直接顯示角色代碼——PlayerNode.tsx/PlayerMarker.tsx 會在 number===0
+          // 時把圈裡的內容換成 role（見那兩個檔案的說明），所以這裡兩個欄位是一致的。
+          name: role,
+          number: 0,
+          role,
+          x: norm.x,
+          y: norm.y,
+          isLibero: role === "L",
+        };
+        placeSessionPlayer(anonPlayer);
+        return;
+      }
+    }
+
+    // 以下沿用「從名單拖球員」既有路徑：輪轉視圖一定要有比賽（沒有比賽就沒有輪轉表可以
+    // 動）；戰術視圖的名單拖曳目前也只有選了比賽才有名單可拖（見下面 tactics 分支）。
     if (!matchId) return;
     const playerId = e.dataTransfer.getData("text/plain");
     if (!playerId || !courtRef.current) return;

@@ -4,6 +4,10 @@ import NavIconSvg from "./NavIconSvg";
 // 「匯出／匯入」導覽圖示：存檔片（save/floppy）造型——外框＋底部口袋＋左上角折角，三條路徑。
 // 動畫機制跟其他導覽圖示同一套（見 index.css 的 .nav-icon-draw 說明），長度是圖示來源
 // 工具量出來的真實路徑長。
+// #372：NavRail 不再渲染這顆圖示——左欄的「出」那一格連同匯出／匯入的子清單整組拆掉了
+// （見 NavRail.tsx 開頭的說明）。但匯出／匯入功能本身沒有被砍，只是搬家：移到戰術板頁
+// （TacticsBoard.tsx），是另一個 issue 的範圍，這裡先保留這顆圖示等它接手用，不要因為
+// 「NavRail 暫時沒有 import」就誤判成死碼刪掉。
 export default function NavSaveIcon({ className }: { className?: string }) {
   return (
     <NavIconSvg className={className}>

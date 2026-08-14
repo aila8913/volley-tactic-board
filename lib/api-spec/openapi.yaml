@@ -873,15 +873,31 @@ paths:
     get:
       operationId: listTactics
       tags: [tactics]
-      summary: List all saved tactics for the current user
+      summary: List saved tactics for the current user, filtered by matchId / scope, newest-updated first
       parameters:
         # 依比賽過濾戰術庫（#119）。帶 matchId 就只回這場的戰術，戰術面板才不會跨場汙染。
-        # 不帶就回全部（保留舊行為）。
         - name: matchId
           in: query
           required: false
           schema:
             type: integer
+        # #372 決策④：空板（沒有 matchId）進戰術板時，也要能只看「全域戰術庫」——
+        # 也就是 matchId 為 null 的那些。這個需求乍看可以用 matchId 參數表達，但其實不行：
+        # URL query string 沒辦法區分「?matchId=」（空字串）跟「完全不帶 matchId」，
+        # 兩者在 Express 收到的 req.query 裡都很難乾淨地跟「matchId 是 null」畫上等號——
+        # 「只要 matchId 是 null 的」這個篩選條件，本質上就是表達不出來，所以另開一個
+        # 明確的旗標 scope=global 來表達。
+        # 三種模式：
+        #   - 帶 matchId：只回那場比賽的戰術（#119，不變）
+        #   - 帶 scope=global：只回 matchId IS NULL 的戰術（空板進去的戰術庫）
+        #   - 都不帶：回全部（不變）
+        # 如果兩者同時帶，matchId 贏（前端不會同時送兩個，這裡只是把行為講清楚）。
+        - name: scope
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [global]
       responses:
         "200":
           description: List of tactics

@@ -144,8 +144,13 @@ export default function PlayerNode({
   const handlePointerUp = (e: React.PointerEvent) => {
     setIsDragging(false);
     (e.target as Element).releasePointerCapture(e.pointerId);
-    if (!matchId) return;
 
+    // #372：這裡原本是一道 `if (!matchId) return;` 擋在最前面。兩個分支對 matchId 的需求
+    // 其實不一樣——戰術視圖只動 session 快照裡的座標（moveSessionPlayer），跟哪一場無關；
+    // 輪轉視圖才真的要寫進那一場的輪轉表（placePlayerOnCourt 第一個參數就是 matchId）。
+    // 統一擋在最前面的後果是：空板（/board）上從位置調色盤拖上場的球員，放下去之後就再也
+    // 拖不動了——手勢照樣跑完、座標卻沒寫回 session，看起來像球員自己彈回原位。
+    // 所以 guard 下移到真正需要它的那一個分支。
     if (courtView === "tactics" && dragPos) {
       if (isLibero && isOverBench) {
         // 拖出球場下緣＝送回備位、不上場，等同右鍵移除，只是換一個拖曳手勢完成。
@@ -157,7 +162,7 @@ export default function PlayerNode({
       }
       setDragPos(null);
       setIsOverBench(false);
-    } else if (courtView === "rotation" && dragZone !== null) {
+    } else if (courtView === "rotation" && dragZone !== null && matchId) {
       // 輪轉視圖：格子吸附並推算全部 6 輪
       placePlayerOnCourt(matchId, position.playerId, dragZone);
       setDragZone(null);
@@ -189,6 +194,12 @@ export default function PlayerNode({
           細邊框，圈裡固定背號、圈下姓名，不再套用 circleLabel 三選一。 */}
       <PlayerMarker
         number={player.number}
+        // #372 決策②：位置調色盤拖出來的匿名球員 number 固定是 0（見 Court.tsx
+        // handleDrop），這裡用「背號是不是 0」當判準，把圈裡要印的內容換成角色代碼——
+        // 判準寫在這裡（呼叫端）而不是 PlayerMarker 內部，是因為「0 代表匿名」是這個
+        // 資料模型（SnapshotPlayer/MatchPlayer）自己的規則，PlayerMarker 只管畫圖，不該
+        // 替呼叫端猜測 0 是什麼意思（見 circleText 的說明）。
+        circleText={player.number === 0 ? player.role : undefined}
         name={player.name || player.role}
         color={stateColor}
         radius={radius}

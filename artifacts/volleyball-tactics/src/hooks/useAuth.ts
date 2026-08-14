@@ -13,8 +13,10 @@ import {
 } from "@workspace/api-client-react";
 
 export function useAuth() {
-  // queryKey 必填是這批 generated hook 的既有規則（見 NavRail.tsx useListTactics 同樣的
-  // 註解）：跟 hook 內部預設值一模一樣的鍵，用對應的 getXxxQueryKey 產生。
+  // queryKey 必填是這批 generated hook 的既有規則：跟 hook 內部預設值一模一樣的鍵，用
+  // 對應的 getXxxQueryKey 產生（#372：這裡原本指向 NavRail.tsx 一個帶 `enabled` 條件、
+  // 所以要手動補 queryKey 的例子，那段訂閱已經隨子清單機制一起刪除，見 hooks/useMatches.ts
+  // 開頭同一種寫法的完整說明）。
   const { data, isLoading, isError, error } = useGetCurrentUser({
     query: { retry: false, queryKey: getGetCurrentUserQueryKey() },
   });

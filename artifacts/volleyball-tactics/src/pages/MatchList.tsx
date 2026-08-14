@@ -10,7 +10,7 @@ import ListItemCard from "@/components/ListItemCard";
 import ListScrollArea from "@/components/ListScrollArea";
 import MatchEntryLinks from "@/components/MatchEntryLinks";
 import AppShell from "@/components/AppShell";
-import ListNavRail from "@/components/ListNavRail";
+import NavRail from "@/components/NavRail";
 import MatchInfoRail from "@/components/MatchInfoRail";
 import { useMatchRailSelection } from "@/hooks/useMatchRailSelection";
 import { APP_BACKGROUND_STYLE, APP_SHELL_CLASS } from "@/lib/appChromeStyles";
@@ -156,9 +156,10 @@ export default function MatchList() {
 
   return (
     // issue #172：三欄骨架交給 AppShell，這裡只負責「這一頁的視覺」（背景）跟「這一頁要塞進
-    // 哪些插槽」。mode="A"（列表瀏覽）、nav 是共用導覽軌（沒有 matchId——這頁本來就不屬於
-    // 任何一場比賽，NavRail 會把「計/數/戰/出」渲染成停用態，issue #173：點下去會跳 toast
-    // 「先選一場比賽」，不是完全不可互動）。
+    // 哪些插槽」。mode="A"（列表瀏覽）、nav 是共用導覽軌。
+    // #372：左欄改成「比/數/戰/人」四格固定連結，不再需要知道「目前選中哪一場比賽」——
+    // 原本這裡用 ListNavRail 把 selected 翻譯成 matchId 餵給 NavRail（給「計/戰/出」判斷
+    // 停用態），那一整層翻譯已經沒有存在的理由，直接用 NavRail 本人（ListNavRail.tsx 已刪除）。
     // aside（issue #174）：右欄資訊欄，內容完全交給 MatchInfoRail 依 selected 決定要顯示
     // 空狀態／資料夾摘要／比賽站位——這一頁只負責把「目前選中什麼」傳過去，不自己判斷要
     // 渲染哪一種畫面。
@@ -170,7 +171,7 @@ export default function MatchList() {
       mode="A"
       nav={
         <div className="relative z-10 h-full">
-          <ListNavRail selected={selected} />
+          <NavRail backHref="/" active="list" />
         </div>
       }
       aside={
@@ -203,8 +204,8 @@ export default function MatchList() {
             <h1 className="font-dash text-2xl font-bold">比賽列表</h1>
             {/* §3.1 的操作列，由左至右：篩選（方形圖示鈕）、新增資料夾、新增比賽。 */}
             {/* 跨場紀錄本的入口以前在這裡放一顆 BarChart 小圖示，現在收斂到左欄導覽軌的「數」
-                （沒選比賽時「數」就通往 /analytics，見 NavRail.tsx analyticsHref）——同一個目的地
-                不再有兩個入口，避免使用者困惑，也讓「隨時翻得開的紀錄本」統一從那條軌進出。 */}
+                （固定通往 /analytics，見 NavRail.tsx）——同一個目的地不再有兩個入口，避免
+                使用者困惑，也讓「隨時翻得開的紀錄本」統一從那條軌進出。 */}
             <div className="flex gap-3">
               <button
                 type="button"

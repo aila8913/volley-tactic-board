@@ -31,7 +31,6 @@ import {
   INFO_RAIL_BASE_CLASS,
 } from "@/lib/appChromeStyles";
 import { filterLineupToRoster, isLineupFull, lineupToPositions } from "@/lib/rotationLogic";
-import { captureFromScoreSheet, captureBlank } from "@/lib/courtSnapshot";
 import { resolveLiberoOnRotation } from "@/lib/liberoRotation";
 
 // 6 大類跟 lib/db/src/schema/events.ts 的 eventActionEnum 對齊（見
@@ -594,25 +593,12 @@ export default function ScoreSheet() {
     setSelectedBenchPlayer(null);
   };
 
-  // 左側導覽軌（issue #173，原 issue #160 C3 的 TacticsRailMenu 已收斂進 NavRail）「戰」
-  // 子清單的「+ 新增戰術」：NavRail 自己管開關/清單/彈窗，這裡只需要告訴它「計分頁的『現在
-  // 站位』要怎麼查」——見 NewTacticDialog.tsx 開頭那段「為什麼擷取來源要由呼叫端注入」的
-  // 說明。計分頁的現在站位＝activeLineup（計分表自己的逐局先發快照）。為什麼不直接讀全域
-  // 輪轉表 store：activeLineup 已經幫我們處理好「開賽前讀共用站位、開賽後讀該局凍結快照」
-  // 的分岔，而戰術板要的是「計分頁此刻畫面上那一份」——第 3 局進行中時，共用站位可能已經
-  // 被改成第 4 局的先發了，直接讀 store 會抓到未來的陣容。
-  const captureCurrentForBoard = () => {
-    if (!activeZones || !currentSet) {
-      // 理論上不會被呼叫到——NavRail 在 captureDisabled 為真時，會把「擷取
-      // 目前站位」這個選項停用，使用者按不到這裡。但 captureCurrent 的型別要求永遠回傳一張
-      // CourtSnapshot（不能是 null/undefined），所以保底給一張空站位，純粹滿足型別、不會
-      // 真的被用到。
-      return captureBlank({ matchId: id });
-    }
-    return captureFromScoreSheet(activeZones, currentSet.ourRotation, match.players, {
-      matchId: id,
-    });
-  };
+  // #372 之前這裡有一個 captureCurrentForBoard：計分頁的左欄「戰」子清單「+ 新增戰術」
+  // 需要呼叫端注入「現在站位怎麼擷取」的邏輯（見 NewTacticDialog.tsx 開頭那段說明）。
+  // NavRail 拆掉子清單機制之後（見 NavRail.tsx 開頭的說明），計分頁不再是「新增戰術」的
+  // 入口，這段邏輯沒有消費者了，連同只被它用到的 captureFromScoreSheet／captureBlank
+  // import 一起刪除。想在計分頁開新戰術，現在要先用左欄「戰」去空板戰術板頁，或從比賽卡片
+  // 的入口進計分頁旁邊的戰術板——這條路徑本身怎麼接，是戰術板頁那個子任務的範圍。
 
   // 比分卡能不能點：currentSet 存在、且已經選過發球方。**不能只看 !!currentSet**——開賽前
   // 「誰先發球」畫面共用同一份 scoreDisplay，那時候的 currentSet 其實是 makeEmptySet 佔位
@@ -761,18 +747,11 @@ export default function ScoreSheet() {
       style={APP_BACKGROUND_STYLE}
       nav={
         <div className="relative z-10 h-full">
-          <NavRail
-            matchId={id}
-            backHref={backHref}
-            active="record"
-            // issue #160 C3 起，計分頁的「戰」就不是單純導覽連結，而是列出已存戰術＋新增戰術的
-            // 子清單——#173 把這段行為從獨立的 TacticsRailMenu 收斂進 NavRail 本身，這裡不用
-            // 再像以前那樣透過 boardSlot 塞一整塊自訂 UI 進去，只需要把「擷取現在站位」這一小段
-            // 因頁而異的邏輯傳進去。
-            captureCurrent={captureCurrentForBoard}
-            captureLabel="擷取目前計分站位"
-            captureDisabled={!activeZones || !currentSet}
-          />
+          {/* #372：計分頁在左欄沒有對應的格子了——四格判準是「不需要先選比賽」，計分頁恰好
+              是唯一「一定要先選比賽」才有意義的頁面，所以 active 傳 "none"（NavRailProps 特地
+              加了這個值，見 NavRail.tsx），四格都不亮，不是漏寫。這一頁現在只從比賽卡片展開
+              的入口進（MatchEntryLinks.tsx），不再是可以在左欄之間直接互跳的目的地。 */}
+          <NavRail backHref={backHref} active="none" />
         </div>
       }
       aside={

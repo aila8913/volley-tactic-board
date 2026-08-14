@@ -18,7 +18,18 @@ import type { Marker, DefenseRange } from "./tacticsBoard";
 export interface SnapshotPlayer {
   // sourcePlayerId 僅供追溯用（例如未來想做「這個球員後來去哪了」之類的除錯/分析）。
   // 渲染畫面、或再次存檔時，一律不得拿這個 id 回名單查資料——那樣就違背了「快照」的意義，
-  // 又變回正規化、又會被刪球員/改名污染。null 代表這個站位當初就查無此人（幽靈 id）。
+  // 又變回正規化、又會被刪球員/改名污染。這個欄位現在有三種來源：
+  //   - 真實球員 id：從名單（TacticsRosterPanel／輪轉表）拖上場的球員，是這個人在
+  //     「這一場」名單裡的 id。
+  //   - null：這個站位當初就查無此人（幽靈 id，例如舊資料指到後來被刪掉的球員）。
+  //   - 合成 id（"anon-<role>-<uuid>"，issue #372 決策②的位置調色盤）：這個站位一開始就
+  //     不是從任何名單拖出來的，是直接拖一個「位置代表」（OH/S/MB/OPP/L 其中一種）上場，
+  //     本來就沒有「來源球員」這回事——合成一個唯一 id 只是為了讓下面 placeSessionPlayer
+  //     的 upsert 邏輯能區分「這是哪一個」（每次拖曳鑄一個新 id，兩個 OH 才不會共用同一個
+  //     id 而互相覆蓋，見 Court.tsx handleDrop 的說明）。
+  // 上面「不得拿這個 id 回名單查資料」的規則對第三種一樣成立，而且正是它能安全存在的
+  // 理由：反正沒有任何程式碼會拿它去查 roster，一個查無此人的合成 id 跟一個真實 id、
+  // 或是 null，對渲染層而言沒有差別，都只是「拿一個字串/null 當 React key 用」。
   sourcePlayerId: string | null;
   name: string;
   number: number;

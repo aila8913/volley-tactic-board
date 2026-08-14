@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and } from "drizzle-orm";
+import { eq, and, isNull, desc } from "drizzle-orm";
 import { db, tacticsTable } from "@workspace/db";
 import { requireAuth } from "../middleware/requireAuth";
 import { matchBelongsToUser, tacticBelongsToUser } from "../lib/ownership";
@@ -19,29 +19,41 @@ const router: IRouter = Router();
 // 所有戰術路由都套用 mock auth，userId 會被注入到 req.userId
 router.use(requireAuth);
 
-// GET /tactics — 取得目前使用者的戰術，按建立時間新→舊排列。
-// 帶 ?matchId=<n> 就只回那場比賽的戰術（#119：戰術庫 per-match，面板不再跨場汙染）；
-// 不帶就回全部（保留舊行為）。
+// GET /tactics — 取得目前使用者的戰術，按最近修改時間新→舊排列。
+// 排序原本是 orderBy(createdAt)（遞增），代表「最早建立的排最前面」——這對一個瀏覽用的
+// 列表來說是反的（使用者通常想先看到最近動過的那份），#372 決策④ 順手把它釘成
+// 「最近修改優先」：desc(updatedAt)。
+//
+// 三種篩選模式（詳細理由寫在 openapi.yaml 的 parameters 註解，這裡只列行為）：
+//   - 帶 ?matchId=<n>：只回那場比賽的戰術（#119：戰術庫 per-match，面板不再跨場汙染）
+//   - 帶 ?scope=global：只回 matchId 是 null 的戰術（空板進去看到的戰術庫，#372 決策④）
+//   - 都不帶：回全部（保留舊行為）
+//   - 兩者都帶：matchId 贏（前端不會這樣送，這裡只是講清楚優先序）
 // owns: "public" ——這支路由本身不驗證任何單一資源的擁有權，因為它查的是
 // 「這個 userId 名下的戰術」，擁有權篩選就發生在下面的 where 條件裡（eq(tacticsTable.userId, ...)），
 // 不是靠 handler() 的 owns 機制擋。用 "public" 而不是留空，是因為 owns 是必填欄位（見 handler.ts 的說明）。
 router.get(
   "/tactics",
   handler({ owns: "public" }, async ({ req, res }) => {
-    const { matchId } = ListTacticsQueryParams.parse(req.query);
+    const { matchId, scope } = ListTacticsQueryParams.parse(req.query);
 
     const tactics = await db
       .select()
       .from(tacticsTable)
       .where(
-        // 一律先鎖 userId（擁有權），有帶 matchId 再多疊一個等值條件。
-        // and(...) 接受 undefined 會自動略過，所以沒帶 matchId 時等同只有 userId 條件。
+        // 一律先鎖 userId（擁有權），再依情況多疊一個條件：
+        // 有 matchId 就等值比對；沒有 matchId 但 scope 是 global 就篩 matchId IS NULL；
+        // 都沒有就是 undefined（and() 會自動略過，等同只剩 userId 條件）。
         and(
           eq(tacticsTable.userId, req.userId),
-          matchId !== undefined ? eq(tacticsTable.matchId, matchId) : undefined,
+          matchId !== undefined
+            ? eq(tacticsTable.matchId, matchId)
+            : scope === "global"
+              ? isNull(tacticsTable.matchId)
+              : undefined,
         ),
       )
-      .orderBy(tacticsTable.createdAt);
+      .orderBy(desc(tacticsTable.updatedAt));
 
     res.json(tactics);
   }),

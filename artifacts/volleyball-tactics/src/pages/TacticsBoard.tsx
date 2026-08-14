@@ -1,27 +1,49 @@
-import React, { useEffect } from "react";
-import { useParams } from "wouter";
+import React, { useEffect, useState } from "react";
+import { useParams, useLocation } from "wouter";
 import AppShell, { ShellMode } from "../components/AppShell";
 import NavRail, { matchBackHref } from "../components/NavRail";
 import NewTacticDialog from "../components/NewTacticDialog";
+import BoardMatchPicker from "../components/BoardMatchPicker";
+import TacticsExportMenu from "../components/TacticsExportMenu";
 import RotationTable from "../components/RotationTable";
 import TacticsBoardPanel from "../components/TacticsBoardPanel";
 import TacticsEditToolRail from "../components/TacticsEditToolRail";
 import TacticsRosterPanel from "../components/TacticsRosterPanel";
+import PositionPalette from "../components/PositionPalette";
 import Court from "../components/Court";
 import { useMatchWithRoster } from "../hooks/useMatches";
 import { useRotationTable } from "../hooks/useRotationTable";
-import { useTacticsBoard } from "../hooks/useTacticsBoard";
+import { useTacticsBoard, isSessionDirty } from "../hooks/useTacticsBoard";
 import { useTacticsBoardController } from "../hooks/useTacticsBoardController";
 import { APP_BACKGROUND_STYLE, APP_SHELL_CLASS } from "../lib/appChromeStyles";
-import { captureCurrentRotation } from "../lib/captureCurrentRotation";
 import { PRIMARY_BTN_CLASS } from "../lib/tacticsBoardStyles";
 
+// #372：aside 裡「這裡本來要放輪轉/名單面板，但目前沒有選比賽」的共用空狀態卡片。
+// 抽成模組層級的小元件（不是寫在 JSX 裡的一段 <div>）純粹是因為 mode B／D 兩處都要用同一段
+// 文案，抽出來才不會有人改了一邊的措辭、忘了改另一邊。內容只是一段說明文字，不需要 props。
+function BoardNoMatchPlaceholder() {
+  return (
+    <div className="p-3 text-xs text-[#a9b096]">
+      還沒選比賽——上方可以選一場借名單與最後輪轉站位，或直接從右側工具軌拖位置上場。
+    </div>
+  );
+}
+
 export default function TacticsBoard() {
-  const { id } = useParams<{ id: string }>();
-  // URL 的 id 是字串，後端 match id 是整數，取用前轉成 number。
-  const { match } = useMatchWithRoster(Number(id));
+  // #372：/board（空板）沒有 :id 這個路由段，id 會是 undefined。matchId 統一改成
+  // `string | null`（undefined 對「沒有值」這件事沒有額外語意，用 null 讓下面每處判斷跟
+  // 其他地方既有的「matchId: string | null」型別——例如 CourtSnapshot.matchId——一致，不用
+  // 到處寫 `id ?? undefined` / `id ?? null` 混用）。
+  const { id } = useParams<{ id?: string }>();
+  const matchId = id ?? null;
+  const [, setLocation] = useLocation();
+  // URL 的 id 是字串，後端 match id 是整數，取用前轉成 number。沒有比賽時 enabled=false，
+  // 這條查詢完全不會發——不然 Number(undefined) 會是 NaN，送去打 /matches/NaN 只會換來一個
+  // 400，還會在 React Query 的快取裡佔一個沒有意義的 key。
+  const { match } = useMatchWithRoster(Number(id), matchId !== null);
   const setRoster = useRotationTable((state) => state.setRoster);
   const resetBoardView = useTacticsBoard((state) => state.resetBoardView);
+  const startSession = useTacticsBoard((state) => state.startSession);
   // session !== null＝正在編輯一張戰術：這一個欄位同時決定「AppShell 要用 mode B / C / D」
   // （下面）跟「aside/tools 該放什麼」，是這一環（issue #176）新增的唯一畫面分支——issue #177
   // 再加一層：session.arranging 進一步決定 C 跟 D 兩態。
@@ -55,26 +77,78 @@ export default function TacticsBoard() {
   // 變動（跨場）才會清掉 session；同一場（例如從計分頁的「快速戰術板」按鈕先 startSession()
   // 再導航過來，見 ScoreSheet.tsx）進來時，交棒的 session 會被保留（issue #160 C3）。
   useEffect(() => {
-    resetBoardView(id);
-  }, [id, resetBoardView]);
+    resetBoardView(matchId);
+  }, [matchId, resetBoardView]);
 
   // 進入戰術板時，把這場比賽名單帶進來，這樣球員設定才會跟外面比賽列表輸入的資訊一致。
   // 只在比賽資料本身變動時才重新同步，不然每次 render 都會跑。
   // setRoster 現在要指定 matchId（issue #119）：名單存進「這一場」的分片，不會污染別場。
+  // 沒有比賽（match/matchId 任一為空）時整段 no-op——空板沒有名單可帶，也不該把上一場
+  // 殘留的 match 資料（React Query 快取還沒切換完成前的舊值）誤塞進某個分片。
   useEffect(() => {
-    if (match && id) {
-      setRoster(id, match.players);
+    if (match && matchId) {
+      setRoster(matchId, match.players);
     }
-  }, [match, id, setRoster]);
+  }, [match, matchId, setRoster]);
+
+  // #372 決策②③：header 的「選比賽」下拉選了別場之後，要「借那一場最後的輪轉站位」直接
+  // 開一個佈陣中（mode D）的 session——但站位資料要等新場的名單真的進了 useRotationTable
+  // 才讀得到（見上面的 setRoster 效果）。這裡先把「選了哪一場、還沒借到站位」記在一個
+  // local state，等下面這個效果偵測到「路由已經切到那一場、而且（透過上面那個效果）名單
+  // 應該也已經寫進 store 了」才真的去借。
+  //
+  // 為什麼用 local useState 而不是塞進 Zustand：這個旗標只有這個頁面自己在乎（「我剛剛
+  // 導頁過來，是不是該借站位」），沒有其他元件需要知道，符合這個檔案一貫「跨元件共用才進
+  // store、頁面自己的暫時狀態留在 local」的分法（同一種考量見 TacticsEditToolRail.tsx 的
+  // rosterOpen）。
+  const [pendingRotationMatchId, setPendingRotationMatchId] = useState<string | null>(null);
+
+  // ⚠️ 這個效果必須寫在上面 setRoster 效果的**後面**（原始碼順序，不是執行時機的巧合）：
+  // React 對同一次 commit 裡的多個 useEffect，是照它們在元件裡出現的先後順序依序執行的。
+  // 當「切場後名單終於抓回來」這一刻發生時（match 從 undefined 變成有值），上面的 setRoster
+  // 效果與這個效果會在**同一次 commit**裡先後被呼叫——upstream 先把新名單寫進
+  // useRotationTable，這個效果才呼叫 controller.captureCurrentFromRotation()，而它內部是用
+  // useRotationTable.getState() 讀「當下」的 store（見 useTacticsBoardController.ts 的說明），
+  // 不是 React 訂閱值，所以能不能讀到剛寫進去的名單，完全取決於「寫」跟「讀」誰先執行。
+  // 如果這兩個效果的順序對調（讀寫效果先於寫入效果），這裡讀到的會是切場前的舊分片（或空的），
+  // 借回來的站位就會是錯的一場——而且因為兩份資料形狀相似，錯誤不容易被肉眼發現，是那種
+  // 「日後有人為了排版方便把效果搬動順序」就會悄悄壞掉的耦合，所以特別寫這段註解說明。
+  const captureCurrentFromRotation = controller.captureCurrentFromRotation;
+  useEffect(() => {
+    if (pendingRotationMatchId !== null && matchId === pendingRotationMatchId && match) {
+      startSession(captureCurrentFromRotation(), { arranging: true });
+      setPendingRotationMatchId(null);
+    }
+  }, [pendingRotationMatchId, matchId, match, startSession, captureCurrentFromRotation]);
+
+  // header 的「選比賽」下拉觸發的入口：決定要不要跳確認、要不要導頁、要不要之後借站位。
+  // 三種狀況都在這裡集中處理，BoardMatchPicker 本身只負責畫下拉、回報選了什麼（見該檔案
+  // 開頭的說明），不知道選了之後會發生什麼事。
+  const handleSelectMatch = (chosen: string | null) => {
+    // 決策③：板上有未存內容時，選比賽「跳確認、確認後套用」——不是「拒絕、請使用者自己先清
+    // 空再選」。使用者按了「確定」代表他知道會蓋掉現有內容，直接照做；按「取消」則什麼都不做，
+    // 下拉的顯示值繼續綁著目前的 matchId（controlled component，見 BoardMatchPicker 的
+    // matchId prop），畫面會自然「彈回」原本選的那一項，不需要另外處理。
+    if (isSessionDirty(session)) {
+      const proceed = window.confirm(
+        "板上已有內容。選擇比賽會改用那一場最後的輪轉站位，現有內容會被放棄，確定嗎？",
+      );
+      if (!proceed) return;
+    }
+    if (chosen === null) {
+      // 選「未選比賽（空板）」：單純導頁，不借站位、不開 session——空板本來就沒有站位
+      // 可以借，直接進去讓使用者從空球場開始。
+      setLocation("/board");
+      return;
+    }
+    // 記下「等一下要借這一場的站位」，navigate 之後 id 改變、名單抓回來，上面那個效果
+    // 會接手把 session 開起來（見上面「⚠️」的順序說明）。
+    setPendingRotationMatchId(chosen);
+    setLocation(`/matches/${chosen}/board`);
+  };
 
   // tournamentId 存在時返回該資料夾頁，否則返回根列表。
   const backHref = matchBackHref(match?.tournamentId);
-
-  // issue #173：左欄 NavRail「戰」子清單的「+ 新增戰術」需要呼叫端注入的「現在站位」擷取
-  // 邏輯——這一頁的「現在」＝輪轉表當下排的站位。四個呼叫端（這裡、TacticsBoardPanel、
-  // 兩個列表頁）共用 lib/captureCurrentRotation，那個檔案開頭說明了為什麼可以抽成共用模組
-  // 卻不會弱化 #154 的單向依賴防線（重點：抽出去的同時把它一起加進 eslint 的禁止清單，
-  // 否則白板 store 就能靠 import 這個工具繞過原本擋掉的相依）。
 
   return (
     // issue #172：三欄骨架交給 AppShell（mode="B"＝戰術唯讀）。這一頁比另外四頁複雜，有三個
@@ -135,16 +209,11 @@ export default function TacticsBoard() {
         // 各刻各的、樣式不統一。現在三個頁共用同一個 NavRail，導覽只在一個地方定義。外面包
         // 一層 `relative z-10 h-full`，理由見上面第 2 點的說明。
         <div className="relative z-10 h-full">
-          <NavRail
-            matchId={id ?? ""}
-            backHref={backHref}
-            active="board"
-            captureCurrent={() => captureCurrentRotation(id ?? "")}
-            captureLabel={`將複製當下輪次的站位`}
-            // 這一頁沒有「先發還沒排好」這種需要停用的情境（輪轉表沒排位置時
-            // captureFromRotation 就回一張 players 是空陣列的快照，仍然是一個合法的
-            // CourtSnapshot——空戰術當起點本身沒問題，不需要為此停用按鈕）。
-          />
+          {/* #372：NavRail 不再吃 matchId／captureCurrent 這些站位擷取相關的 props——左欄
+              「戰」不再是需要注入擷取邏輯的子清單，是固定通往這一頁的連結（見 NavRail.tsx
+              開頭的說明）。這一頁自己的「+ 新增戰術」現在走中央浮層 NewTacticDialog（下面
+              Court 那一段），擷取邏輯（captureCurrentRotation）留在那裡繼續用，不是被刪掉。 */}
+          <NavRail backHref={backHref} active="board" />
         </div>
       }
       aside={
@@ -173,8 +242,24 @@ export default function TacticsBoard() {
         // 撐滿 AppShell 給的欄位高度。
         <div className="relative z-10 flex h-full flex-col border-l border-white/[0.08] bg-white/[0.02] backdrop-blur-sm">
           {session?.arranging ? (
-            <div className="min-h-0 flex-1 overflow-y-auto p-3">
-              <TacticsRosterPanel matchId={id ?? ""} />
+            <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3">
+              {/* #372 決策②：位置調色盤永遠顯示（不靠 matchId）——這一輪把「空板佈陣時
+                  右欄完全沒東西可用」這個缺口補上：RotationTable／TacticsRosterPanel 都靠
+                  matchId 去讀「這一場」的分片，空板沒有這一場（見 RotationTable.tsx 開頭，
+                  matchId undefined 時 useRotationTable selector 回傳 undefined，畫出來的是
+                  0 個球員的清單，比起「什麼都沒有」更容易讓人誤以為是 bug），以前這裡整段
+                  換成一張純文字說明卡片，現在換成真的能用的調色盤：使用者不用先選比賽，
+                  也能直接拖位置上場。
+                  有比賽時名單面板疊在調色盤下面——⚠️「選了比賽之後，位置調色盤要不要留著
+                  跟真名單並存」是版面上還沒拍板的開放問題（PO @tangyi1025 在 #372 待決），
+                  這裡「兩塊都畫出來」只是先給一個具體畫面讓她有東西可以反應，不是定案的
+                  最終版面。 */}
+              <PositionPalette />
+              {matchId && (
+                <div className="border-t border-white/[0.08] pt-3">
+                  <TacticsRosterPanel matchId={matchId} />
+                </div>
+              )}
             </div>
           ) : (
             <>
@@ -182,7 +267,11 @@ export default function TacticsBoard() {
                 這裡不需要再包一層捲動容器，只需要讓它跟下面 TacticsBoardPanel 各自
                 佔一半高度、都能在內容太長時各自捲動，不會互相把對方擠出畫面。 */}
               <div className="min-h-0 flex-1 border-b border-white/[0.08]">
-                <RotationTable />
+                {/* 同上：空板沒有這一場的輪轉/名單可以顯示，換成同一張說明卡片。
+                    TacticsBoardPanel（下面那一塊、全域戰術庫）完全不受影響，繼續渲染——
+                    #372 決策④要的正是「空板仍然看得到戰術庫」，只是庫的內容改成全域戰術
+                    （過濾邏輯在 useTacticsBoardController.ts）。 */}
+                {matchId ? <RotationTable /> : <BoardNoMatchPlaceholder />}
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto">
                 <TacticsBoardPanel
@@ -203,8 +292,12 @@ export default function TacticsBoard() {
         // 但 z-index 機制是 AppShell 通用的，其他頁面的 .tb-beam 還是這一層 stacking，
         // 保留這個 wrapper 不會有壞處，之後要重新掛背景層時也不用回頭補）。
         <div className="relative z-10 h-full">
+          {/* #372：matchId 現在可能是 null（空板也能進 mode C 編輯）——TacticsEditToolRail
+              的 prop 型別已經放寬成 string | null，這裡直接傳 matchId 就好，不用再兜一個
+              假的空字串。工具軌內部只有「換球員」浮層真的需要用到 matchId，沒有比賽時那塊
+              浮層自己會換成提示文字（見 TacticsEditToolRail.tsx）。 */}
           <TacticsEditToolRail
-            matchId={id ?? ""}
+            matchId={matchId}
             onSave={controller.handleSave}
             onSaveAs={controller.handleSaveAs}
             onCancel={controller.handleCancel}
@@ -224,8 +317,22 @@ export default function TacticsBoard() {
       {/* 中央主區：header 以前橫跨整頁（在 nav／中央／aside 三欄「上面」置中），現在拆進
           AppShell 之後，header 只會置中在中央主區這一欄的寬度裡——這是這一環唯一刻意的
           小幅視覺位移（issue #172 任務說明裡明確列出的例外），其餘畫面維持原樣。 */}
-      <header className="relative z-10 flex shrink-0 items-center justify-center border-b border-white/[0.08] bg-white/[0.02] px-4 py-3 backdrop-blur-sm">
-        <h1 className="text-lg font-bold">{match ? `vs ${match.opponent}` : "戰術板"}</h1>
+      <header className="relative z-10 flex shrink-0 items-center justify-center gap-2 border-b border-white/[0.08] bg-white/[0.02] px-4 py-3 backdrop-blur-sm">
+        {/* #372 決策②：header 原本是一句唯讀文字（「vs 誰誰誰」／沒有比賽時寫死「戰術板」），
+            現在戰術板可以不綁比賽，「有沒有比賽」不再是進得了這一頁的前提，而是使用者隨時
+            可以切換的一個選項——所以這裡換成一顆下拉選單，選了哪一場（或選「空板」）都在這
+            一顆元件裡處理完，不需要另外一顆靜態標題。 */}
+        <span className="text-lg font-bold">戰術板</span>
+        <BoardMatchPicker matchId={matchId} onSelect={handleSelectMatch} />
+        {/* #372 範圍第 3 點：匯出／匯入從左欄 NavRail 的「出」子選單搬回這裡——匯出 PNG
+            抓的是這一頁球場的 DOM（id="court-wrapper"），只有這一頁有，放在球場正上方
+            才誠實（見 TacticsExportMenu.tsx 開頭的完整說明）。用 `absolute right-4` 疊在
+            header 這個 relative 容器的右緣，而不是跟左邊那兩顆元件一起走 flex 排列——
+            header 本身是 `justify-center`（讓標題＋選單維持置中），如果把這顆按鈕塞進同一個
+            flex row，置中基準會被這顆按鈕的寬度拉歪；用 absolute 定位可以「掛在最右邊」跟
+            「中間那組維持置中」兩件事互不干擾。三種模式（B/D/C）都要看得到、都要能用，
+            所以直接掛在 header 層級，不進任何一個 mode 專屬的插槽。 */}
+        <TacticsExportMenu matchId={matchId} />
       </header>
 
       <div className="relative z-10 flex min-h-0 flex-1 overflow-hidden">
@@ -270,9 +377,18 @@ export default function TacticsBoard() {
             <NewTacticDialog
               open={newTacticOpen}
               onClose={closeNewTactic}
-              matchId={id ?? ""}
+              matchId={matchId}
               captureCurrent={controller.captureCurrentFromRotation}
-              captureLabel={`將複製第 ${controller.currentRotation + 1} 輪`}
+              // 沒有比賽時「現有輪轉位」按鈕停用（見下面 captureDisabled）——空板沒有輪轉表
+              // 可以複製，captureLabel 順便誠實講清楚為什麼，而不是留著一句對不上狀態的
+              // 「將複製第 N 輪」（沒有比賽時 controller.currentRotation 固定是 0，那句話會
+              // 誤導使用者以為按了就會複製到「第 1 輪」）。
+              captureLabel={
+                matchId
+                  ? `將複製第 ${controller.currentRotation + 1} 輪`
+                  : "先選一場比賽才有輪轉站位可複製"
+              }
+              captureDisabled={matchId === null}
             />
           </div>
         </div>

@@ -159,15 +159,19 @@ interface TacticsBoardStore {
   confirmArrangement: () => void;
 
   // ── session 內的編輯動作（都作用在當前 session；沒有 session 時是 no-op）──
-  // 球員以 sourcePlayerId 當 key：可編輯 session 的球員都來自 roster 擷取，sourcePlayerId 必為
-  // 非 null，拿來當穩定識別安全（null 只會出現在唯讀檢視的舊快照，那條路不會呼叫這些動作）。
+  // 球員以 sourcePlayerId 當 key：可編輯 session 的球員來源現在有兩種——從名單擷取的
+  // （真實 roster id）跟 issue #372 決策②新增的、從位置調色盤拖入的「匿名角色」（合成
+  // "anon-<role>-<uuid>" id，見 types/courtSnapshot.ts 的 sourcePlayerId 說明、
+  // Court.tsx 的 handleDrop）。兩種來源都保證 sourcePlayerId 非 null，拿來當穩定識別一樣
+  // 安全（null 只會出現在唯讀檢視的舊快照，那條路不會呼叫這些動作）。
   //
   // #304/#361：以下九支動作全部透過 store 內部的 editSession() 走同一套「何時記 undo 歷史」的
   // 規則（見實作處註解），不再各自硬寫。凡是「一次手勢會連續觸發很多次」的動作（拖曳、畫線）
   // 都改用 options.skipHistory 選擇性跳過，交由呼叫端在手勢結束（pointerUp）時補記一次。
   moveSessionPlayer: (sourcePlayerId: string, x: number, y: number) => void;
   removeSessionPlayer: (sourcePlayerId: string) => void;
-  placeSessionPlayer: (player: SnapshotPlayer) => void; // upsert（從名單拖入新球員用）
+  // upsert（從名單拖入新球員／從位置調色盤拖入匿名角色都走這支，見上面的說明）
+  placeSessionPlayer: (player: SnapshotPlayer) => void;
 
   // options.skipHistory：拖曳畫線（arrow/dashed/attack）用 pointerDown 放起點、pointerMove
   // 更新終點、pointerUp 才記一次完整的線。pointerDown 時傳 skipHistory 避免把「起點＝終點」的

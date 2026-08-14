@@ -1,6 +1,7 @@
 import { ComponentType, useState } from "react";
 import { useTacticsBoard, ToolType } from "../hooks/useTacticsBoard";
 import TacticsRosterPanel from "./TacticsRosterPanel";
+import PositionPalette from "./PositionPalette";
 import { PRIMARY_BTN_CLASS, SECONDARY_BTN_CLASS } from "../lib/tacticsBoardStyles";
 import ToolSelectIcon from "./icons/ToolSelectIcon";
 import ToolArrowIcon from "./icons/ToolArrowIcon";
@@ -38,7 +39,11 @@ import ToolDeleteIcon from "./icons/ToolDeleteIcon";
 // 的 attack 渲染都還在（舊戰術裡如果已經畫了 attack 線，讀出來還是要能顯示），只是工具軌
 // 不再提供新增這個工具的入口。
 interface TacticsEditToolRailProps {
-  matchId: string;
+  // #372 part 1：空板（/board）沒有比賽可傳，這裡跟著放寬成 string | null。工具軌本身其他
+  // 部分不受影響（畫筆/防守範圍/undo 都跟 matchId 無關），只有下面「換球員」浮層需要一場
+  // 比賽的名單才有東西可換——沒有 matchId 時那塊浮層改顯示提示文字（見下面用到的地方）。
+  // 這是這一環唯一動到這個檔案的地方，浮層本身的其餘重寫留給後續任務（見任務說明開頭）。
+  matchId: string | null;
   onSave: () => void;
   onSaveAs: () => void;
   onCancel: () => void;
@@ -160,7 +165,9 @@ export default function TacticsEditToolRail({
 
         <div className="h-px w-8 bg-white/[0.14]" />
 
-        {/* 「換」＝球員名單浮層開關，是 toggle（按下去切換一個持續性狀態），跟上面「選一種
+        {/* 「球員」＝球員名單浮層開關，是 toggle（按下去切換一個持續性狀態，直到再按一次才
+          收——issue #372 決策②明確要求「按後常態展開」，不是 hover 型選單，之後不要因為
+          「看起來像選單」就順手改成 hover-to-open，那不是這個按鈕的行為），跟上面「選一種
           工具」語意不同，但視覺上沿用同一顆方鈕、用同一套 active 樣式表示「現在開著」，
           使用者不用學兩套視覺語言。
           （原本這裡還有一顆「號位標示」開關，tang 覺得這功能不必要，已經整顆拿掉——連帶
@@ -284,7 +291,20 @@ export default function TacticsEditToolRail({
               ×
             </button>
           </div>
-          <TacticsRosterPanel matchId={matchId} />
+          {/* #372 決策②：位置調色盤永遠顯示在最上面——它不靠這一場的名單，沒有比賽（空板）
+              也能拖位置上場，所以不能跟下面「有比賽才顯示」的名單面板綁在同一個條件裡。
+              有比賽時名單面板疊在調色盤下面，兩塊並存：⚠️「選了比賽之後，位置調色盤要不要
+              留著跟真名單並存」還是一個開放的版面問題，PO（@tangyi1025）在 #372 還沒拍板，
+              這裡「兩塊都畫出來」只是先給一個具體的畫面讓她有東西可以反應，不是已經定案的
+              最終版面——不要看到這裡就當成規格照抄到別處。 */}
+          <div className="flex flex-col gap-3">
+            <PositionPalette />
+            {matchId && (
+              <div className="border-t border-white/[0.14] pt-3">
+                <TacticsRosterPanel matchId={matchId} />
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

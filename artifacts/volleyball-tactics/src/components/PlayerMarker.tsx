@@ -39,6 +39,14 @@ interface PlayerMarkerProps {
   // 最後定案的樣式一致（見那邊的配色說明）。true 時 fill/stroke 對調、圈角再加「L」徽章；
   // 預設 false 維持其他狀態原本的樣子，不影響既有呼叫端。
   solidFill?: boolean;
+  // #372 決策②：位置調色盤拖出來的「匿名球員」沒有真背號，SnapshotPlayer.number 固定填 0
+  // （見 Court.tsx handleDrop）。圈裡如果照舊印 `number`，畫面上會是一個看起來煞有介事的
+  // 「0 號」，容易被誤讀成「這是背號 0 的球員」而不是「這是一個位置代表」。circleText
+  // 存在時整顆蓋過 number 的顯示（呼叫端會傳角色代碼，例如 "OH"），不傳就是原本行為——
+  // 真球員完全不受影響。刻意不新增/更動 `number` 欄位本身的型別（它仍然乘載「真的背號
+  // 是幾號」這個語意，只是顯示層可以選擇不畫出來），這樣任何拿 number 做計算/比對的既有
+  // 邏輯都不用改，改動收斂在渲染層。
+  circleText?: string;
 }
 
 export default function PlayerMarker({
@@ -49,6 +57,7 @@ export default function PlayerMarker({
   emphasized = false,
   glowBlur = 3,
   solidFill = false,
+  circleText,
 }: PlayerMarkerProps) {
   // 背號在圈「裡面」，solidFill 時圈是飽和實色，背號要跟著換深色才有對比；非實色時
   // 背號直接用邊框色（卡片版本的決定：不再永遠白色，讓數字也是狀態指示的一部分）。
@@ -83,14 +92,17 @@ export default function PlayerMarker({
       />
       <text
         y={radius * 0.27}
-        fontSize={radius * 0.84}
+        // circleText（角色代碼，例如 "OPP"）比背號多到 3 個字元，字級照舊會擠出圈外——
+        // 縮小到 0.55 那個係數是實機比對過的結果：兩個字元的代碼（OH/MB/OPP 這幾個裡最長
+        // 的是 3 碼）在半徑 6 的圈裡還讀得清楚，又不會貼到邊框。
+        fontSize={circleText ? radius * 0.55 : radius * 0.84}
         fontWeight="400"
         fill={numberColor}
         textAnchor="middle"
         className="font-score pointer-events-none"
         style={{ letterSpacing: "0.02em" }}
       >
-        {number}
+        {circleText ?? number}
       </text>
       {solidFill && (
         <g

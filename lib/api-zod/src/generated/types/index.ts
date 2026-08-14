@@ -16,6 +16,7 @@ export * from './eventSource';
 export * from './healthStatus';
 export * from './lineup';
 export * from './listTacticsParams';
+export * from './listTacticsScope';
 export * from './match';
 export * from './matchAnalysisSummary';
 export * from './matchEvent';
