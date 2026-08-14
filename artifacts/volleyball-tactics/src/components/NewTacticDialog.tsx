@@ -6,8 +6,10 @@ import type { CourtSnapshot } from "../types/courtSnapshot";
 
 // 「新增戰術」中央浮層——issue #177（layout-spec §6）：戰術板頁專用。左欄或瀏覽面板按
 // 「+ 新增戰術」時，只蓋住中央球場那一欄，左右欄（NavRail／球員清單或戰術瀏覽面板）仍然
-// 看得見——這跟 NewTacticDialogModal.tsx（其他頁面用的全螢幕 Radix Dialog、走 Portal 蓋滿
-// 整個視窗）刻意不同。
+// 看得見——這跟已退役的 NewTacticDialogModal.tsx（#372 刪除；原本是其他頁面用的全螢幕
+// Radix Dialog、走 Portal 蓋滿整個視窗）刻意不同：那個版本的呼叫端（NavRail）已經不存在了
+// （左欄「戰」不再是子清單，是固定連結，見 NavRail.tsx 開頭的說明），這個中央浮層版本是
+// 現在戰術板頁「+ 新增戰術」唯一的入口。
 //
 // 為什麼用「絕對定位、鋪滿呼叫端容器」而不是 Portal？因為這個元件現在固定被放進
 // TacticsBoard.tsx 中央欄那個 `<div className="relative ...">` 容器內部（跟 <Court/>
@@ -20,22 +22,25 @@ import type { CourtSnapshot } from "../types/courtSnapshot";
 // 「重新佈陣」是全新的起點（capture by value，見 useTacticsBoard.ts 開頭的單向依賴說明），
 // 「現有輪轉位」複製呼叫端指定的「現在站位」。arranging: true 讓 session 一開始就進佈陣
 // 模式（mode D，見 useTacticsBoard.ts 的 WhiteboardSession.arranging 說明）——這是這個
-// 浮層跟舊版 NewTacticDialogModal 最大的行為差異：舊版開的 session 直接進編輯模式（C），
+// 浮層跟已退役的舊版全螢幕彈窗最大的行為差異：舊版開的 session 直接進編輯模式（C），
 // 這裡刻意先停在佈陣模式，讓使用者先把人排上場，按「確定」才進工具軌。
 //
 // 為什麼「擷取目前站位」不再自己內部呼叫 useRotationTable.getState()，改成收一個
 // captureCurrent 函式 prop？因為「現在站位」這個詞在不同頁面意思不一樣：戰術頁的「現在」
 // 指輪轉表當下排的站位，計分頁的「現在」指計分表自己逐局凍結的先發快照（issue #115 把
 // 這兩份資料的耦合切開、#154 又用 ESLint no-restricted-imports 把「戰術白板單向依賴」焊進
-// CI）。這個浮層目前只有戰術板頁一個呼叫端，但沿用同一個「呼叫端注入擷取邏輯」的介面，
-// 是為了跟 NewTacticDialogModal 保持同一套心智模型，不多開一種寫法。
+// CI）。這個浮層現在是新增戰術唯一的入口，沿用的仍然是「呼叫端注入擷取邏輯」這個介面
+//（原本是為了跟已退役的全螢幕彈窗版本共用同一套心智模型，見上面的說明）。
 //
-// captureCurrent 故意設計成 required（沒有預設值），理由跟 NewTacticDialogModal 完全一樣：
-// 逼呼叫端明確想清楚「我的現在站位從哪來」，寫錯了 TypeScript 編譯期就會擋下來。
+// captureCurrent 故意設計成 required（沒有預設值）：逼呼叫端明確想清楚「我的現在站位從哪
+// 來」，寫錯了 TypeScript 編譯期就會擋下來。
 interface NewTacticDialogProps {
   open: boolean;
   onClose: () => void;
-  matchId: string;
+  // #372：空板（/board）沒有 matchId 可傳，這裡跟著放寬成 string | null——captureBlank
+  // 本來就吃 matchId: string | null（見 lib/courtSnapshot.ts），沒有比賽時新建的戰術一律
+  // 是「不屬於任何一場」的空快照，跟決策④「空板戰術庫只收全域戰術」是同一件事的兩面。
+  matchId: string | null;
   // 使用者「真的選了一個起點」時呼叫，session 已經開好才觸發（例如讓呼叫端做導覽）。
   onStarted?: () => void;
   // 呼叫端提供「現在站位」的擷取邏輯：按下按鈕的當下呼叫一次，回傳一張純值快照，不是即時

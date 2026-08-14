@@ -106,7 +106,10 @@ export default function PeopleManagement() {
       mode="A"
       nav={
         <div className="relative z-10 h-full">
-          <NavRail backHref="/" active="analytics" />
+          {/* #372：左欄現在有專屬的「人」格通往這一頁（原本借用「數」的 active 態，見
+              NavRail.tsx 開頭的說明——四格改成「比/數/戰/人」，人員名單管理不再寄居在
+              數據分析底下）。 */}
+          <NavRail backHref="/" active="people" />
         </div>
       }
       className={APP_SHELL_CLASS}

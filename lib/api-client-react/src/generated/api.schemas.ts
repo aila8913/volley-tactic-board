@@ -570,5 +570,13 @@ export interface UpdateEvent {
 
 export type ListTacticsParams = {
 matchId?: number;
+scope?: ListTacticsScope;
 };
+
+export type ListTacticsScope = typeof ListTacticsScope[keyof typeof ListTacticsScope];
+
+
+export const ListTacticsScope = {
+  global: 'global',
+} as const;
 

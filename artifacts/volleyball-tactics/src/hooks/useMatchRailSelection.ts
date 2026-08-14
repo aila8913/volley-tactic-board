@@ -6,7 +6,9 @@ import type { MatchListSelection } from "@/components/MatchInfoRail";
 // 為什麼是一支共用 hook，而不是兩個頁面各寫一份 useState（#329）：
 //
 // 這兩頁的右欄本來就已經共用同一個 MatchInfoRail 了，選取語意也早就共用同一個
-// MatchListSelection 型別（見 ListNavRail.tsx 開頭的說明）。#329 把「編輯比賽」從彈窗搬進右欄
+// MatchListSelection 型別（見該檔案開頭的說明；#372 之前這裡還提到 ListNavRail.tsx——那是
+// 「把 selected 翻譯成 matchId 餵給左欄 NavRail」的薄包裝，NavRail 不再吃 matchId 之後
+// 已刪除，見 NavRail.tsx 開頭的說明）。#329 把「編輯比賽」從彈窗搬進右欄
 // 之後，又多了三件必須兩頁一致的事：編輯模式的開關、未存檔切走的攔截、新增成功後要選到新那場。
 // 三份狀態機複製兩份，遲早會飄開成「頂層列表會攔、資料夾內頁不會攔」這種只有使用者才發現得了
 // 的不一致。

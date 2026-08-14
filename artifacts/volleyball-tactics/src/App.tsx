@@ -24,6 +24,15 @@ function Router() {
       <Route path="/matches/:id/board" component={TacticsBoard} />
       <Route path="/matches/:id/record" component={ScoreSheet} />
       <Route path="/matches/:id/analytics" component={MatchAnalytics} />
+      {/* 空板入口（#372 決策②）：跟 /matches/:id/board 是同一個頁面元件（TacticsBoard），
+          只是網址沒有 matchId，useParams 讀出來的 id 是 undefined。左欄「戰」（#372 之後是
+          固定連結，不再需要先選比賽）就是導去這裡——頁面內部怎麼呈現「沒有比賽可對照」這件事
+          是另一個子任務的範圍，這裡先把路由接上，讓「戰」有地方可去。要放在
+          /matches/:id/board 之後、/analytics 之前：wouter 用宣告順序比對路徑，具體路徑
+          （帶 :id 的）要排在更泛用的 /board 前面才不會被截胡，但這條本身沒有 :id，順序其實
+          不影響比對結果，仍然排在這裡是為了跟其他 /matches/:id/... 路由放在同一叢，閱讀時
+          好找。 */}
+      <Route path="/board" component={TacticsBoard} />
       {/* 不帶 matchId 的跨場彙總頁（#65 M2 視圖②），跟上面單場的 /matches/:id/analytics
           是兩個不同的頁面，別搞混——這支要放在具體路徑之後、NotFound 之前。 */}
       <Route path="/analytics" component={CrossMatchAnalytics} />

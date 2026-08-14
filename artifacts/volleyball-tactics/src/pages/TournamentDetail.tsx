@@ -20,7 +20,7 @@ import {
   type MatchFormat,
 } from "@/lib/matchOutcome";
 import AppShell from "@/components/AppShell";
-import ListNavRail from "@/components/ListNavRail";
+import NavRail from "@/components/NavRail";
 import MatchInfoRail from "@/components/MatchInfoRail";
 import { useMatchRailSelection } from "@/hooks/useMatchRailSelection";
 
@@ -133,8 +133,9 @@ export default function TournamentDetail() {
   }
 
   return (
-    // issue #172：跟 MatchList.tsx 一樣改成 AppShell 的 mode="A"，nav 是共用導覽軌（同樣沒有
-    // matchId——這頁是「資料夾」層級，不是某一場比賽）。
+    // issue #172：跟 MatchList.tsx 一樣改成 AppShell 的 mode="A"，nav 是共用導覽軌。
+    // #372：左欄改成固定四格（見 NavRail.tsx 開頭的說明），不再需要 ListNavRail 那層
+    // 「把 selected 翻譯成 matchId」的包裝（已刪除），跟 MatchList.tsx 一樣直接用 NavRail。
     // 這裡是 tournament 本身的資料，不是「這場比賽」的資料，所以 backHref 固定回最外層列表
     //「/」，跟 matchBackHref() 那條「比賽該回哪個資料夾」的規則是兩回事，不能共用。
     // aside（issue #174）：跟 MatchList.tsx 用同一個 MatchInfoRail——issue 原文明講「進資料夾
@@ -144,7 +145,7 @@ export default function TournamentDetail() {
       mode="A"
       nav={
         <div className="relative z-10 h-full">
-          <ListNavRail selected={selected} />
+          <NavRail backHref="/" active="list" />
         </div>
       }
       aside={
