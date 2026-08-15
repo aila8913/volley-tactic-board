@@ -1,48 +1,22 @@
-import type { Tactic } from "@workspace/api-client-react";
-import TacticsList from "./TacticsList";
-import { PRIMARY_BTN_CLASS } from "../lib/tacticsBoardStyles";
-
-// browse 模式（session === null && viewingScene === null）——issue #160 C2 的兩模式狀態機
-// 之一：還沒在編輯、也沒在看任何一張已存戰術，畫面就是「戰術庫」本身：一顆「新增戰術」
-// 開新的布置彈窗，加上已存戰術清單（點一筆＝切去 viewing 模式看那張快照）。
-interface TacticsBrowsePanelProps {
-  tactics: Tactic[];
-  onOpenNewTacticDialog: () => void;
-  onSelectTactic: (t: Tactic) => void;
-  onRenameTactic: (t: Tactic, name: string) => void;
-  onDeleteTactic: (id: string) => void;
-}
-
-export default function TacticsBrowsePanel({
-  tactics,
-  onOpenNewTacticDialog,
-  onSelectTactic,
-  onRenameTactic,
-  onDeleteTactic,
-}: TacticsBrowsePanelProps) {
+// browse 模式（session === null && viewingScene === null）的說明文字——issue #160 C2 的兩模式
+// 狀態機之一：還沒在編輯、也沒在看任何一張已存戰術。
+//
+// issue #331（右欄 v2）瘦身：這裡原本還兼著畫「新增戰術」按鈕與已儲存戰術清單，兩者現在都
+// 搬走了——「新增戰術」變成分頁 B 的常駐 footer 主要按鈕（跟分頁 A 的「重置先發」同一個
+// 落點，見 TacticsBoardRail.tsx），清單本身則跟「已儲存 · 點擊載入」標題一起移到
+// TacticsBoardPanel.tsx（因為清單在瀏覽/唯讀檢視兩態都要顯示，不是瀏覽態獨有）。這個檔案
+// 瘦到只剩說明文字，仍然保留成獨立檔案（沒有直接內聯進 TacticsBoardPanel）單純是跟著設計稿
+// 的檔案清單走，而且「瀏覽模式專屬文案」這條分界本身沒有錯，之後這塊文字要再長內容
+// （例如加一顆「查看範例」連結）有自己的家可以放，不用擠進 TacticsBoardPanel 已經在管
+// 三件事（viewcard／清單／Toaster）的那個檔案。
+//
+// 文案本身沒有照抄設計稿——設計稿寫的版本沒提到「空白球場」這個起點，是在 #372 補上空板
+// 支援之前寫的，照搬會讓文案退步（漏講一個現在確實存在的選項），所以維持這裡原本就有、
+// 涵蓋兩種起點的版本。
+export default function TacticsBrowsePanel() {
   return (
-    <>
-      <section>
-        <h2 className="mb-2 text-panel-title font-bold">戰術布置</h2>
-        <p className="mb-2 text-micro text-[#a9b096]">
-          「新增戰術」用輪轉表現在的站位、或空白球場當起點，開一個可編排的戰術。點下面清單的已儲存戰術是「唯讀檢視」（看一張凍結的照片），檢視時按「編輯」才進可修改模式。
-        </p>
-        <button
-          onClick={onOpenNewTacticDialog}
-          className={`w-full py-1.5 text-xs font-bold ${PRIMARY_BTN_CLASS}`}
-          data-testid="button-enter-layout-mode"
-        >
-          新增戰術
-        </button>
-      </section>
-      <TacticsList
-        tactics={tactics}
-        activeTacticId={null}
-        maxHeight="160px"
-        onSelect={onSelectTactic}
-        onRename={onRenameTactic}
-        onDelete={onDeleteTactic}
-      />
-    </>
+    <p className="shrink-0 text-caption leading-relaxed text-[#a9b096]">
+      「新增戰術」用輪轉表現在的站位、或空白球場當起點，開一個可編排的戰術。點下面清單的已儲存戰術是「唯讀檢視」（看一張凍結的照片），檢視時按「編輯」才進可修改模式。
+    </p>
   );
 }
