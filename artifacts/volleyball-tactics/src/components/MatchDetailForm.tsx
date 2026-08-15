@@ -1,7 +1,7 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { useForm, useFieldArray, useWatch, type UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Trash2, X } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import type { Person } from "@workspace/api-client-react";
 import {
   Form,
@@ -23,7 +23,8 @@ import {
 } from "@/components/ui/select";
 import { useCreateMatch, useUpdateMatch } from "@/hooks/useMatches";
 import { useTeamList, useCreateTeam, useTeamRosterSuggestions } from "@/hooks/useTeams";
-import { usePersonList, useCreatePerson } from "@/hooks/usePeople";
+import PlayerRosterMatchHint from "@/components/PlayerRosterMatchHint";
+import { usePersonList } from "@/hooks/usePeople";
 import { MATCH_FORMAT_LABEL } from "@/components/MatchDetailView";
 import {
   Match,
@@ -75,16 +76,24 @@ const DARK_FORM_TOKENS = {
   "--border": "75 6% 30%",
   // placeholder 跟次要文字：對齊右欄既有的 #9AA08C。
   "--muted-foreground": "75 9% 60%",
+  // 主要文字：:root 的 --foreground 是近黑（0 0% 7%），在深色玻璃上讀不到。#222 把去重提示
+  // 抽成兩邊共用的元件之後才需要這一條——那塊 UI 現在同時出現在這裡（深底）跟白底的
+  // RosterEditDialog，只能靠 token 分辨自己站在哪，不能再寫死 #F5F5F0。值就是 #F5F5F0。
+  //
+  // 安全性：專案裡 --foreground 的消費者只有 shadcn Input 的 file:text-foreground（檔案上傳
+  // 按鈕的偽元素，這份表單沒有 file input），其餘欄位的文字色都是繼承自外層，所以這條覆寫
+  // 只影響明確寫了 text-foreground 的元素。
+  "--foreground": "60 20% 95%",
 } as CSSProperties;
 
-// 球員名單去重 UX（#213）：在姓名輸入框下方，比對這一列的姓名跟既有的 people（跨場身分）
-// 是否「trim 後不分大小寫完全相同」。
-//   - 還沒對應到任何人、且比對到同名的既有身分 → 顯示建議 chip，要使用者親自按「是同一人」
-//     才會寫入 personId。絕不自動綁定：自動綁對了省一步，綁錯了會把兩個不同人的生涯數據
-//     混在一起，而且事後很難發現，所以這一步一定要使用者明示。
-//   - 已經對應到某個人 → 顯示「已對應：XXX」＋一個可以解除的 ✕（解除＝把 personId 設回 null）。
-//   - 沒對到、也還沒對應過 → 什麼都不顯示，保持名單編輯的清爽。
-function PlayerRosterMatchHint({
+// 名單去重提示（#213）的 react-hook-form 接線。UI 本體已經搬去共用的
+// PlayerRosterMatchHint.tsx（#222：戰術板的 RosterEditDialog 也要同一塊），這裡只剩
+// 「這一列的值怎麼讀、按下去怎麼寫回表單」這段跟 MatchFormValues 綁在一起的膠水。
+//
+// useWatch 而不是直接讀 form.getValues：要讓這個提示隨著使用者打字/按鈕即時更新，
+// 而 react-hook-form 預設不會因為某個欄位變動就重繪整個表單（那樣效能太差），
+// 訂閱特定欄位才能拿到「這欄變了就重繪我」的效果。
+function MatchFormRosterMatchHint({
   form,
   index,
   people,
@@ -93,49 +102,17 @@ function PlayerRosterMatchHint({
   index: number;
   people: Person[];
 }) {
-  // useWatch 而不是直接讀 form.getValues：要讓這個提示隨著使用者打字/按鈕即時更新，
-  // 而 react-hook-form 預設不會因為某個欄位變動就重繪整個表單（那樣效能太差），
-  // 訂閱特定欄位才能拿到「這欄變了就重繪我」的效果。
   const name = useWatch({ control: form.control, name: `players.${index}.name` });
   const personId = useWatch({ control: form.control, name: `players.${index}.personId` });
 
-  if (personId != null) {
-    const matched = people.find((p) => p.id === personId);
-    return (
-      <div className="flex items-center gap-1 pl-1 text-micro text-[#9AA08C]">
-        <span>已對應：{matched?.name ?? `#${personId}`}</span>
-        <button
-          type="button"
-          onClick={() => form.setValue(`players.${index}.personId`, null, { shouldDirty: true })}
-          className="rounded-sm hover:text-[#ef4444]"
-          aria-label="解除對應"
-        >
-          <X className="h-3 w-3" />
-        </button>
-      </div>
-    );
-  }
-
-  const trimmed = name?.trim() ?? "";
-  if (!trimmed) return null;
-
-  const candidate = people.find((p) => p.name.trim().toLowerCase() === trimmed.toLowerCase());
-  if (!candidate) return null;
-
   return (
-    <div className="flex flex-wrap items-center gap-1.5 pl-1 text-micro text-[#9AA08C]">
-      <span>這是先前記錄過的「{candidate.name}」嗎？</span>
-      <button
-        type="button"
-        onClick={() =>
-          form.setValue(`players.${index}.personId`, candidate.id, { shouldDirty: true })
-        }
-        className="rounded border border-white/[0.26] px-1.5 py-0.5 text-[#F5F5F0]
-          transition hover:border-[#C6F135] hover:text-[#C6F135]"
-      >
-        是同一人
-      </button>
-    </div>
+    <PlayerRosterMatchHint
+      name={name}
+      personId={personId}
+      people={people}
+      onLink={(id) => form.setValue(`players.${index}.personId`, id, { shouldDirty: true })}
+      onUnlink={() => form.setValue(`players.${index}.personId`, null, { shouldDirty: true })}
+    />
   );
 }
 
@@ -264,10 +241,9 @@ export default function MatchDetailForm({
   // 靜默丟掉變更。自己記一格「球隊動過沒有」，跟 isDirty 一起往上報。
   const [teamDirty, setTeamDirty] = useState(false);
 
-  // 跨場身分（Person）列表，給名單去重 UX 比對「這個名字是不是先前記錄過的某個人」用；
-  // 也給 onSubmit 在送出時「幫還沒對應的名單列自動建一個新身分」用。
+  // 跨場身分（Person）列表，給名單去重 UX 比對「這個名字是不是先前記錄過的某個人」用。
+  //（「還沒對應的列自動建一個新身分」已經不在這支表單裡做了，見 onSubmit 的說明。）
   const { people } = usePersonList();
-  const createPerson = useCreatePerson();
 
   // defaultValues 直接算好，不需要 MatchFormDialog 那個「每次開窗用 reset 重填」的 useEffect：
   // 彈窗是常駐掛載、靠 open 開關顯示，所以得自己重置；這裡則是「進編輯模式才掛載、離開就卸載」，
@@ -312,28 +288,15 @@ export default function MatchDetailForm({
       }
 
       // 名單去重（#213）：「合併到既有身分」只能由使用者在上面按「是同一人」明確指定
-      // （見 PlayerRosterMatchHint），這裡絕不自己猜著合併。但送出時如果某列還是沒有
-      // personId，就自動幫他建一個新的 person 並綁上——這個不對稱是刻意的：
-      //   - 建新身分永遠安全：最壞情況只是同一個人多了一筆待合併的身分，
-      //     資料還是對的，只是分散在兩個 id 底下，之後仍可人工合併回來。
-      //   - 自動合併到既有身分不安全：一旦猜錯人，兩個不同人的生涯數據就會被混在一起，
-      //     而且事後很難發現、很難修正。
-      // 所以「建新」可以是預設值，「合併」必須使用者明示——跟 #215 那條「合理預設值 vs
-      // 沉默的錯誤答案」是同一條判準：這裡敢給預設，正是因為預設的方向不會產生錯誤答案。
-      const playersWithPersonId = await Promise.all(
-        values.players.map(async (p) => {
-          if (p.personId != null) return p;
-          const personId = await createPerson(p.name);
-          return { ...p, personId };
-        }),
-      );
-      const resolvedValues: MatchFormValues = { ...values, players: playersWithPersonId };
-
+      // （見 PlayerRosterMatchHint），這裡絕不自己猜著合併。至於「某列還是沒有 personId
+      // 就自動建一個新的」——那段原本寫在這裡，#222 已經搬進 useMatches 的寫入層
+      //（resolveRosterPersonIds），因為戰術板的「編輯球員名單」彈窗走的是另一條寫入路徑、
+      // 沒有經過這支表單，補在這裡等於只補一半。這裡不再自己做，直接送原始的表單值。
       if (match) {
-        await updateMatch(Number(match.id), resolvedValues, match.players, teamId);
+        await updateMatch(Number(match.id), values, match.players, teamId);
         onSaved();
       } else {
-        const newId = await createMatch(resolvedValues, tournamentId, teamId);
+        const newId = await createMatch(values, tournamentId, teamId);
         onCreated(String(newId));
       }
     } catch {
@@ -585,7 +548,7 @@ export default function MatchDetailForm({
                     </Button>
                   </div>
                   {/* 這一列的同名對應提示／已對應狀態，見 PlayerRosterMatchHint 上方註解。 */}
-                  <PlayerRosterMatchHint form={form} index={index} people={people} />
+                  <MatchFormRosterMatchHint form={form} index={index} people={people} />
                 </div>
               ))}
               <Button
