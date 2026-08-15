@@ -345,14 +345,15 @@ describe("自由球員的拖曳去處（#425：賽前只記「誰是先發 L」�
     expect(onLineupChange).not.toHaveBeenCalled();
   });
 
-  it("第七格仍然收得到他：拖進去＝指定先發 L，頂替對象留空", () => {
+  it("第七格仍然收得到他：拖進去＝指定先發 L", () => {
     const onLineupChange = vi.fn();
     const onLiberoChange = vi.fn();
     renderPanel(onLineupChange, onLiberoChange);
 
     dropPlayer(screen.getByTestId("libero-slot"), "p3");
 
-    // 第二個參數是 null＝「還沒指定頂替對象」，正是本張要的常態。
-    expect(onLiberoChange).toHaveBeenCalledWith("p3", null);
+    // 只交出一個值。這個回呼以前收兩個參數（誰 ＋ 他頂替誰），#425 之後賽前沒有第二件事
+    // 可講，型別上就交不出頂替對象了——那正是「乾淨」的意思：講不出來的東西不留位子。
+    expect(onLiberoChange).toHaveBeenCalledWith("p3");
   });
 });

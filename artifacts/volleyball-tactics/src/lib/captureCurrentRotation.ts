@@ -27,9 +27,10 @@ export function captureCurrentRotation(matchId: string): CourtSnapshot {
   // #231 PR3 之後 store 不再存「六輪各一份座標」，這一輪的座標要用 deriveRotation 現算。
   // 對這裡沒有實質差別：擷取要的一直都是「按下去那一刻，這一輪誰站哪」，以前是從快取撈、
   // 現在是當場算，算出來的東西一模一樣（deriveRotation 是純函式，同輸入必同輸出）。
+  // 第三個參數（L 頂替誰）固定給 null：#425 之後賽前不記頂替對象，所以擷取到的就是先發
+  // 六人、不含自由球員——那正是「先發」的定義（L 是換人上場的，不佔那六格）。
   const positions = data
-    ? deriveRotation(data.lineup, data.startingLiberoId, data.liberoReplacesPlayerId, rotation)
-        .positions
+    ? deriveRotation(data.lineup, data.startingLiberoId, null, rotation).positions
     : [];
   const roster = data?.roster ?? [];
   return captureFromRotation(positions, roster, { matchId, rotation });

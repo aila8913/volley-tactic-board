@@ -85,11 +85,14 @@ interface RotationRailPanelProps {
   // 先發自由球員是誰（名單裡可能有多位 L，場上同時只有一位）。
   liberoId?: string | null;
   // 他頂替先發裡的哪一位（#326 的模型：存「頂替誰」，站哪格是推導值）。
+  //
+  // ⚠️ #425 之後這個 prop 只有**唯讀**的呼叫端會傳值：計分頁/比賽列表看一局已封存的先發時，
+  // 那份快照裡記著該局實際的頂替對象（#359）。可編輯狀態下它恆為 null——賽前不記頂替對象，
+  // 所以第七格編得動的只有「誰是先發 L」。這也是為什麼 onLiberoChange 交不出這個值。
   liberoReplacesPlayerId?: string | null;
-  // 使用者改了第七格。兩個值一起交出去，理由見 useRotationTable 的 setLiberoAssignment：
-  // 「哪位 L」跟「頂誰」描述的是同一件事，分兩次寫會生出「換了人但頂替對象是舊的」的中間態。
+  // 使用者改了第七格：交出「先發 L 是誰」，null＝這場不派 L。
   // readOnly 時不會被呼叫（戰術板那兩個呼叫端只看不改，ADR-0001）。
-  onLiberoChange?: (liberoId: string | null, replacesPlayerId: string | null) => void;
+  onLiberoChange?: (liberoId: string | null) => void;
 
   // ── 以下兩個 prop 只有 axis==="set" 時才有意義（issue #191/#192）──
   //
@@ -288,7 +291,7 @@ export default function RotationRailPanel({
     // 直接忽略（而不是「順便幫他排進某個號位」——那不是使用者在這個當下表達的意思）。
     if (selectedZone === LIBERO_SLOT) {
       if (!onLiberoChange || !liberos.some((p) => p.id === playerId)) return;
-      onLiberoChange(playerId, liberoReplacesPlayerId);
+      onLiberoChange(playerId);
       setSelectedZone(null);
       return;
     }
@@ -358,15 +361,15 @@ export default function RotationRailPanel({
     setSelectedZone(null);
   };
 
-  // 拖到第七格＝指定他是先發自由球員。頂替對象維持原樣（換人不等於換頂替對象）——
-  // 沒有頂替對象時就只是「備位區站著這位 L」，還沒上場。
+  // 拖到第七格＝指定他是先發自由球員。這是賽前對 L 唯一能表達的事（#425）：他上場頂替誰
+  // 要等比賽中真的換上場那一刻才成立，記在計分頁那邊。
   const handleDropOnLibero = (e: ReactDragEvent) => {
     if (!canEditLibero || !onLiberoChange) return;
     e.preventDefault();
     setDragOverZone(null);
     const playerId = e.dataTransfer.getData("text/plain");
     if (!liberos.some((p) => p.id === playerId)) return;
-    onLiberoChange(playerId, liberoReplacesPlayerId);
+    onLiberoChange(playerId);
     setSelectedZone(null);
   };
 
@@ -380,7 +383,7 @@ export default function RotationRailPanel({
     // 系統不會自己幫他找下一個頂替對象）。
     if (e.dataTransfer.getData(DND_SOURCE_LIBERO)) {
       if (!canEditLibero || !onLiberoChange) return;
-      onLiberoChange(null, null);
+      onLiberoChange(null);
       setSelectedZone(null);
       return;
     }
@@ -594,7 +597,7 @@ export default function RotationRailPanel({
           {canEditLibero && libero && (
             <button
               type="button"
-              onClick={() => onLiberoChange?.(null, null)}
+              onClick={() => onLiberoChange?.(null)}
               aria-label="移除先發自由球員"
               className="shrink-0 rounded px-1 text-[#9AA08C] transition hover:text-[#ef4444]"
             >

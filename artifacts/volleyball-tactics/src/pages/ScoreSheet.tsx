@@ -125,10 +125,7 @@ export default function ScoreSheet() {
   const startingLiberoId = useRotationTable((state) =>
     id ? (state.dataByMatch[id]?.startingLiberoId ?? null) : null,
   );
-  const liberoReplacesPlayerId = useRotationTable((state) =>
-    id ? (state.dataByMatch[id]?.liberoReplacesPlayerId ?? null) : null,
-  );
-  const setLiberoAssignment = useRotationTable((state) => state.setLiberoAssignment);
+  const setStartingLibero = useRotationTable((state) => state.setStartingLibero);
   const setRoster = useRotationTable((state) => state.setRoster);
 
   const record = useScoreSheet((state) => (id ? state.recordingsByMatch[id] : undefined));
@@ -277,9 +274,13 @@ export default function ScoreSheet() {
   // 還沒凍結前，「能不能從當下站位擷取出一份完整先發」——湊滿 6 個號位才算數，否則 null。
   // 門檻只看六個號位：自由球員是選配（很多隊根本不排 L），不該擋著教練開賽。
   const capturableZones = editableLineup && isLineupFull(editableLineup) ? editableLineup : null;
-  // 開賽那一刻要凍結進這一局的完整先發（#359 之後含 L 指派）。六個號位來自共用站位真相，
-  // L 兩欄同樣來自共用真相——「誰先發、L 頂替誰」本來就是同一份站位的兩半（見
-  // useRotationTable 的分片），凍結時當然要一起帶走，不然重整後那局的 L 就永遠消失了。
+  // 開賽那一刻要凍結進這一局的完整先發（#359 之後含 L）。六個號位與先發 L 都來自共用站位
+  // 真相（見 useRotationTable 的分片），凍結時一起帶走，不然重整後那局的 L 就永遠消失了。
+  //
+  // replacesPlayerId 一律凍成 null（#425）：賽前不記頂替對象，開賽那一刻我們只知道「誰是
+  // 先發 L」。快照這個欄位保留著不是死欄位——它是**紀錄格式**的一部分（DB lineups 也有這一
+  // 欄），將來若要記「開局時 L 就已經頂替著誰」，值會來自比賽中的 liberoSubstitution，
+  // 不會再來自一個賽前填的計畫值。
   const capturableLineup: LineupSnapshot | null = useMemo(
     () =>
       capturableZones === null
@@ -287,9 +288,9 @@ export default function ScoreSheet() {
         : {
             zones: capturableZones,
             liberoId: startingLiberoId,
-            replacesPlayerId: liberoReplacesPlayerId,
+            replacesPlayerId: null,
           },
-    [capturableZones, startingLiberoId, liberoReplacesPlayerId],
+    [capturableZones, startingLiberoId],
   );
   // activeLineup：優先用已凍結的，其次用可擷取的——開賽擷取以它為準。
   const activeLineup = lineup ?? capturableLineup;
@@ -301,7 +302,7 @@ export default function ScoreSheet() {
   // 一直漏了。之前看不出來，是因為計分頁右欄的 roster 是直接用 match.players 這個 prop 畫的
   // ——畫面上有名單，store 裡卻是空的。
   //
-  // #327 把它逼出水面：setLiberoAssignment 要用 store 的 roster 驗「這個 id 真的是這場的
+  // #327 把它逼出水面：setStartingLibero 要用 store 的 roster 驗「這個 id 真的是這場的
   // 自由球員嗎」，roster 是空陣列的話每次指派都會被自己的白名單擋掉，使用者看到的是「點了
   // 沒反應」。
   // 修法是補上種名單，不是把白名單放寬——白名單是對的，缺的是它要查的那份資料。
@@ -816,12 +817,12 @@ export default function ScoreSheet() {
                   canEditLineup ? !isFinished : (activeLineup?.liberoId ?? null) !== null
                 }
                 liberoId={canEditLineup ? startingLiberoId : (activeLineup?.liberoId ?? null)}
+                // 可編輯時沒有頂替對象可顯示（#425：賽前不記）；凍結後讀該局快照裡實際
+                // 記到的值——那條路是唯讀的歷史資料，畫得出來才不會漏講那一局的事實。
                 liberoReplacesPlayerId={
-                  canEditLineup ? liberoReplacesPlayerId : (activeLineup?.replacesPlayerId ?? null)
+                  canEditLineup ? null : (activeLineup?.replacesPlayerId ?? null)
                 }
-                onLiberoChange={(nextLiberoId, replaces) =>
-                  setLiberoAssignment(id, nextLiberoId, replaces)
-                }
+                onLiberoChange={(nextLiberoId) => setStartingLibero(id, nextLiberoId)}
               />
 
               <div className="flex shrink-0 items-center justify-between border-b border-white/[0.10] px-3 py-2 text-xs font-bold text-[#9AA08C]">
