@@ -118,21 +118,26 @@ interface TacticsBoardStore {
   // ── 全域、暫時性的畫面狀態（重整頁面就回預設，不持久化、不隨 match 分片）──
   activeTool: ToolType;
   selectedObjectId: string | null;
-  courtView: "rotation" | "tactics";
   // 「新增戰術」中央浮層（issue #177）開關——戰術板頁按左欄或瀏覽面板的「+ 新增戰術」時
   // 開啟，選了起點（或按取消）就關閉。放在這顆 store 而不是頁面的 local state，是因為
   // 「開這個浮層」的觸發點（NavRail 的左欄子清單、TacticsBrowsePanel 的按鈕）跟「畫這個
   // 浮層」的地方（TacticsBoard.tsx 中央欄）分屬不同元件，用全域旗標串起來最直接——跟
-  // courtView/activeTool 這些既有的全域暫時 UI state 同一種性質，不需要另外開一顆 context。
+  // activeTool 這些既有的全域暫時 UI state 同一種性質，不需要另外開一顆 context。
   newTacticOpen: boolean;
 
   // 全域畫面狀態的 setter
   setActiveTool: (tool: ToolType) => void;
   setSelectedObjectId: (id: string | null) => void;
-  setCourtView: (v: "rotation" | "tactics") => void;
+  // 離開唯讀檢視、回到瀏覽清單（面板的「返回瀏覽」、切輪次時的順手清理）。
+  //
+  // #328：這支動作是從舊的 setCourtView("rotation") 拆出來的。那顆開關名義上是在切「中央
+  // 球場要畫哪一種畫面」，實際上只有 "rotation" 那個方向真的有人按得到，而按下去真正想要
+  // 的效果從頭到尾都是「把唯讀檢視收掉」——順手清 viewingScene 只是它的副作用。輪轉畫法
+  // 退役之後，剩下的就只有這個副作用本身，所以直接讓動作叫它自己的名字。
+  exitViewing: () => void;
   openNewTactic: () => void;
   closeNewTactic: () => void;
-  // 切場（換 matchId）時把所有暫時狀態歸零：丟掉 session、清掉唯讀檢視、跳回輪轉視圖。
+  // 切場（換 matchId）時把所有暫時狀態歸零：丟掉 session、清掉唯讀檢視。
   // matchId 是選填的「目前要顯示哪一場」——傳了它，resetBoardView 才有辦法分辨「跨場切換」
   // 跟「同一場內部的一次交棒」（見下面實作的說明）。
   resetBoardView: (matchId?: string | null) => void;
@@ -280,7 +285,6 @@ export const useTacticsBoard = create<TacticsBoardStore>()((set, get) => {
 
     activeTool: "select",
     selectedObjectId: null,
-    courtView: "rotation",
     newTacticOpen: false,
 
     openNewTactic: () => set({ newTacticOpen: true }),
@@ -288,14 +292,9 @@ export const useTacticsBoard = create<TacticsBoardStore>()((set, get) => {
 
     setActiveTool: (tool) => set({ activeTool: tool, selectedObjectId: null }),
     setSelectedObjectId: (id) => set({ selectedObjectId: id }),
-    // 翻回輪轉視圖＝離開「看已存戰術」，順手清掉檢視狀態，避免下次進戰術視圖殘留上一張照片。
-    //（切到 tactics 不清，因為即時 session 也用 tactics 視圖。）
-    setCourtView: (v) =>
-      set(
-        v === "rotation"
-          ? { courtView: v, viewingScene: null, viewingTacticId: null, viewingTacticName: "" }
-          : { courtView: v },
-      ),
+    // 離開「看已存戰術」：清掉檢視狀態，中央球場就變回一塊空白白板，
+    // 也避免下次點開別張戰術時殘留上一張照片。
+    exitViewing: () => set({ viewingScene: null, viewingTacticId: null, viewingTacticName: "" }),
     // #119 加這道 reset 是為了防「跨場殘留」：全域共用的 undo 歷史/session 如果不歸零，
     // 從 A 場帶著歷史切到 B 場，再按 Ctrl+Z 會把 A 的快照還原進 B。但病根是「跨場」，不是
     // 「進頁面就該清空」——原本的寫法沒有分辨這兩種情況，所以連「同一場，但由計分頁先
@@ -315,13 +314,11 @@ export const useTacticsBoard = create<TacticsBoardStore>()((set, get) => {
           viewingScene: null,
           viewingTacticId: null,
           viewingTacticName: "",
-          // courtView 必須跟著 session 一起保留，不能無條件打回 "rotation"。原因是畫面上
-          // 「看得到 session」這件事同時取決於兩個狀態：Court.tsx 只有在
-          // `courtView === "tactics" && session` 時才畫 session 的球員與筆跡。startSession()
-          // 會把 courtView 設成 "tactics"，若這裡又把它重設回 "rotation"，就會出現
-          // 「session 明明還在、畫面卻空白」的詭異狀態——資料沒掉，但使用者看不到。
-          // 兩個狀態要嘛一起留、要嘛一起清，不能各走各的。
-          courtView: keepSession ? state.courtView : "rotation",
+          // #328 之前這裡還有一行 `courtView: keepSession ? state.courtView : "rotation"`：
+          // 那時「看不看得到 session」同時取決於兩個狀態（Court 只在 courtView === "tactics"
+          // && session 才畫東西），只留 session 卻把視圖打回輪轉，畫面會空白——資料在、
+          // 使用者看不到。輪轉畫法退役後只剩 session 一個狀態決定畫面，這個「兩個狀態要嘛
+          // 一起留、要嘛一起清」的隱形耦合連同 courtView 一起消失了。
           selectedObjectId: null,
           activeTool: "select",
           // issue #177：「新增戰術」中央浮層的開關也是全域暫時 UI 狀態，一起歸零。否則使用者
@@ -356,14 +353,12 @@ export const useTacticsBoard = create<TacticsBoardStore>()((set, get) => {
         viewingScene: null,
         viewingTacticId: null,
         viewingTacticName: "",
-        courtView: "tactics",
         activeTool: "select",
         selectedObjectId: null,
       });
     },
 
-    discardSession: () =>
-      set({ session: null, courtView: "rotation", selectedObjectId: null, activeTool: "select" }),
+    discardSession: () => set({ session: null, selectedObjectId: null, activeTool: "select" }),
 
     confirmArrangement: () =>
       set((state) => (state.session ? { session: { ...state.session, arranging: false } } : state)),
@@ -552,7 +547,6 @@ export const useTacticsBoard = create<TacticsBoardStore>()((set, get) => {
         viewingScene: scene,
         viewingTacticId: id,
         viewingTacticName: name,
-        courtView: "tactics",
         selectedObjectId: null,
       });
     },
@@ -568,7 +562,6 @@ export const useTacticsBoard = create<TacticsBoardStore>()((set, get) => {
         viewingScene: scene,
         viewingTacticId: null,
         viewingTacticName: "",
-        courtView: "tactics",
         selectedObjectId: null,
       });
     },

@@ -655,7 +655,8 @@ export default function ScoreSheetCourt({
             好看，改回深色。發光（box-shadow）也試過又拿掉——常駐發光原本是想比照「發球方
             才發光」那套語言延伸給「L 待命」，但使用者實際看過覺得不需要，光靠「實色填滿的
             綠圈」本身在深色球場上已經夠醒目。這個顏色/形式決定同一天也同步套到戰術板
-            Court.tsx 的「L 備位圓圈」、PlayerNode.tsx 的球員狀態色、跟這個檔案自己另外兩處
+            Court.tsx 當時那顆「L 備位圓圈」（已隨 #328 的輪轉畫法一起退役）、PlayerNode.tsx
+            的球員狀態色、跟這個檔案自己另外兩處
             自由球員相關的橘色（isDropTarget 拖曳提示、isLiberoOverlay 疊圖）——「自由球員」
             這個語意在全站現在統一用同一個綠色，不再是橘色。 */}
         {liberoOnSideline && (
