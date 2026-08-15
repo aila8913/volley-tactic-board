@@ -15,6 +15,12 @@ import { SECONDARY_BTN_CLASS } from "../lib/tacticsBoardStyles";
 // 才能離開唯讀」、再退回列表去改，實際試玩沒有人找得到。#408 列的三個選項裡選了第 2 案
 //（唯讀態補入口）：它補在使用者當下真的站著的位置，而且不必強迫人在還沒畫任何東西前先命名。
 //
+// issue #331（右欄 v2）：外觀改成「疊在清單上方的檢視卡」（`viewcard`：pill＋名稱＋一行
+// 說明），呼應設計稿 explorations/tactics-rail-v2.html 的③唯讀檢視狀態。**「返回列表」鈕
+// 刻意沒有跟著設計稿搬到清單標題列**——這裡已經有 5 條涵蓋改名/Escape/空白名字/返回列表
+// 的既有測試（TacticsViewingPanel.test.tsx），搬走這顆鈕等於要重寫那組測試改認一個新位置，
+// 换來的只是視覺上更貼近設計稿幾公分，功能完全不變；留在原地是刻意的取捨，不是漏做。
+//
 // ⚠️ 這裡放輸入框**不**違反 #176 那條「不要往 132px 工具軌塞輸入框」：那條講的是 mode C
 // 的編輯工具軌，這個面板住在 aside（一般寬度的右欄），本來就放得下。
 interface TacticsViewingPanelProps {
@@ -49,19 +55,16 @@ export default function TacticsViewingPanel({
   };
 
   return (
-    <section>
-      <div className="mb-2 flex items-center justify-between">
-        <h2 className="text-panel-title font-bold">唯讀檢視</h2>
-        <span className="rounded bg-white/[0.08] px-1.5 py-0.5 text-micro font-bold text-[#a9b096]">
-          唯讀
-        </span>
-      </div>
+    <section className="flex flex-col gap-2 rounded-lg border border-white/[0.10] bg-white/[0.04] p-2.5 backdrop-blur-sm">
+      <span className="inline-flex h-5 w-fit items-center gap-1 rounded-full border border-[#c6f135]/30 bg-[#c6f135]/10 px-2 text-micro font-semibold tracking-wide text-[#c6f135]">
+        唯讀檢視
+      </span>
 
       {editing ? (
         <input
           autoFocus
-          className="mb-3 w-full truncate rounded-lg border border-white/[0.26] bg-white/[0.05]
-            px-2 py-1.5 text-xs text-[#f5f5f0] outline-none focus:border-[#c6f135]"
+          className="w-full truncate rounded-lg border border-white/[0.26] bg-white/[0.05]
+            px-2 py-1.5 text-panel-title text-[#f5f5f0] outline-none focus:border-[#c6f135]"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           // blur 就存：這一格沒有「確定」鈕，使用者點去別的地方就是「我打完了」。
@@ -74,10 +77,9 @@ export default function TacticsViewingPanel({
           aria-label="戰術名稱"
         />
       ) : (
-        <div className="mb-3 flex items-center gap-1">
+        <div className="flex items-center gap-1">
           <p
-            className="min-w-0 flex-1 truncate rounded-lg border border-white/[0.18] bg-white/[0.11]
-              px-2 py-1.5 text-xs shadow-sm shadow-black/20 backdrop-blur-lg"
+            className="min-w-0 flex-1 truncate text-panel-title font-semibold tracking-[-0.01em]"
             title={viewingTacticName || undefined}
           >
             {viewingTacticName || "（未命名戰術）"}
@@ -95,6 +97,10 @@ export default function TacticsViewingPanel({
           )}
         </div>
       )}
+
+      <p className="text-caption leading-relaxed text-[#a9b096]">
+        已載入（唯讀檢視），按「編輯」可修改。
+      </p>
 
       <button
         onClick={onBackToBrowse}

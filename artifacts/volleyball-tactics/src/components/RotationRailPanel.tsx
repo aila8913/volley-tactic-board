@@ -61,6 +61,18 @@ interface RotationRailPanelProps {
   // 頁面各自想加在三個區塊下面的額外內容（戰術板放球員設定/輪次選擇/提示；
   // 計分頁目前用不到，留空）。
   footer?: ReactNode;
+  // 戰術板右欄 v2（issue #331）新增：緊貼在球員清單「上方」的內容（標題＋操作鈕之類）。
+  // 跟 `footer`（畫在清單「下方」）分開一個插槽，單純是因為 v2 設計把「球員名單」標題
+  // 移到清單上緣，而清單本身的拖放互動整套邏輯都鎖在這個元件內部、沒有理由重寫一份，
+  // 加一個「清單前」的插槽比在外面另外重畫一份清單便宜也安全。undefined 時完全不影響
+  // 既有呼叫端（計分頁／比賽列表／分析頁／戰術板 mode D 都不傳這個 prop）。
+  listHeader?: ReactNode;
+  // 戰術板右欄 v2 專用的緊湊 stepper 視覺（置頂箭頭貼兩端、置中數字，取代現行滿版
+  // 「上／第 N 輪／下」三顆按鈕）。刻意用一個獨立的開關而不是直接改掉現有樣式——
+  // 這顆 stepper 同時服務比賽列表右欄／分析頁右欄（MatchInfoRail／AnalyticsRotationRail），
+  // 那兩頁的視覺沒有被這輪設計檢視過，貿然套新樣式等於沒審查就順手改版兩個頁面。
+  // 預設 false＝現行樣式不變，只有戰術板 mode B 傳 true。
+  compactStepper?: boolean;
   // ③ 球員清單這一塊要怎麼呈現（PO 2026-08-09：右欄的兩份名單合併成一份）。
   //   "compact"（預設＝既有行為）：釘在區塊底部、max-h-28 自己捲。計分頁/戰術板/分析頁
   //     底下還有別的東西要顯示，這份清單不能無限長。
@@ -221,6 +233,8 @@ export default function RotationRailPanel({
   title = "場上站位",
   benchDraggable = false,
   footer,
+  listHeader,
+  compactStepper = false,
   rosterList = "compact",
   showLiberoCell = false,
   liberoId = null,
@@ -491,11 +505,18 @@ export default function RotationRailPanel({
           // 拖曳懸停的高亮沿用「已選號位」那一套顏色：兩者要表達的是同一件事——
           // 「放開/點下去，人就會進這一格」，用兩種顏色反而要使用者記兩套規則。
           const isDropTarget = dragOverZone === zone;
-          const cellClass = `flex flex-col items-center justify-center rounded-lg border px-1 py-1.5 transition ${
+          // 唯讀（readOnly）格子改用「內凹、無邊框」材質——可操作性靠材質分辨而不是文字說明
+          // （issue #331 右欄 v2）：選中/命中目標時仍要有反饋，所以那個分支不變；差別只在
+          // 「平常沒被選中」時，唯讀格子刻意不畫邊框、不接受 hover，內凹陰影暗示「看得到、
+          // 動不了」。這裡不用新 prop 控制——readOnly 本來就已經是「這格能不能被改」的判準，
+          // 材質只是把既有的唯讀語意畫得更明確，套用到每一個既有的唯讀呼叫端（計分頁完賽局／
+          // 比賽列表／分析頁／戰術板）都是同一個修正方向，不是戰術板獨有的新規則。
+          const cellClass =
             isSelected || isDropTarget
-              ? "border-[#C6F135] bg-[#C6F135]/10 text-[#C6F135]"
-              : "border-white/[0.12] bg-white/[0.04] text-[#F5F5F0]"
-          } ${!readOnly ? "hover:border-white/[0.30]" : ""}`;
+              ? "flex flex-col items-center justify-center rounded-lg border px-1 py-1.5 transition border-[#C6F135] bg-[#C6F135]/10 text-[#C6F135]"
+              : readOnly
+                ? "flex flex-col items-center justify-center rounded-lg px-1 py-1.5 transition bg-white/[0.028] text-[#F5F5F0] shadow-[inset_0_1px_0_rgba(0,0,0,0.35)]"
+                : "flex flex-col items-center justify-center rounded-lg border px-1 py-1.5 transition border-white/[0.12] bg-white/[0.04] text-[#F5F5F0] hover:border-white/[0.30]";
 
           // readOnly 用 div 而不是 disabled button：既不用處理 disabled 的按鈕樣式，
           // 也從語意上明確表示「這裡沒有任何互動」，不會被螢幕閱讀器唸成一顆按不動的按鈕。
@@ -545,10 +566,13 @@ export default function RotationRailPanel({
                         「第七格要看得出 L 目前在場外」的那一格文字。 */}
       {showLiberoCell && (
         <div
-          className={`mt-1 flex shrink-0 items-center gap-2 rounded-lg border px-2 py-1.5 text-xs transition ${
+          // 材質規則跟六宮格一致（見上面 cellClass 的說明）：唯讀時內凹無邊框。
+          className={`mt-1 flex shrink-0 items-center gap-2 rounded-lg px-2 py-1.5 text-xs transition ${
             selectedZone === LIBERO_SLOT || dragOverZone === LIBERO_SLOT
-              ? "border-[#C6F135] bg-[#C6F135]/10"
-              : "border-white/[0.12] bg-white/[0.04]"
+              ? "border border-[#C6F135] bg-[#C6F135]/10"
+              : readOnly
+                ? "bg-white/[0.028] shadow-[inset_0_1px_0_rgba(0,0,0,0.35)]"
+                : "border border-white/[0.12] bg-white/[0.04]"
           }`}
           onDragOver={allowDrop}
           onDragEnter={() => canEditLibero && setDragOverZone(LIBERO_SLOT)}
@@ -622,31 +646,60 @@ export default function RotationRailPanel({
         （副作用邏輯搬進 hooks/useRotationStepper.ts）——現在三個呼叫端（計分頁的比賽
         列表、戰術板的兩個 mode）用的是同一份 stepper UI，不再是「這裡文字顯示、戰術板
         另外自己畫一顆」的兩套。 */}
-      {onStep && (
-        <div className="mt-2 flex shrink-0 items-center gap-1.5">
-          <button
-            type="button"
-            onClick={() => onStep(-1)}
-            disabled={!canStepPrev}
-            className="flex-1 rounded-lg border border-white/[0.12] bg-white/[0.04] py-1.5 text-xs font-bold text-[#F5F5F0] transition hover:border-white/[0.30] disabled:cursor-not-allowed disabled:opacity-40"
-            aria-label={`上一${unitLabel}`}
-          >
-            上
-          </button>
-          <span className="shrink-0 px-2 text-xs font-bold tabular-nums text-[#F5F5F0]">
-            第 {rotation + 1} {unitLabel}
-          </span>
-          <button
-            type="button"
-            onClick={() => onStep(1)}
-            disabled={!canStepNext}
-            className="flex-1 rounded-lg border border-white/[0.12] bg-white/[0.04] py-1.5 text-xs font-bold text-[#F5F5F0] transition hover:border-white/[0.30] disabled:cursor-not-allowed disabled:opacity-40"
-            aria-label={`下一${unitLabel}`}
-          >
-            下
-          </button>
-        </div>
-      )}
+      {onStep &&
+        (compactStepper ? (
+          // 右欄 v2 的緊湊 stepper（issue #331）：箭頭固定 24×22 貼左右兩端、數字置中在同一條
+          // 28px 高的淺底條上，取代舊版滿版兩顆按鈕中間夾文字的排法——視窗只有 288px 寬，
+          // 這個版面能省下的水平空間留給兩側箭頭更好按。功能跟舊版完全相同（onStep/disabled），
+          // 只是外觀，所以刻意用同一個 onStep 分支、不重複寫一份邏輯。
+          <div className="mt-2 flex h-7 shrink-0 items-center gap-0.5 rounded-lg bg-white/[0.035] px-0.5">
+            <button
+              type="button"
+              onClick={() => onStep(-1)}
+              disabled={!canStepPrev}
+              className="flex h-[22px] w-6 shrink-0 items-center justify-center rounded text-[#9AA08C] transition hover:bg-white/[0.06] hover:text-[#F5F5F0] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+              aria-label={`上一${unitLabel}`}
+            >
+              ◂
+            </button>
+            <span className="flex-1 truncate text-center text-xs font-bold tabular-nums text-[#F5F5F0]">
+              第 {rotation + 1} {unitLabel}
+            </span>
+            <button
+              type="button"
+              onClick={() => onStep(1)}
+              disabled={!canStepNext}
+              className="flex h-[22px] w-6 shrink-0 items-center justify-center rounded text-[#9AA08C] transition hover:bg-white/[0.06] hover:text-[#F5F5F0] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+              aria-label={`下一${unitLabel}`}
+            >
+              ▸
+            </button>
+          </div>
+        ) : (
+          <div className="mt-2 flex shrink-0 items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => onStep(-1)}
+              disabled={!canStepPrev}
+              className="flex-1 rounded-lg border border-white/[0.12] bg-white/[0.04] py-1.5 text-xs font-bold text-[#F5F5F0] transition hover:border-white/[0.30] disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label={`上一${unitLabel}`}
+            >
+              上
+            </button>
+            <span className="shrink-0 px-2 text-xs font-bold tabular-nums text-[#F5F5F0]">
+              第 {rotation + 1} {unitLabel}
+            </span>
+            <button
+              type="button"
+              onClick={() => onStep(1)}
+              disabled={!canStepNext}
+              className="flex-1 rounded-lg border border-white/[0.12] bg-white/[0.04] py-1.5 text-xs font-bold text-[#F5F5F0] transition hover:border-white/[0.30] disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label={`下一${unitLabel}`}
+            >
+              下
+            </button>
+          </div>
+        ))}
 
       {/* 操作提示跟著清單走：rosterList="hidden" 時清單不在，提示裡的「點下面的球員」
         就沒有指涉對象了，一起不渲染。 */}
@@ -668,6 +721,11 @@ export default function RotationRailPanel({
         max-h-28 的既有行為，"fill"（比賽列表右欄）改成吃掉剩餘高度。這一版之所以要多出
         "fill"，是因為右欄原本畫了兩份名單（唯讀檢視一份、這裡一份），合併成一份之後
         它就是那一欄唯一的名單，再壓在 112px 只露兩列就說不過去了（#331）。 */}
+      {/* listHeader（issue #331 右欄 v2）：緊貼在清單正上方的標題/操作鈕，畫在這裡而不是
+        呼叫端自己包一層，是因為要跟下面這個清單共用同一個 flex 容器——"fill" 模式下清單
+        本身要吃掉剩餘高度，listHeader 得先佔掉它自己的高度、清單才知道還剩多少可以撐開。 */}
+      {rosterList !== "hidden" && listHeader}
+
       {/* 放置目標是「整個清單容器」而不是個別球員列：拖回板凳的語意是「離開場上」，
         丟在誰身上都一樣，硬要求對準某一列只是在為難使用者（而且列高只有 ~28px）。 */}
       {rosterList !== "hidden" && (
@@ -677,7 +735,11 @@ export default function RotationRailPanel({
           onDragLeave={() => setDragOverBench(false)}
           onDrop={handleDropOnBench}
           className={`mt-2 space-y-1 overflow-y-auto rounded-lg border pr-0.5 transition ${
-            rosterList === "fill" ? "min-h-0 flex-1" : "max-h-28"
+            // min-h-[176px]（≈4 列）是清單的樓地板，不是天花板——容器塞不下時整段 body 一起
+            // 捲，不能反過來把清單再壓扁（issue #331 的病根就是「捲軸細到看不見、清單露不到
+            // 2 列」）。"compact" 模式維持原本的 max-h-28，計分頁/戰術板 mode D/分析頁那些
+            // 底下還有別的東西要顯示的地方沒有改變。
+            rosterList === "fill" ? "min-h-[176px] flex-1" : "max-h-28"
           } ${dragOverBench ? "border-[#C6F135]/60 bg-[#C6F135]/[0.06]" : "border-transparent"}`}
         >
           {roster.length === 0 && (

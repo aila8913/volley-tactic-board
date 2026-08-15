@@ -3,10 +3,12 @@ import { useTacticsBoard } from "../hooks/useTacticsBoard";
 import { Toaster } from "@/components/ui/toaster";
 import TacticsBrowsePanel from "./TacticsBrowsePanel";
 import TacticsViewingPanel from "./TacticsViewingPanel";
+import TacticsList from "./TacticsList";
 
 // ── issue #160 C2：戰術頁狀態機 + 面板拆檔 ──
 // ── issue #176（環 5）：edit 模式搬去右欄工具軌之後的瘦身 ──
 // ── issue #177：新增戰術彈窗搬去 TacticsBoard.tsx 中央欄、「編輯」鈕搬去球場右上角 ──
+// ── issue #331（右欄 v2）：分頁籤結構——這個檔案現在是「戰術」分頁的 body 容器 ──
 //
 // 這個檔案原本擁有全部三種模式（browse/viewing/edit）＋所有 React Query mutation。
 // #176 把「戰術編輯」整個搬進 mode C 的 132px 工具軌（TacticsEditToolRail，見 AppShell.tsx
@@ -15,31 +17,34 @@ import TacticsViewingPanel from "./TacticsViewingPanel";
 // AppShell 切去 mode C，aside 插槽整個不渲染，這個元件根本不會被 mount，所以不需要再處理
 // 「edit」這個分支了（TacticsEditPanel 也已經沒有任何呼叫端在用）。
 //
-// #177 再瘦身一輪：這個殼不再自己管「新增戰術」彈窗的開關（那顆彈窗現在是中央浮層
-// NewTacticDialog，由 TacticsBoard.tsx 掛在中央欄，由 store 的 newTacticOpen 控制，見
-// useTacticsBoard.ts 的 openNewTactic/closeNewTactic）——「新增戰術」鈕改成呼叫 page 傳下來
-// 的 onOpenNewTacticDialog（其實就是 store 的 openNewTactic）。同理，「編輯」鈕也搬到球場
-// 右上角那顆共用的模式鈕（TacticsBoard.tsx），這裡的 TacticsViewingPanel 不再需要 onEdit。
+// #331 這一輪的變化：
+//   - 「新增戰術」按鈕搬走了（移到 TacticsBoardRail.tsx 的分頁 B 常駐 footer，跟分頁 A 的
+//     「重置先發」同一個落點），這裡不再收 onOpenNewTacticDialog。
+//   - 已儲存戰術清單原本活在 TacticsBrowsePanel 裡、只在瀏覽模式渲染，現在改成這個檔案
+//     直接擁有、瀏覽/唯讀檢視兩態都常駐顯示——設計稿把「已儲存」清單畫成兩態共用的同一塊
+//     區域（唯讀檢視時清單還在，當前那張用萊姆綠反白，可以直接點下一張），不再是「看一張
+//     就把清單整個換掉」。
 //
-// mutation/handler 本身現在住在 hooks/useTacticsBoardController.ts，由 TacticsBoard.tsx
+// mutation/handler 本身住在 hooks/useTacticsBoardController.ts，由 TacticsBoard.tsx
 // 呼叫一次、透過 props 分別餵給這個殼跟工具軌——兩邊看到的 pending 狀態（saving/savingAs）
 // 保證是同一份，不會出現「工具軌顯示存好了、aside 卻還在轉圈」這種不同步。這裡不再自己掛
 // useCreateTactic 之類的 hook。
 interface TacticsBoardPanelProps {
   tactics: Tactic[];
   onSelectTactic: (t: Tactic) => void;
+  // 清單「編輯」圖示鈕（issue #331 新增）：直接跳進可編輯模式，見 TacticsBoardRail.tsx 的
+  // handleEditTactic——組合 onSelectTactic 的載入邏輯與 enterEditFromViewing，收成一步。
+  onEditTactic: (t: Tactic) => void;
   onRenameTactic: (t: Tactic, name: string) => void;
   onDeleteTactic: (id: string) => void;
-  // 「新增戰術」鈕按下去要做的事：page 傳的是 store 的 openNewTactic（開中央浮層）。
-  onOpenNewTacticDialog: () => void;
 }
 
 export default function TacticsBoardPanel({
   tactics,
   onSelectTactic,
+  onEditTactic,
   onRenameTactic,
   onDeleteTactic,
-  onOpenNewTacticDialog,
 }: TacticsBoardPanelProps) {
   // 每個欄位各自用 selector 訂閱，理由見上面的說明搬遷前就有、原封不動保留：只有選中的
   // 那個欄位真的變了才重繪，不整包解構。
@@ -72,28 +77,32 @@ export default function TacticsBoardPanel({
     : null;
 
   return (
-    <div className="flex h-full flex-col font-dash">
-      <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-3">
-        {mode === "browse" && (
-          <TacticsBrowsePanel
-            tactics={tactics}
-            onOpenNewTacticDialog={onOpenNewTacticDialog}
-            onSelectTactic={onSelectTactic}
-            onRenameTactic={onRenameTactic}
-            onDeleteTactic={onDeleteTactic}
-          />
-        )}
-        {mode === "viewing" && (
-          <TacticsViewingPanel
-            viewingTacticName={viewingTacticName}
-            onRename={handleRenameViewing}
-            // exitViewing() 清掉 viewingScene/viewingTacticId/viewingTacticName 三個欄位，
-            // mode 就會從 viewing 掉回 browse（見上面 mode 的推導）。#328 之前這裡呼叫的是
-            // setCourtView("rotation")——那顆開關名義上在切中央球場的畫法，實際做的事就是
-            // 這行清理，現在動作叫它自己的名字（見 useTacticsBoard.ts 的 exitViewing）。
-            onBackToBrowse={exitViewing}
-          />
-        )}
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
+      {mode === "browse" && <TacticsBrowsePanel />}
+      {mode === "viewing" && (
+        <TacticsViewingPanel
+          viewingTacticName={viewingTacticName}
+          onRename={handleRenameViewing}
+          // exitViewing() 清掉 viewingScene/viewingTacticId/viewingTacticName 三個欄位，
+          // mode 就會從 viewing 掉回 browse（見上面 mode 的推導）。#328 之前這裡呼叫的是
+          // setCourtView("rotation")——那顆開關名義上在切中央球場的畫法，實際做的事就是
+          // 這行清理，現在動作叫它自己的名字（見 useTacticsBoard.ts 的 exitViewing）。
+          onBackToBrowse={exitViewing}
+        />
+      )}
+
+      <div className="flex min-h-0 flex-1 flex-col gap-2">
+        <h2 className="shrink-0 text-micro font-bold uppercase tracking-wide text-[#a9b096]">
+          已儲存 · 點擊載入
+        </h2>
+        <TacticsList
+          tactics={tactics}
+          activeTacticId={mode === "viewing" ? viewingTacticId : null}
+          onSelect={onSelectTactic}
+          onEdit={onEditTactic}
+          onRename={onRenameTactic}
+          onDelete={onDeleteTactic}
+        />
       </div>
 
       {/* issue #173：「分享匯出」這一整塊（PNG/JSON 匯出、JSON 匯入）已經搬到左欄 NavRail

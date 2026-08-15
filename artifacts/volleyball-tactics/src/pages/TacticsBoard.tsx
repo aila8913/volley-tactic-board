@@ -5,8 +5,7 @@ import NavRail, { matchBackHref } from "../components/NavRail";
 import NewTacticDialog from "../components/NewTacticDialog";
 import BoardMatchPicker from "../components/BoardMatchPicker";
 import TacticsExportMenu from "../components/TacticsExportMenu";
-import RotationTable from "../components/RotationTable";
-import TacticsBoardPanel from "../components/TacticsBoardPanel";
+import TacticsBoardRail from "../components/TacticsBoardRail";
 import TacticsEditToolRail from "../components/TacticsEditToolRail";
 import TacticsRosterPanel from "../components/TacticsRosterPanel";
 import PositionPalette from "../components/PositionPalette";
@@ -17,17 +16,6 @@ import { useTacticsBoard, isSessionDirty } from "../hooks/useTacticsBoard";
 import { useTacticsBoardController } from "../hooks/useTacticsBoardController";
 import { APP_BACKGROUND_STYLE, APP_SHELL_CLASS } from "../lib/appChromeStyles";
 import { PRIMARY_BTN_CLASS } from "../lib/tacticsBoardStyles";
-
-// #372：aside 裡「這裡本來要放輪轉/名單面板，但目前沒有選比賽」的共用空狀態卡片。
-// 抽成模組層級的小元件（不是寫在 JSX 裡的一段 <div>）純粹是因為 mode B／D 兩處都要用同一段
-// 文案，抽出來才不會有人改了一邊的措辭、忘了改另一邊。內容只是一段說明文字，不需要 props。
-function BoardNoMatchPlaceholder() {
-  return (
-    <div className="p-3 text-xs text-[#a9b096]">
-      還沒選比賽——上方可以選一場借名單與最後輪轉站位，或直接從右側工具軌拖位置上場。
-    </div>
-  );
-}
 
 export default function TacticsBoard() {
   // #372：/board（空板）沒有 :id 這個路由段，id 會是 undefined。matchId 統一改成
@@ -222,13 +210,11 @@ export default function TacticsBoard() {
         // mount 進畫面——React 只有真的把元素放進渲染樹才會呼叫元件函式，所以下面的內容不會
         // 在 mode C 期間執行，不用另外包一層條件判斷。
         //
-        // B／D 兩態右欄放的內容不同，issue #251 這一輪重寫（見上面第 4 點的完整說明）：
-        // D（session?.arranging）只放 TacticsRosterPanel（RotationRailPanel 的另一種
-        // 組裝）——佈陣模式的唯一任務是「把人排上場」；B（沒在編）改成「疊」兩塊：
-        // 上面是 RotationTable（一樣是 RotationRailPanel 的組裝，這裡是原本活在中央欄
-        // 的那份，issue #251 把它搬進這裡），下面接原本就在的 TacticsBoardPanel
-        // （戰術瀏覽／唯讀檢視）。兩塊用同一個 flex-column 容器直接疊起來、不是分頁籤——
-        // PO 確認過「同一欄、直接疊」就是要的效果，不需要更複雜的切換 UI。
+        // B／D 兩態右欄放的內容不同：D（session?.arranging）只放 TacticsRosterPanel
+        // （RotationRailPanel 的另一種組裝）——佈陣模式的唯一任務是「把人排上場」；
+        // B（沒在編）改成 TacticsBoardRail（issue #331 右欄 v2）：站位／戰術兩個分頁籤 +
+        // 常駐 footer 動作列，取代舊版「兩塊直接疊、對半分高度」的版面——那個版面在
+        // 745px 視窗下會把「重置先發」按鈕擠出視野，詳見 TacticsBoardRail.tsx 檔頭的說明。
         //
         // 用同一個外層容器包起來（border-l／bg／backdrop-blur／relative z-10／h-full 這些
         // 視覺 class 兩態共用，理由見上面第 2 點的 backdrop 說明），內容用 session?.arranging
@@ -262,27 +248,11 @@ export default function TacticsBoard() {
               )}
             </div>
           ) : (
-            <>
-              {/* RotationTable 本身內部已經是 flex-col + overflow-y-auto（見該檔案），
-                這裡不需要再包一層捲動容器，只需要讓它跟下面 TacticsBoardPanel 各自
-                佔一半高度、都能在內容太長時各自捲動，不會互相把對方擠出畫面。 */}
-              <div className="min-h-0 flex-1 border-b border-white/[0.08]">
-                {/* 同上：空板沒有這一場的輪轉/名單可以顯示，換成同一張說明卡片。
-                    TacticsBoardPanel（下面那一塊、全域戰術庫）完全不受影響，繼續渲染——
-                    #372 決策④要的正是「空板仍然看得到戰術庫」，只是庫的內容改成全域戰術
-                    （過濾邏輯在 useTacticsBoardController.ts）。 */}
-                {matchId ? <RotationTable /> : <BoardNoMatchPlaceholder />}
-              </div>
-              <div className="min-h-0 flex-1 overflow-y-auto">
-                <TacticsBoardPanel
-                  tactics={controller.tactics}
-                  onSelectTactic={controller.handleSelectTactic}
-                  onRenameTactic={controller.handleRenameTactic}
-                  onDeleteTactic={controller.handleDeleteTactic}
-                  onOpenNewTacticDialog={openNewTactic}
-                />
-              </div>
-            </>
+            <TacticsBoardRail
+              matchId={matchId}
+              controller={controller}
+              openNewTactic={openNewTactic}
+            />
           )}
         </div>
       }
