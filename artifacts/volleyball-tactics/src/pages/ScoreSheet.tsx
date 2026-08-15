@@ -303,7 +303,7 @@ export default function ScoreSheet() {
   //
   // #327 把它逼出水面：setLiberoAssignment 要用 store 的 roster 驗「這個 id 真的是這場的
   // 自由球員嗎」，roster 是空陣列的話每次指派都會被自己的白名單擋掉，使用者看到的是「點了
-  // 沒反應」。同一個坑其實 placePlayerOnCourt 早就有一半（它靠 m.roster 判斷是不是 L）。
+  // 沒反應」。
   // 修法是補上種名單，不是把白名單放寬——白名單是對的，缺的是它要查的那份資料。
   //
   // 依賴用 `match`（而不是 match.players）避免無限迴圈的理由，見 MatchInfoRail.tsx 同一個

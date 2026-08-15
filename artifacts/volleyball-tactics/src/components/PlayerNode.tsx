@@ -20,8 +20,8 @@ export default function PlayerNode({
   isLibero,
   courtRef,
 }: PlayerNodeProps) {
-  // #328：這個元件過去也是「一支元件兩種行為」——輪轉視圖時吸附六個號位並寫回輪轉表
-  // （placePlayerOnCourt / removePlayerFromCourt），戰術視圖時自由拖曳只動 session 快照。
+  // #328：這個元件過去也是「一支元件兩種行為」——輪轉視圖時吸附六個號位並寫回輪轉表，
+  // 戰術視圖時自由拖曳只動 session 快照。
   // 輪轉那半邊隨 Court.tsx 的輪轉畫法一起退役（見該檔開頭的說明），所以這裡不再 import
   // useRotationTable，也不再需要知道自己活在哪一場比賽底下：它動到的東西全都住在
   // session 裡，跟 matchId 無關。
