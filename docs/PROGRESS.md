@@ -15,7 +15,7 @@
 > **開發進度 (aila)** 與 **設計進度 (tang)** 兩個子區塊。各自 wrap-up 時只改自己那區，
 > 平行 PR 就落在不同行段、git 幾乎都能自動合併。上面的 `_Last updated_` 是**共用一行**摘要。
 
-\_Last updated: 2026-08-15 (aila) — #328 戰術板中央輪轉視圖退役（ADR-0012）＋ #425 賽前不記「L 頂替誰」（ADR-0013）；#40 前提消失，已以 `not_planned` 關閉。\_
+\_Last updated: 2026-08-15 (aila) — #328 戰術板中央輪轉視圖退役（ADR-0012）＋ #425 賽前不記「L 頂替誰」（ADR-0013）；#40 前提消失，已以 `not_planned` 關閉。同日 (tang) — 戰術板右欄改成分頁籤結構（PR #428），#331 五處硬上限解掉 2 處，保持 open。\_
 
 ## Current state
 
@@ -129,6 +129,23 @@ Where the project actually stands right now（**只寫現在成立的事實**；
 
 ### 設計進度 (tang — 視覺 / UX / area:design)
 
+- **戰術板右欄改成分頁籤結構（PR #428，08-15）**：mode B（瀏覽）的右欄從「站位／戰術兩塊
+  直接疊、對半分高度」改成「站位／戰術兩個分頁籤 ＋ 常駐 footer 動作列」。起因是舊版對半分
+  完全不管兩邊實際需要多高，745px 視窗下上半只分到 320px、內容要 392px，「重置先發／清除
+  畫筆」整個沉在摺線下（#324 曾誤判成 z-index bug，實際是捲出視野，病根記在 #331）。清單
+  高度規則統一成 `flex:1; min-height:176px`（≈4 列），不再有寫死的高度上限。依 tang 在
+  claude.ai/design 建的「戰術版風格2.0」專案設計稿（`explorations/tactics-rail-v2.html` +
+  `tactics-rail-v2-spec.md`）實作，新增 `TacticsBoardRail.tsx`。
+  **兩處刻意偏離設計稿**：`RotationControlsFooter.tsx` 沒有動——mode D（佈陣中）還需要
+  「清除畫筆」（那是唯一能清白板的地方），但設計稿只畫了 mode B 四態，沒考慮到 mode D；
+  「返回列表」留在 `TacticsViewingPanel` 裡沒搬到清單標題列，因為已有 5 條既有測試守著
+  現在的位置，搬走只是為了視覺上更貼近設計稿幾公分。
+  **#331 保持 open**：這次只解掉 5 處硬性高度上限裡的 2 處（戰術板右欄兩塊、
+  `TacticsBrowsePanel` 的已儲存清單）；`NavRail` 子清單（2 處）與 `RotationRailPanel`
+  `"compact"` 模式（計分頁／mode D 用）還沒有結論，留給下一輪。
+  **當天再度驗證的教訓**：實作到一半 aila 推了 #425／#424（同一天，動了同一個檔案
+  `RotationRailPanel.tsx`）——git 自動合併沒衝突，但不代表合對：stash 後 pull，typecheck
+  抓到一個因為 store 拿掉 `liberoReplacesPlayerId` 而壞掉的 prop 傳遞，修完才 push。
 - **深色語言已套完全站、手繪風全站退役，#131 於 07-23 關閉**（`docs/design-spec.md`）：深色儀表板語言
   （`#0a0b07` 底＋萊姆綠 `#C6F135`＋玻璃卡片＋Space Grotesk/JetBrains Mono）。`wobbly-border` 與
   `--font-display`/Caveat/Permanent Marker 死碼已從 `index.css` 清掉。品牌 logo mark 已定案
@@ -471,40 +488,12 @@ gh issue list --milestone "$(gh api repos/:owner/:repo/milestones --jq 'map(sele
 
 ### 設計 (tang)
 
-- **PR #321**（設計系統「戰術版風格」背景層＋token 落地全站、計分板一鍵記分，08-06，無對應 issue）—
-  見上方 Current state 兩條，細節不重複列。這裡記幾件過程中的事：
-  - **同批把兩項決定補進 `docs/design-spec.md`**（第 4 節整頁背景、第 5 節計分板一鍵記分）。規範沒跟上
-    實作正是這份文件自己記過的教訓——背景改版曾經只改到兩頁、其他五頁停在舊版，直到一頁一頁看才發現。
-    design-spec 是共用約定檔，已依慣例在 PR 上 @-mention aila。
-  - **一併知會 aila 記分行為改變會影響數據面**：從比分卡記的球不寫 `action`／`touchedBy`，在球員決定球
-    矩陣裡不會有貢獻者。他若認為分析頁不能接受，會另開 issue 處理「事後補動作」的入口。
-  - **新開 #320／#322／#323／#324**；#134 Track B 標記為已由設計系統接手（該 issue 只剩 Track A／C），
-    #21／#19 過時的 body 一併修正（#21 的「現狀」只適用球場路徑了；#19 引用的 `MatchRecording.tsx`
-    早已不存在、且把自己列為自己的相依）。
-- **PR #260**（計分表：長按換人＋自由球員鈕改位＋支援兩位候選，08-04，無對應 issue）— 見上方
-  Current state「自由球員視覺定案」「局點提示」兩條，細節不重複列。這裡記流程教訓：這張 PR 在同一條
-  分支上前後改了七輪配色/位置（球場左右側→垂直位置對齊後排→橘色多種變體→萊姆綠→填色關係反轉→
-  拿掉發光），每輪都先在瀏覽器裡實機確認過效果才進下一輪，最後才一次 push／合併——沒有每輪各自開
-  commit/PR。手勢類互動（長按換人、長按選自由球員）這個 sandbox 沒辦法用合成事件穩定觸發，最終
-  由使用者自己實機驗證後才合併。
-- **#176 關閉（08-04），新開 #284**（工具軌圖示：統整細節與視覺調整）— PR #248 已交付 10 顆正式
-  圖示，#176 的原始範圍（正式圖示）算完成，關閉時說明剩下的細節調整（線條粗細一致性、虛線密度、
-  排列時的視覺微調）移到 #284 追蹤，不卡在已完成的票上。
-- **PR #248**（#176 剩餘的工具軌正式圖示，08-03 合併）— 10 顆圖示取代單字佔位，每顆照該工具在球場上
-  實際畫出來的樣子設計（虛線工具的圖示真的用 `stroke-dasharray` 畫）。實機看過後拿掉「攻擊線」工具
-  （跟實線箭頭分不出來）與「號位標示」開關（連 store 欄位＋`Court.tsx` 渲染一起刪，決定已留言在 #176）。
-- **PR #253**（全站背景與右欄材質統一，08-03 合併）— 見上方 Current state「全站外殼材質」一條。
-  合併過程中跟 aila 同期的 #251（PR #274）在 `MatchInfoRail.tsx`／`TournamentDetail.tsx` 有真實文字
-  衝突（型別改名、資料源換掉），用 `git worktree` 隔離解衝突、跑完整檢查套件後才推。
-- **#276**（修掉戰術板頁面空白崩潰，08-03 合併，無關聯設計工作、順手抓到）— `useRosterEditor.ts` 的
-  Zustand selector `state.dataByMatch[matchId]?.roster ?? []` 兩個 fallback 分支各自產生新陣列參照，
-  觸發 React `useSyncExternalStore` 判定「快照每次都變了」的無限重繪迴圈，整個 `<RotationPanel>` 崩潰。
-  修法是把 fallback 提到模組層常數 `EMPTY_ROSTER`，跟 `RotationTable.tsx`／`Court.tsx` 既有慣例一致。
-  確認是 aila PR #274 帶進來的既有 bug，跟本次設計工作無關，獨立分支/PR 修完立刻合併。
+- **PR #428**（戰術板右欄改成分頁籤結構，08-15）— 見上方 Current state 條目，細節不重複列。
 
 ---
 
-- （更早的條目已修剪。判準與決策都另有長期的家：架構決策在 `docs/adr/`、規格在 `docs/*-spec.md`、
+- （更早的條目已修剪，含 08-03～08-06 的 PR #321／#260／#248／#253、#176 關閉、#276 修復。
+  判準與決策都另有長期的家：架構決策在 `docs/adr/`、規格在 `docs/*-spec.md`、
   票的來龍去脈在該 issue 留言、程式碼層的約定在檔案自己的註解裡、協作教訓在 auto-memory。
   已關閉的 milestone：**M1／M1.5／M2／M2.5／M3／M3.5**。想查某張票怎麼收的，`gh issue view <n>`
   比翻這份檔案準。）
