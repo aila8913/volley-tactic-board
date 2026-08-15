@@ -84,6 +84,32 @@ export type RosterInput = {
   personId: number | null;
 };
 
+// ── 名單列 → person 的解析（#222）──
+//
+// 不變量：**存進後端的每一列名單都要指向一個 person**。personId 是 null 的那一列在資料上
+// 是孤兒——它不會出現在視圖③（/analytics/people）的任何統計裡，也串不起跨場的同一個人，
+// 而且畫面上完全沒有提示，使用者不會知道自己少了一塊資料。
+//
+// 這支函式只做「沒有就建一個新的」，**絕不猜著合併到既有身分**。這個不對稱是 #213 定下來的，
+// 原本寫在 MatchDetailForm 的送出流程裡（#222 把它搬到共用的寫入層，理由見 useMatches.ts）：
+//   - 建新身分永遠安全：最壞情況只是同一個人多了一筆待合併的身分，資料還是對的，
+//     之後仍可用 /people 管理頁的合併候選把它併回來。
+//   - 自動合併到既有身分不安全：一旦猜錯人，兩個不同人的生涯數據就會被混在一起，
+//     而且事後很難發現、很難修正。所以「合併」一定要使用者在 UI 上明示（PlayerRosterMatchHint）。
+//
+// 寫成吃 createPerson 回呼的純函式（而不是自己呼叫 hook），是為了讓它能被單元測試直接驗——
+// 這一層的規則（誰該被建、建幾次、原本有 id 的要原封不動）不需要 React Query 就能講清楚。
+export async function resolveRosterPersonIds<T extends { name: string; personId: number | null }>(
+  players: readonly T[],
+  createPerson: (name: string) => Promise<number>,
+): Promise<T[]> {
+  return Promise.all(
+    players.map(async (p) =>
+      p.personId != null ? p : { ...p, personId: await createPerson(p.name) },
+    ),
+  );
+}
+
 export function diffRoster(existing: MatchPlayer[], next: readonly RosterInput[]): RosterDiff {
   const existingById = new Map(existing.map((p) => [p.id, p]));
   const nextIds = new Set(next.map((p) => p.id));

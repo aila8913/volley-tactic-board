@@ -1,10 +1,11 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   localInputToIso,
   isoToLocalInput,
   serverMatchToDomain,
   serverPlayerToDomain,
   diffRoster,
+  resolveRosterPersonIds,
 } from "./matchMapping";
 import type { MatchPlayer } from "../types/match";
 
@@ -165,6 +166,66 @@ describe("diffRoster", () => {
   it("no-ops when nothing changed", () => {
     const diff = diffRoster(existing, existing);
     expect(diff.toCreate).toEqual([]);
+    expect(diff.toUpdate).toEqual([]);
+    expect(diff.toDelete).toEqual([]);
+  });
+});
+
+// #222：「每一列名單都要指向一個 person」這條不變量。原本只有比賽表單那條路徑做這件事，
+// 戰術板的「編輯球員名單」彈窗不做，從那條路加的球員 personId 永遠是 null——資料上是孤兒，
+// 跨場統計看不到它，而且畫面上完全沒有提示。規則本身寫成純函式放在這裡，才驗得起來。
+describe("resolveRosterPersonIds", () => {
+  it("只幫 personId 是 null 的列建身分，已經有對應的原封不動", async () => {
+    const createPerson = vi.fn(async (name: string) => (name === "小美" ? 7 : 99));
+
+    const resolved = await resolveRosterPersonIds(
+      [
+        { name: "阿明", number: 1, role: "S" as const, personId: 42 },
+        { name: "小美", number: 2, role: "OH" as const, personId: null },
+      ],
+      createPerson,
+    );
+
+    expect(resolved).toEqual([
+      { name: "阿明", number: 1, role: "S", personId: 42 },
+      { name: "小美", number: 2, role: "OH", personId: 7 },
+    ]);
+    // 已經有 personId 的那一列不該再多建一個身分出來（會憑空多一筆重複的人）。
+    expect(createPerson).toHaveBeenCalledTimes(1);
+    expect(createPerson).toHaveBeenCalledWith("小美");
+  });
+
+  it("絕不自動合併到同名的既有身分——同名也是建新的", async () => {
+    // 這條看起來「浪費」，但它正是 #213 定下來的判準：建新身分最壞只是多一筆待合併的資料，
+    // 猜錯人把兩個人的生涯數據混在一起則救不回來。要合併必須使用者在 UI 上明示
+    //（PlayerRosterMatchHint 的「是同一人」），不是這支函式的職責。
+    const createPerson = vi.fn(async () => 100);
+
+    const resolved = await resolveRosterPersonIds(
+      [{ name: "阿明", number: 1, role: "S" as const, personId: null }],
+      createPerson,
+    );
+
+    expect(resolved[0].personId).toBe(100);
+    expect(createPerson).toHaveBeenCalledTimes(1);
+  });
+
+  it("解析完再 diff：補上的 personId 會變成真的送得出去的動作", async () => {
+    // 順序在 useMatches 的寫入層很容易寫反（先 diff 再解析），寫反的話補上的 personId
+    // 根本不會被送出去，畫面上完全看不出差別——用組合起來的斷言把順序釘住。
+    const serverRoster: MatchPlayer[] = [
+      { id: "1", name: "阿明", number: 1, role: "S", personId: 42 },
+    ];
+    const resolved = await resolveRosterPersonIds(
+      [
+        { id: "1", name: "阿明", number: 1, role: "S" as const, personId: 42 },
+        { name: "小美", number: 2, role: "OH" as const, personId: null },
+      ],
+      async () => 7,
+    );
+
+    const diff = diffRoster(serverRoster, resolved);
+    expect(diff.toCreate).toEqual([{ name: "小美", number: 2, role: "OH", personId: 7 }]);
     expect(diff.toUpdate).toEqual([]);
     expect(diff.toDelete).toEqual([]);
   });

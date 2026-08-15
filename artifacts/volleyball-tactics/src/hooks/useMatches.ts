@@ -28,8 +28,10 @@ import {
   serverPlayerToDomain,
   localInputToIso,
   diffRoster,
+  resolveRosterPersonIds,
   type RosterInput,
 } from "../lib/matchMapping";
+import { useCreatePerson } from "./usePeople";
 
 // ── 讀取 ──
 
@@ -89,12 +91,33 @@ export function useMatchWithRoster(matchId: number, enabled = true) {
 // 每個寫入 hook 都回傳一個 async 函式；元件在事件處理器裡 await 它。成功後 invalidate 相關
 // query key，讓列表/名單自動重抓最新資料。
 
+// #222：把「名單列還沒有 personId 就先建一個 person」放進**寫入層**，而不是各個表單自己做。
+//
+// 為什麼搬家：新增球員原本有兩條路徑，行為不一致——比賽表單（MatchDetailForm）會在送出前
+// 補上 personId，戰術板的「編輯球員名單」彈窗（RosterEditDialog）不會，從那條路加的球員
+// personId 永遠是 null，靜靜地不出現在跨場統計裡。修法有三案（見 #222），選第 3 案是因為
+// 前兩案都是「再補一個呼叫端」——只要之後長出第三條寫名單的路徑（很可能會，`useSaveRoster`
+// 本來就是為了第二條路徑才抽出來的），同一個洞就會再開一次。放在所有寫入都會經過的這一層，
+// 「每一列名單都指向一個 person」才是真的不變量，而不是每個表單各自記得要做的一個步驟。
+//
+// 副作用（是好的那種）：以前從彈窗那條路存進去、personId 為 null 的舊資料，下一次任何一次
+// 存名單都會順手被補上身分。
+function useResolveRosterPersonIds() {
+  const createPerson = useCreatePerson();
+  return useCallback(
+    <T extends { name: string; personId: number | null }>(players: readonly T[]) =>
+      resolveRosterPersonIds(players, createPerson),
+    [createPerson],
+  );
+}
+
 // 新增比賽：先建 match、拿到 server 給的整數 id，再逐一建名單裡的球員（後端沒有「一次建整份
 // 名單」的 endpoint，所以序列送）。回傳新 match 的整數 id，讓呼叫端可以導頁過去。
 export function useCreateMatch() {
   const queryClient = useQueryClient();
   const createMatch = useCreateMatchMutation();
   const createPlayer = useCreatePlayer();
+  const resolvePersonIds = useResolveRosterPersonIds();
 
   return useCallback(
     async (
@@ -102,6 +125,9 @@ export function useCreateMatch() {
       tournamentId: string | null,
       teamId: number | null,
     ): Promise<number> => {
+      // 先把身分解析完再建比賽（#222）：這一步失敗的話，寧可整場都還沒建出來，
+      // 也不要留下一場「比賽有了、名單只建到一半」的殘骸。
+      const players = await resolvePersonIds(values.players);
       const created = await createMatch.mutateAsync({
         data: {
           opponent: values.opponent,
@@ -116,7 +142,7 @@ export function useCreateMatch() {
           format: values.format,
         },
       });
-      for (const p of values.players) {
+      for (const p of players) {
         await createPlayer.mutateAsync({
           matchId: created.id,
           data: { name: p.name, number: p.number, role: p.role, personId: p.personId },
@@ -126,7 +152,7 @@ export function useCreateMatch() {
       queryClient.invalidateQueries({ queryKey: getListPlayersQueryKey(created.id) });
       return created.id;
     },
-    [queryClient, createMatch, createPlayer],
+    [queryClient, createMatch, createPlayer, resolvePersonIds],
   );
 }
 
@@ -136,10 +162,15 @@ function useApplyRosterDiff() {
   const createPlayer = useCreatePlayer();
   const updatePlayer = useUpdatePlayer();
   const deletePlayer = useDeletePlayer();
+  const resolvePersonIds = useResolveRosterPersonIds();
 
   return useCallback(
     async (matchId: number, existing: MatchPlayer[], next: readonly RosterInput[]) => {
-      const { toCreate, toUpdate, toDelete } = diffRoster(existing, next);
+      // #222：解析要在 diff **之前**——身分是在這一步才補上的，補完那一列跟 existing 的
+      // personId 就不一樣了，diffRoster 才會把它算成需要送出的 create/patch。順序反過來
+      // 的話補上的 personId 根本不會被送出去。
+      const resolved = await resolvePersonIds(next);
+      const { toCreate, toUpdate, toDelete } = diffRoster(existing, resolved);
       for (const data of toCreate) {
         await createPlayer.mutateAsync({ matchId, data });
       }
@@ -150,7 +181,7 @@ function useApplyRosterDiff() {
         await deletePlayer.mutateAsync({ matchId, playerId });
       }
     },
-    [createPlayer, updatePlayer, deletePlayer],
+    [createPlayer, updatePlayer, deletePlayer, resolvePersonIds],
   );
 }
 
