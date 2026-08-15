@@ -47,7 +47,7 @@ export default function TacticsBoardPanel({
   const viewingTacticName = useTacticsBoard((s) => s.viewingTacticName);
   const viewingTacticId = useTacticsBoard((s) => s.viewingTacticId);
   const setViewingTacticName = useTacticsBoard((s) => s.setViewingTacticName);
-  const setCourtView = useTacticsBoard((s) => s.setCourtView);
+  const exitViewing = useTacticsBoard((s) => s.exitViewing);
 
   // 兩選一模式：session 已經被排除在這個元件會出現的情境之外（見上面說明），所以只看
   // viewingScene 就夠分辨 browse／viewing，不用再檢查 session。
@@ -87,9 +87,11 @@ export default function TacticsBoardPanel({
           <TacticsViewingPanel
             viewingTacticName={viewingTacticName}
             onRename={handleRenameViewing}
-            // setCourtView("rotation") 本來就會順手清掉 viewingScene/viewingTacticId/
-            // viewingTacticName（見 useTacticsBoard.ts），不用另外加一個 store 動作。
-            onBackToBrowse={() => setCourtView("rotation")}
+            // exitViewing() 清掉 viewingScene/viewingTacticId/viewingTacticName 三個欄位，
+            // mode 就會從 viewing 掉回 browse（見上面 mode 的推導）。#328 之前這裡呼叫的是
+            // setCourtView("rotation")——那顆開關名義上在切中央球場的畫法，實際做的事就是
+            // 這行清理，現在動作叫它自己的名字（見 useTacticsBoard.ts 的 exitViewing）。
+            onBackToBrowse={exitViewing}
           />
         )}
       </div>

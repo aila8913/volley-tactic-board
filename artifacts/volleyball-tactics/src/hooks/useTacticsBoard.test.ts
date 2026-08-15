@@ -70,7 +70,6 @@ beforeEach(() => {
     viewingTacticName: "",
     selectedObjectId: null,
     activeTool: "select",
-    courtView: "rotation",
   });
 });
 
@@ -273,7 +272,6 @@ describe("載入已存戰術＝唯讀檢視（issue #154 PR B/C）", () => {
     expect(scene).not.toBeNull();
     expect(scene?.snapshot.players.map((p) => p.name)).toEqual(["saved1", "saved2"]);
     expect(tb().session).toBeNull();
-    expect(tb().courtView).toBe("tactics");
     expect(tb().viewingTacticId).toBe("tid");
   });
 
@@ -287,12 +285,18 @@ describe("載入已存戰術＝唯讀檢視（issue #154 PR B/C）", () => {
     expect(names).toContain("p2");
   });
 
-  it("翻回輪轉視圖會清掉檢視中的快照", () => {
+  // #328 更名：這一條以前叫「翻回輪轉視圖會清掉檢視中的快照」，測的動作是
+  // setCourtView("rotation")。輪轉畫法退役後那顆開關不存在了，但它真正做的事——
+  // 「離開唯讀檢視時要把三個 viewing 欄位一起清乾淨」——照樣要釘住：漏清的話下次點開
+  // 別張戰術，面板名稱會是上一張的。
+  it("exitViewing 清掉檢視中的快照與它的 id/名稱", () => {
     tb().loadProject(legacySave([player("p1")]), "tid", "x");
     expect(tb().viewingScene).not.toBeNull();
 
-    tb().setCourtView("rotation");
+    tb().exitViewing();
     expect(tb().viewingScene).toBeNull();
+    expect(tb().viewingTacticId).toBeNull();
+    expect(tb().viewingTacticName).toBe("");
   });
 });
 
@@ -323,13 +327,15 @@ describe("編輯已存戰術 + 存檔（issue #154 PR C）", () => {
     expect(saved.scenes[0].markers).toHaveLength(1);
   });
 
-  it("discardSession 用完即丟：session 歸零、回輪轉視圖", () => {
+  it("discardSession 用完即丟：session 歸零", () => {
     tb().startSession(snapshot([snapPlayer("p1")]));
     expect(tb().session).not.toBeNull();
 
     tb().discardSession();
     expect(tb().session).toBeNull();
-    expect(tb().courtView).toBe("rotation");
+    // #328 之前這裡還會斷言 courtView 回到 "rotation"（＝畫面翻回輪轉表的站位）。
+    // 現在白板上畫什麼只由 session/viewingScene 決定，session 歸零本身就是「板子清空」。
+    expect(tb().viewingScene).toBeNull();
   });
 });
 
@@ -388,7 +394,12 @@ describe("新增戰術中央浮層開關（issue #177）", () => {
 // 一 mount 就會呼叫 resetBoardView(id)，所以這道 reset 必須看得懂「跨場切換」跟「同一場內
 // 的一次交棒」的差別，否則剛交棒過去的 session 會在落地當下被清掉。
 describe("跨頁交棒 vs 跨場清空（issue #160 C3 / #119）", () => {
-  it("同一場交棒：session 保留，courtView 也要一起留住", () => {
+  // #328 更名：這一條以前叫「session 保留，courtView 也要一起留住」，因為當時
+  // 「看不看得到 session」同時取決於兩個狀態（Court 只在 courtView === "tactics" && session
+  // 才畫東西），只留其中一個會出現「資料在、畫面空白」。輪轉畫法退役後 courtView 不存在，
+  // 那個隱形耦合連同它一起消失，這一條回到它原本要保護的那件事：交棒過來的 session 與
+  // 它的內容不能在落地當下被 reset 清掉。
+  it("同一場交棒：session 與內容都保留", () => {
     tb().startSession(snapshot([snapPlayer("p1")]), { name: "第 1 局 第 2 輪" });
 
     // 模擬導航到 /matches/match-A/board 之後，頁面 effect 呼叫 resetBoardView(id)。
@@ -396,9 +407,7 @@ describe("跨頁交棒 vs 跨場清空（issue #160 C3 / #119）", () => {
 
     expect(tb().session).not.toBeNull();
     expect(tb().session?.name).toBe("第 1 局 第 2 輪");
-    // 這一條是重點：Court 只有在 courtView === "tactics" && session 才畫得出東西。
-    // 只留 session、卻把 courtView 打回 "rotation"，畫面會空白（資料在、看不到）。
-    expect(tb().courtView).toBe("tactics");
+    expect(tb().session?.snapshot.players.map((p) => p.sourcePlayerId)).toEqual(["p1"]);
   });
 
   it("跨場切換：session 照樣清掉（#119 的保護不能被 C3 弄鬆）", () => {
@@ -407,7 +416,6 @@ describe("跨頁交棒 vs 跨場清空（issue #160 C3 / #119）", () => {
     tb().resetBoardView("match-B");
 
     expect(tb().session).toBeNull();
-    expect(tb().courtView).toBe("rotation");
   });
 
   it("沒帶 matchId 時退回舊行為：全部清空", () => {
@@ -416,6 +424,5 @@ describe("跨頁交棒 vs 跨場清空（issue #160 C3 / #119）", () => {
     tb().resetBoardView();
 
     expect(tb().session).toBeNull();
-    expect(tb().courtView).toBe("rotation");
   });
 });

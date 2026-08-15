@@ -24,5 +24,8 @@ interface TacticsRosterPanelProps {
 }
 
 export default function TacticsRosterPanel({ matchId }: TacticsRosterPanelProps) {
-  return <RotationPanel matchId={matchId} />;
+  // mode D＝正在佈陣，中央球場上有一個 session 接得住拖曳（Court.tsx 的 handleDrop 會把
+  // 拖進來的球員查成 SnapshotPlayer 放進快照），所以清單保持可拖。mode B 的
+  // RotationTable 則相反，理由見 RotationTable.tsx 的 benchDraggable 說明。
+  return <RotationPanel matchId={matchId} benchDraggable />;
 }

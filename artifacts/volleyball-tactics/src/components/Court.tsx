@@ -1,11 +1,9 @@
-import React, { useRef, useState, useEffect, useMemo } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import { useParams } from "wouter";
 import { v4 as uuidv4 } from "uuid";
 import { useRotationTable } from "../hooks/useRotationTable";
 import { useTacticsBoard } from "../hooks/useTacticsBoard";
-import { findNearestZone, deriveRotation } from "../lib/rotationLogic";
 import { PLAYER_ROLES, type MatchPlayer, type PlayerRole } from "../types/match";
-import type { LineupZones } from "../types/scoresheet";
 import type { SnapshotPlayer } from "../types/courtSnapshot";
 import { DND_ANON_ROLE } from "../lib/dndProtocols";
 import PlayerNode from "./PlayerNode";
@@ -14,40 +12,57 @@ import DefenseRange from "./DefenseRange";
 import { CourtGradientDefs, CourtSurface, CourtBorder, CourtLines } from "../lib/courtTheme";
 import { COURT_W, COURT_H, fromScreen, toNorm, rowOf } from "../lib/courtGeometry";
 
+// ── issue #328：這個檔案只剩一種畫法 ──
+//
+// 在此之前 Court 一支元件兼兩種畫法，由 useTacticsBoard.courtView 切換：「輪轉視圖」畫
+// 輪轉表的先發（球員只能吸附六個號位、旁邊一顆 L 備位圓圈、不能畫筆），「戰術視圖」畫
+// 一份戰術快照（自由擺放＋畫筆）。輪轉那半邊已經退役，理由有三層：
+//
+//   1. **沒有任何按鈕能切換它**——courtView 從來不是使用者按的，只是 startSession /
+//      discardSession / 切輪次的副作用，而畫面上也沒有任何地方說明現在是哪一種狀態。
+//      PO 實測的回報是「看不懂輪轉視圖是什麼、也從來沒看到過它」。
+//   2. **職責已經被搬走**。六格拖曳與輪次切換在 #174／#251 之後由右欄的 RotationRailPanel
+//      提供；最後一件獨有的事（指定先發自由球員）在 #327 交給了輪轉表的第七格。它不是被
+//      設計出來的畫面，是被剩下來的。
+//   3. **它是戰術板僅存的「寫回輪轉表」路徑**（拖球員 → placePlayerOnCourt、拖進紅框 →
+//      setStartingLiberoId），跟 ADR-0001「戰術板嚴格單向、永遠不寫回輪轉表」直接牴觸。
+//      拿掉之後這個檔案只讀 roster 查身分，不再有任何一支寫入動作。
+//
+// 於是「白板上畫什麼」現在只由一個狀態決定：有 session＝畫可編輯的即時快照，有
+// viewingScene＝畫唯讀的已存戰術，兩者皆無＝一塊空白球場。
+//
+// ⚠️「中央空著很奇怪，把站位畫上去當唯讀參照就好」是這個檔案最容易被改回去的方向——那正是
+// 被退役的畫面。決定與「不要重新提議」清單在 docs/adr/0012，行為由 Court.test.tsx 第一條
+// 釘住。
+
 // 這一場還沒有分片資料時用的空白預設值（模組層、參照穩定，避免每 render 換新陣列造成重繪）。
 const EMPTY_ROSTER: MatchPlayer[] = [];
-const EMPTY_LINEUP: LineupZones = {};
 
-// 球場「真正比賽用」的座標範圍，永遠固定 0~100 / 0~200——格子吸附、界外判斷、
-// 6 個站位格全部都認這組數字，不會因為旁邊要多留 L 備位空間就跟著變動。
-// （這兩個常數本體收斂到 lib/courtGeometry.ts，跟 ScoreSheetCourt.tsx／PlayerNode.tsx
-// 共用同一份定義，這裡只是 import 進來繼續用同樣的名字，下面 COURT_CANVAS_* 等
-// 衍生常數不用跟著改。）
+// 球場「真正比賽用」的座標範圍，永遠固定 0~100 / 0~200——界外判斷、球員座標、快照存的
+// 正規化座標全部都認這組數字。（這兩個常數本體收斂到 lib/courtGeometry.ts，跟
+// ScoreSheetCourt.tsx／PlayerNode.tsx 共用同一份定義，這裡只是 import 進來繼續用同樣的
+// 名字，下面 COURT_CANVAS_* 等衍生常數不用跟著改。）
 
-// L 備位紅框的尺寸（issue #18）。原本連同緩衝一起畫在球場「上下方」，會把球場本體
-// 往內壓縮快 30% 高度；2026-07-15 改成畫在球場「左右側」、對齊 1 號位的高度——
-// 縱向是排球場比較稀缺的方向（球場本身就是窄長形），橫向留白換來的球場本體反而更大。
-const LIBERO_BOX_SIZE = 18;
-// 留給備位框的水平寬度：框本身 18 + 兩側各留一點視覺呼吸空間，不追求 px 級精確。
-const LIBERO_ZONE_WIDTH = LIBERO_BOX_SIZE + 14; // = 32
+// 球場左右兩側的留白（單位跟球場座標同一套）。這個數字的來歷是 issue #18 的 L 備位紅框
+// （框 18 + 兩側呼吸空間 14），紅框與備位圓圈都已隨 #328 退役，但留白本身保留下來：
+// 戰術白板本來就允許把球員拖到界外當註解，球場外緣貼著白板邊緣反而沒地方放。
+const COURT_SIDE_MARGIN = 32;
 
-// court-canvas：SVG 實際要畫出來的範圍，比賽場地（0~100/0~200）只是置中畫在裡面的
-// 一塊，左右各多留 LIBERO_ZONE_WIDTH 空間給 1 號位外側的 L 紅框備位格。垂直方向
-// 完全不用再留白，canvas 高度直接等於球場本身的高度。
-const COURT_CANVAS_MIN_X = -LIBERO_ZONE_WIDTH;
-const COURT_CANVAS_WIDTH = COURT_W + LIBERO_ZONE_WIDTH * 2;
+// court-canvas：白板「至少」要畫得下的範圍——比賽場地（0~100/0~200）加左右兩條留白帶。
+// 垂直方向不留白，canvas 高度直接等於球場本身的高度。
+const COURT_CANVAS_MIN_X = -COURT_SIDE_MARGIN;
+const COURT_CANVAS_WIDTH = COURT_W + COURT_SIDE_MARGIN * 2;
 const COURT_CANVAS_MIN_Y = 0;
 const COURT_CANVAS_HEIGHT = COURT_H;
 
-// 輪轉視圖：viewBox 固定等於 court-canvas（球場本身 + 左右 L 備位留白），球員只能
-// 吸附在 6 個格子裡，嚴格對應真實比賽規則，不需要、也不應該讓人跑到界外。
-const VIEWBOX_ROTATION = `${COURT_CANVAS_MIN_X} ${COURT_CANVAS_MIN_Y} ${COURT_CANVAS_WIDTH} ${COURT_CANVAS_HEIGHT}`;
+// 還沒量到 wrapper 尺寸（第一次 render、ResizeObserver 還沒回報）時的保底 viewBox：
+// 就是 court-canvas 本身，不多不少。
+const VIEWBOX_FALLBACK = `${COURT_CANVAS_MIN_X} ${COURT_CANVAS_MIN_Y} ${COURT_CANVAS_WIDTH} ${COURT_CANVAS_HEIGHT}`;
 
-// 戰術視圖：白板要跟外層 panel 一樣大（不是固定留一小圈邊界），court-canvas（球場
-// +左右 L 備位留白）置中畫在裡面。用 wrapper 實際量到的寬高比決定要往哪個方向多留白，
-// 這樣球場才不會被拉伸變形——量不到尺寸（還沒 mount）就先退回跟輪轉視圖一樣的範圍。
+// 白板要跟外層 panel 一樣大（不是固定留一小圈邊界），court-canvas 置中畫在裡面。用 wrapper
+// 實際量到的寬高比決定要往哪個方向多留白，這樣球場才不會被拉伸變形。
 function computeTacticsViewBox(size: { width: number; height: number } | null): string {
-  if (!size || size.width <= 0 || size.height <= 0) return VIEWBOX_ROTATION;
+  if (!size || size.width <= 0 || size.height <= 0) return VIEWBOX_FALLBACK;
   const containerRatio = size.width / size.height;
   const courtCanvasRatio = COURT_CANVAS_WIDTH / COURT_CANVAS_HEIGHT;
   let vw: number, vh: number;
@@ -66,21 +81,14 @@ function computeTacticsViewBox(size: { width: number; height: number } | null): 
 }
 
 export default function Court() {
-  // 站位資料（誰在場上哪個位置）來自輪轉表；畫筆/防守範圍/戰術視圖自由站位來自戰術板。
-  // Court 是兩邊資料實際「合流顯示」的地方——戰術板要疊圖畫在球員身上，天生就要同時
-  // 讀兩個 store，這跟我們說好的「戰術板依賴輪轉表」並不衝突：這裡只是元件同時訂閱
-  // 兩個 store，不是其中一個 store 內部互相呼叫。
-  // 兩個 store 現在都用 matchId 分片（issue #119），資料一律從 dataByMatch[matchId] 讀，
-  // 動作則第一參數帶 matchId。matchId 來自 URL（這個元件只在 /matches/:id/board 底下）。
+  // 畫筆/防守範圍/場上球員都來自戰術板 store。輪轉表這邊 #328 之後只剩一個用途：把「從
+  // 右欄名單拖進來的 playerId」查成一筆完整身分（姓名/背號/位置），好組出快照要存的
+  // SnapshotPlayer——只讀不寫，符合 ADR-0001 的單向規則。
+  // 兩個 store 都用 matchId 分片（issue #119），資料一律從 dataByMatch[matchId] 讀。
+  // matchId 來自 URL（空板 /board 沒有這一段，會是 undefined）。
   const { id: matchId } = useParams<{ id: string }>();
   const rotationData = useRotationTable((s) => (matchId ? s.dataByMatch[matchId] : undefined));
-  const lineup = rotationData?.lineup ?? EMPTY_LINEUP;
-  const liberoReplacesPlayerId = rotationData?.liberoReplacesPlayerId ?? null;
-  const currentRotation = rotationData?.currentRotation ?? 0;
   const roster = rotationData?.roster ?? EMPTY_ROSTER;
-  const startingLiberoId = rotationData?.startingLiberoId ?? null;
-  const setStartingLiberoId = useRotationTable((s) => s.setStartingLiberoId);
-  const placePlayerOnCourt = useRotationTable((s) => s.placePlayerOnCourt);
 
   // 戰術白板改成單景 session 後（issue #154 PR C），畫筆/防守範圍/場上球員都住在
   // session 裡（可編輯）或 viewingScene 裡（唯讀檢視已存戰術）。isLayoutMode 這個常駐布林
@@ -89,7 +97,6 @@ export default function Court() {
   const viewingScene = useTacticsBoard((s) => s.viewingScene);
   const isLayoutMode = session !== null;
   const activeTool = useTacticsBoard((s) => s.activeTool);
-  const courtView = useTacticsBoard((s) => s.courtView);
   const setActiveTool = useTacticsBoard((s) => s.setActiveTool);
   const setSelectedObjectId = useTacticsBoard((s) => s.setSelectedObjectId);
   const addMarker = useTacticsBoard((s) => s.addMarker);
@@ -103,8 +110,8 @@ export default function Court() {
   const courtRef = useRef<SVGSVGElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [drawingMarkerId, setDrawingMarkerId] = useState<string | null>(null);
-  // 戰術視圖白板要跟著 wrapper 的實際渲染尺寸縮放，這裡用 ResizeObserver 量測，
-  // 尺寸一變（切視圖、拉視窗、側欄開關擠壓版面）就重算 viewBox。
+  // 白板要跟著 wrapper 的實際渲染尺寸縮放，這裡用 ResizeObserver 量測，
+  // 尺寸一變（拉視窗、側欄開關擠壓版面、B/C/D 換欄）就重算 viewBox。
   const [wrapperSize, setWrapperSize] = useState<{ width: number; height: number } | null>(null);
 
   useEffect(() => {
@@ -143,15 +150,6 @@ export default function Court() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [undo, redo]);
-
-  // 這一輪誰站哪：#231 PR3 之後不再從 store 撈現成的座標陣列，而是從「一份先發 + L 頂替誰」
-  // 現算（deriveRotation）。用 useMemo 包起來是因為下面 map 出來的 PlayerNode 會吃這些物件，
-  // 每次 render 重算會產生一批新物件、讓整排球員白白重繪；依賴項都是 store 裡參照穩定的
-  // slice，只有真的改了站位才會重算。
-  const rotationPositions = useMemo(
-    () => deriveRotation(lineup, startingLiberoId, liberoReplacesPlayerId, currentRotation),
-    [lineup, startingLiberoId, liberoReplacesPlayerId, currentRotation],
-  );
 
   // 螢幕座標→SVG 座標的換算（issue #227 收斂到 lib/courtGeometry.ts 的 fromScreen，
   // 這裡只是把目前這個 SVG 元素的 ref 帶進去）。
@@ -274,10 +272,10 @@ export default function Court() {
     // **最前面**、在下面「沒有比賽就整段擋掉」的 `!matchId` 判斷之前處理——調色盤本來就是
     // 設計給「還沒選比賽」的空板一個能放球員的入口，如果沿用舊有「先擋 !matchId」的順序，
     // 空板永遠走不到這個分支，調色盤拖上去會被最上面那道關卡直接吃掉、什麼事都不會發生
-    // （這正是這一環要修的問題本身，不是理論上的邊角案例）。只在戰術視圖、而且真的有
-    // session（正在編輯／佈陣中，不是唯讀檢視）時接受——跟下面既有的球員拖曳分支要求
-    // 的前提一致：唯讀檢視不接受任何拖曳。
-    if (courtView === "tactics" && session) {
+    // （這正是這一環要修的問題本身，不是理論上的邊角案例）。只在真的有 session（正在
+    // 編輯／佈陣中，不是唯讀檢視）時接受——跟下面既有的球員拖曳分支要求的前提一致：
+    // 唯讀檢視不接受任何拖曳。
+    if (session) {
       const anonRole = e.dataTransfer.getData(DND_ANON_ROLE);
       // (PLAYER_ROLES as readonly string[]).includes(...) 而不是直接斷言：dataTransfer 拿到
       // 的是任意字串（理論上可以被瀏覽器擴充功能之類的東西塞進奇怪的值），先用 includes
@@ -308,88 +306,42 @@ export default function Court() {
       }
     }
 
-    // 以下沿用「從名單拖球員」既有路徑：輪轉視圖一定要有比賽（沒有比賽就沒有輪轉表可以
-    // 動）；戰術視圖的名單拖曳目前也只有選了比賽才有名單可拖（見下面 tactics 分支）。
-    if (!matchId) return;
+    // 以下是「從右欄名單拖球員上場」的路徑，要有 session 才成立（唯讀檢視不接受拖曳），
+    // 也要有比賽才有名單可拖。#328 之前這裡還有一條輪轉視圖分支，會把球員吸附到六個號位
+    // 並寫回輪轉表（placePlayerOnCourt）、或把 L 拖到球場下緣的留白帶指定成先發自由球員
+    // （setStartingLiberoId）。兩件事都已經有更好的家：排先發去計分頁的輪轉表，指定先發 L
+    // 去右欄第七格（#327）——而且它們是戰術板僅存的兩支「寫回輪轉表」動作，跟 ADR-0001
+    // 牴觸，退役之後這個 handler 只會寫進自己的 session。
+    if (!matchId || !session) return;
     const playerId = e.dataTransfer.getData("text/plain");
     if (!playerId || !courtRef.current) return;
     const { x: rawX, y: rawY } = fromScreen(e.clientX, e.clientY, courtRef.current);
 
-    if (courtView === "rotation") {
-      if (rawY > COURT_H) {
-        // 拖到球場 baseline 之外、我方 L 備位紅框那塊留白帶：這是「指定/歸還這位
-        // 球員為先發自由球員」的動作，不是要把人放上場，所以呼叫
-        // setStartingLiberoId，不能呼叫 placePlayerOnCourt——不然座標會被
-        // findNearestZone 吸附到最近的 1 號位，變成球員誤上場（這正是原本回報的
-        // 「拖不進紅框」問題：不是真的拖不進去，是拖進去後被吸到球場上了）。
-        const player = roster.find((p) => p.id === playerId);
-        if (player?.role === "L") {
-          setStartingLiberoId(matchId, playerId);
-        }
-      } else {
-        // 輪轉視圖：吸附到最近格子，自動推算全部 6 個輪次
-        const norm = toNorm({ x: rawX, y: rawY });
-        placePlayerOnCourt(matchId, playerId, findNearestZone(norm.x, norm.y));
-      }
-    } else if (courtView === "tactics" && session) {
-      // 戰術視圖 + 有 session：從名單把一位球員拖進白板。session 的球員是反正規化的
-      // SnapshotPlayer（姓名/背號/位置都凍在裡面），所以這裡在「元件層」用輪轉表的 roster
-      // 把 id 查成一筆完整身分再傳值進去（placeSessionPlayer 以 sourcePlayerId upsert）——
-      // store 本身不碰 roster，維持單向。查不到（幽靈 id）就什麼都不做。
-      const p = roster.find((rp) => rp.id === playerId);
-      if (p) {
-        const norm = toNorm({ x: rawX, y: rawY });
-        const sp: SnapshotPlayer = {
-          sourcePlayerId: p.id,
-          name: p.name,
-          number: p.number,
-          role: p.role,
-          x: norm.x,
-          y: norm.y,
-          isLibero: p.role === "L",
-        };
-        placeSessionPlayer(sp);
-      }
+    // session 的球員是反正規化的 SnapshotPlayer（姓名/背號/位置都凍在裡面），所以這裡在
+    // 「元件層」用輪轉表的 roster 把 id 查成一筆完整身分再傳值進去（placeSessionPlayer 以
+    // sourcePlayerId upsert）——store 本身不碰 roster，維持單向。查不到（幽靈 id）就什麼
+    // 都不做。
+    const p = roster.find((rp) => rp.id === playerId);
+    if (p) {
+      const norm = toNorm({ x: rawX, y: rawY });
+      const sp: SnapshotPlayer = {
+        sourcePlayerId: p.id,
+        name: p.name,
+        number: p.number,
+        role: p.role,
+        x: norm.x,
+        y: norm.y,
+        isLibero: p.role === "L",
+      };
+      placeSessionPlayer(sp);
     }
-    // 戰術視圖 + 非布置模式（唯讀檢視）：不接受拖曳
   };
 
-  // 輪轉視圖中，指定先發的 L 球員不在場上時顯示在備位區。
-  // startingLiberoId === null 代表目前沒指定先發 L（備位區空白）。
-  const startingLibero = startingLiberoId
-    ? (roster.find((p) => p.id === startingLiberoId && p.role === "L") ?? null)
-    : null;
-  const liberoInSpot =
-    startingLibero && !rotationPositions.positions.some((pos) => pos.playerId === startingLiberoId)
-      ? [startingLibero]
-      : [];
+  const currentViewBox = computeTacticsViewBox(wrapperSize);
 
-  const tacticsViewBox = computeTacticsViewBox(wrapperSize);
-  const currentViewBox = courtView === "tactics" ? tacticsViewBox : VIEWBOX_ROTATION;
-  // 目前這個 SVG 實際在用的 viewBox 四個數字，拆出來給下面 svgPointToPercent 換算用。
-  const [vbX, vbY, vbWidth, vbHeight] = currentViewBox.split(" ").map(Number);
-
-  // 把「球場座標系」（x:0~100 / y:0~200，跟站位格、PlayerNode 同一套基準）換算成
-  // 目前這個 viewBox 裡的百分比位置。因為 SVG 用 preserveAspectRatio="none"，viewBox
-  // 一定會直接等比例貼滿 wrapper（沒有內部再留白），這個換算才會是線性、精確的——
-  // 這也是下面 L 備位圓圈可以用一般 HTML 絕對定位疊在 SVG 上、卻仍能精準對齊 SVG
-  // 座標系裡「1 號位後方」那個位置的原因，不需要量測 DOM 或算 CTM。
-  const svgPointToPercent = (x: number, y: number) => ({
-    leftPercent: ((x - vbX) / vbWidth) * 100,
-    topPercent: ((y - vbY) / vbHeight) * 100,
-  });
-
-  // L 備位圓圈的落點（issue #18，2026-07-15 改成側邊留白；珊瑚色虛線外框已於
-  // 2026-08-04 拿掉，見下面 courtView === "rotation" 那段的說明）：落在 1 號位外側——
-  // 我方 1 號位 y=185（見 rotationLogic.ts 的 zoneCoords，zone 1: {x:0.83, y:0.85}，
-  // 我方半場是 y:100~200，100 + 0.85*100 = 185）。
-  const OUR_ZONE1_Y = 185;
-  const LIBERO_STRIP_MARGIN = (LIBERO_ZONE_WIDTH - LIBERO_BOX_SIZE) / 2;
-  // 落點正中央的百分比位置，給下面可拖曳的 L 備位圓圈疊上去用。
-  const ourLiberoCenterPercent = svgPointToPercent(
-    COURT_W + LIBERO_STRIP_MARGIN + LIBERO_BOX_SIZE / 2,
-    OUR_ZONE1_Y,
-  );
+  // 白板上要畫哪一份內容：即時 session（可編輯）優先，其次是唯讀檢視的已存戰術，
+  // 兩者皆無就是 null＝空白球場。#328 之前這個判斷還要先過 courtView 那一關。
+  const drawings = session ?? viewingScene;
 
   return (
     <div className="h-full w-full flex flex-col justify-center items-center relative">
@@ -398,23 +350,14 @@ export default function Court() {
           現在留白責任整個下放給下面的「場地元件」，白板跟 panel 完全重疊本來就是
           刻意的設計選擇，不需要再額外畫出來強調。 */}
       <div className="flex-1 w-full flex items-center justify-center min-h-0 py-[5px] px-[10px]">
-        {/* 場地元件：白板到球場真正外框之間的留白，上下 5px、左右 10px（上面那層
-            padding），兩個視圖共用同一組數字。輪轉視圖原本用不對稱的 32/72/16px 是
-            為了幫最下面那排「L 備位」列留位置，現在備位改畫進 SVG 自己的留白帶裡
-            （見 LIBERO_ZONE_WIDTH），外層就不用再特別留大留白了。 */}
+        {/* 場地元件：白板到球場真正外框之間的留白，上下 5px、左右 10px（上面那層 padding）。
+            白板吃滿整個中央欄（h-full w-full），球場本身則靠 viewBox 置中畫在裡面——
+            #328 之前這裡要依 courtView 在「吃滿」跟「鎖住球場長寬比」兩種 class/style 之間
+            二選一，退役後只剩前者。 */}
         <div
           id="court-wrapper"
           ref={wrapperRef}
-          className={
-            courtView === "tactics"
-              ? "h-full w-full relative drop-shadow-sm court-glass"
-              : "h-full w-auto max-w-full relative drop-shadow-sm court-glass"
-          }
-          style={
-            courtView === "tactics"
-              ? undefined
-              : { aspectRatio: `${COURT_CANVAS_WIDTH} / ${COURT_CANVAS_HEIGHT}` }
-          }
+          className="h-full w-full relative drop-shadow-sm court-glass"
         >
           {/* 邊緣繞行光（issue #134）：獨立於 SVG 之外的一層，蓋在整個 wrapper 外框，
               見 index.css 的 .court-edge-light 說明。 */}
@@ -472,142 +415,70 @@ export default function Court() {
                 透出頁面底色 #050603，不是球場自己塗的。 */}
             <CourtSurface />
 
-            {/* 球場外框（lib/courtTheme.tsx CourtBorder）：兩個視圖都畫在 SVG 裡、貼著
-                球場本身（0,0 到 100,200），不會被上下 L 備位留白帶撐大（過去輪轉視圖是
-                靠 wrapper 的 CSS border 畫框，但 wrapper 現在比球場高，CSS border 會框住
-                整個留白帶，所以統一改成跟戰術視圖一樣畫在 SVG 裡）。vectorEffect=
-                "non-scaling-stroke" 的理由見 CourtBorder 本體的註解。 */}
+            {/* 球場外框（lib/courtTheme.tsx CourtBorder）：畫在 SVG 裡、貼著球場本身
+                （0,0 到 100,200），不會被左右留白帶撐大——wrapper 比球場大，用 CSS border
+                畫的話會框住整塊白板而不是球場。vectorEffect="non-scaling-stroke" 的理由
+                見 CourtBorder 本體的註解。 */}
             <CourtBorder />
-
-            {/* L 備位珊瑚色虛線框（issue #18）已於 2026-08-04 拿掉（tang 要求，覺得跟現在
-                的畫面風格不搭）——底下留白空間（LIBERO_ZONE_WIDTH 等常數）跟可拖曳的
-                L 備位圓圈（下面 courtView === "rotation" 那段）都還在，只是不再額外畫一圈
-                虛線框標示這塊區域，圓圈本身已經夠清楚。 */}
 
             {/* 攻擊線 + 球網：跟計分表球場（ScoreSheetCourt.tsx）共用同一份 <CourtLines/>
                 （lib/courtTheme.tsx），改一邊兩邊一起變。id 要跟上面 <CourtGradientDefs/>
                 傳的 "court-gradient" 一致，球網的網格帶才找得到 pattern。 */}
             <CourtLines id="court-gradient" />
 
-            {/* 畫筆標記與防守範圍只在「戰術視圖」模式下顯示，
-              輪轉視圖只看站位圓圈，避免標記干擾判斷球員站哪裡。 */}
-            {courtView === "tactics" &&
-              (() => {
-                // 即時布置時畫筆/防守範圍來自 session（可編輯），檢視已存戰術時來自 viewingScene
-                //（唯讀）——兩者 markers/defenseRanges 欄位形狀相同；都沒有就不畫。
-                const drawings = session ?? viewingScene;
-                if (!drawings) return null;
-                return (
-                  <>
-                    {drawings.defenseRanges.map((dr) => (
-                      <DefenseRange key={dr.id} range={dr} />
-                    ))}
-                    {drawings.markers.map((m) => (
-                      <Markers key={m.id} marker={m} />
-                    ))}
-                  </>
-                );
-              })()}
+            {/* 畫筆標記與防守範圍：即時布置時來自 session（可編輯），檢視已存戰術時來自
+                viewingScene（唯讀）——兩者 markers/defenseRanges 欄位形狀相同；都沒有
+                （drawings === null，例如剛進頁面還沒選任何戰術）就整段不畫。 */}
+            {drawings && (
+              <>
+                {drawings.defenseRanges.map((dr) => (
+                  <DefenseRange key={dr.id} range={dr} />
+                ))}
+                {drawings.markers.map((m) => (
+                  <Markers key={m.id} marker={m} />
+                ))}
+              </>
+            )}
 
             {/* Render Players
-              戰術視圖：一律渲染「反正規化」的 SnapshotPlayer——即時布置吃 session.snapshot.players
+              一律渲染「反正規化」的 SnapshotPlayer——即時布置吃 session.snapshot.players
               （可拖曳），檢視已存戰術吃 viewingScene.snapshot.players（唯讀，issue #154 PR B）。
-              兩者姓名/背號/位置都凍在快照裡，刻意「不」回 roster 查，所以名單怎麼改都動不到畫面。
-              輪轉視圖：用 positions（格子吸附站位，來自輪轉表即時資料）＋ roster join。 */}
-            {courtView === "tactics"
-              ? (session?.snapshot.players ?? viewingScene?.snapshot.players ?? []).map((sp, i) => {
-                  // SnapshotPlayer 沒有現成的 MatchPlayer/PlayerPosition 物件，就地組出 PlayerNode
-                  // 需要的兩個 prop。session 的球員 sourcePlayerId 必為非 null（拖曳/移除要靠它當
-                  // 識別）；viewingScene 可能有 null（當初就查無此人），唯讀情境用合成 id 當 key 即可。
-                  const id = sp.sourcePlayerId ?? `snap-${i}`;
-                  // 快照球員（SnapshotPlayer）本來就沒有 personId 這個概念（快照是凍結的姓名/
-                  // 背號/位置，不回 roster 查），這裡只是就地組出 PlayerNode 要的形狀，personId
-                  // 給 null 即可——不影響任何跨場統計，因為畫面渲染根本不會讀這個欄位。
-                  const player = {
-                    id,
-                    name: sp.name,
-                    number: sp.number,
-                    role: sp.role,
-                    personId: null,
-                  };
-                  const position = { playerId: id, x: sp.x, y: sp.y };
-                  const isFrontRow = rowOf(sp.y) === "front";
-                  return (
-                    <PlayerNode
-                      key={id}
-                      player={player}
-                      position={position}
-                      isFrontRow={isFrontRow}
-                      isLibero={sp.isLibero}
-                      courtRef={courtRef}
-                    />
-                  );
-                })
-              : rotationPositions.positions.map((pos) => {
-                  const player = roster.find((p) => p.id === pos.playerId);
-                  if (!player) return null;
-                  const isLibero = player.role === "L";
-                  const isFrontRow = rowOf(pos.y) === "front";
-                  return (
-                    <PlayerNode
-                      key={pos.playerId}
-                      player={player}
-                      position={pos}
-                      isFrontRow={isFrontRow}
-                      isLibero={isLibero}
-                      courtRef={courtRef}
-                    />
-                  );
-                })}
+              兩者姓名/背號/位置都凍在快照裡，刻意「不」回 roster 查，所以名單怎麼改都動不到畫面。 */}
+            {(drawings?.snapshot.players ?? []).map((sp, i) => {
+              // SnapshotPlayer 沒有現成的 MatchPlayer/PlayerPosition 物件，就地組出 PlayerNode
+              // 需要的兩個 prop。session 的球員 sourcePlayerId 必為非 null（拖曳/移除要靠它當
+              // 識別）；viewingScene 可能有 null（當初就查無此人），唯讀情境用合成 id 當 key 即可。
+              const id = sp.sourcePlayerId ?? `snap-${i}`;
+              // 快照球員（SnapshotPlayer）本來就沒有 personId 這個概念（快照是凍結的姓名/
+              // 背號/位置，不回 roster 查），這裡只是就地組出 PlayerNode 要的形狀，personId
+              // 給 null 即可——不影響任何跨場統計，因為畫面渲染根本不會讀這個欄位。
+              const player = {
+                id,
+                name: sp.name,
+                number: sp.number,
+                role: sp.role,
+                personId: null,
+              };
+              const position = { playerId: id, x: sp.x, y: sp.y };
+              const isFrontRow = rowOf(sp.y) === "front";
+              return (
+                <PlayerNode
+                  key={id}
+                  player={player}
+                  position={position}
+                  isFrontRow={isFrontRow}
+                  isLibero={sp.isLibero}
+                  courtRef={courtRef}
+                />
+              );
+            })}
           </svg>
 
-          {/* L 備位圓圈（issue #18）：只在輪轉視圖顯示——這是「先發 L 還沒上場」這個
-              輪轉表自己的概念，戰術布置是獨立的快照畫布，沒有「備位」這回事（快照裡
-              有誰就是有誰）。用一般 HTML 絕對定位疊在 SVG 上面（不是畫在 SVG 座標系
-              裡的 <g>），因為拖曳上場沿用的是「從左側名單拖到球場」那一套瀏覽器原生
-              drag-and-drop（onDragStart 用 e.dataTransfer 存 playerId，Court 的
-              handleDrop 接住），這套機制在一般 HTML 元素上最穩定；left/top 用
-              svgPointToPercent 換算成百分比，精準疊在上面那個我方紅框正中央，兩個
-              視圖縮放時都不會跑位。 */}
-          {courtView === "rotation" && liberoInSpot.length > 0 && (
-            <div
-              className="absolute flex flex-col items-center"
-              style={{
-                left: `${ourLiberoCenterPercent.leftPercent}%`,
-                top: `${ourLiberoCenterPercent.topPercent}%`,
-                transform: "translate(-50%, -50%)",
-              }}
-            >
-              {liberoInSpot.map((p) => (
-                <div
-                  key={p.id}
-                  draggable
-                  onDragStart={(e) => e.dataTransfer.setData("text/plain", p.id)}
-                  onContextMenu={(e) => {
-                    e.preventDefault();
-                    // 右鍵點備位區 L = 取消先發設定，備位區變空白
-                    if (matchId) setStartingLiberoId(matchId, null);
-                  }}
-                  // 2026-08-07 對齊 Claude Design PlayerMarker 元件卡的「自由球員」樣式
-                  // （components/PlayerMarker/card.html，跟 components/PlayerMarker.tsx
-                  // 那顆 SVG 版本同一套視覺語言，這裡是 HTML 版）：深色玻璃底描邊改成
-                  // 「這個顏色實色填滿＋圈角一顆深底 L 徽章」，背號不再加 # 前綴，文字用
-                  // 深色墨（DS 的 filled 狀態規則：實色亮綠底上深色字才有足夠對比）。
-                  className="relative flex h-7 w-7 cursor-grab select-none items-center justify-center rounded-full font-score text-micro backdrop-blur-sm active:cursor-grabbing"
-                  style={{ background: "#CCFF00", color: "#0a0b07" }}
-                  title={`${p.name} #${p.number} — 拖到後排（1/5/6）上場；右鍵取消先發`}
-                >
-                  {p.number}
-                  <span
-                    className="absolute -bottom-1 -right-1 rounded-full px-1 text-marker-xs font-sans font-bold leading-[1.4]"
-                    style={{ background: "#0a0b07", color: "#CCFF00" }}
-                  >
-                    L
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
+          {/* 這裡原本疊著一顆「L 備位圓圈」（issue #18）：先發自由球員還沒上場時，用一般
+              HTML 絕對定位畫在球場 1 號位外側的留白帶上，可以拖進場、右鍵取消。#328 把它
+              刪掉，因為「指定先發自由球員」這個職責在 #327 已經整個交給右欄輪轉表的第七格
+              ——而且那一格存的是 #326 的模型「L 頂替誰」，不是「L 站在哪個座標」，所以這顆
+              圓圈沒有東西要搬過去，是純刪除（見 docs/adr/0012）。 */}
         </div>
       </div>
     </div>

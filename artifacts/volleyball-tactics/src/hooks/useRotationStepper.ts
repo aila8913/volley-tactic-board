@@ -18,19 +18,21 @@ export function useRotationStepper(matchId: string | undefined) {
   const setCurrentRotation = useRotationTable((state) => state.setCurrentRotation);
   const session = useTacticsBoard((state) => state.session);
   const discardSession = useTacticsBoard((state) => state.discardSession);
-  const setCourtView = useTacticsBoard((state) => state.setCourtView);
+  const exitViewing = useTacticsBoard((state) => state.exitViewing);
 
   // 切輪次（issue #154 PR C）：戰術白板改成單景 session 後，白板跟輪次已脫鉤——一個 session
   // 是「某一刻擷取的一張獨立照片」，不再是「第 N 輪的畫」。所以切輪次時：
   //   - 正在編一個有未存內容的 session → 先確認捨棄（唯一還會弄丟東西的動作）。
-  //   - 確認後結束 session、切回輪轉視圖，再改輪轉表的 currentRotation。
+  //   - 確認後把白板清空，再改輪轉表的 currentRotation。
   const onStep = (delta: -1 | 1) => {
     if (!matchId) return;
     const dirty = isSessionDirty(session);
     if (dirty && !window.confirm("未儲存的戰術內容將會捨棄，確定要切換輪次嗎？")) return;
-    // 丟掉 session / 清掉唯讀檢視、回到輪轉視圖，再切輪次——避免帶著白板狀態切到別輪。
+    // 丟掉 session / 清掉唯讀檢視，再切輪次——避免帶著上一輪的白板狀態切到別輪。
+    // （#328 之前 else 那半邊寫的是 setCourtView("rotation")，那顆開關真正做的事就是
+    // 清掉唯讀檢視，現在動作直接叫它自己的名字，見 useTacticsBoard.ts 的 exitViewing。）
     if (session) discardSession();
-    else setCourtView("rotation");
+    else exitViewing();
     // 排球的 6 個輪次是「環狀」的，位移要取模 6。往前一格用 +5 而不是 -1，是因為 JS 的
     // % 對負數會回傳負值（例如 -1 % 6 === -1），+5 mod 6 在 0~5 範圍內結果相同、又不會出現
     // 負索引（沿用 RotationSwitcher 原本的寫法）。

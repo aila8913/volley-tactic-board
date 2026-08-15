@@ -15,7 +15,7 @@ import RotationControlsFooter from "./RotationControlsFooter";
 const EMPTY_ROSTER: MatchPlayer[] = [];
 const EMPTY_LINEUP: LineupZones = {};
 
-// 小按鈕共用樣式（編輯/重置站位/清除畫筆），跟比賽列表那邊的次要按鈕是同一套語言，
+// 小按鈕共用樣式（編輯/重置先發/清除畫筆），跟比賽列表那邊的次要按鈕是同一套語言，
 // 只是尺寸縮小配合這裡的資訊密度。
 const PANEL_BUTTON_CLASS =
   "rounded-lg border border-white/[0.26] bg-white/[0.05] px-2 py-1 text-xs " +
@@ -23,6 +23,12 @@ const PANEL_BUTTON_CLASS =
 
 interface RotationPanelProps {
   matchId: string | undefined;
+  // 球員清單那幾列能不能被拖走。#328：這件事以前兩個 mode 都寫死 true，因為中央球場的
+  // 輪轉畫法會接住這個拖曳（把人吸附進六個號位、寫回輪轉表）。那個畫法退役後，只有
+  // **正在編一張戰術**（mode D 佈陣中）的球場還接得住拖曳——mode B 的球場上沒有 session，
+  // 拖過去會什麼都不發生。可拖但拖了沒反應是這個 repo 最不想留的那種東西（跟 #372 修的
+  // 「調色盤拖上去被 guard 安靜吃掉」同一類），所以改成由呼叫端誠實宣告。
+  benchDraggable: boolean;
 }
 
 // 這裡以前還有一個 showTips prop，掛著 mode B 專屬的「👉 新手提示 (Tips)」摺疊區塊。
@@ -30,9 +36,9 @@ interface RotationPanelProps {
 //
 //   1. 它是右欄空間的主要競爭者。Tips 是 flex 的兄弟節點、佔掉固定一段高度，把上面
 //      `overflow-y-auto` 那塊擠到 745px 視窗下只剩 320px（內容 392px）——名單只露 3 列、
-//      「重置站位／清除畫筆」兩顆整個沉在摺線下。#324 就是因此被誤開成一張「按鈕被蓋住」
+//      「重置先發／清除畫筆」兩顆整個沉在摺線下。#324 就是因此被誤開成一張「按鈕被蓋住」
 //      的 bug（實際是捲出視野），根因併進 #331 追。
-//   2. 內容本身已經過期。四條裡有兩條在講「輪轉視圖」——正是 #328 要退役的那個沒有名字、
+//   2. 內容本身已經過期。四條裡有兩條在講「輪轉視圖」——就是 #328 退役掉的那個沒有名字、
 //      沒有切換入口的遺留畫面。教學文案指著一個要拆掉的東西，留著只會誤導。
 //
 // 需要新手引導的話那是另一件事（該做在第一次進頁的 onboarding，不是常駐佔一塊版面），
@@ -45,10 +51,10 @@ interface RotationPanelProps {
 // 用 prop 傳進來的。與其兩邊各自拼一份幾乎相同的 JSX，不如把「拼裝」這件事抽成這個
 // 吃 matchId prop 的元件，兩個檔案各自只負責「怎麼拿到 matchId」。
 //
-// Tips 區塊拿掉之後（見上面 RotationPanelProps 的說明），兩個 mode 的差別只剩 matchId
-// 從哪來——這層包裝現在幾乎是純轉發，但先留著：#328／#331 都會再動這一帶的版面，
-// 等那兩張落地、確定兩邊真的不會再長出差異了再談要不要合併。
-export function RotationPanel({ matchId }: RotationPanelProps) {
+// Tips 區塊拿掉之後，兩個 mode 的差別是 matchId 從哪來、以及 benchDraggable 開不開
+// （#328 新增，見上面 RotationPanelProps 的說明——這正是「兩邊會不會長出差異」的答案：
+// 會，而且已經長出來了）。#331 還會再動這一帶的版面，這層包裝先留著。
+export function RotationPanel({ matchId, benchDraggable }: RotationPanelProps) {
   // 名單/站位/目前輪次/先發 L 現在都存在「這一場」的分片裡（issue #119），統一從
   // dataByMatch[matchId] 讀；那場還沒任何資料時給空白預設值。
   const data = useRotationTable((state) => (matchId ? state.dataByMatch[matchId] : undefined));
@@ -72,11 +78,12 @@ export function RotationPanel({ matchId }: RotationPanelProps) {
           「寫」回去——真的要排先發，得去計分頁排（那邊在開賽前是可編輯的）。lineup 直接就是
           store 裡那一份先發（#231 PR3 之後 store 存的本來就是號位版），不再需要「從座標
           算回號位」那層翻譯，兩邊天生是同一份資料、不可能兜不起來。
-          benchDraggable 則是另一件事（見 RotationRailPanel 的 prop 註解）：格子唯讀
-          不代表清單也不能動，把球員拖到球場本來就是這個 repo 一直允許的互動。 */}
+          benchDraggable 則是另一件事（見 RotationRailPanel 的 prop 註解，以及上面
+          RotationPanelProps 的說明）：格子唯讀不代表清單也不能動——但清單能不能拖，取決於
+          「現在有沒有一塊接得住的球場」，所以由呼叫端傳進來，不再兩個 mode 都寫死。 */}
         <RotationRailPanel
           readOnly
-          benchDraggable
+          benchDraggable={benchDraggable}
           lineup={isLineupFull(lineup) ? lineup : null}
           roster={roster}
           rotation={currentRotation}
@@ -125,5 +132,8 @@ export function RotationPanel({ matchId }: RotationPanelProps) {
 // 職責，維持原檔名/預設匯出不變，這樣 TacticsBoard.tsx 等既有呼叫端不用跟著改 import。
 export default function RotationTable() {
   const { id: matchId } = useParams<{ id: string }>();
-  return <RotationPanel matchId={matchId} />;
+  // mode B＝沒在編任何戰術，中央是一塊空白白板，接不住從清單拖過來的球員（見
+  // RotationPanelProps 的 benchDraggable 說明）——所以這裡關掉。要把人排上場，走
+  // 「+ 新增戰術」開一個 session（那就是 mode D）。
+  return <RotationPanel matchId={matchId} benchDraggable={false} />;
 }
