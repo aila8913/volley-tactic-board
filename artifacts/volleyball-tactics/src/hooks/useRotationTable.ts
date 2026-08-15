@@ -10,7 +10,6 @@ import type { LineupZones } from "../types/scoresheet";
 const emptyPerMatch = (): PerMatchRotationState => ({
   roster: [],
   lineup: {},
-  liberoReplacesPlayerId: null,
   currentRotation: 0,
   startingLiberoId: null,
 });
@@ -36,22 +35,17 @@ interface RotationTableStore {
   setRoster: (matchId: string, roster: MatchPlayer[]) => void;
   setCurrentRotation: (matchId: string, index: number) => void;
 
-  // 一次寫定「先發自由球員是誰 ＋ 他頂替誰」（issue #327 的第七格）。
+  // 指定這一場的先發自由球員是誰（issue #327 的第七格），null＝這場不派 L。
   //
-  // 這支取代了舊的 setStartingLiberoId（只寫得了一半）跟 placePlayerOnCourt 的 L 分支
-  // （輸入是「號位」，因為它服務的是球場拖曳——使用者指的是畫面上某一格）。第七格的輸入
-  // 是**人**（「L 頂替 12 號」），中間沒有格子；硬要用號位表示就得先把人反查回號位、再
-  // 換算回起始號位，多繞兩層還會被 currentRotation 影響，等於把一件簡單的事重新編碼成
-  // 座標——正是 #326 判定為方向錯誤的那種做法。那兩支已在 #328 收尾時刪除（見檔尾註）。
+  // 輸入是**人**不是號位：使用者在第七格回答的是「我們的 L 是誰」。#328 之前另有一支
+  // placePlayerOnCourt 從球場拖曳寫進來（輸入是號位，得反查成人再換算），那條路連同它的
+  // 畫面一起退役了。
   //
-  // 兩個參數一起寫也是刻意的：這兩個欄位描述的是**同一件事**（哪一位 L 上場頂替哪一位）。
-  // 拆成兩支各寫一半，就會出現「L 換人了但頂替對象還是舊的」這種中間狀態——store 端不該
-  // 讓那種狀態存在得起來。
-  setLiberoAssignment: (
-    matchId: string,
-    liberoId: string | null,
-    replacesPlayerId: string | null,
-  ) => void;
+  // ⚠️ 這支以前叫 setLiberoAssignment，一次寫兩個欄位（誰 ＋ 他頂替誰），因為那時兩件事
+  // 被視為同一個決定、拆開寫會出現「L 換人了但頂替對象還是舊的」這種中間狀態。#425 之後
+  // 賽前根本不記頂替對象（見 types/rotationTable.ts 的說明），這支就只剩一個欄位可寫，
+  // 名字也跟著誠實化——那個中間狀態現在從型別上就不存在。
+  setStartingLibero: (matchId: string, liberoId: string | null) => void;
 
   // 清空這場的先發（RotationControlsFooter 的「重置先發」按鈕）。
   //
@@ -79,8 +73,8 @@ interface RotationTableStore {
   // placePlayerOnCourt / removePlayerFromCourt / setStartingLiberoId / resetAll。
   // 前兩支的呼叫端只有戰術板中央的輪轉畫法（#328 退役），而「排先發」這件事本身早就改由
   // setLineupZones ＋ lib/rotationLogic 的 assignPlayerToZone 承接（#231 PR3、#174 的跨欄
-  // 拖曳）；setStartingLiberoId 只寫得了「L 是誰」一半，#327 之後一律走 setLiberoAssignment
-  // 兩個欄位一起寫；resetAll 從頭到尾沒有任何呼叫端。
+  // 拖曳）；setStartingLiberoId 被 setLiberoAssignment 取代（#327；#425 之後它又收斂回
+  // 單一欄位、改名 setStartingLibero）；resetAll 從頭到尾沒有任何呼叫端。
   //
   // 為什麼是刪不是留著備用：**同一份 state 有兩條寫入路徑**正是這顆 store 反覆出過 bug 的
   // 形狀（#14 兩個 L、#231 的四份先發表示法）。留著一條沒人走、也沒人維護的寫法，下一個人
@@ -114,37 +108,23 @@ export const useRotationTable = create<RotationTableStore>()(
       setCurrentRotation: (matchId, index) =>
         set((state) => updateMatch(state, matchId, (m) => ({ ...m, currentRotation: index }))),
 
-      setLiberoAssignment: (matchId, liberoId, replacesPlayerId) =>
+      setStartingLibero: (matchId, liberoId) =>
         set((state) =>
           updateMatch(state, matchId, (m) => {
-            // 收掉整個指派：L 下場、也不再頂替任何人。
             if (liberoId === null) {
-              if (m.startingLiberoId === null && m.liberoReplacesPlayerId === null) return m;
-              return { ...m, startingLiberoId: null, liberoReplacesPlayerId: null };
+              if (m.startingLiberoId === null) return m;
+              return { ...m, startingLiberoId: null };
             }
 
             // ── 白名單把關 ──
-            // 兩道檢查都寫成「必須等於允許的值」而不是「不可以是危險值」（見專案 memory
-            // 「安全閘門一律白名單」）：這個 action 的輸入來自拖曳事件的 dataTransfer，
-            // 那是外部字串，別的分頁、桌面上的一段文字都可能丟進來。
-            //   (a) 這個人必須真的在這場名單裡、而且真的是自由球員——不然會寫進一個
-            //       deriveRotation 永遠找不到人的幽靈 id。
-            //   (b) 被頂替的人必須真的在先發裡——頂替一個不在場上的人沒有意義。
-            //
-            // 刻意**不**檢查「被頂替者是不是站後排」，不是漏寫：這個 action 的手勢是
-            // 「指定 L 要頂誰」——「頂替 12 號，等他轉到後排我再上」是完全合法的計畫。
-            // 被頂替者在前排時 L 不在場上，由 deriveRotation 推導出來（#326），不需要在
-            // 寫入這端先擋掉。（舊的 placePlayerOnCourt 有一條「L 不准放前排」的把關，因為
-            // 它的手勢是「把 L 拖到某一格站著」、前排站位在規則上不存在；那支已在 #328
-            // 收尾時整個刪掉，所以現在寫入端只剩這一條語意。）
+            // 寫成「必須等於允許的值」而不是「不可以是危險值」（見專案 memory「安全閘門
+            // 一律白名單」）：這個 action 的輸入來自拖曳事件的 dataTransfer，那是外部字串，
+            // 別的分頁、桌面上的一段文字都可能丟進來。這個人必須真的在這場名單裡、而且真的
+            // 是自由球員——不然會寫進一個渲染時永遠找不到人的幽靈 id。
             if (!m.roster.some((p) => p.id === liberoId && p.role === "L")) return m;
-            const replaced =
-              replacesPlayerId !== null && Object.values(m.lineup).includes(replacesPlayerId)
-                ? replacesPlayerId
-                : null;
 
-            if (m.startingLiberoId === liberoId && m.liberoReplacesPlayerId === replaced) return m;
-            return { ...m, startingLiberoId: liberoId, liberoReplacesPlayerId: replaced };
+            if (m.startingLiberoId === liberoId) return m;
+            return { ...m, startingLiberoId: liberoId };
           }),
         ),
 
@@ -167,21 +147,13 @@ export const useRotationTable = create<RotationTableStore>()(
             //（Maximum update depth exceeded）。（見 memory：zustand stable ref in effect actions）
             const lineup = filterLineupToRoster(m.lineup, roster);
 
-            // 頂替狀態也要跟著名單清乾淨，兩種情況都算「這次替換不再成立」：
-            //   (a) 先發 L 被移出名單——場上那位 L 不存在了
-            //   (b) **被頂替的那個人**被移出名單——沒有人被頂替，L 也就沒有位置可站
-            // (b) 是換表示法之後才需要顧的：舊模型記的是號位，人被刪掉頂多讓那格空著；新
-            // 模型記的是人，指向已刪除球員的 id 會讓 deriveRotation 每次都算出「L 不在場上」，
-            // 畫面雖然沒錯，但 store 裡留著一個永遠不會成真的殘留值。
-            const replacedStillExists = roster.some((p) => p.id === m.liberoReplacesPlayerId);
-            const liberoReplacesPlayerId =
-              currentStillExists && replacedStillExists ? m.liberoReplacesPlayerId : null;
-
+            // 註：這裡以前還要順手清「L 頂替誰」——先發 L 或被頂替者任一被移出名單，那次
+            // 頂替就不再成立。#425 之後賽前不記頂替對象，這段清理連同欄位一起消失：少一個
+            // 欄位，就少一種「兩個欄位對不起來」的殘留。
             return {
               ...m,
               roster,
               lineup,
-              liberoReplacesPlayerId,
               startingLiberoId: currentStillExists ? m.startingLiberoId : (liberos[0]?.id ?? null),
             };
           }),
@@ -192,26 +164,17 @@ export const useRotationTable = create<RotationTableStore>()(
           updateMatch(state, matchId, (m) => ({
             ...m,
             lineup: {},
-            liberoReplacesPlayerId: null,
           })),
         ),
 
       setLineupZones: (matchId, lineup) =>
         set((state) =>
+          // 只動先發。這裡曾經有一段「調整號位時，L 的頂替關係要不要跟著失效」的規則
+          // （#327 修過一次無聲清空的 bug），#425 之後賽前不記頂替對象，那段規則沒有對象
+          // 可以維護了——動六個號位就只是動六個號位。
           updateMatch(state, matchId, (m) => ({
             ...m,
             lineup,
-            // ⚠️ 行為變更（#327）：這裡以前是無條件 `liberoReplacesPlayerId: null`。
-            // 當時說得通——那時右欄面板沒有任何地方能指定 L，這支的每個呼叫端都是「教練
-            // 剛動過六個號位」，順手清掉一個永遠是別處設的殘留值不會有人察覺。
-            // 第七格搬進同一個面板之後就完全不同了：教練排好 L、接著調整任何一格，L 就會
-            // 無聲消失，看起來就是「設了沒用」。
-            // 改成：被頂替的人還在新的先發裡，這次頂替就繼續成立；被換掉/擠掉了就收回
-            // null（#326：系統不替教練猜下一個頂替對象）。#328 收尾刪掉 placePlayerOnCourt
-            // 之後，這條規則在 store 裡只剩這一份，不再需要跟另一支保持同步。
-            liberoReplacesPlayerId: Object.values(lineup).includes(m.liberoReplacesPlayerId ?? "")
-              ? m.liberoReplacesPlayerId
-              : null,
           })),
         ),
     }),

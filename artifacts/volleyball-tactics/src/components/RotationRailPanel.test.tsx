@@ -8,7 +8,7 @@
 // 那些舊寫法一條都寫不出來；為什麼兩種寫法在同一個檔案裡並存，見下半部開頭的說明。
 import { describe, it, expect, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import RotationRailPanel from "./RotationRailPanel";
 import type { MatchPlayer } from "@/types/match";
@@ -106,8 +106,10 @@ describe("RotationRailPanel 的自由球員先發格（#327）", () => {
     );
 
     expect(html).toContain("頂替 10");
-    // 格子顯示的是**場上實際站著的人**（L），被蓋住的格主縮小標在旁邊。這是教練唯一
-    // 能確認「我剛剛設的頂替有沒有生效」的視覺回饋。
+    // 格子顯示的是**場上實際站著的人**（L），被蓋住的格主縮小標在旁邊。
+    // ⚠️ #425 之後這個 prop 在**可編輯**狀態下恆為 null（賽前不再指定頂替對象），所以這一節
+    // 幾條測的其實是**唯讀**那條路：計分頁看歷史局時，第七格讀的是該局封存快照裡的
+    // replacesPlayerId（#359），那份資料可以有值，畫面就必須畫得出來。
     expect(html).toContain("西谷夕".slice(0, 3));
     expect(html).toContain("L 頂 ");
   });
@@ -304,5 +306,54 @@ describe("RotationRailPanel 的點擊指派（先選號位、再點球員）", (
     expect(screen.getByTestId("rotation-zone-1").tagName).toBe("DIV");
     // 球員清單那幾列在唯讀模式下也是 div——整個面板一顆 button 都沒有。
     expect(screen.queryAllByRole("button")).toHaveLength(0);
+  });
+});
+
+describe("自由球員的拖曳去處（#425：賽前只記「誰是先發 L」）", () => {
+  // jsdom 沒有實作 HTML5 drag-and-drop，所以手刻一個最小的假 DataTransfer：只要 getData
+  // 回得出被拖的 playerId 就夠了（跟 Court.test.tsx / PositionPalette.test.tsx 同一招）。
+  const dropPlayer = (target: HTMLElement, playerId: string) =>
+    fireEvent.drop(target, { dataTransfer: { getData: () => playerId } });
+
+  const renderPanel = (onLineupChange: () => void, onLiberoChange: () => void) =>
+    render(
+      <RotationRailPanel
+        lineup={LINEUP}
+        roster={ROSTER}
+        rotation={0}
+        showLiberoCell
+        onLineupChange={onLineupChange}
+        onLiberoChange={onLiberoChange}
+      />,
+    );
+
+  it("⚠️ 行為變更：把 L 拖到六個號位裡的任何一格，什麼都不會發生", () => {
+    // 舊行為（#326／#327）：這個手勢＝「L 頂替站在這一格的那個人」，格子只是使用者指到
+    // 那個人的方式。PO 2026-08-15 決定賽前不記頂替對象——先發六人本來就不含自由球員，
+    // 賽前該回答的只有「先發 L 是誰」；他頂替誰要等比賽中真的換上場才成立（計分頁的
+    // liberoSubstitution）。賽前先寫下來的那個值會被凍進該局先發快照，讀起來像紀錄、
+    // 其實只是計畫，跟 #326 刪掉「接替啟發式」是同一個理由。
+    const onLineupChange = vi.fn();
+    const onLiberoChange = vi.fn();
+    renderPanel(onLineupChange, onLiberoChange);
+
+    // 1 號位站著 p1（後排），在舊行為下這是最典型的「L 頂替他」手勢。
+    dropPlayer(screen.getByTestId("rotation-zone-1"), "p3");
+
+    expect(onLiberoChange).not.toHaveBeenCalled();
+    // 也不可以退而求其次把 L 塞進那六格——L 不佔輪轉序，這不是「頂替不成就當成排位」。
+    expect(onLineupChange).not.toHaveBeenCalled();
+  });
+
+  it("第七格仍然收得到他：拖進去＝指定先發 L", () => {
+    const onLineupChange = vi.fn();
+    const onLiberoChange = vi.fn();
+    renderPanel(onLineupChange, onLiberoChange);
+
+    dropPlayer(screen.getByTestId("libero-slot"), "p3");
+
+    // 只交出一個值。這個回呼以前收兩個參數（誰 ＋ 他頂替誰），#425 之後賽前沒有第二件事
+    // 可講，型別上就交不出頂替對象了——那正是「乾淨」的意思：講不出來的東西不留位子。
+    expect(onLiberoChange).toHaveBeenCalledWith("p3");
   });
 });

@@ -85,11 +85,14 @@ interface RotationRailPanelProps {
   // 先發自由球員是誰（名單裡可能有多位 L，場上同時只有一位）。
   liberoId?: string | null;
   // 他頂替先發裡的哪一位（#326 的模型：存「頂替誰」，站哪格是推導值）。
+  //
+  // ⚠️ #425 之後這個 prop 只有**唯讀**的呼叫端會傳值：計分頁/比賽列表看一局已封存的先發時，
+  // 那份快照裡記著該局實際的頂替對象（#359）。可編輯狀態下它恆為 null——賽前不記頂替對象，
+  // 所以第七格編得動的只有「誰是先發 L」。這也是為什麼 onLiberoChange 交不出這個值。
   liberoReplacesPlayerId?: string | null;
-  // 使用者改了第七格。兩個值一起交出去，理由見 useRotationTable 的 setLiberoAssignment：
-  // 「哪位 L」跟「頂誰」描述的是同一件事，分兩次寫會生出「換了人但頂替對象是舊的」的中間態。
+  // 使用者改了第七格：交出「先發 L 是誰」，null＝這場不派 L。
   // readOnly 時不會被呼叫（戰術板那兩個呼叫端只看不改，ADR-0001）。
-  onLiberoChange?: (liberoId: string | null, replacesPlayerId: string | null) => void;
+  onLiberoChange?: (liberoId: string | null) => void;
 
   // ── 以下兩個 prop 只有 axis==="set" 時才有意義（issue #191/#192）──
   //
@@ -288,7 +291,7 @@ export default function RotationRailPanel({
     // 直接忽略（而不是「順便幫他排進某個號位」——那不是使用者在這個當下表達的意思）。
     if (selectedZone === LIBERO_SLOT) {
       if (!onLiberoChange || !liberos.some((p) => p.id === playerId)) return;
-      onLiberoChange(playerId, liberoReplacesPlayerId);
+      onLiberoChange(playerId);
       setSelectedZone(null);
       return;
     }
@@ -336,20 +339,19 @@ export default function RotationRailPanel({
     setDragOverZone(null);
     const playerId = e.dataTransfer.getData("text/plain");
 
-    // ── 把一位 L 拖到某個號位上 ──
-    // 語意不是「L 站進這一格」（他不佔輪轉序），而是**「L 頂替站在這一格的那個人」**——
-    // 格子只是使用者指到那個人的方式。這是 #326 定案的模型，也是為什麼這條路不呼叫
-    // onLineupChange：六個號位一個字都沒改。
-    if (liberos.some((p) => p.id === playerId)) {
-      if (!canEditLibero || !onLiberoChange) return;
-      const target = safeLineup[zone];
-      // 空格子沒有可頂替的對象，這次拖曳表示不成任何狀態，忽略（#326：L 是替換上場的，
-      // 「站在一個空格上」在規則上不存在）。
-      if (target === undefined) return;
-      onLiberoChange(playerId, target);
-      setSelectedZone(null);
-      return;
-    }
+    // ── 把一位 L 拖到某個號位上：忽略（#425）──
+    // 這條路以前的語意是「L 頂替站在這一格的那個人」（#326／#327 的模型：格子只是使用者
+    // 指到那個人的方式）。PO 2026-08-15 決定**賽前不記頂替對象**：先發六人本來就不含自由
+    // 球員，賽前只該回答「我們的先發 L 是誰」（第七格）；他頂替誰是比賽中真的換上場那一刻
+    // 才發生的事實，記在計分頁的 record.liberoSubstitution。
+    //
+    // 理由跟 #326 刪掉「接替啟發式」完全一樣：賽前寫下的頂替對象會被凍進那一局的先發快照，
+    // 讀起來像紀錄、其實只是計畫。這個 app 產出的是紀錄，不是示意圖。
+    //
+    // 這裡明確 return，不讓它往下掉去走「排進六個號位」那條：assignablePlayers 確實也會把 L
+    // 濾掉、結果一樣是什麼都不做，但那樣一來「L 拖到六格會發生什麼」就取決於另一個判斷式的
+    // 副作用，而不是這裡自己講清楚。
+    if (liberos.some((p) => p.id === playerId)) return;
 
     if (!canDrag || !onLineupChange) return;
     // 只認這場名單裡的人：其他地方（甚至別的分頁、桌面上的文字）也可能丟一段 text/plain
@@ -359,15 +361,15 @@ export default function RotationRailPanel({
     setSelectedZone(null);
   };
 
-  // 拖到第七格＝指定他是先發自由球員。頂替對象維持原樣（換人不等於換頂替對象）——
-  // 沒有頂替對象時就只是「備位區站著這位 L」，還沒上場。
+  // 拖到第七格＝指定他是先發自由球員。這是賽前對 L 唯一能表達的事（#425）：他上場頂替誰
+  // 要等比賽中真的換上場那一刻才成立，記在計分頁那邊。
   const handleDropOnLibero = (e: ReactDragEvent) => {
     if (!canEditLibero || !onLiberoChange) return;
     e.preventDefault();
     setDragOverZone(null);
     const playerId = e.dataTransfer.getData("text/plain");
     if (!liberos.some((p) => p.id === playerId)) return;
-    onLiberoChange(playerId, liberoReplacesPlayerId);
+    onLiberoChange(playerId);
     setSelectedZone(null);
   };
 
@@ -381,7 +383,7 @@ export default function RotationRailPanel({
     // 系統不會自己幫他找下一個頂替對象）。
     if (e.dataTransfer.getData(DND_SOURCE_LIBERO)) {
       if (!canEditLibero || !onLiberoChange) return;
-      onLiberoChange(null, null);
+      onLiberoChange(null);
       setSelectedZone(null);
       return;
     }
@@ -588,16 +590,15 @@ export default function RotationRailPanel({
             </div>
           )}
 
-          {/* × 的語意跟著狀態走：有頂替對象時先收掉頂替（L 回場外、備位區還站著他），
-            沒有頂替對象時才是把這位 L 整個撤掉。分兩段而不是一次清光，是因為「先發 L
-            是誰」跟「這一輪頂誰」在教練心裡就是兩個決定，一鍵清光會誤刪前者。 */}
+          {/* × ＝把這位先發 L 撤掉。#425 之前這顆是兩段式（有頂替對象時先收掉頂替、按第二
+            次才移除 L），因為那時賽前排得出頂替對象、而「先發 L 是誰」跟「他頂誰」是教練心裡
+            兩個決定。現在賽前不記頂替了，可編輯狀態下 liberoReplacesPlayerId 恆為 null，
+            第一段永遠走不到——留著那個分支只是留一條到不了的路。 */}
           {canEditLibero && libero && (
             <button
               type="button"
-              onClick={() =>
-                onLiberoChange?.(liberoReplacesPlayerId !== null ? libero.id : null, null)
-              }
-              aria-label={liberoReplacesPlayerId !== null ? "解除頂替" : "移除先發自由球員"}
+              onClick={() => onLiberoChange?.(null)}
+              aria-label="移除先發自由球員"
               className="shrink-0 rounded px-1 text-[#9AA08C] transition hover:text-[#ef4444]"
             >
               ×
@@ -717,8 +718,9 @@ export default function RotationRailPanel({
 
             // ── 自由球員這一列（issue #327）──
             // ⚠️ 行為變更：以前是 `opacity-70` 的純資訊列，不可點也不可拖。那是「還沒有
-            // 地方放得下 L」時的權宜，現在第七格就是他的去處：拖到第七格＝指定為先發 L，
-            // 拖到某個號位＝由他頂替那個人。兩條路都不會動到六個號位（見 handleDropOnZone）。
+            // 地方放得下 L」時的權宜，現在第七格就是他的去處：拖到第七格（或選中第七格再點
+            // 這一列）＝指定為先發 L。#425 之後那是**唯一**的去處——拖到六個號位不再有任何
+            // 意義，六格是先發六人，L 不佔那六格（見 handleDropOnZone）。
             if (isLibero) {
               // 可拖的兩種情況：這個面板能編第七格；或者呼叫端開了 benchDraggable
               //（戰術板——那裡拖出去是要丟到球場上的備位區，跟這個面板無關）。

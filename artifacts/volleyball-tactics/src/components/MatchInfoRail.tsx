@@ -173,15 +173,12 @@ function MatchDetailSection({
   const setRoster = useRotationTable((state) => state.setRoster);
   const storedLineup = useRotationTable((state) => state.dataByMatch[matchId]?.lineup);
   const setLineupZones = useRotationTable((state) => state.setLineupZones);
-  // 自由球員先發（#327）跟 lineup 存在同一份分片裡——「誰先發、L 頂替誰」本來就是同一
-  // 份站位真相的兩半，分開存就會出現「先發換人了但 L 還頂著已經下場的人」這種狀態。
+  // 自由球員先發（#327）跟 lineup 存在同一份分片裡：它們是同一份「這場打算怎麼排」的兩半。
+  // #425 之後這一半就只有「誰是先發 L」——他頂替誰是比賽中才成立的事實，不在賽前規劃裡。
   const startingLiberoId = useRotationTable(
     (state) => state.dataByMatch[matchId]?.startingLiberoId,
   );
-  const liberoReplacesPlayerId = useRotationTable(
-    (state) => state.dataByMatch[matchId]?.liberoReplacesPlayerId,
-  );
-  const setLiberoAssignment = useRotationTable((state) => state.setLiberoAssignment);
+  const setStartingLibero = useRotationTable((state) => state.setStartingLibero);
 
   const record = useScoreSheet((state) => state.recordingsByMatch[matchId]);
   // 只借用 controller 的「進頁重建」副作用（見 hooks/useScoreSheet.ts 開頭的架構說明）：
@@ -327,7 +324,9 @@ function MatchDetailSection({
     // 同一份真相），而且是全 app 唯一排得了 L 先發的地方，所以無條件打開——即使還沒排任何
     // L（空的第七格＝「這裡可以排 L」的入口），跟唯讀分支「沒排就不畫」的判準相反。
     liberoId = startingLiberoId ?? null;
-    liberoReplaces = liberoReplacesPlayerId ?? null;
+    // 可編輯這一支永遠沒有頂替對象可顯示（#425：賽前不記）。留著這行賦值是為了讓兩支分支
+    // 都明確講一次自己給什麼，而不是靠「上面宣告時是 null」的預設值默默生效。
+    liberoReplaces = null;
     showLiberoCell = true;
   }
 
@@ -367,9 +366,7 @@ function MatchDetailSection({
       showLiberoCell={showLiberoCell}
       liberoId={liberoId}
       liberoReplacesPlayerId={liberoReplaces}
-      onLiberoChange={(nextLiberoId, replaces) =>
-        setLiberoAssignment(matchId, nextLiberoId, replaces)
-      }
+      onLiberoChange={(nextLiberoId) => setStartingLibero(matchId, nextLiberoId)}
     />
   );
 

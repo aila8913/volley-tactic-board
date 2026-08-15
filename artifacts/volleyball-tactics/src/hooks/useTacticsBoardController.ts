@@ -141,9 +141,9 @@ export function useTacticsBoardController(matchId: string | undefined) {
     const rt = useRotationTable.getState().dataByMatch[matchId ?? ""];
     const r = rt?.currentRotation ?? 0;
     // 這一輪的座標改用 deriveRotation 現算（#231 PR3：store 不再存六輪座標）。
-    const positions = rt
-      ? deriveRotation(rt.lineup, rt.startingLiberoId, rt.liberoReplacesPlayerId, r).positions
-      : [];
+    // 第三個參數（L 頂替誰）固定給 null：#425 之後賽前不記頂替對象，所以從輪轉表擷取的
+    // 快照就是先發六人，不含自由球員——那正是「先發」的定義（L 是換人上場的）。
+    const positions = rt ? deriveRotation(rt.lineup, rt.startingLiberoId, null, r).positions : [];
     const roster = rt?.roster ?? [];
     return captureFromRotation(positions, roster, { matchId: matchId ?? "", rotation: r });
   };
