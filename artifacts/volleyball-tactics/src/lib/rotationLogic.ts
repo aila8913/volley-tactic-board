@@ -4,8 +4,8 @@ import type { LineupZones } from "../types/scoresheet";
 
 // 把先發快照（rotation 0 的號位→球員）換算成「第 rotation 輪」時場上 6 個人的座標，
 // 給計分表球場渲染用。排球輪轉：起始號位 z 的人，轉了 rotation 次後落在 rotateZone(z, rotation)，
-// 取那個號位的座標。這跟 useRotationTable.placePlayerOnCourt 推算其他輪次是同一條公式，只是這裡
-// 的基準固定是 rotation 0（先發那一輪），且資料來源是計分表自己的快照、不是全域 store。
+// 取那個號位的座標。基準固定是 rotation 0（先發那一輪），且資料來源是計分表自己的快照、
+// 不是全域 store——輪轉表那邊要看某一輪則走 deriveRotation（多套一層自由球員替換）。
 export function lineupToPositions(lineup: LineupZones, rotation: number): PlayerPosition[] {
   return Object.entries(lineup).map(([zoneStr, playerId]) => {
     const startZone = Number(zoneStr);

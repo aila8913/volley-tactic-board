@@ -343,8 +343,8 @@ export default function RotationRailPanel({
     if (liberos.some((p) => p.id === playerId)) {
       if (!canEditLibero || !onLiberoChange) return;
       const target = safeLineup[zone];
-      // 空格子沒有可頂替的對象，這次拖曳表示不成任何狀態，忽略（跟 store 的
-      // placePlayerOnCourt 同一條把關）。
+      // 空格子沒有可頂替的對象，這次拖曳表示不成任何狀態，忽略（#326：L 是替換上場的，
+      // 「站在一個空格上」在規則上不存在）。
       if (target === undefined) return;
       onLiberoChange(playerId, target);
       setSelectedZone(null);

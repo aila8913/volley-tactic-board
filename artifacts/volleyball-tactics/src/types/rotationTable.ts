@@ -38,7 +38,7 @@ export interface RotationPositions {
 export interface PerMatchRotationState {
   // 完整球員名單（人數不固定），跟比賽列表那邊的 match.players 是同一份資料、同一個型別，
   // 編輯這裡會回寫到 match list。lineup 裡的 playerId 直接存這份名單裡的球員 id，
-  // 哪個球員站哪個號位，完全由教練拖曳決定（見 hooks/useRotationTable.ts 的 placePlayerOnCourt）。
+  // 哪個球員站哪個號位，完全由教練拖曳決定（右欄輪轉表的六格 → setLineupZones）。
   roster: MatchPlayer[];
   currentRotation: number;
 
