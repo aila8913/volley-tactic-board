@@ -495,7 +495,29 @@ export default function MatchDetailForm({
               update={update}
             />
 
-            <div className="space-y-2">
+            {/* #401：球員名單這一區裡，在輸入框按 Enter 不送出整場比賽。
+
+                原因是 HTML 的 **implicit submission**——表單裡只要有 submit 鈕，在任何單行
+                input 按 Enter 瀏覽器就會幫你送出。對「對手隊名」那種單一欄位這是好事（打完
+                按 Enter 就存檔很自然），但球員名單是一個多列陣列：使用者打完一位球員的名字
+                按 Enter，心裡想的是「下一格／下一位」，不是「這場比賽我填完了」。實際撞到的
+                人看到的是驗證錯誤整片亮起來（日期還沒填），開發模式下還會再吃一個 Vite 的
+                紅色錯誤覆蓋層。
+
+                只擋 input，不擋 button：刪除鈕、「新增球員」鈕都是 <button>，鍵盤操作的人
+                靠 Enter 觸發它們，一起擋掉會讓名單變成滑鼠才能用。Radix 的「位置」下拉在
+                DOM 上也是 button（role=combobox），它自己會處理 Enter 展開選單，同樣不能擋。
+
+                只掛在名單這一區、不掛在整個 <form> 上：基本資料那幾格按 Enter 存檔是合理的，
+                沒必要跟著一起犧牲。 */}
+            <div
+              className="space-y-2"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && e.target instanceof HTMLInputElement) {
+                  e.preventDefault();
+                }
+              }}
+            >
               <Label className="text-xs text-[#9AA08C]">球員名單</Label>
               {fields.map((field, index) => (
                 <div key={field.id} className="space-y-1">
