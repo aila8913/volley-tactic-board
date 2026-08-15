@@ -45,11 +45,31 @@ export default function TacticsBoardPanel({
   // 那個欄位真的變了才重繪，不整包解構。
   const viewingScene = useTacticsBoard((s) => s.viewingScene);
   const viewingTacticName = useTacticsBoard((s) => s.viewingTacticName);
+  const viewingTacticId = useTacticsBoard((s) => s.viewingTacticId);
+  const setViewingTacticName = useTacticsBoard((s) => s.setViewingTacticName);
   const setCourtView = useTacticsBoard((s) => s.setCourtView);
 
   // 兩選一模式：session 已經被排除在這個元件會出現的情境之外（見上面說明），所以只看
   // viewingScene 就夠分辨 browse／viewing，不用再檢查 session。
   const mode: "browse" | "viewing" = viewingScene ? "viewing" : "browse";
+
+  // #408：唯讀態的改名。onRenameTactic 需要一整筆 Tactic（它會把原本的 data 一起送回去，
+  // 見 useTacticsBoardController.handleRenameTactic——PATCH 帶的是完整內容，不是只有名字），
+  // 但 store 只記得 viewingTacticId，所以在清單裡把那一筆撈回來。
+  //
+  // 撈不到就是 null，改名入口整個不長出來——兩種情況會這樣：JSON 匯入的唯讀照片本來就沒有
+  // server id，以及清單還沒載完。與其給一顆按了沒反應的按鈕，不如先不給。
+  const viewingTactic = viewingTacticId
+    ? (tactics.find((t) => t.id === viewingTacticId) ?? null)
+    : null;
+  const handleRenameViewing = viewingTactic
+    ? (name: string) => {
+        onRenameTactic(viewingTactic, name);
+        // 面板顯示的名字來自 store 的快照，不是 query 的衍生值，要自己同步一份，
+        // 否則改完畫面上還是舊名字（見 useTacticsBoard.ts setViewingTacticName 的說明）。
+        setViewingTacticName(name);
+      }
+    : null;
 
   return (
     <div className="flex h-full flex-col font-dash">
@@ -66,6 +86,7 @@ export default function TacticsBoardPanel({
         {mode === "viewing" && (
           <TacticsViewingPanel
             viewingTacticName={viewingTacticName}
+            onRename={handleRenameViewing}
             // setCourtView("rotation") 本來就會順手清掉 viewingScene/viewingTacticId/
             // viewingTacticName（見 useTacticsBoard.ts），不用另外加一個 store 動作。
             onBackToBrowse={() => setCourtView("rotation")}

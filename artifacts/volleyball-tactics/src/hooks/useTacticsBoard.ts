@@ -110,6 +110,10 @@ interface TacticsBoardStore {
   viewingScene: TacticScene | null;
   viewingTacticId: string | null;
   viewingTacticName: string;
+  // 唯讀態改名之後，把新名字寫回這裡（#408）。伺服器那邊由 handleRenameTactic 的 mutation
+  // 負責，但 viewingTacticName 是**載入當下抄下來的一份快照**，不是 query 的衍生值——
+  // 不同步更新的話，改完名字面板上還是舊的，要等使用者退回列表再點一次才看得到。
+  setViewingTacticName: (name: string) => void;
 
   // ── 全域、暫時性的畫面狀態（重整頁面就回預設，不持久化、不隨 match 分片）──
   activeTool: ToolType;
@@ -552,6 +556,8 @@ export const useTacticsBoard = create<TacticsBoardStore>()((set, get) => {
         selectedObjectId: null,
       });
     },
+
+    setViewingTacticName: (name) => set({ viewingTacticName: name }),
 
     // 匯入 JSON 也是唯讀檢視，跟 loadProject 同一條路，只是沒有 server id/name（匯入的檔案
     // 不屬於任何一筆已存戰術）。
