@@ -110,6 +110,15 @@
   --text-panel-title: 15px;
   --text-marker: 9px;
   --text-marker-xs: 7px;
+  /* issue #420（header ＋ 佈陣右欄 v3 設計稿）新增兩級：
+     - display：戰術板拿掉 header 之後，比賽主詞（球場左上角、右欄頂端）升格成整頁最大的
+       文字——它是遠距離唯一需要確認的資訊，所以比原本最大的 panel-title（15px）還要再
+       大一階，不是塞進既有五級裡硬湊。
+     - hero：佈陣模式「輪轉對照」展開時的巨大 Anton 輪次數字（設計稿原話「Anton 展示級，
+       僅輪次巨字」）。跟 --font-score 是同一套視覺語彙（Anton 數字展示），但那支只管
+       字型、這支管大小——巨大到這個尺度只有這一個用途，另開一級比硬套 display 更誠實。 */
+  --text-display: 20px;
+  --text-hero: 46px;
 
   --radius-sm: 4px;
   --radius-md: 6px;
