@@ -84,7 +84,7 @@ export default function TacticsExportMenu({ matchId }: TacticsExportMenuProps) {
   };
 
   return (
-    // issue #420（header ＋ 佈陣右欄 v3）：header 整條拆掉之後，這顆鈕自己不再決定「掛在
+    // issue #433（header ＋ 佈陣右欄 v3）：header 整條拆掉之後，這顆鈕自己不再決定「掛在
     // 頁面的哪裡」——那是版面層級的決定，交給呼叫端（TacticsBoard.tsx）把這個元件包進球場
     // 右上角的浮層容器。這裡只留給自己的選單用的 relative 錨點，不再自己 absolute 定位
     // 整顆鈕。

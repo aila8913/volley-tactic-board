@@ -1,6 +1,6 @@
 import type { MatchPlayer } from "../types/match";
 
-// 佈陣模式（mode D）常駐球員名單——issue #420（header ＋ 佈陣右欄 v3）新元件。
+// 佈陣模式（mode D）常駐球員名單——issue #433（header ＋ 佈陣右欄 v3）新元件。
 //
 // 跟 mode B「站位」分頁、mode C 球員名單浮層用的 RotationRailPanel 清單是**兩份獨立實作**，
 // 不是共用元件的另一種組裝，原因是這裡的互動比 RotationRailPanel 單純很多：

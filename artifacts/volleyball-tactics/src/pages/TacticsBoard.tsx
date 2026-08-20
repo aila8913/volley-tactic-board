@@ -226,7 +226,7 @@ export default function TacticsBoard() {
         // 撐滿 AppShell 給的欄位高度。
         <div className="relative z-10 flex h-full flex-col border-l border-white/[0.08] bg-white/[0.02] backdrop-blur-sm">
           {session?.arranging ? (
-            // issue #420（header ＋ 佈陣右欄 v3）：整條右欄改用 ArrangingRail——空板時它自己
+            // issue #433（header ＋ 佈陣右欄 v3）：整條右欄改用 ArrangingRail——空板時它自己
             // 顯示位置調色盤，選了比賽時换成迷你球場輪轉對照＋真人名單，兩者互斥不再並存
             // （見該檔案開頭的說明；#372 當時「兩者要不要並存」的開放問題已在這一輪定案）。
             <ArrangingRail matchId={matchId} match={match} />
@@ -267,7 +267,7 @@ export default function TacticsBoard() {
       className={APP_SHELL_CLASS}
       style={APP_BACKGROUND_STYLE}
     >
-      {/* issue #420（header ＋ 佈陣右欄 v3）：整條 header 拆掉。它承載的三樣東西各自搬家
+      {/* issue #433（header ＋ 佈陣右欄 v3）：整條 header 拆掉。它承載的三樣東西各自搬家
           （見下面球場容器內的浮層），省下的高度直接還給球場——頁面因此沒有任何橫跨全寬的列，
           只剩 nav／球場／aside 三欄。「戰術板」那個靜態標題也一併刪除，NavRail 左欄「戰」
           那格已經標明現在在哪一頁，不需要頁面內再講一次。 */}
@@ -293,7 +293,7 @@ export default function TacticsBoard() {
             </div>
             {/* 球場右上角「編輯」鈕（issue #177 §6）：B 且正在唯讀檢視（viewingScene 存在）
                 時顯示，取代原本住在 TacticsViewingPanel 裡的「編輯」按鈕。D（佈陣中）的
-                「確定」已經搬進 ArrangingRail 的 rfoot（issue #420），不再跟這顆共用位置——
+                「確定」已經搬進 ArrangingRail 的 rfoot（issue #433），不再跟這顆共用位置——
                 球場右上角現在只留匯出跟這顆編輯鈕，各自獨立不互斥。 */}
             {viewingScene && (
               <button

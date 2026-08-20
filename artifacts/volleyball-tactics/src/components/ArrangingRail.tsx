@@ -11,7 +11,7 @@ import MiniCourtRotation from "./MiniCourtRotation";
 import ArrangingRosterList from "./ArrangingRosterList";
 import RosterEditDialog from "./RosterEditDialog";
 
-// mode D（佈陣中）的整條右欄——issue #420（header ＋ 佈陣右欄 v3）新元件，取代原本
+// mode D（佈陣中）的整條右欄——issue #433（header ＋ 佈陣右欄 v3）新元件，取代原本
 // TacticsBoard.tsx 裡「永遠顯示 PositionPalette、matchId 有值再疊 TacticsRosterPanel」的
 // 拼裝寫法。三層結構跟瀏覽模式的 TacticsBoardRail.tsx（issue #331）呼應：rhead／rbody／
 // rfoot，但這是完全不同的模式（佈陣 vs 瀏覽），不是它的第三個分頁——兩者刻意不共用元件。

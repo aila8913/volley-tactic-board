@@ -474,7 +474,7 @@ export default function RotationRailPanel({
 
       {/* ① 輪轉表（layout-spec §4.1）：六宮格本身就是站位表。可編輯時點格子選號位；
         唯讀時純粹渲染成看不能點的資訊卡片。
-        issue #420：外層包一圈球場材質（邊框／網／攻擊線，跟中央大球場、迷你球場對照
+        issue #433：外層包一圈球場材質（邊框／網／攻擊線，跟中央大球場、迷你球場對照
         `MiniCourtRotation.tsx` 共用同一組 courtTheme 常數）——教練讀號位是空間性的
         （4/3/2 靠網、5/6/1 在後場），這圈球場輪廓讓格子的空間關係一眼看出來，不用先讀懂
         「這是一張表格」才能對應到球場方位。互動邏輯（點格子、拖放）完全沒動，只是外面
@@ -626,7 +626,7 @@ export default function RotationRailPanel({
           onDrop={handleDropOnLibero}
           data-testid="libero-slot"
         >
-          {/* issue #420：L 徽章從一顆邊框文字改成跟六宮格圈圈一致的 PlayerMarker 圓——
+          {/* issue #433：L 徽章從一顆邊框文字改成跟六宮格圈圈一致的 PlayerMarker 圓——
             這裡的「L」是通用角標（這一列在講自由球員這件事本身），不是某個人的背號，
             所以固定 circleText="L"，跟 MiniCourtRotation.tsx 的自由球員列同一種畫法。 */}
           <svg width="22" height="22" viewBox="0 0 22 22" className="pointer-events-none shrink-0">
@@ -705,7 +705,7 @@ export default function RotationRailPanel({
         列表、戰術板的兩個 mode）用的是同一份 stepper UI，不再是「這裡文字顯示、戰術板
         另外自己畫一顆」的兩套。 */}
       {onStep && (
-        // issue #420：這顆 stepper 原本有兩套外觀（滿版兩顆按鈕 vs 緊湊版），由呼叫端用
+        // issue #433：這顆 stepper 原本有兩套外觀（滿版兩顆按鈕 vs 緊湊版），由呼叫端用
         // `compactStepper` 選——那個開關本身就是「跨頁面不連動」的症狀，戰術板一套、
         // 計分頁/比賽列表/分析頁另一套。現在只留一套，五個呼叫端（TacticsBoardRail、
         // ScoreSheet、RotationTable、MatchInfoRail、AnalyticsRotationRail）共用同一顆

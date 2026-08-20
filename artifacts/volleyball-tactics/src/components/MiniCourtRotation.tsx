@@ -10,7 +10,7 @@ import {
   COURT_NET_COLOR,
 } from "../lib/courtTheme";
 
-// 「輪轉對照」——issue #420（header ＋ 佈陣右欄 v3）新增：取代舊版 RotationRailPanel 裡的
+// 「輪轉對照」——issue #433（header ＋ 佈陣右欄 v3）新增：取代舊版 RotationRailPanel 裡的
 // 3×2 表格。理由是教練讀號位是**空間性的**（4/3/2 靠網、5/6/1 在後場），用表格畫它等於把
 // 一張圖硬轉成資料列；改畫成一座迷你球場，方位跟中央大球場一致（上緣是網），眼睛在兩者之間
 // 移動不用重新定位。

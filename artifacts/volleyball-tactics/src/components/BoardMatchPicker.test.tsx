@@ -9,7 +9,7 @@ import type { Match } from "@/types/match";
 // 要不要真的切過去」，這裡只換掉「比賽從哪來」這一層（跟 MatchInfoRail.test.tsx 同一種
 // 考量——讓真的 React Query 去跑只會讓測試變成在驗 fetch 有沒有被 mock 對）。
 //
-// issue #420 重寫：原本是原生 <select>，測試靠 user.selectOptions／toHaveValue 這類
+// issue #433 重寫：原本是原生 <select>，測試靠 user.selectOptions／toHaveValue 這類
 // <select> 專屬 API。改成自畫的按鈕＋選單之後，互動模型變成「點觸發鈕展開 → 點選項」，
 // 這裡整份重寫成對應的 testing-library 寫法，行為保證（列出哪些選項、目前選中誰、
 // 選了之後 onSelect 收到什麼）維持跟改版前一致。

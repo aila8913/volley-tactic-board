@@ -15,7 +15,7 @@ import PlayerMarker from "./PlayerMarker";
 // 下面每顆籌碼因此永遠不會消失、不會變灰、不會有「已用完」的狀態——這排本來就不是一份
 // 「清單」，是一組固定的取用點。
 //
-// issue #420（header ＋ 佈陣右欄 v3）視覺重寫：原本是 flex-wrap 排列的方形描邊鈕，改成
+// issue #433（header ＋ 佈陣右欄 v3）視覺重寫：原本是 flex-wrap 排列的方形描邊鈕，改成
 // 5 欄固定 grid、圓形籌碼直接套用 PlayerMarker 的畫法（不另畫近似版——球場上跟調色盤上的
 // 球員圈要是同一套視覺語彙，教練不用學兩套符號）。PlayerMarker 是畫進 <svg> 的 circle+text
 // 片段（見該檔案開頭說明：只管畫、不管容器），這裡外面包一層小 <svg> 當圖示使用。
