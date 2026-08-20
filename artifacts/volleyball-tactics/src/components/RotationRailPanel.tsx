@@ -5,6 +5,14 @@ import type { DragEvent as ReactDragEvent, ReactNode } from "react";
 import { assignPlayerToZone, removePlayerFromZone, BACK_ROW_ZONES } from "@/lib/rotationLogic";
 import type { MatchPlayer } from "@/types/match";
 import type { LineupZones } from "@/types/scoresheet";
+import PlayerMarker from "./PlayerMarker";
+import {
+  COURT_LINE_COLOR,
+  COURT_BORDER_OPACITY,
+  COURT_BORDER_WIDTH,
+  COURT_ATTACK_LINE_OPACITY,
+  COURT_NET_COLOR,
+} from "@/lib/courtTheme";
 
 // ── 右欄共用的「場上站位」面板（issue #120）──
 //
@@ -67,12 +75,6 @@ interface RotationRailPanelProps {
   // 加一個「清單前」的插槽比在外面另外重畫一份清單便宜也安全。undefined 時完全不影響
   // 既有呼叫端（計分頁／比賽列表／分析頁／戰術板 mode D 都不傳這個 prop）。
   listHeader?: ReactNode;
-  // 戰術板右欄 v2 專用的緊湊 stepper 視覺（置頂箭頭貼兩端、置中數字，取代現行滿版
-  // 「上／第 N 輪／下」三顆按鈕）。刻意用一個獨立的開關而不是直接改掉現有樣式——
-  // 這顆 stepper 同時服務比賽列表右欄／分析頁右欄（MatchInfoRail／AnalyticsRotationRail），
-  // 那兩頁的視覺沒有被這輪設計檢視過，貿然套新樣式等於沒審查就順手改版兩個頁面。
-  // 預設 false＝現行樣式不變，只有戰術板 mode B 傳 true。
-  compactStepper?: boolean;
   // ③ 球員清單這一塊要怎麼呈現（PO 2026-08-09：右欄的兩份名單合併成一份）。
   //   "compact"（預設＝既有行為）：釘在區塊底部、max-h-28 自己捲。計分頁/戰術板/分析頁
   //     底下還有別的東西要顯示，這份清單不能無限長。
@@ -234,7 +236,6 @@ export default function RotationRailPanel({
   benchDraggable = false,
   footer,
   listHeader,
-  compactStepper = false,
   rosterList = "compact",
   showLiberoCell = false,
   liberoId = null,
@@ -472,87 +473,132 @@ export default function RotationRailPanel({
       )}
 
       {/* ① 輪轉表（layout-spec §4.1）：六宮格本身就是站位表。可編輯時點格子選號位；
-        唯讀時純粹渲染成看不能點的資訊卡片。 */}
-      <div className="grid shrink-0 grid-cols-3 gap-1">
-        {GRID_ZONES.map((zone) => {
-          const playerId = safeLineup[zone];
-          const player = playerId ? roster.find((p) => p.id === playerId) : undefined;
-          const isSelected = !readOnly && selectedZone === zone;
-          // 這一格的人正被 L 頂替著：格子要顯示**場上實際站的那個人**（＝L），不是名義上
-          // 的格主。這是第七格最重要的視覺回饋——教練指定完頂替對象，得在站位圖上直接看到
-          // 結果，否則「設了有沒有生效」只能用猜的。
-          // 被蓋住的格主不會消失，只是縮小顯示在角落（他還在先發裡，L 一下場他就回來）。
-          const coveredByLibero =
-            liberoOnCourt && !!playerId && playerId === liberoReplacesPlayerId;
-          // 號位數字（1–6）不顯示：GRID_ZONES 的排法本身就是「從場上視角看」的空間位置，
-          // 看的是格子在哪、不是格子寫著幾號——教練關心的是相對站位，數字反而是多餘的
-          // 資訊圖層（使用者原話：「數字資訊不重要」）。GRID_ZONES 陣列順序仍然不能動
-          // （layout-spec §4.1 鎖死），只是不再把 zone 這個數字渲染出來而已。
-          const shown = coveredByLibero && libero ? libero : player;
-          const cellContent = (
-            <>
-              <span className="text-xs font-bold leading-tight">{shown ? shown.number : "—"}</span>
-              <span className="text-micro leading-tight text-[#9AA08C]">
-                {shown ? shown.name.slice(0, 3) : ""}
-              </span>
-              {coveredByLibero && player && (
-                <span className="text-micro leading-tight text-[#C6F135]/70">
-                  L 頂 {player.number}
+        唯讀時純粹渲染成看不能點的資訊卡片。
+        issue #433：外層包一圈球場材質（邊框／網／攻擊線，跟中央大球場、迷你球場對照
+        `MiniCourtRotation.tsx` 共用同一組 courtTheme 常數）——教練讀號位是空間性的
+        （4/3/2 靠網、5/6/1 在後場），這圈球場輪廓讓格子的空間關係一眼看出來，不用先讀懂
+        「這是一張表格」才能對應到球場方位。互動邏輯（點格子、拖放）完全沒動，只是外面
+        多包一層視覺、格子裡的內容從純文字改成跟 PlayerMarker 一致的圓形標記。 */}
+      <div
+        className="relative shrink-0 p-1.5"
+        style={{
+          border: `${COURT_BORDER_WIDTH}px solid rgba(245,245,240,${COURT_BORDER_OPACITY})`,
+          background: "linear-gradient(180deg, rgba(27,110,98,.14), rgba(27,110,98,.04))",
+        }}
+      >
+        <div
+          aria-hidden
+          className="absolute -left-1 -right-1 top-0 h-1 -translate-y-[2px]"
+          style={{
+            background:
+              "repeating-linear-gradient(90deg, rgba(245,245,240,.45) 0 .6px, transparent .6px 3px)",
+            borderTop: `1.5px solid ${COURT_NET_COLOR}`,
+          }}
+        />
+        <div className="relative grid grid-cols-3 gap-1">
+          <div
+            aria-hidden
+            className="absolute -left-1.5 -right-1.5 top-1/2 h-px"
+            style={{ background: COURT_LINE_COLOR, opacity: COURT_ATTACK_LINE_OPACITY }}
+          />
+          {GRID_ZONES.map((zone) => {
+            const playerId = safeLineup[zone];
+            const player = playerId ? roster.find((p) => p.id === playerId) : undefined;
+            const isSelected = !readOnly && selectedZone === zone;
+            // 這一格的人正被 L 頂替著：格子要顯示**場上實際站的那個人**（＝L），不是名義上
+            // 的格主。這是第七格最重要的視覺回饋——教練指定完頂替對象，得在站位圖上直接看到
+            // 結果，否則「設了有沒有生效」只能用猜的。
+            // 被蓋住的格主不會消失，只是縮小顯示在角落（他還在先發裡，L 一下場他就回來）。
+            const coveredByLibero =
+              liberoOnCourt && !!playerId && playerId === liberoReplacesPlayerId;
+            // 號位數字（1–6）不顯示：GRID_ZONES 的排法本身就是「從場上視角看」的空間位置，
+            // 看的是格子在哪、不是格子寫著幾號——教練關心的是相對站位，數字反而是多餘的
+            // 資訊圖層（使用者原話：「數字資訊不重要」）。GRID_ZONES 陣列順序仍然不能動
+            // （layout-spec §4.1 鎖死），只是不再把 zone 這個數字渲染出來而已。
+            const shown = coveredByLibero && libero ? libero : player;
+            const cellContent = (
+              <>
+                <svg width="22" height="22" viewBox="0 0 22 22" className="pointer-events-none">
+                  <g transform="translate(11,11)">
+                    {shown ? (
+                      <PlayerMarker
+                        number={shown.number}
+                        name=""
+                        radius={9}
+                        color={shown.role === "OPP" ? "#F5A623" : "#f5f5f0"}
+                        // solidFill 是這個 app 統一的「這是自由球員」視覺語言（見
+                        // PlayerMarker.tsx 開頭的說明）——這一格被 L 蓋住時直接沿用同一套，
+                        // 不用另外發明一個「被蓋住」的樣式，圈角自動長出的 L 徽章就是
+                        // 「這裡站的是頂替上來的自由球員」最直接的訊號。
+                        solidFill={coveredByLibero}
+                      />
+                    ) : (
+                      <circle r="9" fill="none" stroke="rgba(245,245,240,0.2)" strokeWidth="1" />
+                    )}
+                  </g>
+                </svg>
+                <span className="max-w-full truncate text-micro leading-tight text-[#9AA08C]">
+                  {shown ? shown.name.slice(0, 3) : ""}
                 </span>
-              )}
-            </>
-          );
-          // 拖曳懸停的高亮沿用「已選號位」那一套顏色：兩者要表達的是同一件事——
-          // 「放開/點下去，人就會進這一格」，用兩種顏色反而要使用者記兩套規則。
-          const isDropTarget = dragOverZone === zone;
-          // 唯讀（readOnly）格子改用「內凹、無邊框」材質——可操作性靠材質分辨而不是文字說明
-          // （issue #331 右欄 v2）：選中/命中目標時仍要有反饋，所以那個分支不變；差別只在
-          // 「平常沒被選中」時，唯讀格子刻意不畫邊框、不接受 hover，內凹陰影暗示「看得到、
-          // 動不了」。這裡不用新 prop 控制——readOnly 本來就已經是「這格能不能被改」的判準，
-          // 材質只是把既有的唯讀語意畫得更明確，套用到每一個既有的唯讀呼叫端（計分頁完賽局／
-          // 比賽列表／分析頁／戰術板）都是同一個修正方向，不是戰術板獨有的新規則。
-          const cellClass =
-            isSelected || isDropTarget
-              ? "flex flex-col items-center justify-center rounded-lg border px-1 py-1.5 transition border-[#C6F135] bg-[#C6F135]/10 text-[#C6F135]"
-              : readOnly
-                ? "flex flex-col items-center justify-center rounded-lg px-1 py-1.5 transition bg-white/[0.028] text-[#F5F5F0] shadow-[inset_0_1px_0_rgba(0,0,0,0.35)]"
-                : "flex flex-col items-center justify-center rounded-lg border px-1 py-1.5 transition border-white/[0.12] bg-white/[0.04] text-[#F5F5F0] hover:border-white/[0.30]";
+                {coveredByLibero && player && (
+                  <span className="max-w-full truncate text-micro leading-tight text-[#C6F135]/70">
+                    L 頂 {player.number}
+                  </span>
+                )}
+              </>
+            );
+            // 拖曳懸停的高亮沿用「已選號位」那一套顏色：兩者要表達的是同一件事——
+            // 「放開/點下去，人就會進這一格」，用兩種顏色反而要使用者記兩套規則。
+            const isDropTarget = dragOverZone === zone;
+            // 唯讀（readOnly）格子改用「內凹、無邊框」材質——可操作性靠材質分辨而不是文字說明
+            // （issue #331 右欄 v2）：選中/命中目標時仍要有反饋，所以那個分支不變；差別只在
+            // 「平常沒被選中」時，唯讀格子刻意不畫邊框、不接受 hover，內凹陰影暗示「看得到、
+            // 動不了」。這裡不用新 prop 控制——readOnly 本來就已經是「這格能不能被改」的判準，
+            // 材質只是把既有的唯讀語意畫得更明確，套用到每一個既有的唯讀呼叫端（計分頁完賽局／
+            // 比賽列表／分析頁／戰術板）都是同一個修正方向，不是戰術板獨有的新規則。
+            const cellClass =
+              isSelected || isDropTarget
+                ? "flex flex-col items-center justify-center gap-0.5 rounded-lg border px-1 py-1.5 transition border-[#C6F135] bg-[#C6F135]/10 text-[#C6F135]"
+                : readOnly
+                  ? "flex flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-1.5 transition bg-white/[0.028] text-[#F5F5F0] shadow-[inset_0_1px_0_rgba(0,0,0,0.35)]"
+                  : "flex flex-col items-center justify-center gap-0.5 rounded-lg border px-1 py-1.5 transition border-white/[0.12] bg-white/[0.04] text-[#F5F5F0] hover:border-white/[0.30]";
 
-          // readOnly 用 div 而不是 disabled button：既不用處理 disabled 的按鈕樣式，
-          // 也從語意上明確表示「這裡沒有任何互動」，不會被螢幕閱讀器唸成一顆按不動的按鈕。
-          // 兩個分支共用同一個 testid（#168 的互動測試要能指名某一格）：唯讀時它是 <div>、
-          // 可編輯時是 <button>，「這一格現在是哪一種」本身就是要被測的規格之一，所以刻意
-          // 不用兩個不同的 testid 去區分——測試該問的是「zone-1 這格是不是可按的」，
-          // 而不是「zone-1-readonly 這個節點在不在」（後者等於把答案寫進查詢條件裡）。
-          return readOnly ? (
-            <div key={zone} data-testid={`rotation-zone-${zone}`} className={cellClass}>
-              {cellContent}
-            </div>
-          ) : (
-            <button
-              key={zone}
-              data-testid={`rotation-zone-${zone}`}
-              // type="button" 不是可有可無的：#329 之後這個面板會被塞進 MatchDetailForm 的
-              // <form> 裡（編輯模式的版面順序要跟唯讀模式一致），而 <button> 在 form 內的
-              // 預設 type 是 "submit"——少了這行，點一下號位格子就會直接送出整張表單。
-              type="button"
-              onClick={() => setSelectedZone(isSelected ? null : zone)}
-              // 格子上有人才可以被拖走（空格子沒東西可拖）。playerId 在這個分支一定存在
-              // 才會進到 draggable，所以下面的 startDrag 不用再判一次。
-              draggable={canDrag && !!playerId}
-              onDragStart={(e) => playerId && startDrag(e, playerId, { zone })}
-              onDragOver={allowDrop}
-              onDragEnter={() => canDragAnything && setDragOverZone(zone)}
-              // dragleave 要比對 zone 再清掉：拖過相鄰兩格時 enter(新格) 有機會早於
-              // leave(舊格)，無條件清空會把剛設好的高亮又抹掉，畫面就一路不亮。
-              onDragLeave={() => setDragOverZone((z) => (z === zone ? null : z))}
-              onDrop={(e) => handleDropOnZone(e, zone)}
-              className={cellClass}
-            >
-              {cellContent}
-            </button>
-          );
-        })}
+            // readOnly 用 div 而不是 disabled button：既不用處理 disabled 的按鈕樣式，
+            // 也從語意上明確表示「這裡沒有任何互動」，不會被螢幕閱讀器唸成一顆按不動的按鈕。
+            // 兩個分支共用同一個 testid（#168 的互動測試要能指名某一格）：唯讀時它是 <div>、
+            // 可編輯時是 <button>，「這一格現在是哪一種」本身就是要被測的規格之一，所以刻意
+            // 不用兩個不同的 testid 去區分——測試該問的是「zone-1 這格是不是可按的」，
+            // 而不是「zone-1-readonly 這個節點在不在」（後者等於把答案寫進查詢條件裡）。
+            return readOnly ? (
+              <div key={zone} data-testid={`rotation-zone-${zone}`} className={cellClass}>
+                {cellContent}
+              </div>
+            ) : (
+              <button
+                key={zone}
+                data-testid={`rotation-zone-${zone}`}
+                // type="button" 不是可有可無的：#329 之後這個面板會被塞進 MatchDetailForm 的
+                // <form> 裡（編輯模式的版面順序要跟唯讀模式一致），而 <button> 在 form 內的
+                // 預設 type 是 "submit"——少了這行，點一下號位格子就會直接送出整張表單。
+                type="button"
+                onClick={() => setSelectedZone(isSelected ? null : zone)}
+                // 格子上有人才可以被拖走（空格子沒東西可拖）。playerId 在這個分支一定存在
+                // 才會進到 draggable，所以下面的 startDrag 不用再判一次。
+                draggable={canDrag && !!playerId}
+                onDragStart={(e) => playerId && startDrag(e, playerId, { zone })}
+                onDragOver={allowDrop}
+                onDragEnter={() => canDragAnything && setDragOverZone(zone)}
+                // dragleave 要比對 zone 再清掉：拖過相鄰兩格時 enter(新格) 有機會早於
+                // leave(舊格)，無條件清空會把剛設好的高亮又抹掉，畫面就一路不亮。
+                onDragLeave={() => setDragOverZone((z) => (z === zone ? null : z))}
+                onDrop={(e) => handleDropOnZone(e, zone)}
+                className={cellClass}
+              >
+                {cellContent}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* ② 第七格：自由球員先發（issue #327）。
@@ -580,9 +626,21 @@ export default function RotationRailPanel({
           onDrop={handleDropOnLibero}
           data-testid="libero-slot"
         >
-          <span className="shrink-0 rounded border border-[#C6F135]/40 px-1 text-micro font-bold text-[#C6F135]">
-            L
-          </span>
+          {/* issue #433：L 徽章從一顆邊框文字改成跟六宮格圈圈一致的 PlayerMarker 圓——
+            這裡的「L」是通用角標（這一列在講自由球員這件事本身），不是某個人的背號，
+            所以固定 circleText="L"，跟 MiniCourtRotation.tsx 的自由球員列同一種畫法。 */}
+          <svg width="22" height="22" viewBox="0 0 22 22" className="pointer-events-none shrink-0">
+            <g transform="translate(11,11)">
+              <PlayerMarker
+                number={0}
+                name=""
+                radius={9}
+                color="#f5f5f0"
+                solidFill
+                circleText="L"
+              />
+            </g>
+          </svg>
 
           {/* 這一格的主體：可編輯時是一顆按鈕（點了選中，再點清單裡的 L 指派），
             唯讀時是純文字。跟六宮格用 div/button 分兩種寫法是同一個理由。 */}
@@ -646,60 +704,36 @@ export default function RotationRailPanel({
         （副作用邏輯搬進 hooks/useRotationStepper.ts）——現在三個呼叫端（計分頁的比賽
         列表、戰術板的兩個 mode）用的是同一份 stepper UI，不再是「這裡文字顯示、戰術板
         另外自己畫一顆」的兩套。 */}
-      {onStep &&
-        (compactStepper ? (
-          // 右欄 v2 的緊湊 stepper（issue #331）：箭頭固定 24×22 貼左右兩端、數字置中在同一條
-          // 28px 高的淺底條上，取代舊版滿版兩顆按鈕中間夾文字的排法——視窗只有 288px 寬，
-          // 這個版面能省下的水平空間留給兩側箭頭更好按。功能跟舊版完全相同（onStep/disabled），
-          // 只是外觀，所以刻意用同一個 onStep 分支、不重複寫一份邏輯。
-          <div className="mt-2 flex h-7 shrink-0 items-center gap-0.5 rounded-lg bg-white/[0.035] px-0.5">
-            <button
-              type="button"
-              onClick={() => onStep(-1)}
-              disabled={!canStepPrev}
-              className="flex h-[22px] w-6 shrink-0 items-center justify-center rounded text-[#9AA08C] transition hover:bg-white/[0.06] hover:text-[#F5F5F0] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
-              aria-label={`上一${unitLabel}`}
-            >
-              ◂
-            </button>
-            <span className="flex-1 truncate text-center text-xs font-bold tabular-nums text-[#F5F5F0]">
-              第 {rotation + 1} {unitLabel}
-            </span>
-            <button
-              type="button"
-              onClick={() => onStep(1)}
-              disabled={!canStepNext}
-              className="flex h-[22px] w-6 shrink-0 items-center justify-center rounded text-[#9AA08C] transition hover:bg-white/[0.06] hover:text-[#F5F5F0] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
-              aria-label={`下一${unitLabel}`}
-            >
-              ▸
-            </button>
-          </div>
-        ) : (
-          <div className="mt-2 flex shrink-0 items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => onStep(-1)}
-              disabled={!canStepPrev}
-              className="flex-1 rounded-lg border border-white/[0.12] bg-white/[0.04] py-1.5 text-xs font-bold text-[#F5F5F0] transition hover:border-white/[0.30] disabled:cursor-not-allowed disabled:opacity-40"
-              aria-label={`上一${unitLabel}`}
-            >
-              上
-            </button>
-            <span className="shrink-0 px-2 text-xs font-bold tabular-nums text-[#F5F5F0]">
-              第 {rotation + 1} {unitLabel}
-            </span>
-            <button
-              type="button"
-              onClick={() => onStep(1)}
-              disabled={!canStepNext}
-              className="flex-1 rounded-lg border border-white/[0.12] bg-white/[0.04] py-1.5 text-xs font-bold text-[#F5F5F0] transition hover:border-white/[0.30] disabled:cursor-not-allowed disabled:opacity-40"
-              aria-label={`下一${unitLabel}`}
-            >
-              下
-            </button>
-          </div>
-        ))}
+      {onStep && (
+        // issue #433：這顆 stepper 原本有兩套外觀（滿版兩顆按鈕 vs 緊湊版），由呼叫端用
+        // `compactStepper` 選——那個開關本身就是「跨頁面不連動」的症狀，戰術板一套、
+        // 計分頁/比賽列表/分析頁另一套。現在只留一套，五個呼叫端（TacticsBoardRail、
+        // ScoreSheet、RotationTable、MatchInfoRail、AnalyticsRotationRail）共用同一顆
+        // stepper，不再各自表述。
+        <div className="mt-2 flex h-7 shrink-0 items-center gap-0.5 rounded-lg bg-white/[0.035] px-0.5">
+          <button
+            type="button"
+            onClick={() => onStep(-1)}
+            disabled={!canStepPrev}
+            className="flex h-[22px] w-6 shrink-0 items-center justify-center rounded text-[#9AA08C] transition hover:bg-white/[0.06] hover:text-[#F5F5F0] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+            aria-label={`上一${unitLabel}`}
+          >
+            ◂
+          </button>
+          <span className="flex-1 truncate text-center text-xs font-bold tabular-nums text-[#F5F5F0]">
+            第 {rotation + 1} {unitLabel}
+          </span>
+          <button
+            type="button"
+            onClick={() => onStep(1)}
+            disabled={!canStepNext}
+            className="flex h-[22px] w-6 shrink-0 items-center justify-center rounded text-[#9AA08C] transition hover:bg-white/[0.06] hover:text-[#F5F5F0] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+            aria-label={`下一${unitLabel}`}
+          >
+            ▸
+          </button>
+        </div>
+      )}
 
       {/* 操作提示跟著清單走：rosterList="hidden" 時清單不在，提示裡的「點下面的球員」
         就沒有指涉對象了，一起不渲染。 */}

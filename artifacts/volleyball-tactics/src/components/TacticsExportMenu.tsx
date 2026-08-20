@@ -84,10 +84,11 @@ export default function TacticsExportMenu({ matchId }: TacticsExportMenuProps) {
   };
 
   return (
-    // 掛在 TacticsBoard.tsx header（relative）的右緣：absolute 定位不佔 flex 排版的空間，
-    // 才不會把 header 原本「標題＋選單置中」的排版基準拉歪，見 TacticsBoard.tsx 掛載處的
-    // 說明。
-    <div className="absolute right-4 top-1/2 -translate-y-1/2">
+    // issue #433（header ＋ 佈陣右欄 v3）：header 整條拆掉之後，這顆鈕自己不再決定「掛在
+    // 頁面的哪裡」——那是版面層級的決定，交給呼叫端（TacticsBoard.tsx）把這個元件包進球場
+    // 右上角的浮層容器。這裡只留給自己的選單用的 relative 錨點，不再自己 absolute 定位
+    // 整顆鈕。
+    <div className="relative">
       <button
         type="button"
         onClick={() => setMenuOpen((v) => !v)}
@@ -95,10 +96,10 @@ export default function TacticsExportMenu({ matchId }: TacticsExportMenuProps) {
         aria-label="匯出／匯入"
         aria-pressed={menuOpen}
         data-testid="button-tactics-export-menu"
-        className={`flex h-8 w-8 items-center justify-center rounded-full border transition ${
+        className={`flex h-[34px] w-[34px] items-center justify-center rounded-[9px] border backdrop-blur-[8px] transition ${
           menuOpen
-            ? "border-[#c6f135] text-[#c6f135]"
-            : "border-white/[0.26] bg-white/[0.05] text-[#f5f5f0] hover:border-[#c6f135] hover:text-[#c6f135]"
+            ? "border-[#c6f135] bg-[#0a0b07]/70 text-[#c6f135]"
+            : "border-white/[0.10] bg-[#0a0b07]/50 text-[#a9b096]/90 hover:border-[#c6f135] hover:text-[#c6f135]"
         }`}
       >
         <NavSaveIcon className="size-4" />
@@ -107,7 +108,7 @@ export default function TacticsExportMenu({ matchId }: TacticsExportMenuProps) {
       {menuOpen && (
         <div
           data-testid="tactics-export-menu"
-          className="absolute right-0 top-full z-40 mt-2 flex w-40 flex-col gap-1 rounded-xl
+          className="absolute right-0 top-full z-40 mt-2 flex w-[200px] flex-col gap-1 rounded-xl
             border border-white/[0.14] bg-[#12140f]/97 p-2 shadow-2xl shadow-black/50
             backdrop-blur-lg"
         >

@@ -7,8 +7,7 @@ import BoardMatchPicker from "../components/BoardMatchPicker";
 import TacticsExportMenu from "../components/TacticsExportMenu";
 import TacticsBoardRail from "../components/TacticsBoardRail";
 import TacticsEditToolRail from "../components/TacticsEditToolRail";
-import TacticsRosterPanel from "../components/TacticsRosterPanel";
-import PositionPalette from "../components/PositionPalette";
+import ArrangingRail from "../components/ArrangingRail";
 import Court from "../components/Court";
 import { useMatchWithRoster } from "../hooks/useMatches";
 import { useRotationTable } from "../hooks/useRotationTable";
@@ -40,7 +39,6 @@ export default function TacticsBoard() {
   // 就是靠這個欄位判斷（見下面球場容器內那顆按鈕的說明）。
   const viewingScene = useTacticsBoard((state) => state.viewingScene);
   const enterEditFromViewing = useTacticsBoard((state) => state.enterEditFromViewing);
-  const confirmArrangement = useTacticsBoard((state) => state.confirmArrangement);
   // 「新增戰術」中央浮層開關（issue #177）：左欄 NavRail／TacticsBrowsePanel 按「+ 新增
   // 戰術」時由它們呼叫 store 的 openNewTactic() 打開，這裡只負責讀狀態、渲染浮層本身。
   const newTacticOpen = useTacticsBoard((state) => state.newTacticOpen);
@@ -228,25 +226,10 @@ export default function TacticsBoard() {
         // 撐滿 AppShell 給的欄位高度。
         <div className="relative z-10 flex h-full flex-col border-l border-white/[0.08] bg-white/[0.02] backdrop-blur-sm">
           {session?.arranging ? (
-            <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3">
-              {/* #372 決策②：位置調色盤永遠顯示（不靠 matchId）——這一輪把「空板佈陣時
-                  右欄完全沒東西可用」這個缺口補上：RotationTable／TacticsRosterPanel 都靠
-                  matchId 去讀「這一場」的分片，空板沒有這一場（見 RotationTable.tsx 開頭，
-                  matchId undefined 時 useRotationTable selector 回傳 undefined，畫出來的是
-                  0 個球員的清單，比起「什麼都沒有」更容易讓人誤以為是 bug），以前這裡整段
-                  換成一張純文字說明卡片，現在換成真的能用的調色盤：使用者不用先選比賽，
-                  也能直接拖位置上場。
-                  有比賽時名單面板疊在調色盤下面——⚠️「選了比賽之後，位置調色盤要不要留著
-                  跟真名單並存」是版面上還沒拍板的開放問題（PO @tangyi1025 在 #372 待決），
-                  這裡「兩塊都畫出來」只是先給一個具體畫面讓她有東西可以反應，不是定案的
-                  最終版面。 */}
-              <PositionPalette />
-              {matchId && (
-                <div className="border-t border-white/[0.08] pt-3">
-                  <TacticsRosterPanel matchId={matchId} />
-                </div>
-              )}
-            </div>
+            // issue #433（header ＋ 佈陣右欄 v3）：整條右欄改用 ArrangingRail——空板時它自己
+            // 顯示位置調色盤，選了比賽時换成迷你球場輪轉對照＋真人名單，兩者互斥不再並存
+            // （見該檔案開頭的說明；#372 當時「兩者要不要並存」的開放問題已在這一輪定案）。
+            <ArrangingRail matchId={matchId} match={match} />
           ) : (
             <TacticsBoardRail
               matchId={matchId}
@@ -284,27 +267,10 @@ export default function TacticsBoard() {
       className={APP_SHELL_CLASS}
       style={APP_BACKGROUND_STYLE}
     >
-      {/* 中央主區：header 以前橫跨整頁（在 nav／中央／aside 三欄「上面」置中），現在拆進
-          AppShell 之後，header 只會置中在中央主區這一欄的寬度裡——這是這一環唯一刻意的
-          小幅視覺位移（issue #172 任務說明裡明確列出的例外），其餘畫面維持原樣。 */}
-      <header className="relative z-10 flex shrink-0 items-center justify-center gap-2 border-b border-white/[0.08] bg-white/[0.02] px-4 py-3 backdrop-blur-sm">
-        {/* #372 決策②：header 原本是一句唯讀文字（「vs 誰誰誰」／沒有比賽時寫死「戰術板」），
-            現在戰術板可以不綁比賽，「有沒有比賽」不再是進得了這一頁的前提，而是使用者隨時
-            可以切換的一個選項——所以這裡換成一顆下拉選單，選了哪一場（或選「空板」）都在這
-            一顆元件裡處理完，不需要另外一顆靜態標題。 */}
-        <span className="text-lg font-bold">戰術板</span>
-        <BoardMatchPicker matchId={matchId} onSelect={handleSelectMatch} />
-        {/* #372 範圍第 3 點：匯出／匯入從左欄 NavRail 的「出」子選單搬回這裡——匯出 PNG
-            抓的是這一頁球場的 DOM（id="court-wrapper"），只有這一頁有，放在球場正上方
-            才誠實（見 TacticsExportMenu.tsx 開頭的完整說明）。用 `absolute right-4` 疊在
-            header 這個 relative 容器的右緣，而不是跟左邊那兩顆元件一起走 flex 排列——
-            header 本身是 `justify-center`（讓標題＋選單維持置中），如果把這顆按鈕塞進同一個
-            flex row，置中基準會被這顆按鈕的寬度拉歪；用 absolute 定位可以「掛在最右邊」跟
-            「中間那組維持置中」兩件事互不干擾。三種模式（B/D/C）都要看得到、都要能用，
-            所以直接掛在 header 層級，不進任何一個 mode 專屬的插槽。 */}
-        <TacticsExportMenu matchId={matchId} />
-      </header>
-
+      {/* issue #433（header ＋ 佈陣右欄 v3）：整條 header 拆掉。它承載的三樣東西各自搬家
+          （見下面球場容器內的浮層），省下的高度直接還給球場——頁面因此沒有任何橫跨全寬的列，
+          只剩 nav／球場／aside 三欄。「戰術板」那個靜態標題也一併刪除，NavRail 左欄「戰」
+          那格已經標明現在在哪一頁，不需要頁面內再講一次。 */}
       <div className="relative z-10 flex min-h-0 flex-1 overflow-hidden">
         {/* 中央主區以前這裡有一欄 260px 寬的 RotationTable（見上面說明的第 3 點），
             issue #251 這一輪把它搬進 aside 插槽（跟球員名單面板疊在一起），所以這裡
@@ -312,33 +278,32 @@ export default function TacticsBoard() {
         <div className="relative flex flex-1 flex-col overflow-hidden">
           <div className="relative flex min-h-0 flex-1 items-center justify-center p-4">
             <Court />
-            {/* 球場右上角共用模式鈕（issue #177 §6）：D（佈陣中）顯示「確定」→
-                confirmArrangement()，讓 session 從佈陣態切回編輯態（mode C）；B 且正在唯讀
-                檢視（viewingScene 存在）顯示「編輯」→ enterEditFromViewing()，這顆鈕取代了
-                原本住在 TacticsViewingPanel 裡的「編輯」按鈕（見該檔案開頭的說明）。兩種情況
-                互斥（session 存在時 viewingScene 一定是 null，見 useTacticsBoard.ts 開頭的
-                狀態機說明），所以可以共用同一個位置/尺寸，只換文案跟 onClick。其他情況
-               （browse 模式、mode C 編輯中）不顯示這顆鈕。 */}
-            {session?.arranging ? (
+            {/* 比賽主詞——原本 header 的下拉選單搬到這裡，貼球場左上角外緣。平常零 chrome
+                （沒有背景、沒有邊框，只是浮在球場上的一行字），只有展開選單時才長出深色底
+                跟萊姆綠框（見 BoardMatchPicker.tsx 的說明）。三種模式（B/D/C）都要看得到、
+                都要能選，所以掛在這個中央欄層級，不進任何一個 mode 專屬的插槽。 */}
+            <div className="absolute left-4 top-4 z-20">
+              <BoardMatchPicker matchId={matchId} onSelect={handleSelectMatch} />
+            </div>
+            {/* 匯出／匯入——原本 header 右緣的鈕，搬到球場右上角。跟主詞分居球場兩個角，
+                各自不干擾。匯出 PNG 抓的是這一頁球場的 DOM（id="court-wrapper"），只有這一頁
+                有，放在球場正上方才誠實（見 TacticsExportMenu.tsx 開頭的完整說明）。 */}
+            <div className="absolute right-4 top-4 z-20">
+              <TacticsExportMenu matchId={matchId} />
+            </div>
+            {/* 球場右上角「編輯」鈕（issue #177 §6）：B 且正在唯讀檢視（viewingScene 存在）
+                時顯示，取代原本住在 TacticsViewingPanel 裡的「編輯」按鈕。D（佈陣中）的
+                「確定」已經搬進 ArrangingRail 的 rfoot（issue #433），不再跟這顆共用位置——
+                球場右上角現在只留匯出跟這顆編輯鈕，各自獨立不互斥。 */}
+            {viewingScene && (
               <button
                 type="button"
-                onClick={confirmArrangement}
-                data-testid="button-confirm-arrangement"
-                className={`absolute right-6 top-6 z-20 px-4 py-2 text-xs font-bold ${PRIMARY_BTN_CLASS}`}
+                onClick={enterEditFromViewing}
+                data-testid="button-edit-current"
+                className={`absolute right-4 top-16 z-20 px-4 py-2 text-xs font-bold ${PRIMARY_BTN_CLASS}`}
               >
-                確定
+                編輯
               </button>
-            ) : (
-              viewingScene && (
-                <button
-                  type="button"
-                  onClick={enterEditFromViewing}
-                  data-testid="button-edit-current"
-                  className={`absolute right-6 top-6 z-20 px-4 py-2 text-xs font-bold ${PRIMARY_BTN_CLASS}`}
-                >
-                  編輯
-                </button>
-              )
             )}
             {/* 「新增戰術」中央浮層（issue #177）：只蓋這個中央欄（見 NewTacticDialog.tsx
                 開頭「為什麼用 absolute in central column」的說明），左右欄仍看得見。

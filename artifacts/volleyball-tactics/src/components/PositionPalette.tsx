@@ -1,5 +1,6 @@
 import { PLAYER_ROLES, type PlayerRole } from "../types/match";
 import { DND_ANON_ROLE } from "../lib/dndProtocols";
+import PlayerMarker from "./PlayerMarker";
 
 // 位置調色盤（issue #372 決策②）：右欄原本的「球員」按鈕只能換／挪真名單裡的人，戰術板
 // 沒有比賽（空板，見 #372 part 1）時完全沒有名單可用，右欄那塊就整個是空的——PO 拍板的
@@ -14,54 +15,100 @@ import { DND_ANON_ROLE } from "../lib/dndProtocols";
 // 下面每顆籌碼因此永遠不會消失、不會變灰、不會有「已用完」的狀態——這排本來就不是一份
 // 「清單」，是一組固定的取用點。
 //
-// 角色代碼／中文名對照抄 CONTEXT.md〈位置〉那一條：舉球(S)、主攻(OH)、副攻(MB)、
-// 對角(OPP)、自由球員(L)。直接 import types/match.ts 的 PLAYER_ROLES 決定要畫哪幾顆、
-// 順序也跟著它走，不要另外手key一份角色代碼字串——那份才是跟 DB schema
-// （lib/db/src/schema/players.ts 的 playerRoleEnum）對齊的唯一真相來源，兩邊各自維護
-// 遲早會漂移（例如以後改成六個位置分類，這裡忘記加一顆）。
+// issue #433（header ＋ 佈陣右欄 v3）視覺重寫：原本是 flex-wrap 排列的方形描邊鈕，改成
+// 5 欄固定 grid、圓形籌碼直接套用 PlayerMarker 的畫法（不另畫近似版——球場上跟調色盤上的
+// 球員圈要是同一套視覺語彙，教練不用學兩套符號）。PlayerMarker 是畫進 <svg> 的 circle+text
+// 片段（見該檔案開頭說明：只管畫、不管容器），這裡外面包一層小 <svg> 當圖示使用。
+//
+// ⚠️ 這顆元件同時被兩個地方用：mode D 的 ArrangingRail（見該檔案）跟 mode C 的
+// TacticsEditToolRail 球員名單浮層。這次重繪套用到兩邊——純視覺升級、拖曳互動完全沒變，
+// 兩個呼叫端不需要各自判斷「現在是哪個模式」，風險低到可以直接全域套用（同一種判斷見
+// RotationRailPanel.tsx 唯讀格子材質那次的說明）。
 const ROLE_LABEL: Record<PlayerRole, string> = {
   S: "舉球",
   OH: "主攻",
   MB: "副攻",
   OPP: "對角",
-  L: "自由球員",
+  L: "自由",
 };
+
+// 角色描邊色——直接對應 tactics-header-arranging-v3 spec §3.1 那張表。OH/MB 沒有專屬色，
+// 用預設的 --ink（PlayerMarker 不傳 color 覆寫時的原生白）。OPP 的琥珀色是這次新增的
+// 角色識別色，之前的畫面沒有替 OPP 單獨配色過。
+const ROLE_COLOR: Partial<Record<PlayerRole, string>> = {
+  S: "#c6f135",
+  OPP: "#F5A623",
+};
+
+// 籌碼的視覺半徑（SVG 座標，配合下面 viewBox 換算成 44px 的圓）。「無限供應」的同心錯位
+// 環（spec 的 .pm::after）改成在 PlayerMarker 主圓「後面」多畫一顆同半徑、往右下偏移的
+// 空心圓——SVG 沒有 CSS 的 z-index，靠畫的先後順序決定疊層，所以這圈環要畫在 <PlayerMarker
+// /> 之前，才會被主圓蓋住大半、只在右下角露出一小段弧，看起來像疊了一疊牌。
+const CHIP_RADIUS = 17;
+const RING_OFFSET = 3;
+
+function PositionChip({ role }: { role: PlayerRole }) {
+  const isLibero = role === "L";
+  const color = ROLE_COLOR[role] ?? "#f5f5f0";
+  return (
+    <div
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData(DND_ANON_ROLE, role);
+        // effectAllowed 用 "copy" 不是 "move"：瀏覽器原生拖放的這個屬性只影響滑鼠游標
+        // 圖示（"copy" 通常畫一個「+」角標），不會真的影響資料怎麼傳，純粹是視覺上誠實
+        // 反映「這是複印一份，不是把這顆籌碼真的搬走」這個決策，跟「無限供應」是同一件事
+        // 的兩種寫法（狀態上：這顆 div 拖完還在；游標上：也不畫成「移動中」）。
+        e.dataTransfer.effectAllowed = "copy";
+      }}
+      data-testid={`position-palette-${role}`}
+      title={`${ROLE_LABEL[role]}（${role}）——拖到球場上放一位`}
+      className="flex w-12 cursor-grab select-none flex-col items-center gap-1.5 active:cursor-grabbing"
+    >
+      <svg
+        width="44"
+        height="44"
+        viewBox={`0 0 ${(CHIP_RADIUS + RING_OFFSET) * 2} ${(CHIP_RADIUS + RING_OFFSET) * 2}`}
+        className="pointer-events-none"
+      >
+        {/* 同心錯位環：跟主圓同半徑、圓心往右下偏移 RING_OFFSET，畫在主圓之前所以會被蓋住
+          大半，只留右下角一小段弧線——這段弧線就是「原地還有一顆」的視覺訊號。 */}
+        <circle
+          cx={CHIP_RADIUS + RING_OFFSET}
+          cy={CHIP_RADIUS + RING_OFFSET}
+          r={CHIP_RADIUS}
+          fill="none"
+          stroke="rgba(245,245,240,0.14)"
+          strokeWidth="1"
+        />
+        <g transform={`translate(${CHIP_RADIUS}, ${CHIP_RADIUS})`}>
+          <PlayerMarker
+            number={0}
+            name=""
+            radius={CHIP_RADIUS}
+            color={isLibero ? "#f5f5f0" : color}
+            solidFill={isLibero}
+            circleText={role}
+          />
+        </g>
+      </svg>
+      <span className="whitespace-nowrap text-micro text-[#a9b096]/70">{ROLE_LABEL[role]}</span>
+    </div>
+  );
+}
 
 export default function PositionPalette() {
   return (
-    // flex-wrap：這排要塞進工具軌浮層（288px 寬，見 TacticsEditToolRail.tsx）跟 aside
-    // （也是 288px，見 TacticsBoard.tsx mode D）兩種容器，五顆籌碼在窄容器裡自然換行，
-    // 不需要為兩處容器各自排一份版面。
+    // 5 欄固定 grid（spec：一列排滿五顆、不換行——角色固定五個，flex-wrap 只會讓它在不同
+    // 寬度的容器裡長得不一樣）。這顆元件會被塞進兩種容器：mode D 的 aside（288px）跟工具軌
+    // 浮層（w-72，同樣 288px），兩邊寬度剛好一致，5 欄不會有換行風險。
     <div
       data-testid="position-palette"
-      className="flex flex-wrap items-center gap-1.5"
+      className="grid grid-cols-5 items-start justify-items-center gap-1"
       aria-label="位置調色盤：拖到球場上放一個對應位置的球員"
     >
       {PLAYER_ROLES.map((role) => (
-        <div
-          key={role}
-          draggable
-          onDragStart={(e) => {
-            e.dataTransfer.setData(DND_ANON_ROLE, role);
-            // effectAllowed 用 "copy" 不是 "move"：瀏覽器原生拖放的這個屬性只影響滑鼠游標
-            // 圖示（"copy" 通常畫一個「+」角標），不會真的影響資料怎麼傳，純粹是視覺上誠實
-            // 反映「這是複印一份，不是把這顆籌碼真的搬走」這個決策，跟上面說的「無限供應」
-            // 是同一件事的兩種寫法（狀態上：這顆 div 拖完還在；游標上：也不畫成「移動中」）。
-            e.dataTransfer.effectAllowed = "copy";
-          }}
-          data-testid={`position-palette-${role}`}
-          title={`${ROLE_LABEL[role]}（${role}）——拖到球場上放一位`}
-          // 樣式抄 TacticsEditToolRail.tsx 的 squareBtnClass（單一方鈕、選中萊姆綠）跟
-          // RotationRailPanel.tsx 的 rowClass 未選中態（深色玻璃底＋白邊）——這排籌碼沒有
-          // 「選中」這個狀態（不是點選式，是拖曳式），所以只借未選中的那一半視覺語彙，
-          // 不新發明一套顏色。
-          className="flex h-11 w-11 cursor-grab select-none items-center justify-center
-            rounded-lg border border-white/[0.26] bg-white/[0.05] text-caption font-bold
-            text-[#f5f5f0] transition hover:border-[#c6f135] hover:text-[#c6f135]
-            active:cursor-grabbing"
-        >
-          {role}
-        </div>
+        <PositionChip key={role} role={role} />
       ))}
     </div>
   );

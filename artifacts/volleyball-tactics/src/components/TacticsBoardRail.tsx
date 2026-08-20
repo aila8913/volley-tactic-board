@@ -146,7 +146,6 @@ export default function TacticsBoardRail({
               roster={roster}
               rotation={currentRotation}
               onStep={onStep}
-              compactStepper
               title=""
               showLiberoCell
               liberoId={data?.startingLiberoId ?? null}
