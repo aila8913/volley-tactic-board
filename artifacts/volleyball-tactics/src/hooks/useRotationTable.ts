@@ -65,6 +65,24 @@ interface RotationTableStore {
   // 自由球員的頂替狀態只在「被頂替的人不在新先發裡」時才收掉（理由見實作處的 ⚠️）。
   setLineupZones: (matchId: string, lineup: LineupZones) => void;
 
+  // 從後端「已經凍結的先發」把這一場的站位補進來（issue #431）。
+  //
+  // 為什麼需要它：在這支之前，這份 store 的 lineup **只有一個寫入點**——計分頁在
+  // 「還沒開賽、允許編輯先發」時的拖曳（ScoreSheet.tsx 的 setLineupZones）。而 dataByMatch
+  // 刻意不 persist（見下面 partialize），所以「已經開賽或打完的比賽」在這份 store 裡永遠是
+  // 空的：戰術板的六宮格對教練最常工作的那些比賽一律顯示六格 `—`。這直接違反 07-21 PO 定案
+  // 的「站位＝全站共用單一真相」——戰術板讀到的根本不是同一份真相，是一份大部分時候是空的
+  // 分片。缺的不是「再存一份」，是**把已經存在後端的那份讀回來**。
+  //
+  // ⚠️ 已經有先發時一律不覆蓋（見實作處）。這條讓它不會變成「第二條會跟使用者搶方向盤的
+  // 寫入路徑」——那正是這顆 store 反覆出 bug 的形狀（見檔尾 #328 那段）。它只填空，不改寫。
+  //
+  // 餵進來的必須是**起始先發**（後端 lineups 那一列），不是即時輪轉後的當下站位：store 的
+  // lineup 定義就是「第 0 輪站哪一格」，其他輪次由 rotateZone 現算（見 types/rotationTable.ts）。
+  // 同理，這裡只收「先發 L 是誰」不收「他頂替誰」——賽前規劃側根本沒有那個欄位（ADR-0013／
+  // #425），把後端快照裡的頂替對象讀回來就是把「紀錄」倒灌回「計畫」。
+  hydrateLineup: (matchId: string, lineup: LineupZones, startingLiberoId: string | null) => void;
+
   // 註：舊的 loadRotationData（整批把存檔覆蓋回輪轉表）已在 #154 PR B 移除。載入已存戰術
   // 改成唯讀檢視、不再反向寫回輪轉表，所以輪轉表不需要、也刻意不提供這個「被別人整包覆蓋」
   // 的入口——反向寫回的能力從型別上就不存在了。
@@ -176,6 +194,25 @@ export const useRotationTable = create<RotationTableStore>()(
             ...m,
             lineup,
           })),
+        ),
+
+      hydrateLineup: (matchId, lineup, startingLiberoId) =>
+        set((state) =>
+          updateMatch(state, matchId, (m) => {
+            // 只填空，不覆蓋：這一場在這個分頁裡已經有先發（教練剛排的、或上一次 hydrate
+            // 進來的），就原封不動退回去。回傳同一個 m 參照 → 訂閱 lineup 的元件不會重繪，
+            // 也就不會有「effect 寫 → 元件重繪 → effect 再寫」的迴圈（同一個坑見 setRoster
+            // 裡 filterLineupToRoster 的說明）。
+            if (Object.keys(m.lineup).length > 0) return m;
+
+            // 這裡刻意不做 setStartingLibero 那種「必須在名單裡而且 role === 'L'」的白名單
+            // 把關。那道關卡擋的是拖曳事件的 dataTransfer——外部字串，什麼都可能丟進來；
+            // 這裡的來源是我們自己的後端，而且 lineups 的球員欄位有外鍵指著 players，
+            // 它給的 id 一定是這場比賽真實存在的球員。真正的順序風險（先發已經 hydrate 進來、
+            // 名單卻還沒抓回來）由 setRoster 的 filterLineupToRoster 收尾：名單一到就會把
+            // 對不上的號位掃掉。
+            return { ...m, lineup, startingLiberoId };
+          }),
         ),
     }),
     {
