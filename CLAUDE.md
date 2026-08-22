@@ -219,3 +219,9 @@ changes default behavior for this repo specifically:
   learning.
 - Delegation must not skip the teaching step: after subagent work completes, walk the user through what
   was decided and why — a bare "done" defeats the purpose of this repo.
+- **聊天回覆要短，但「短」的對象只有對話本身。** 上面四條要求的是「解釋得多一層」，很容易被誤讀成
+  「話要多」——那是兩件事。收短的是**聊天視窗裡的字**：不要為了看起來完整而複述使用者已經知道的事、
+  不要把一句話能講完的結論鋪成分節報告、不要在動手前先列一遍你等一下就會做的事。
+  **不收短的是**：程式碼註解（那是寫給下一個讀檔案的人，不是寫給這次對話）、架構決策的理由、
+  指令在做什麼的那句說明、以及 `wrap-up`／`catch-up` 這類**產出本身就是文件**的流程。
+  判準一句話：**問「這段字是給現在的對話，還是會被留下來？」給對話的收短，會被留下來的照舊。**
