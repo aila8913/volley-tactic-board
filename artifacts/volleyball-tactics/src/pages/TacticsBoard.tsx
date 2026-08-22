@@ -10,6 +10,7 @@ import TacticsEditToolRail from "../components/TacticsEditToolRail";
 import ArrangingRail from "../components/ArrangingRail";
 import Court from "../components/Court";
 import { useMatchWithRoster } from "../hooks/useMatches";
+import { useHydrateLineup } from "../hooks/useHydrateLineup";
 import { useRotationTable } from "../hooks/useRotationTable";
 import { useTacticsBoard, isSessionDirty } from "../hooks/useTacticsBoard";
 import { useTacticsBoardController } from "../hooks/useTacticsBoardController";
@@ -76,6 +77,17 @@ export default function TacticsBoard() {
       setRoster(matchId, match.players);
     }
   }, [match, matchId, setRoster]);
+
+  // 已經開賽／打完的比賽，站位不在 useRotationTable 裡（那份 store 只有計分頁「排先發」
+  // 那一個寫入點，而且刻意不 persist），所以六宮格對這些比賽一律空白——issue #431。這支
+  // hook 把後端已凍結的先發補進 store，右欄兩種六宮格（mode B 的站位分頁、mode D 的
+  // ArrangingRail）都是直接訂閱 store 的，資料一到就會自己畫出來。
+  //
+  // 擺在 setRoster 效果**後面**：同一次 commit 裡多個 effect 按原始碼順序執行，先有名單、
+  // 後補站位。兩邊誰先到其實都不會壞（setRoster 的幽靈站位清理只掃「不在名單上的人」，而
+  // 先發裡的六個人本來就在名單裡），但「先名單、後站位」是這頁其他效果一致的假設，順序照著
+  // 排比較不用每次都重新推一遍。
+  useHydrateLineup(matchId);
 
   // #372 決策②③：header 的「選比賽」下拉選了別場之後，要「借那一場最後的輪轉站位」直接
   // 開一個佈陣中（mode D）的 session——但站位資料要等新場的名單真的進了 useRotationTable

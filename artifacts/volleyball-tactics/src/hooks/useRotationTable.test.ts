@@ -265,3 +265,41 @@ describe("per-match 分片互不污染（#231 清單 11 / issue #119）", () => 
     expect(rotationOf(B, 0).positions.map((p) => p.playerId)).toEqual(["p9"]);
   });
 });
+
+describe("hydrateLineup — 把後端已凍結的先發補進來（issue #431）", () => {
+  // 這支存在的理由是一個具體的 bug：已開賽／打完的比賽在這份 store 裡永遠沒有站位
+  //（唯一的寫入點是計分頁「還沒開賽時排先發」的拖曳，而 dataByMatch 不 persist），
+  // 所以戰術板六宮格對那些比賽一律六格空白。下面三條釘住的是「補進來」與「不搶方向盤」
+  // 這兩件事的邊界。
+  it("這一場還沒有先發時，六個號位照著補進來", () => {
+    rt().setRoster(A, [player("p1"), player("p2")]);
+
+    rt().hydrateLineup(A, { 1: "p1", 2: "p2" }, null);
+
+    expect(rt().dataByMatch[A].lineup).toEqual({ 1: "p1", 2: "p2" });
+    expect(rotationOf(A, 0).positions.map((p) => p.playerId)).toEqual(["p1", "p2"]);
+  });
+
+  it("先發 L 也一起補；不做 setStartingLibero 那種名單白名單把關", () => {
+    // 名單還沒抓回來（roster 是空的）就先 hydrate——這是真實會發生的順序：lineups 這支
+    // query 可能比 match 先回來。setStartingLibero 在這種情況會拒絕寫入（它的輸入來自
+    // 拖曳事件，必須確認人真的在名單裡），hydrateLineup 不需要那道關卡：來源是我們自己的
+    // 後端，lineups 的欄位有外鍵指著 players。
+    rt().hydrateLineup(A, { 1: "p1" }, "l1");
+
+    expect(rt().dataByMatch[A].startingLiberoId).toBe("l1");
+  });
+
+  it("這一場已經有先發時整支 no-op——只填空，不覆蓋使用者剛排的東西", () => {
+    rt().setRoster(A, [player("p1"), player("p2")]);
+    rt().setLineupZones(A, { 1: "p1" });
+    const before = rt().dataByMatch[A].lineup;
+
+    rt().hydrateLineup(A, { 1: "p2", 2: "p1", 3: "p1" }, "l9");
+
+    // 內容不變，而且**是同一個物件參照**：這條不只是「沒改到」，它同時保證訂閱 lineup 的
+    // 元件不會因為這次呼叫重繪——不然「effect 寫 → 元件重繪 → effect 再寫」就會轉不停。
+    expect(rt().dataByMatch[A].lineup).toBe(before);
+    expect(rt().dataByMatch[A].startingLiberoId).toBeNull();
+  });
+});
